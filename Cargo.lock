@@ -1134,6 +1134,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dioxus-material-icons"
+version = "4.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cfd9292881c95af20de4c4a783bae4aaef1419f2230108726548a34969439a9"
+dependencies = [
+ "dioxus",
+]
+
+[[package]]
 name = "dioxus-router"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3059,6 +3068,7 @@ name = "overseer"
 version = "0.1.0"
 dependencies = [
  "dioxus",
+ "dioxus-material-icons",
 ]
 
 [[package]]

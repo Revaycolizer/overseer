@@ -1,21 +1,47 @@
 use dioxus::prelude::*;
+use dioxus_material_icons::{MaterialIconStylesheet};
+mod routes;
+use routes::{Conversations, AppManager, Layout};
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
 enum Route {
-    #[layout(Navbar)]
-    #[route("/")]
-    Home {},
+    #[layout(Layout)]
+        #[route("/")]
+        Conversations {},
+        #[route("/apps")]
+        AppManager {},
+    #[end_layout]
     #[route("/blog/:id")]
     Blog { id: i32 },
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
-const MAIN_CSS: Asset = asset!("/assets/main.css");
+const MAIN_CSS: Asset = asset!("/assets/main.css",AssetOptions::css().with_static_head(true));
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
-const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
+const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css",AssetOptions::css().with_static_head(true));
 
+pub fn common_head_content() -> String {
+
+	format!(r#" 
+					<link rel="icon" href="{FAVICON}">
+					<link rel="stylesheet" href="{MAIN_CSS}" blocking="render">
+					<link rel="stylesheet" href="{TAILWIND_CSS}" blocking="render">
+				"#)
+}
 fn main() {
+      #[cfg(feature = "desktop")]
+    {
+        use dioxus::desktop::{Config, WindowBuilder};
+        let config = Config::new()
+            .with_custom_head(common_head_content())
+            .with_window(
+                WindowBuilder::new()
+                    .with_title("Overseer")
+                    .with_decorations(false)
+            );
+        dioxus::LaunchBuilder::desktop().with_cfg(config).launch(App);
+    }
     dioxus::launch(App);
 }
 
@@ -23,7 +49,9 @@ fn main() {
 fn App() -> Element {
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
-        document::Link { rel: "stylesheet", href: MAIN_CSS } document::Link { rel: "stylesheet", href: TAILWIND_CSS }
+        document::Link { rel: "stylesheet", href: MAIN_CSS }
+        document::Link { rel: "stylesheet", href: TAILWIND_CSS }
+        MaterialIconStylesheet {}
         Router::<Route> {}
     }
 }
@@ -87,7 +115,7 @@ fn Navbar() -> Element {
         div {
             id: "navbar",
             Link {
-                to: Route::Home {},
+                to: Route::Conversations {},
                 "Home"
             }
             Link {

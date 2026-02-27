@@ -1,1 +1,95 @@
 @import "tailwindcss";
+
+@theme {
+    --color-primary: #0f172a;
+    --color-sidebar-bg: #ffffff;
+    --color-background-light: #f8fafc;
+    --color-card-bg: #ffffff;
+    --color-status-active: #10b981;
+    --color-status-idle: #64748b;
+    --color-status-warning: #f59e0b;
+    --color-brand-blue: #3b82f6;
+}
+
+:root {
+    --workspace-bg: #F8FAFC;
+    --sidebar-bg: #FFFFFF;
+    --text-main: #0F172A;
+    --assistant-bubble: #EFF6FF;
+    --user-bubble: #FFFFFF;
+    --border-light: #E2E8F0;
+    --accent-blue: #3B82F6;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--workspace-bg);
+    color: var(--text-main);
+    user-select: none;
+    margin: 0;
+    padding: 0;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.nav-link {
+    @apply flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 text-slate-400 hover:text-slate-600 hover:bg-slate-100 mb-2 relative overflow-hidden;
+}
+
+.nav-link.active {
+    @apply text-white bg-slate-900 shadow-md;
+}
+
+.nav-link.active::before {
+    content: '';
+    @apply absolute left-0 top-3 bottom-3 w-1 bg-blue-500 rounded-r-full;
+}
+
+.window-frame {
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2 transition-all duration-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100 relative rounded-lg;
+}
+
+.sidebar-item.active {
+    @apply text-white bg-slate-900 shadow-sm border border-slate-700/50;
+}
+
+.sidebar-item.active::after {
+    content: '';
+    @apply absolute left-0 top-1 bottom-1 w-1 bg-blue-500 rounded-r-full;
+}
+
+.shadow-soft {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.shadow-bubble {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
