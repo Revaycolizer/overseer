@@ -75,39 +75,48 @@ pub fn Layout() -> Element {
                     }
                 },
                 div { class: "flex items-center gap-4",
-                    div { class: "flex gap-2",
+                    div { class: "flex gap-2 group/controls",
                         div { 
-                            class: "w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e] cursor-pointer hover:opacity-80 transition-opacity",
+                            class: "w-3.5 h-3.5 rounded-full bg-[#ff5f56] border border-[#e0443e] cursor-pointer flex items-center justify-center transition-all",
                             onclick: {
                                 #[cfg(feature = "desktop")]
                                 let window = window.clone();
-                                move |_| {
+                                move |e| {
+                                    e.stop_propagation();
                                     #[cfg(feature = "desktop")]
                                     window.close();
                                 }
-                            }
+                            },
+                            onmousedown: |e| e.stop_propagation(),
+                            span { class: "text-[10px] text-[#4c0000] opacity-0 group-hover/controls:opacity-100 transition-opacity font-bold select-none mb-[1px]", "×" }
                         }
                         div { 
-                            class: "w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123] cursor-pointer hover:opacity-80 transition-opacity",
+                            class: "w-3.5 h-3.5 rounded-full bg-[#ffbd2e] border border-[#dea123] cursor-pointer flex items-center justify-center transition-all",
                             onclick: {
                                 #[cfg(feature = "desktop")]
                                 let window = window.clone();
-                                move |_| {
+                                move |e| {
+                                    e.stop_propagation();
                                     #[cfg(feature = "desktop")]
                                     window.set_minimized(true);
                                 }
-                            }
+                            },
+                            onmousedown: |e| e.stop_propagation(),
+                            span { class: "text-[12px] text-[#9a6a00] opacity-0 group-hover/controls:opacity-100 transition-opacity font-bold select-none mb-[2px]", "−" }
                         }
                         div { 
-                            class: "w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29] cursor-pointer hover:opacity-80 transition-opacity",
+                            class: "w-3.5 h-3.5 rounded-full bg-[#27c93f] border border-[#1aab29] cursor-pointer flex items-center justify-center transition-all",
                             onclick: {
                                 #[cfg(feature = "desktop")]
                                 let window = window.clone();
-                                move |_| {
+                                move |e| {
+                                    e.stop_propagation();
                                     #[cfg(feature = "desktop")]
                                     window.set_maximized(!window.is_maximized());
                                 }
-                            }
+                            },
+                            onmousedown: |e| e.stop_propagation(),
+                            span { class: "text-[8px] text-[#006400] opacity-0 group-hover/controls:opacity-100 transition-opacity font-bold select-none", "+" }
                         }
                     }
                     div { class: "flex items-center gap-2 text-slate-500",
