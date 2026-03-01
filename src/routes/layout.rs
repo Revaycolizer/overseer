@@ -35,8 +35,10 @@ pub fn Sidebar() -> Element {
                 button { class: "nav-link", title: "Tools",
                     MaterialIcon { name: "build", size: 22 }
                 }
-  
-                button { class: "nav-link", title: "Settings",
+                Link { 
+                    class: if route == (Route::Settings {}) { "nav-link active" } else { "nav-link" }, 
+                    to: Route::Settings {}, 
+                    title: "Settings",
                     MaterialIcon { name: "settings", size: 22 }
                 }
             }
