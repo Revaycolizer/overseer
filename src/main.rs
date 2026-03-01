@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIconStylesheet};
 mod routes;
-use routes::{Conversations, AppManager, Layout};
+use routes::{Conversations, AppManager, Layout, WorkflowAutomation};
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
@@ -11,6 +11,8 @@ enum Route {
         Conversations {},
         #[route("/apps")]
         AppManager {},
+        #[route("/workflows")]
+        WorkflowAutomation {},
     #[end_layout]
     #[route("/blog/:id")]
     Blog { id: i32 },

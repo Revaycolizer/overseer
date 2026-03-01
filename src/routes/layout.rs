@@ -26,12 +26,16 @@ pub fn Sidebar() -> Element {
                     title: "Apps",
                     MaterialIcon { name: "apps", size: 22 }
                 }
+                Link { 
+                    class: if route == (Route::WorkflowAutomation {}) { "nav-link active" } else { "nav-link" }, 
+                    to: Route::WorkflowAutomation {}, 
+                    title: "Workflows",
+                    MaterialIcon { name: "terminal", size: 22 }
+                }
                 button { class: "nav-link", title: "Tools",
                     MaterialIcon { name: "build", size: 22 }
                 }
-                button { class: "nav-link", title: "Macros",
-                    MaterialIcon { name: "terminal", size: 22 }
-                }
+  
                 button { class: "nav-link", title: "Settings",
                     MaterialIcon { name: "settings", size: 22 }
                 }
