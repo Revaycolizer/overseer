@@ -1,7 +1,15 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIconStylesheet};
 mod routes;
-use routes::{Conversations, AppManager, Layout, WorkflowAutomation, Settings};
+mod backend;
+mod state;
+pub mod engine;
+pub mod db;
+
+use routes::{Conversations, AgentsWorkshop, Layout, WorkflowAutomation, Settings, ToolsWorkshop};
+use state::StateProvider;
+use crate::db::Database;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
@@ -9,10 +17,12 @@ enum Route {
     #[layout(Layout)]
         #[route("/")]
         Conversations {},
-        #[route("/apps")]
-        AppManager {},
+        #[route("/agents")]
+        AgentsWorkshop {},
         #[route("/workflows")]
         WorkflowAutomation {},
+        #[route("/tools")]
+        ToolsWorkshop {},
         #[route("/settings")]
         Settings {},
     #[end_layout]
@@ -34,7 +44,18 @@ pub fn common_head_content() -> String {
 				"#)
 }
 fn main() {
-      #[cfg(feature = "desktop")]
+    let args: Vec<String> = std::env::args().collect();
+    
+    // Check if we should run in CLI mode
+    if args.len() > 1 && (args[1] == "info" || args[1] == "--info" || !args[1].starts_with("-")) {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        if let Err(e) = rt.block_on(engine::shell::run_cli()) {
+            eprintln!("Error: {}", e);
+        }
+        return;
+    }
+
+    #[cfg(feature = "desktop")]
     {
         use dioxus::desktop::{Config, WindowBuilder};
         let config = Config::new()
@@ -46,17 +67,33 @@ fn main() {
             );
         dioxus::LaunchBuilder::desktop().with_cfg(config).launch(App);
     }
+    #[cfg(not(feature = "desktop"))]
     dioxus::launch(App);
 }
 
 #[component]
 fn App() -> Element {
+    let db = use_resource(|| async move {
+        Database::new().await.ok()
+    });
+
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         MaterialIconStylesheet {}
-        Router::<Route> {}
+        
+        if let Some(Some(database)) = db.cloned() {
+            StateProvider {
+                database: Arc::new(database),
+                Router::<Route> {}
+            }
+        } else {
+            div { class: "flex items-center justify-center h-screen bg-gray-900 text-white",
+                div { class: "animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" }
+                p { class: "ml-4", "Initializing Database..." }
+            }
+        }
     }
 }
 

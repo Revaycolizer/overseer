@@ -21,10 +21,10 @@ pub fn Sidebar() -> Element {
                     MaterialIcon { name: "chat", size: 22 }
                 }
                 Link { 
-                    class: if route == (Route::AppManager {}) { "nav-link active" } else { "nav-link" }, 
-                    to: Route::AppManager {}, 
-                    title: "Apps",
-                    MaterialIcon { name: "apps", size: 22 }
+                    class: if route == (Route::AgentsWorkshop {}) { "nav-link active" } else { "nav-link" }, 
+                    to: Route::AgentsWorkshop {}, 
+                    title: "Agents",
+                    MaterialIcon { name: "smart_toy", size: 22 }
                 }
                 Link { 
                     class: if route == (Route::WorkflowAutomation {}) { "nav-link active" } else { "nav-link" }, 
@@ -32,7 +32,10 @@ pub fn Sidebar() -> Element {
                     title: "Workflows",
                     MaterialIcon { name: "terminal", size: 22 }
                 }
-                button { class: "nav-link", title: "Tools",
+                Link { 
+                    class: if route == (Route::ToolsWorkshop {}) { "nav-link active" } else { "nav-link" }, 
+                    to: Route::ToolsWorkshop {}, 
+                    title: "Tools",
                     MaterialIcon { name: "build", size: 22 }
                 }
                 Link { 
@@ -63,7 +66,10 @@ pub fn Layout() -> Element {
 
     let (title, icon) = match route {
         Route::Conversations {} => ("Overseer", "forum"),
-        Route::AppManager {} => ("App Manager", "grid_view"),
+        Route::AgentsWorkshop {} => ("Agents Workshop", "smart_toy"),
+        Route::ToolsWorkshop {} => ("Tools Workshop", "build"),
+        Route::WorkflowAutomation {} => ("Workflow Automation", "terminal"),
+        Route::Settings {} => ("Settings", "settings"),
         _ => ("Overseer", "apps"),
     };
 

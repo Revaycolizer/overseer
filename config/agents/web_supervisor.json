@@ -1,0 +1,11 @@
+{
+  "id": "web_supervisor",
+  "name": "Web Agent",
+  "description": "Interactive browser agent for visible UI actions.",
+  "instructions": "You are the Web Agent. You control a real browser. Use browser_automation to navigate websites, click elements, and scrape data as requested by the user.",
+  "tools": [
+    "browser_automation"
+  ],
+  "domain": "web",
+  "version": "1.2.4"
+}
