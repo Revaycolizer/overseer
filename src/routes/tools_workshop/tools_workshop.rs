@@ -20,13 +20,33 @@ pub fn ToolsWorkshop() -> Element {
     
     let selected_tool = tools.iter().find(|t| t.id == selected_tool_id()).cloned();
     let mut local_code = use_signal(|| selected_tool.as_ref().map(|t| t.code.clone()).unwrap_or_default());
-
-    // Sync code when selection changes
+    
+    let mut is_fullscreen = use_signal(|| false);
+    let mut test_output = use_signal(|| "Run a test to see output here.".to_string());
+    let mut is_testing = use_signal(|| false);
+    let mut test_query = use_signal(|| String::new());
+    
+    // Sync code and handle initial selection
     let tools_for_effect = tools.clone();
     use_effect(move || {
-        if let Some(tool) = tools_for_effect.iter().find(|t| t.id == selected_tool_id()) {
+        let current_tools = tools_for_effect.clone();
+        if selected_tool_id() == 0 {
+            if let Some(first) = current_tools.first() {
+                selected_tool_id.set(first.id);
+            }
+        }
+
+        if let Some(tool) = current_tools.iter().find(|t| t.id == selected_tool_id()) {
             local_code.set(tool.code.clone());
         }
+    });
+
+    // Re-highlight when code changes
+    let _code_trigger = local_code();
+    use_effect(move || {
+        let _ = _code_trigger;
+        let script = "setTimeout(() => { if (window.Prism) { Prism.highlightAll(); } }, 10);";
+        document::eval(script);
     });
 
     rsx! {
@@ -106,32 +126,32 @@ pub fn ToolsWorkshop() -> Element {
                         }
                     }
                     div { class: "lg:col-span-2 space-y-6",
-                        if let Some(ref tool) = selected_tool {
-                            div { class: "bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-full min-h-[500px]",
+                        if let Some(tool) = selected_tool {
+                            div { class: "bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-[600px] max-h-[600px]",
                                 div { class: "border-b border-slate-200 p-4 flex items-center justify-between",
                                     div { class: "flex items-center gap-4",
                                         div {
                                             label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1", "Tool Name" }
-                                            input { 
-                                                class: "font-bold text-slate-900 border-none focus:ring-0 p-0",
-                                                value: "{tool.name}",
-                                                oninput: {
-                                                    let tool_id = tool.id;
-                                                    let mut tools_resource = tools_resource.clone();
-                                                    let db = db.clone();
-                                                    move |e| {
-                                                        let new_name = e.value();
-                                                        let db = db.clone();
+                                                input { 
+                                                    class: "font-bold text-slate-900 border-none focus:ring-0 p-0",
+                                                    value: "{tool.name}",
+                                                    oninput: {
                                                         let mut tools_resource = tools_resource.clone();
-                                                        let mut updated_tool = tool.clone();
-                                                        updated_tool.name = new_name;
-                                                        spawn(async move {
-                                                            let _ = backend::update_tool(&db, updated_tool).await;
-                                                            tools_resource.restart();
-                                                        });
+                                                        let db = db.clone();
+                                                        let tool_for_name = tool.clone();
+                                                        move |e| {
+                                                            let new_name = e.value();
+                                                            let db = db.clone();
+                                                            let mut tools_resource = tools_resource.clone();
+                                                            let mut updated_tool = tool_for_name.clone();
+                                                            updated_tool.name = new_name;
+                                                            spawn(async move {
+                                                                let _ = backend::update_tool(&db, updated_tool).await;
+                                                                tools_resource.restart();
+                                                            });
+                                                        }
                                                     }
                                                 }
-                                            }
                                         }
                                         div { class: "flex items-center gap-1",
                                             span { class: "text-[10px] font-bold text-emerald-600 uppercase bg-emerald-50 px-2 py-0.5 rounded",
@@ -141,10 +161,59 @@ pub fn ToolsWorkshop() -> Element {
                                     }
                                     div { class: "flex items-center gap-2",
                                         button { class: "text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-50",
-                                            MaterialIcon { name: "play_arrow", size: 20 }
+                                            onclick: move |_| is_fullscreen.set(!is_fullscreen()),
+                                            MaterialIcon { name: if is_fullscreen() { "fullscreen_exit" } else { "fullscreen" }, size: 20 }
                                         }
                                         button { 
-                                            class: "text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-50",
+                                            class: "bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-sm active:scale-95",
+                                            onclick: {
+                                                let t = tool.clone();
+                                                let local_code = local_code.clone();
+                                                let query = test_query.clone();
+                                                move |_| {
+                                                    let lang = t.language.clone();
+                                                    let code = local_code();
+                                                    let q = query();
+                                                    is_testing.set(true);
+                                                    test_output.set("Running test...".to_string());
+                                                    spawn(async move {
+                                                        let query_opt = if q.is_empty() { None } else { Some(q.as_str()) };
+                                                        match backend::test_tool_code(&lang, &code, query_opt).await {
+                                                            Ok(res) => test_output.set(res),
+                                                            Err(e) => test_output.set(format!("Test Error: {}", e)),
+                                                        }
+                                                        is_testing.set(false);
+                                                    });
+                                                }
+                                            },
+                                            MaterialIcon { name: "play_arrow", size: 14, color: MaterialIconColor::Light }
+                                            if is_testing() { " Testing... " } else { " Test Tool " }
+                                        }
+                                        button { 
+                                            class: "bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-sm active:scale-95",
+                                            onclick: {
+                                                let t = tool.clone();
+                                                let local_code = local_code.clone();
+                                                let db_click = db.clone();
+                                                let mut tools_resource_click = tools_resource.clone();
+                                                move |_| {
+                                                    let mut updated_tool = t.clone();
+                                                    updated_tool.code = local_code();
+                                                    let db_spawn = db_click.clone();
+                                                    let mut tools_resource_spawn = tools_resource_click.clone();
+                                                    let tool_id = t.id;
+                                                    spawn(async move {
+                                                        let _ = backend::update_tool(&db_spawn, updated_tool).await;
+                                                        let _ = backend::publish_tool_version(&db_spawn, tool_id, "1.1.0", "Version snapshot").await;
+                                                        tools_resource_spawn.restart();
+                                                    });
+                                                }
+                                            },
+                                            MaterialIcon { name: "publish", size: 14 }
+                                            " Publish Version "
+                                        }
+                                        button { 
+                                            class: "bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm active:scale-95",
                                             onclick: {
                                                 let t = tool.clone();
                                                 let local_code = local_code.clone();
@@ -161,7 +230,8 @@ pub fn ToolsWorkshop() -> Element {
                                                     });
                                                 }
                                             },
-                                            MaterialIcon { name: "save", size: 20 }
+                                            MaterialIcon { name: "save", size: 14 }
+                                            " Save & Sync Logic "
                                         }
                                         div { class: "w-[1px] h-4 bg-slate-200 mx-1" }
                                         button { class: "text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-50",
@@ -169,12 +239,62 @@ pub fn ToolsWorkshop() -> Element {
                                         }
                                     }
                                 }
-                                div { class: "flex-1 bg-[#1e293b] font-mono text-sm overflow-hidden",
-                                    textarea {
-                                        class: "w-full h-full bg-transparent border-none focus:ring-0 text-slate-300 p-6 resize-none custom-scrollbar",
-                                        value: "{local_code}",
-                                        oninput: move |e| local_code.set(e.value()),
-                                        spellcheck: false,
+                                div { 
+                                    class: if is_fullscreen() {
+                                        "fixed inset-0 z-50 bg-[#1e1e1e] flex flex-col p-6 animate-fade-in"
+                                    } else {
+                                        "flex-1 overflow-hidden relative code-editor-container min-h-[300px]"
+                                    },
+                                    if is_fullscreen() {
+                                        div { class: "flex justify-between items-center mb-6",
+                                            div { class: "flex items-center gap-3 text-white",
+                                                MaterialIcon { name: "code", size: 24, color: MaterialIconColor::Light }
+                                                span { class: "font-bold font-mono text-sm", "{tool.name}.{tool.language}" }
+                                            }
+                                            div { class: "flex items-center gap-4",
+                                                button {
+                                                    class: "bg-blue-600 text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-blue-500 shadow-md",
+                                                    onclick: {
+                                                        let t = tool.clone();
+                                                        let local_code = local_code.clone();
+                                                        let query = test_query.clone();
+                                                        move |_| {
+                                                            let lang = t.language.clone();
+                                                            let code = local_code();
+                                                            let q = query();
+                                                            is_testing.set(true);
+                                                            test_output.set("Running test...".to_string());
+                                                            spawn(async move {
+                                                                let query_opt = if q.is_empty() { None } else { Some(q.as_str()) };
+                                                                match backend::test_tool_code(&lang, &code, query_opt).await {
+                                                                    Ok(res) => test_output.set(res),
+                                                                    Err(e) => test_output.set(format!("Test Error: {}", e)),
+                                                                }
+                                                                is_testing.set(false);
+                                                            });
+                                                        }
+                                                    },
+                                                    MaterialIcon { name: "play_arrow", size: 16, color: MaterialIconColor::Light }
+                                                    if is_testing() { " Testing... " } else { " Run Test " }
+                                                }
+                                                button { class: "bg-white/10 hover:bg-white/20 text-white p-2.5 rounded-lg flex items-center transition-colors",
+                                                    onclick: move |_| is_fullscreen.set(false),
+                                                    MaterialIcon { name: "fullscreen_exit", size: 20, color: MaterialIconColor::Light }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    div { class: if is_fullscreen() { "flex-1 relative overflow-hidden bg-black/20 rounded-xl" } else { "w-full h-full relative" },
+                                        textarea {
+                                            class: "code-editor-textarea",
+                                            value: "{local_code}",
+                                            oninput: move |e| local_code.set(e.value()),
+                                            spellcheck: false,
+                                        }
+                                        pre { class: "code-editor-highlight language-{tool.language}",
+                                            code { "{local_code}\n\n" }
+                                        }
                                     }
                                 }
                                 
@@ -187,14 +307,14 @@ pub fn ToolsWorkshop() -> Element {
                                                 class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs text-slate-600 focus:ring-1 focus:ring-brand-blue/20 focus:border-brand-blue transition-all min-h-[60px]",
                                                 value: "{tool.description}",
                                                 oninput: {
-                                                    let tool_id = tool.id;
                                                     let mut tools_resource = tools_resource.clone();
                                                     let db = db.clone();
+                                                    let tool_for_desc = tool.clone();
                                                     move |e| {
                                                         let new_desc = e.value();
                                                         let db = db.clone();
                                                         let mut tools_resource = tools_resource.clone();
-                                                        let mut updated_tool = tool.clone();
+                                                        let mut updated_tool = tool_for_desc.clone();
                                                         updated_tool.description = new_desc;
                                                         spawn(async move {
                                                             let _ = backend::update_tool(&db, updated_tool).await;
@@ -205,20 +325,20 @@ pub fn ToolsWorkshop() -> Element {
                                             }
                                         }
                                         div {
-                                            label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Script Path" }
+                                            label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Legacy Script Path (Fallback)" }
                                             input { 
                                                 class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-mono text-slate-600",
-                                                placeholder: "/src/engine/scripts/...",
+                                                placeholder: "Leave empty to use DB code exclusively",
                                                 value: tool.script_path.clone().unwrap_or_default(),
                                                 oninput: {
-                                                    let tool_id = tool.id;
                                                     let mut tools_resource = tools_resource.clone();
                                                     let db = db.clone();
+                                                    let tool_for_path = tool.clone();
                                                     move |e| {
                                                         let new_path = e.value();
                                                         let db = db.clone();
                                                         let mut tools_resource = tools_resource.clone();
-                                                        let mut updated_tool = tool.clone();
+                                                        let mut updated_tool = tool_for_path.clone();
                                                         updated_tool.script_path = if new_path.is_empty() { None } else { Some(new_path) };
                                                         spawn(async move {
                                                             let _ = backend::update_tool(&db, updated_tool).await;
@@ -246,16 +366,24 @@ pub fn ToolsWorkshop() -> Element {
                                 }
 
                                 div { class: "border-t border-slate-200 p-4 bg-white rounded-b-xl",
-                                    div { class: "flex items-center justify-between",
+                                    div { class: "flex items-center justify-between mb-2",
                                         div { class: "flex items-center gap-4",
                                             span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
                                                 "Console Output"
                                             }
-                                            span { class: "text-[10px] text-emerald-600 font-mono",
-                                                "Core tool loaded successfully"
-                                            }
                                         }
                                         MaterialIcon { name: "keyboard_arrow_up", size: 18, color: MaterialIconColor::Custom("text-slate-300".into()) }
+                                    }
+                                    div { class: "mb-3 flex items-center gap-2",
+                                        input {
+                                            class: "flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-mono text-slate-600 focus:ring-1 focus:ring-brand-blue/20",
+                                            placeholder: "e.g., --action search --query 'Dioxus'",
+                                            value: "{test_query}",
+                                            oninput: move |e| test_query.set(e.value()),
+                                        }
+                                    }
+                                    pre { class: "text-[10px] text-slate-600 font-mono whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-100 max-h-40 overflow-y-auto custom-scrollbar",
+                                        "{test_output}"
                                     }
                                 }
                             }

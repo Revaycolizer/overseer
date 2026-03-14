@@ -3,42 +3,23 @@ mod dispatcher;
 
 use rig::{
     providers::ollama,
-    completion::Message,
+    completion::{Message, Prompt},
     tool::Tool,
+    client::CompletionClient,
 };
 use std::time::Duration;
 use tokio::time::sleep;
 
-use crate::engine::agents::{
-    master_planner::MasterPlanner,
-    web::{planner::WebPlanner, supervisor::WebSupervisor},
-    office::{planner::OfficePlanner, supervisor::OfficeSupervisor},
-    desktop::{planner::DesktopPlanner, supervisor::AppSupervisor},
-    neontune::{planner::NeontunePlanner, supervisor::NeontuneSupervisor},
-    text_writer::supervisor::TextWriterSupervisor,
-    overseer::OverseerAgent,
-    chat::ChatAgent,
-    stealth::StealthSupervisor,
-};
-use crate::engine::tools::{StructuredPerceptionTool, BrowserTool, BrowserArgs, PyUITool, PyUIArgs};
+use crate::engine::agents::master_planner::MasterPlanner;
+use crate::engine::tools::StructuredPerceptionTool;
+use crate::engine::utils::discovery::AgentInfo;
 
 pub use planner::MacroTask;
 
 pub async fn orchestrate_request<'a>(
     db: &crate::db::Database,
     master_planner: &'a MasterPlanner,
-    web_planner: &'a WebPlanner,
-    office_planner: &'a OfficePlanner,
-    desktop_planner: &'a DesktopPlanner,
-    neontune_planner: &'a NeontunePlanner,
-    web_supervisor: &'a WebSupervisor,
-    app_supervisor: &'a AppSupervisor,
-    office_supervisor: &'a OfficeSupervisor,
-    text_writer_supervisor: &'a TextWriterSupervisor,
-    neontune_supervisor: &'a NeontuneSupervisor,
-    overseer: &'a OverseerAgent,
-    chat_agent: &'a ChatAgent,
-    stealth_supervisor: &'a StealthSupervisor,
+    all_agents: &[AgentInfo],
     query: &str, 
     _history: Vec<Message>,
     perception_tool: &StructuredPerceptionTool,
@@ -77,33 +58,24 @@ pub async fn orchestrate_request<'a>(
         println!("=======================================================");
 
         // Fetch micro-steps from domain planner if needed
-        let micro_steps: Vec<String> = match macro_task.domain.as_str() {
-            "web" => {
-                println!("🧠 WEB PLANNER Decomposing task...");
-                let sub_plan = web_planner.plan(&macro_task.task).await;
-                planner::parse_micro_steps(&sub_plan, &macro_task.task)
-            },
-            "office" => {
-                println!("🧠 OFFICE PLANNER Decomposing task...");
-                let sub_plan = office_planner.plan(&macro_task.task).await;
-                planner::parse_micro_steps(&sub_plan, &macro_task.task)
-            },
-            "neontune" => {
-                println!("🎵 NEONTUNE PLANNER Decomposing task...");
-                let sub_plan: String = neontune_planner.plan(&macro_task.task).await;
-                planner::parse_micro_steps(&sub_plan, &macro_task.task)
-            },
-            "desktop" => {
-                println!("🧠 DESKTOP PLANNER Decomposing task...");
-                let sub_plan = desktop_planner.plan(&macro_task.task).await;
-                planner::parse_micro_steps(&sub_plan, &macro_task.task)
-            },
-            "math" | "text_writer" | "chat" | "stealth" => vec![macro_task.task.clone()],
-            _ => {
-                println!("⚠️ Unknown domain '{}', defaulting to desktop.", macro_task.domain);
-                println!("🧠 DESKTOP PLANNER Decomposing task...");
-                let sub_plan = desktop_planner.plan(&macro_task.task).await;
-                planner::parse_micro_steps(&sub_plan, &macro_task.task)
+        let planner_domain = format!("{}_planner", macro_task.domain);
+        let micro_steps: Vec<String> = if let Some(agent_info) = all_agents.iter().find(|a| a.domain == planner_domain || a.domain == macro_task.domain && (a.name.to_lowercase().contains("planner") || a.domain == "orchestrator")) {
+            println!("🧠 {} Decomposing task...", agent_info.name);
+            let model_name = if agent_info.model.is_empty() { "qwen2.5:7b-instruct" } else { &agent_info.model };
+            let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(model_name))
+                .preamble(&agent_info.instructions)
+                .default_max_turns(1)
+                .build();
+            
+            let sub_plan: String = agent.prompt(&macro_task.task).await.unwrap_or_else(|e| format!("[\"Error planning: {}\"]", e));
+            planner::parse_micro_steps(&sub_plan, &macro_task.task)
+        } else {
+            match macro_task.domain.as_str() {
+                "math" | "text_writer" | "chat" | "stealth" => vec![macro_task.task.clone()],
+                _ => {
+                    println!("⚠️ No specific planner found for domain '{}', using task directly.", macro_task.domain);
+                    vec![macro_task.task.clone()]
+                }
             }
         };
 
@@ -138,9 +110,13 @@ pub async fn orchestrate_request<'a>(
                     if browser_apps.iter().any(|b| app_name.contains(b)) {
                         println!("🌐 AUTO-BROWSER-OPEN: Starting Playwright daemon for '{}'...", app_name);
                         let tools_list = crate::backend::get_tools(db).await.unwrap_or_default();
-                        let script_path = tools_list.iter().find(|t| t.name == "browser_automation").and_then(|t| t.script_path.clone());
-                        let tool = BrowserTool::new(script_path);
-                        if let Ok(out) = tool.call(BrowserArgs { action: "ping".to_string(), url: None, text: None, selector: None, submit: None, direction: None, amount: None, navigate: None, x: None, y: None }).await {
+                        let script_path = if let Some(tinfo) = tools_list.iter().find(|t| t.name == "browser_automation") {
+                            crate::engine::utils::discovery::get_tool_executable_path(tinfo)
+                        } else {
+                            None
+                        };
+                        let tool = crate::engine::tools::BrowserTool::new(script_path);
+                        if let Ok(out) = tool.call(crate::engine::tools::BrowserArgs { action: "ping".to_string(), url: None, text: None, selector: None, submit: None, direction: None, amount: None, navigate: None, x: None, y: None }).await {
                             if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(out.find('{').map(|i| &out[i..]).unwrap_or(&out)) {
                                 if let Some(pid) = json_val.get("browser_pid").and_then(|v| v.as_i64()) { browser_pid = Some(pid as i32); }
                             }
@@ -154,9 +130,13 @@ pub async fn orchestrate_request<'a>(
                     } else {
                         println!("🚀 AUTO-LAUNCH: Directly launching '{}' without model...", app_name);
                         let tools_list = crate::backend::get_tools(db).await.unwrap_or_default();
-                        let script_path = tools_list.iter().find(|t| t.name == "ui_automation").and_then(|t| t.script_path.clone());
-                        let tool = PyUITool::new(script_path);
-                        let result_str = tool.call(PyUIArgs { action: "launch".to_string(), app: Some(app_name.clone()), text: None, x: None, y: None, submit: None, clear: None, key: None, no_launch: None }).await.unwrap_or_else(|e| format!("Launch error: {}", e));
+                        let script_path = if let Some(tinfo) = tools_list.iter().find(|t| t.name == "ui_automation") {
+                            crate::engine::utils::discovery::get_tool_executable_path(tinfo)
+                        } else {
+                            None
+                        };
+                        let tool = crate::engine::tools::PyUITool::new(script_path);
+                        let result_str = tool.call(crate::engine::tools::PyUIArgs { action: "launch".to_string(), app: Some(app_name.clone()), text: None, x: None, y: None, submit: None, clear: None, key: None, no_launch: None }).await.unwrap_or_else(|e| format!("Launch error: {}", e));
                         sleep(Duration::from_secs(2)).await;
                         let result = format!("Launched '{}'. Result: {}", app_name, result_str);
                         println!("✅ AUTO-LAUNCH result: {}", result_str);
@@ -170,6 +150,7 @@ pub async fn orchestrate_request<'a>(
             // Route to supervisor loop methods
             match dispatcher::dispatch_domain(
                 db,
+                all_agents,
                 &macro_task.domain,
                 step,
                 query,
@@ -177,14 +158,6 @@ pub async fn orchestrate_request<'a>(
                 &plan_history,
                 memory_context,
                 &macro_task.task,
-                web_supervisor,
-                app_supervisor,
-                office_supervisor,
-                text_writer_supervisor,
-                neontune_supervisor,
-                overseer,
-                chat_agent,
-                stealth_supervisor,
                 perception_tool,
                 ollama_client,
                 &mut browser_pid,

@@ -5,7 +5,7 @@ use crate::engine::tools::{BrowserTool, BrowserArgs};
 use rig::tool::Tool;
 
 pub async fn get_browser_dom_tree() -> Option<String> {
-    let tool = BrowserTool::new();
+    let tool = BrowserTool::new(None);
     let args = BrowserArgs {
         action: "get_dom_tree".to_string(),
         url: None,

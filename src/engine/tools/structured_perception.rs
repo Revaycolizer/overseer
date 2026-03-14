@@ -34,6 +34,7 @@ pub struct PerceptionResponse {
 
 #[derive(Clone)]
 pub struct StructuredPerceptionTool {
+    db: crate::db::Database,
     last_state: Arc<Mutex<Option<PerceptionResponse>>>,
 }
 
@@ -49,15 +50,30 @@ impl std::fmt::Display for ToolError {
 impl std::error::Error for ToolError {}
 
 impl StructuredPerceptionTool {
-    pub fn new() -> Self {
+    pub fn new(db: crate::db::Database) -> Self {
         Self {
+            db,
             last_state: Arc::new(Mutex::new(None)),
         }
     }
 
     fn call_python(&self, action: &str, app: &str) -> Result<String, ToolError> {
+        // Fetch the tool code from the database
+        let pool = self.db.pool.clone();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        
+        let tool_info = rt.block_on(async {
+            sqlx::query_as::<_, crate::engine::utils::discovery::ToolInfo>("SELECT * FROM tools WHERE name = ?")
+                .bind("ui_automation")
+                .fetch_one(&pool)
+                .await
+        }).map_err(|e| ToolError(format!("Failed to fetch ui_automation tool from DB: {}", e)))?;
+
+        let script_path = crate::engine::utils::discovery::get_tool_executable_path(&tool_info)
+            .ok_or_else(|| ToolError("Failed to prepare ui_automation script".to_string()))?;
+
         let output = Command::new("python3")
-            .arg("src/engine/scripts/desktop/ui_automation.py")
+            .arg(&script_path)
             .arg("--action")
             .arg(action)
             .arg("--app")

@@ -45,9 +45,11 @@ pub fn common_head_content() -> String {
 }
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    println!("📍 Overseer launched with args: {:?}", args);
     
     // Check if we should run in CLI mode
     if args.len() > 1 && (args[1] == "info" || args[1] == "--info" || !args[1].starts_with("-")) {
+        println!("🖥️ Entering CLI mode...");
         let rt = tokio::runtime::Runtime::new().unwrap();
         if let Err(e) = rt.block_on(engine::shell::run_cli()) {
             eprintln!("Error: {}", e);
@@ -73,23 +75,72 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-    let db = use_resource(|| async move {
-        Database::new().await.ok()
+    println!("🏗️  App component rendering...");
+    let mut db = use_resource(|| async move {
+        println!("🛠️  Database resource initialization started...");
+        let result = Database::new().await;
+        match &result {
+            Ok(_) => println!("✅ Database resource initialization successful!"),
+            Err(e) => eprintln!("❌ Database resource initialization failed: {}", e),
+        }
+        result.ok()
     });
 
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
+        
+        // PrismJS for Syntax Highlighting
+        document::Link { rel: "stylesheet", href: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" }
+        document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" }
+        document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js" }
+        document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js" }
+        document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js" }
+
+        document::Script {
+            {r#"
+            document.addEventListener('scroll', function(e) {
+                if (e.target.classList && e.target.classList.contains('code-editor-textarea')) {
+                    let pre = e.target.nextElementSibling;
+                    if (pre && pre.tagName === 'PRE') {
+                        pre.scrollTop = e.target.scrollTop;
+                        pre.scrollLeft = e.target.scrollLeft;
+                    }
+                }
+            }, true);
+            "#}
+        }
+
         MaterialIconStylesheet {}
         
-        if let Some(Some(database)) = db.cloned() {
-            StateProvider {
-                database: Arc::new(database),
-                Router::<Route> {}
+        if let Some(res) = db.cloned() {
+            match res {
+                Some(database) => rsx! {
+                    StateProvider {
+                        database: Arc::new(database),
+                        Router::<Route> {}
+                    }
+                },
+                None => rsx! {
+                    div { class: "flex items-center justify-center h-screen bg-[#0f1116] text-white flex-col",
+                        div { class: "p-8 bg-red-900/20 border border-red-500 rounded-lg max-w-2xl",
+                            h2 { class: "text-xl font-bold text-red-500 mb-4", "Database Initialization Failed" }
+                            p { class: "text-gray-300 mb-4", "The application encountered an error while setting up the database. This usually happens if migration files have been modified after being applied." }
+                            pre { class: "bg-black/40 p-4 rounded text-xs overflow-auto max-h-64 text-red-300",
+                                "Error: Migration checksum mismatch or lock issue.\nCheck terminal logs for details."
+                            }
+                            button { 
+                                class: "mt-6 px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition-colors font-medium",
+                                onclick: move |_| db.restart(),
+                                "Retry Initialization"
+                            }
+                        }
+                    }
+                }
             }
         } else {
-            div { class: "flex items-center justify-center h-screen bg-gray-900 text-white",
+            div { class: "flex items-center justify-center h-screen bg-[#0f1116] text-white",
                 div { class: "animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" }
                 p { class: "ml-4", "Initializing Database..." }
             }

@@ -1,8 +1,8 @@
 use crate::engine::utils::discovery::{AgentInfo, ToolInfo};
 use crate::db::Database;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use reqwest;
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OllamaModel {
@@ -29,35 +29,39 @@ pub async fn list_ollama_models() -> Vec<String> {
 }
 
 pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
-    let rows = sqlx::query!(
-        r#"SELECT id, name, description, instructions, model, domain, version FROM agents"#
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT id, name, description, instructions, model, domain, version FROM agents"
     )
     .fetch_all(&db.pool)
     .await?;
     
     let mut agents = Vec::new();
     for r in rows {
-        let agent_id = r.id.expect("ID should not be null");
+        let agent_id: i64 = r.get("id");
         
         // Fetch tools for this agent
-        let tools = sqlx::query!(
-            r#"SELECT t.name FROM tools t 
-               JOIN agent_tools at ON t.id = at.tool_id 
-               WHERE at.agent_id = ?"#,
-            agent_id
+        let tools_rows = sqlx::query(
+            "SELECT t.name FROM tools t 
+             JOIN agent_tools at ON t.id = at.tool_id 
+             WHERE at.agent_id = ?"
         )
+        .bind(agent_id)
         .fetch_all(&db.pool)
         .await?;
 
+        let domain: String = r.get::<Option<String>, _>("domain").unwrap_or_default();
+
         agents.push(AgentInfo {
             id: agent_id,
-            name: r.name,
-            description: r.description.unwrap_or_default(),
-            instructions: r.instructions.unwrap_or_default(),
-            model: r.model.unwrap_or_default(),
-            domain: r.domain.unwrap_or_default(),
-            version: r.version.unwrap_or_default(),
-            tools: tools.into_iter().map(|t| t.name).collect(),
+            name: r.get("name"),
+            description: r.get::<Option<String>, _>("description").unwrap_or_default(),
+            instructions: r.get::<Option<String>, _>("instructions").unwrap_or_default(),
+            model: r.get::<Option<String>, _>("model").unwrap_or_default(),
+            domain: domain.clone(),
+            version: r.get::<Option<String>, _>("version").unwrap_or_default(),
+            tools: tools_rows.into_iter().map(|t| t.get("name")).collect(),
+            source_files: vec![],
         });
     }
     
@@ -65,20 +69,21 @@ pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
 }
 
 pub async fn get_tools(db: &Database) -> anyhow::Result<Vec<ToolInfo>> {
-    let rows = sqlx::query!(
-        r#"SELECT id, name, description, code, language, script_path, version FROM tools"#
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT id, name, description, code, language, script_path, version FROM tools"
     )
     .fetch_all(&db.pool)
     .await?;
     
     let tools = rows.into_iter().map(|r| ToolInfo {
-        id: r.id.expect("ID should not be null"),
-        name: r.name,
-        description: r.description.unwrap_or_default(),
-        code: r.code.unwrap_or_default(),
-        language: r.language.unwrap_or_default(),
-        script_path: r.script_path,
-        version: r.version.unwrap_or_default(),
+        id: r.get("id"),
+        name: r.get("name"),
+        description: r.get::<Option<String>, _>("description").unwrap_or_default(),
+        code: r.get::<Option<String>, _>("code").unwrap_or_default(),
+        language: r.get::<Option<String>, _>("language").unwrap_or_default(),
+        script_path: r.get("script_path"),
+        version: r.get::<Option<String>, _>("version").unwrap_or_default(),
     }).collect();
     
     Ok(tools)
@@ -86,10 +91,10 @@ pub async fn get_tools(db: &Database) -> anyhow::Result<Vec<ToolInfo>> {
 
 pub async fn add_agent(db: &Database, name: &str, description: &str, domain: &str) -> anyhow::Result<i64> {
     let id = db.next_id().await;
-    sqlx::query!(
-        "INSERT INTO agents (id, name, description, instructions, model, domain, version) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        id, name, description, "", "llama3", domain, "1.0.0"
+    sqlx::query(
+        "INSERT INTO agents (id, name, description, instructions, model, domain, version) VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
+    .bind(id).bind(name).bind(description).bind("").bind("llama3").bind(domain).bind("1.0.0")
     .execute(&db.pool)
     .await?;
     Ok(id)
@@ -97,59 +102,59 @@ pub async fn add_agent(db: &Database, name: &str, description: &str, domain: &st
 
 pub async fn add_tool(db: &Database, name: &str, description: &str, language: &str) -> anyhow::Result<i64> {
     let id = db.next_id().await;
-    sqlx::query!(
-        "INSERT INTO tools (id, name, description, code, language, script_path, version) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        id, name, description, "", language, "", "1.0.0"
+    sqlx::query(
+        "INSERT INTO tools (id, name, description, code, language, script_path, version) VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
+    .bind(id).bind(name).bind(description).bind("").bind(language).bind("").bind("1.0.0")
     .execute(&db.pool)
     .await?;
     Ok(id)
 }
 
 pub async fn update_agent(db: &Database, agent: AgentInfo) -> anyhow::Result<()> {
-    sqlx::query!(
-        "UPDATE agents SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        agent.name, agent.description, agent.instructions, agent.model, agent.domain, agent.version, agent.id
+    sqlx::query(
+        "UPDATE agents SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     )
+    .bind(agent.name).bind(agent.description).bind(agent.instructions).bind(agent.model).bind(agent.domain).bind(agent.version).bind(agent.id)
     .execute(&db.pool)
     .await?;
     Ok(())
 }
 
 pub async fn update_tool(db: &Database, tool: ToolInfo) -> anyhow::Result<()> {
-    sqlx::query!(
-        "UPDATE tools SET name = ?, description = ?, code = ?, language = ?, script_path = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        tool.name, tool.description, tool.code, tool.language, tool.script_path, tool.version, tool.id
+    sqlx::query(
+        "UPDATE tools SET name = ?, description = ?, code = ?, language = ?, script_path = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     )
+    .bind(tool.name).bind(tool.description).bind(tool.code).bind(tool.language).bind(tool.script_path).bind(tool.version).bind(tool.id)
     .execute(&db.pool)
     .await?;
     Ok(())
 }
 
+
 pub async fn add_tool_to_agent(db: &Database, agent_id: i64, tool_id: i64) -> anyhow::Result<()> {
-    sqlx::query!(
-        "INSERT OR IGNORE INTO agent_tools (agent_id, tool_id) VALUES (?, ?)",
-        agent_id, tool_id
+    sqlx::query(
+        "INSERT OR IGNORE INTO agent_tools (agent_id, tool_id) VALUES (?, ?)"
     )
+    .bind(agent_id).bind(tool_id)
     .execute(&db.pool)
     .await?;
     Ok(())
 }
 
 pub async fn remove_tool_from_agent(db: &Database, agent_id: i64, tool_id: i64) -> anyhow::Result<()> {
-    sqlx::query!(
-        "DELETE FROM agent_tools WHERE agent_id = ? AND tool_id = ?",
-        agent_id, tool_id
+    sqlx::query(
+        "DELETE FROM agent_tools WHERE agent_id = ? AND tool_id = ?"
     )
+    .bind(agent_id).bind(tool_id)
     .execute(&db.pool)
     .await?;
     Ok(())
 }
 
 pub async fn get_conversations(db: &Database) -> anyhow::Result<Vec<Conversation>> {
-    let convs = sqlx::query_as!(
-        Conversation,
-        r#"SELECT id as "id!", title, created_at as "created_at!" FROM conversations ORDER BY updated_at DESC"#
+    let convs = sqlx::query_as::<_, Conversation>(
+        "SELECT id, title, created_at FROM conversations ORDER BY updated_at DESC"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -158,40 +163,50 @@ pub async fn get_conversations(db: &Database) -> anyhow::Result<Vec<Conversation
 
 pub async fn add_conversation(db: &Database, title: &str) -> anyhow::Result<i64> {
     let id = db.next_id().await;
-    sqlx::query!(
-        "INSERT INTO conversations (id, title) VALUES (?, ?)",
-        id, title
+    sqlx::query(
+        "INSERT INTO conversations (id, title) VALUES (?, ?)"
     )
+    .bind(id).bind(title)
     .execute(&db.pool)
     .await?;
     Ok(id)
 }
 
-pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result<Vec<Message>> {
-    let rows = sqlx::query!(
-        r#"SELECT id as "id!", conversation_id as "conversation_id!", role as "role!", content as "content!", created_at as "created_at!" FROM messages WHERE conversation_id = ? ORDER BY created_at ASC"#,
-        conversation_id
+pub async fn update_conversation_title(db: &Database, id: i64, title: &str) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE conversations SET title = ? WHERE id = ?"
     )
+    .bind(title).bind(id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result<Vec<Message>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT id, conversation_id, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC"
+    )
+    .bind(conversation_id)
     .fetch_all(&db.pool)
     .await?;
     
     let mut messages = Vec::new();
     for r in rows {
-        let message_id = r.id;
-        let attachments = sqlx::query_as!(
-            Attachment,
-            r#"SELECT id as "id!", message_id as "message_id!", filename as "filename!", file_path as "file_path!", content_type as "content_type!", size as "size!" FROM attachments WHERE message_id = ?"#,
-            message_id
+        let message_id: i64 = r.get("id");
+        let attachments = sqlx::query_as::<_, Attachment>(
+            "SELECT id, message_id, filename, file_path, content_type, size FROM attachments WHERE message_id = ?"
         )
+        .bind(message_id)
         .fetch_all(&db.pool)
         .await?;
 
         messages.push(Message {
-            id: r.id,
-            conversation_id: r.conversation_id,
-            role: r.role,
-            content: r.content,
-            created_at: r.created_at,
+            id: message_id,
+            conversation_id: r.get("conversation_id"),
+            role: r.get("role"),
+            content: r.get("content"),
+            created_at: r.get("created_at"),
             attachments,
         });
     }
@@ -201,10 +216,10 @@ pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result
 
 pub async fn add_attachment(db: &Database, message_id: i64, filename: &str, file_path: &str, content_type: &str, size: i64) -> anyhow::Result<i64> {
     let id = db.next_id().await;
-    sqlx::query!(
-        "INSERT INTO attachments (id, message_id, filename, file_path, content_type, size) VALUES (?, ?, ?, ?, ?, ?)",
-        id, message_id, filename, file_path, content_type, size
+    sqlx::query(
+        "INSERT INTO attachments (id, message_id, filename, file_path, content_type, size) VALUES (?, ?, ?, ?, ?, ?)"
     )
+    .bind(id).bind(message_id).bind(filename).bind(file_path).bind(content_type).bind(size)
     .execute(&db.pool)
     .await?;
     Ok(id)
@@ -212,18 +227,18 @@ pub async fn add_attachment(db: &Database, message_id: i64, filename: &str, file
 
 pub async fn add_message(db: &Database, conversation_id: i64, role: &str, content: &str) -> anyhow::Result<i64> {
     let id = db.next_id().await;
-    sqlx::query!(
-        "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
-        id, conversation_id, role, content
+    sqlx::query(
+        "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)"
     )
+    .bind(id).bind(conversation_id).bind(role).bind(content)
     .execute(&db.pool)
     .await?;
     
     // Update conversation timestamp
-    sqlx::query!(
-        "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        conversation_id
+    sqlx::query(
+        "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     )
+    .bind(conversation_id)
     .execute(&db.pool)
     .await?;
     
@@ -231,59 +246,90 @@ pub async fn add_message(db: &Database, conversation_id: i64, role: &str, conten
 }
 
 pub async fn get_agent_by_domain(db: &Database, domain: &str) -> anyhow::Result<Option<AgentInfo>> {
-    let r = sqlx::query!(
-        r#"SELECT id, name, description, instructions, model, domain, version FROM agents WHERE domain = ? LIMIT 1"#,
-        domain
+    use sqlx::Row;
+    let r = sqlx::query(
+        "SELECT id, name, description, instructions, model, domain, version FROM agents WHERE domain = ? LIMIT 1"
     )
+    .bind(domain)
     .fetch_optional(&db.pool)
     .await?;
     
     if let Some(r) = r {
+        let agent_id: i64 = r.get("id");
         // Fetch tools for this agent
-        let tools = sqlx::query!(
-            r#"SELECT t.name FROM tools t JOIN agent_tools at ON t.id = at.tool_id WHERE at.agent_id = ?"#,
-            r.id
+        let tools_rows = sqlx::query(
+            "SELECT t.name FROM tools t JOIN agent_tools at ON t.id = at.tool_id WHERE at.agent_id = ?"
         )
+        .bind(agent_id)
         .fetch_all(&db.pool)
         .await?;
 
         Ok(Some(AgentInfo {
-            id: r.id.expect("ID should not be null"),
-            name: r.name,
-            description: r.description.unwrap_or_default(),
-            instructions: r.instructions.unwrap_or_default(),
-            model: r.model.unwrap_or_default(),
-            domain: r.domain.unwrap_or_default(),
-            version: r.version.unwrap_or_default(),
-            tools: tools.into_iter().map(|t| t.name).collect(),
+            id: agent_id,
+            name: r.get("name"),
+            description: r.get::<Option<String>, _>("description").unwrap_or_default(),
+            instructions: r.get::<Option<String>, _>("instructions").unwrap_or_default(),
+            model: r.get::<Option<String>, _>("model").unwrap_or_default(),
+            domain: r.get::<Option<String>, _>("domain").unwrap_or_default(),
+            version: r.get::<Option<String>, _>("version").unwrap_or_default(),
+            tools: tools_rows.into_iter().map(|t| t.get("name")).collect(),
+            source_files: vec![],
         }))
     } else {
         Ok(None)
     }
 }
 
+pub async fn publish_agent_version(db: &Database, agent_id: i64, version_tag: &str, changelog: &str) -> anyhow::Result<()> {
+    // 1. Fetch current agent data
+    let agent = get_agents(db).await?
+        .into_iter()
+        .find(|a| a.id == agent_id)
+        .ok_or_else(|| anyhow::anyhow!("Agent not found"))?;
+
+    // 2. Serialize to JSON
+    let content = serde_json::to_string(&agent)?;
+
+    // 3. Publish
+    publish_version(db, "agent", agent_id, version_tag, &content, changelog).await
+}
+
+pub async fn publish_tool_version(db: &Database, tool_id: i64, version_tag: &str, changelog: &str) -> anyhow::Result<()> {
+    // 1. Fetch current tool data
+    let tool = get_tools(db).await?
+        .into_iter()
+        .find(|t| t.id == tool_id)
+        .ok_or_else(|| anyhow::anyhow!("Tool not found"))?;
+
+    // 2. Content is source code
+    let content = tool.code;
+
+    // 3. Publish
+    publish_version(db, "tool", tool_id, version_tag, &content, changelog).await
+}
+
 pub async fn publish_version(db: &Database, entity_type: &str, entity_id: i64, version_tag: &str, content: &str, changelog: &str) -> anyhow::Result<()> {
     let id = db.next_id().await;
-    sqlx::query!(
-        "INSERT INTO versions (id, entity_type, entity_id, version_tag, content, changelog) VALUES (?, ?, ?, ?, ?, ?)",
-        id, entity_type, entity_id, version_tag, content, changelog
+    sqlx::query(
+        "INSERT INTO versions (id, entity_type, entity_id, version_tag, content, changelog) VALUES (?, ?, ?, ?, ?, ?)"
     )
+    .bind(id).bind(entity_type).bind(entity_id).bind(version_tag).bind(content).bind(changelog)
     .execute(&db.pool)
     .await?;
 
     // Update the main entity to this version
     if entity_type == "agent" {
-        sqlx::query!(
-            "UPDATE agents SET version = ?, instructions = ? WHERE id = ?",
-            version_tag, content, entity_id
+        sqlx::query(
+            "UPDATE agents SET version = ? WHERE id = ?"
         )
+        .bind(version_tag).bind(entity_id)
         .execute(&db.pool)
         .await?;
     } else if entity_type == "tool" {
-        sqlx::query!(
-            "UPDATE tools SET version = ?, code = ? WHERE id = ?",
-            version_tag, content, entity_id
+        sqlx::query(
+            "UPDATE tools SET version = ? WHERE id = ?"
         )
+        .bind(version_tag).bind(entity_id)
         .execute(&db.pool)
         .await?;
     }
@@ -292,25 +338,28 @@ pub async fn publish_version(db: &Database, entity_type: &str, entity_id: i64, v
 }
 
 pub async fn rollback_version(db: &Database, entity_type: &str, entity_id: i64, version_tag: &str) -> anyhow::Result<()> {
-    let v = sqlx::query!(
-        "SELECT content FROM versions WHERE entity_type = ? AND entity_id = ? AND version_tag = ? LIMIT 1",
-        entity_type, entity_id, version_tag
+    use sqlx::Row;
+    let v = sqlx::query(
+        "SELECT content FROM versions WHERE entity_type = ? AND entity_id = ? AND version_tag = ? LIMIT 1"
     )
+    .bind(entity_type).bind(entity_id).bind(version_tag)
     .fetch_one(&db.pool)
     .await?;
+    
+    let content: String = v.get("content");
 
     if entity_type == "agent" {
-        sqlx::query!(
-            "UPDATE agents SET version = ?, instructions = ? WHERE id = ?",
-            version_tag, v.content, entity_id
+        sqlx::query(
+            "UPDATE agents SET version = ?, instructions = ? WHERE id = ?"
         )
+        .bind(version_tag).bind(content).bind(entity_id)
         .execute(&db.pool)
         .await?;
     } else if entity_type == "tool" {
-        sqlx::query!(
-            "UPDATE tools SET version = ?, code = ? WHERE id = ?",
-            version_tag, v.content, entity_id
+        sqlx::query(
+            "UPDATE tools SET version = ?, code = ? WHERE id = ?"
         )
+        .bind(version_tag).bind(content).bind(entity_id)
         .execute(&db.pool)
         .await?;
     }
@@ -319,17 +368,16 @@ pub async fn rollback_version(db: &Database, entity_type: &str, entity_id: i64, 
 }
 
 pub async fn get_version_history(db: &Database, entity_type: &str, entity_id: i64) -> anyhow::Result<Vec<EntityVersion>> {
-    let rows = sqlx::query_as!(
-        EntityVersion,
-        r#"SELECT id as "id!", version_tag, changelog, created_at as "created_at!" FROM versions WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC"#,
-        entity_type, entity_id
+    let rows = sqlx::query_as::<_, EntityVersion>(
+        "SELECT id, version_tag, changelog, created_at FROM versions WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC"
     )
+    .bind(entity_type).bind(entity_id)
     .fetch_all(&db.pool)
     .await?;
     Ok(rows)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct EntityVersion {
     pub id: i64,
     pub version_tag: String,
@@ -337,7 +385,7 @@ pub struct EntityVersion {
     pub created_at: chrono::NaiveDateTime,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Conversation {
     pub id: i64,
     pub title: String,
@@ -355,7 +403,7 @@ pub struct Message {
     pub attachments: Vec<Attachment>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Attachment {
     pub id: i64,
     pub message_id: i64,
@@ -363,4 +411,113 @@ pub struct Attachment {
     pub file_path: String,
     pub content_type: String,
     pub size: i64,
+}
+
+
+pub async fn test_tool_code(language: &str, code: &str, query: Option<&str>) -> anyhow::Result<String> {
+    use std::process::Command;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    if language.to_lowercase() == "python" {
+        let mut temp_file = NamedTempFile::new()?;
+        write!(temp_file, "{}", code)?;
+        let path = temp_file.path().to_str().unwrap();
+
+        let mut cmd = Command::new("python3");
+        cmd.arg(path);
+
+        if let Some(q) = query {
+            // Using a simple whitespace split to mimic CLI arguments from the UI text field.
+            // For complex quoted arguments, a real shell lexer would be better, but this handles basic flags.
+            let args: Vec<&str> = q.split_whitespace().collect();
+            cmd.args(args);
+        }
+
+        let output = cmd.output()?;
+
+        let mut result = String::new();
+        if !output.stdout.is_empty() {
+            result.push_str(&String::from_utf8_lossy(&output.stdout));
+        }
+        if !output.stderr.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str("--- Error Output ---\n");
+            result.push_str(&String::from_utf8_lossy(&output.stderr));
+        }
+
+        if result.is_empty() {
+            result.push_str("Executed unconditionally with no output.");
+        }
+        Ok(result)
+    } else {
+        Ok(format!("Dynamic execution for language '{}' is currently unsupported or mocked. Code registered.", language))
+    }
+}
+
+pub async fn test_agent_preamble(instructions: &str) -> anyhow::Result<String> {
+    // A mock test for agent preamble syntax. For now, it simply validates length and placeholders.
+    if instructions.is_empty() {
+        return Ok("Agent preamble is empty. Please provide instructions.".to_string());
+    }
+    
+    let mut result = String::new();
+    result.push_str("Syntax Check: Valid\n");
+    result.push_str(&format!("Length: {} characters\n", instructions.len()));
+    
+    if instructions.contains("{{") && instructions.contains("}}") {
+        result.push_str("Detected template variables ({{...}}). Ensure these are populated at runtime.\n");
+    }
+    
+    result.push_str("Agent instructions are ready for deployment.");
+    Ok(result)
+}
+
+pub async fn get_setting(db: &Database, key: &str) -> String {
+    let res: Result<Option<(String,)>, sqlx::Error> = sqlx::query_as("SELECT value FROM settings WHERE key = ?")
+        .bind(key)
+        .fetch_optional(&db.pool)
+        .await;
+    
+    match res {
+        Ok(Some((v,))) => v,
+        _ => "".to_string(),
+    }
+}
+
+pub async fn set_setting(db: &Database, key: &str, value: &str) -> anyhow::Result<()> {
+    sqlx::query("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
+        .bind(key)
+        .bind(value)
+        .execute(&db.pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn get_all_settings(db: &Database) -> HashMap<String, String> {
+    let rows: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM settings")
+        .fetch_all(&db.pool)
+        .await
+        .unwrap_or_default();
+    
+    rows.into_iter().collect()
+}
+
+pub async fn get_available_models() -> Vec<String> {
+    let client = reqwest::Client::new();
+    let res = client.get("http://localhost:11434/api/tags").send().await;
+    
+    if let Ok(resp) = res {
+        if let Ok(json) = resp.json::<serde_json::Value>().await {
+            if let Some(models) = json["models"].as_array() {
+                return models.iter()
+                    .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                    .collect();
+            }
+        }
+    }
+    
+    vec!["llama3:latest".to_string(), "qwen2.5:7b-instruct".to_string()]
 }

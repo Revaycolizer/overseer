@@ -10,9 +10,11 @@ use crate::engine::agents::{
     stealth::StealthSupervisor,
 };
 use crate::engine::tools::StructuredPerceptionTool;
+use crate::engine::utils::discovery::AgentInfo;
 
 pub async fn dispatch_domain(
     db: &crate::db::Database,
+    agent_registry: &[AgentInfo],
     domain: &str,
     step: &str,
     query: &str,
@@ -20,46 +22,73 @@ pub async fn dispatch_domain(
     plan_history: &str,
     memory_context: &str,
     macro_task_description: &str,
-    web_supervisor: &WebSupervisor,
-    app_supervisor: &AppSupervisor,
-    office_supervisor: &OfficeSupervisor,
-    text_writer_supervisor: &TextWriterSupervisor,
-    neontune_supervisor: &NeontuneSupervisor,
-    overseer: &OverseerAgent,
-    chat_agent: &ChatAgent,
-    stealth_supervisor: &StealthSupervisor,
     perception_tool: &StructuredPerceptionTool,
     ollama_client: &ollama::Client,
     browser_pid: &mut Option<i32>,
 ) -> Result<String, String> {
+    // Helper to find agent info or use default
+    let get_agent = |domain_name: &str| {
+        agent_registry.iter().find(|a| a.domain == domain_name)
+            .cloned()
+            .unwrap_or_else(|| AgentInfo {
+                id: 0,
+                name: domain_name.to_string(),
+                description: String::new(),
+                tools: Vec::new(),
+                instructions: String::new(),
+                model: "qwen2.5:7b-instruct".to_string(),
+                domain: domain_name.to_string(),
+                version: "1.0.0".to_string(),
+                source_files: Vec::new(),
+            })
+    };
+
+    // Instantiate overseer (needed by most supervisors)
+    let overseer_info = get_agent("overseer");
+    let overseer = OverseerAgent::new(ollama_client, &overseer_info.instructions);
+
     match domain {
         "web" => {
             println!("🌐 DISPATCH: WebSupervisor -> run_loop");
-            web_supervisor.run_loop(db, step, Vec::new(), memories, plan_history, perception_tool, ollama_client, overseer, browser_pid).await
+            let info = get_agent("web_supervisor");
+            let supervisor = WebSupervisor::new(ollama_client, &info.instructions);
+            supervisor.run_loop(db, step, Vec::new(), memories, plan_history, perception_tool, ollama_client, &overseer, browser_pid).await
         },
         "office" => {
             println!("🏢 DISPATCH: OfficeSupervisor -> run_loop");
-            office_supervisor.run_loop(db, overseer, step, perception_tool, ollama_client, plan_history, memory_context).await
+            let info = get_agent("office_supervisor");
+            let supervisor = OfficeSupervisor::new(ollama_client, &info.instructions);
+            supervisor.run_loop(db, &overseer, step, perception_tool, ollama_client, plan_history, memory_context).await
         },
         "text_writer" => {
             println!("📝 DISPATCH: TextWriterSupervisor -> run_loop");
-            text_writer_supervisor.run_loop(db, overseer, step, perception_tool, ollama_client, plan_history, memory_context).await
+            let info = get_agent("text_writer");
+            let supervisor = TextWriterSupervisor::new(ollama_client, &info.instructions);
+            supervisor.run_loop(db, &overseer, step, perception_tool, ollama_client, plan_history, memory_context).await
         },
         "neontune" => {
             println!("🎵 DISPATCH: NeontuneSupervisor -> run_loop");
-            neontune_supervisor.run_loop(db, overseer, query, perception_tool, plan_history, macro_task_description, step).await
+            let info = get_agent("neontune_supervisor");
+            let supervisor = NeontuneSupervisor::new(ollama_client, &info.instructions);
+            supervisor.run_loop(db, &overseer, query, perception_tool, plan_history, macro_task_description, step).await
         },
         "chat" => {
             println!("💬 DISPATCH: ChatAgent -> answer");
-            Ok(chat_agent.answer(step, memory_context).await)
+            let info = get_agent("chat");
+            let agent = ChatAgent::new(ollama_client, &info.instructions);
+            Ok(agent.answer(step, memory_context).await)
         },
         "stealth" => {
             println!("👤 DISPATCH: StealthSupervisor -> run_loop");
-            stealth_supervisor.run_loop(db, step, Vec::new(), memory_context, perception_tool).await
+            let info = get_agent("stealth");
+            let supervisor = StealthSupervisor::new(ollama_client, &info.instructions);
+            supervisor.run_loop(db, step, Vec::new(), memory_context, perception_tool).await
         },
         _ => {
             println!("🖥️ DISPATCH: AppSupervisor -> run_loop");
-            app_supervisor.run_loop(db, step, memories, plan_history, perception_tool, overseer).await
+            let info = get_agent("desktop_supervisor");
+            let supervisor = AppSupervisor::new(ollama_client, &info.instructions);
+            supervisor.run_loop(db, step, memories, plan_history, perception_tool, &overseer).await
         }
     }
 }

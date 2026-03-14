@@ -2,24 +2,12 @@ use rig::providers::ollama;
 use rig::client::Nothing;
 use std::io::{self, Write};
 
-use crate::engine::agents::{
-    master_planner::MasterPlanner,
-    web::{WebPlanner, WebSupervisor},
-    office::{OfficePlanner, OfficeSupervisor},
-    desktop::{DesktopPlanner, AppSupervisor},
-    text_writer::supervisor::TextWriterSupervisor,
-    overseer::OverseerAgent,
-    neontune::{NeontuneSupervisor, NeontunePlanner},
-    chat::ChatAgent,
-    stealth::StealthSupervisor,
-};
-use crate::engine::tools::StructuredPerceptionTool;
+use crate::engine::agents::master_planner::MasterPlanner;
 use crate::engine::memory::{setup_memory_table, retrieve_memories, store_memory};
-use crate::engine::orchestrator::orchestrate_request;
 
 pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     let sqlite_db = crate::db::Database::new().await?;
-    let system = crate::engine::system::AgentSystem::new();
+    let system = crate::engine::system::AgentSystem::new(sqlite_db.clone());
     
     // Create a special CLI conversation if it doesn't exist
     let conversation_id = match crate::backend::get_conversations(&sqlite_db).await {
@@ -42,32 +30,10 @@ pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
         }
         
         let query = args[1..].join(" ");
+        println!("🚀 CLI Query: {}", query);
         
-        // Retrieve relevant memories
-        let memory_context = if let Some(ref table) = memory_table {
-            let memories = retrieve_memories(table, &client, &query, 3).await;
-            if !memories.is_empty() {
-                println!("📚 Found {} relevant memories.", memories.len());
-                memories.join("\n---\n")
-            } else {
-                String::new()
-            }
-        } else {
-            String::new()
-        };
-
-        let response = orchestrate_request(
-            &master_planner, &web_planner, &office_planner, &desktop_planner, &neontune_planner,
-            &web_supervisor, &app_supervisor, &office_supervisor, &text_writer_supervisor, &neontune_supervisor, &overseer, &chat_agent, &stealth_supervisor, &query, vec![], &perception_tool, &memory_context, &client
-        ).await;
+        let response = system.orchestrate(&sqlite_db, conversation_id, &query).await;
         println!("\n✅ FINAL RESULT:\n{}", response);
-        
-        // Store successful result in memory
-        if let Some(ref table) = memory_table {
-            if !response.contains("HALTED") && !response.contains("Error") {
-                store_memory(table, &client, &query, &response).await;
-            }
-        }
         
         return Ok(());
     }

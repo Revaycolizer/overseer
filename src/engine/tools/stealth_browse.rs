@@ -29,7 +29,7 @@ impl std::error::Error for ToolError {}
 impl StealthBrowseTool {
     pub fn new(script_path: Option<String>) -> Self {
         Self {
-            script_path: script_path.unwrap_or_else(|| "src/engine/scripts/stealth/stealth_browse.py".to_string()),
+            script_path: script_path.unwrap_or_else(|| "MISSING_TOOL_PATH".to_string()),
         }
     }
 }

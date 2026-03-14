@@ -41,6 +41,7 @@ impl TextWriterSupervisor {
 
     pub async fn run_loop(
         &self,
+        db: &crate::db::Database,
         _overseer: &OverseerAgent,
         goal: &str,
         perception_tool: &StructuredPerceptionTool,
@@ -78,7 +79,7 @@ impl TextWriterSupervisor {
             
             let mut x = None; let mut y = None; let mut t = None; let mut ty = String::new(); let mut v = false;
             let mut b = None; let mut c = None;
-            if let Some(output) = execute_tools(&json_candidate, "", perception_tool, &mut x, &mut y, &mut t, &mut ty, &mut v, &mut b, &mut c, false).await {
+            if let Some(output) = execute_tools(db, &json_candidate, "", perception_tool, &mut x, &mut y, &mut t, &mut ty, &mut v, &mut b, &mut c, false).await {
                 println!("--- TOOL OUTPUT ---\n{}", output);
                 if output.contains("TASK_COMPLETED") || output.to_lowercase().contains("code executed successfully") {
                     println!("✅ TEXT WRITER: Summary written successfully.");

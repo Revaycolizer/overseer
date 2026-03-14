@@ -74,7 +74,7 @@ pub fn Layout() -> Element {
     };
 
     rsx! {
-        div { class: "window-frame bg-white flex flex-col border border-slate-300 overflow-hidden",
+        div { class: "window-frame h-screen bg-white flex flex-col border border-slate-300 overflow-hidden",
             // Title Bar
             div { 
                 class: "h-10 bg-[#f1f5f9] border-b border-slate-200 flex items-center justify-between px-4 shrink-0 select-none",
@@ -149,7 +149,7 @@ pub fn Layout() -> Element {
             // Main Content Area
             div { class: "flex flex-1 overflow-hidden",
                 Sidebar {}
-                div { class: "flex-1 flex flex-col min-w-0 bg-background-light overflow-hidden",
+                div { class: "flex-1 flex flex-col min-w-0 min-h-0 bg-background-light overflow-hidden",
                     Outlet::<Route> {}
                 }
             }

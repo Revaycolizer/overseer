@@ -1,4 +1,6 @@
-use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{SqlitePoolOptions, SqliteConnectOptions, SqliteJournalMode}; 
+use sqlx::ConnectOptions;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use snowflake::SnowflakeIdGenerator;
@@ -12,28 +14,41 @@ pub struct Database {
 
 impl PartialEq for Database {
     fn eq(&self, _other: &Self) -> bool {
-        true // Singleton-like behavior
+        true
     }
 }
 
 impl Database {
     pub async fn new() -> anyhow::Result<Self> {
         let db_url = "sqlite:overseer.db?mode=rwc";
+        println!("🚀 Connecting to SQLite at {}...", db_url);
+        
+        let mut connection_options = SqliteConnectOptions::from_str(db_url)?
+            .journal_mode(SqliteJournalMode::Wal)
+            .busy_timeout(std::time::Duration::from_secs(10));
+
+        connection_options = connection_options.disable_statement_logging();
+
+        println!("📜 Opening migration connection...");
+        let mut conn = connection_options.connect().await?;
+
+        println!("📜 Running database migrations...");
+        sqlx::migrate!("./migrations")
+            .run(&mut conn)
+            .await?;
+        
+        drop(conn);
+
+        println!("🔗 Creating database pool...");
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
-            .connect(db_url)
+            .connect_with(connection_options)
             .await?;
 
-        // Initialize LanceDB
+        println!("📂 Initializing LanceDB...");
         let _ = std::fs::create_dir_all("rig_memory");
         let lancedb = lancedb::connect("rig_memory").execute().await?;
 
-        // Run migrations
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await?;
-
-        // Initialize Snowflake: Worker ID 1, Datacenter ID 1
         let generator = SnowflakeIdGenerator::new(1, 1);
         let database = Self {
             pool: pool.clone(),
@@ -41,10 +56,17 @@ impl Database {
             lancedb,
         };
 
-        // Seed agents if none exist
-        database.seed_agents().await?;
+        database.seed_all().await?;
 
+        println!("✨ Database initialization complete.");
         Ok(database)
+    }
+
+    async fn seed_all(&self) -> anyhow::Result<()> {
+        self.seed_agents().await?;
+        self.seed_tools().await?;
+        self.seed_agent_tools().await?;
+        Ok(())
     }
 
     async fn seed_agents(&self) -> anyhow::Result<()> {
@@ -52,237 +74,140 @@ impl Database {
             .fetch_one(&self.pool)
             .await?;
 
-        if count.0 > 0 {
-            return Ok(());
+        if count.0 > 0 { return Ok(()); }
+
+        println!("🌱 Seeding authentic agents from configs and codebase...");
+        
+        let mut agents_data = Vec::new();
+
+        // 1. Try to load from config/agents/*.json
+        if let Ok(entries) = std::fs::read_dir("config/agents") {
+            for entry in entries.flatten() {
+                if entry.path().extension().and_then(|s| s.to_str()) == Some("json") {
+                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                            agents_data.push((
+                                val["name"].as_str().unwrap_or("Unknown").to_string(),
+                                val["description"].as_str().unwrap_or("").to_string(),
+                                val["domain"].as_str().unwrap_or("core").to_string(),
+                                val["model"].as_str().unwrap_or("qwen2.5:7b-instruct").to_string(),
+                                val["instructions"].as_str().unwrap_or("").to_string(),
+                                val["version"].as_str().unwrap_or("1.0.0").to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
         }
 
-        println!("🌱 Seeding default agents...");
-
-        let agents = vec![
-            ("orchestrator", "Master Orchestrator", "orchestrator", "qwen2.5:7b-instruct", r#"You are the Master Orchestrator.
-YOUR JOB:
-Review the user's request and decompose it into a sequence of high-level macro-tasks.
-Each macro-task MUST be explicitly delegated to a specific domain agent.
-Return ONLY a valid JSON array of objects.
-
-═══ AVAILABLE DOMAINS ═══
-1. "stealth" - DEFAULT for research, knowledge queries (e.g., "what is X"), finding facts, or checking documentation. NO BROWSER IS OPENED.
-2. "web" - STRICTLY for interactive/visible browsing where the user explicitly asks to "open a site", "show me", "use chrome", or perform specific UI actions on a website.
-3. "office" - LibreOffice document generation, PDF creation, exporting reports.
-4. "neontune" - USED FOR NEONTUNE MUSIC PLAYER ONLY.
-5. "text_writer" - Synthesizing data into a file. MUST be used to bridge research (stealth/web) and document creation (office).
-6. "desktop" - Generic desktop applications (Spotify, generic GUI apps).
-7. "chat" - STRICTLY for conversation, answering questions from context/memory, or "what did I do?" queries. NO RESEARCH.
-8. "math" - Pure calculations and direct answers.
-
-═══ RULES ═══
-1. STEALTH FIRST: Always use "stealth" for information gathering unless the user explicitly mentions a browser (e.g., "open", "chrome", "search on google").
-2. BRIDGE TO OFFICE: If the user wants a PDF or document, you MUST follow this sequence: [STEALTH/WEB] -> [TEXT_WRITER] -> [OFFICE].
-3. NO HALLUCINATIONS: Do not use "desktop" for writing files; use "text_writer".
-4. ROUTING CRITICAL:
-   - "Explain X" -> "stealth"
-   - "Search for X and save as PDF" -> ["stealth", "text_writer", "office"]
-   - "Open github.com" -> "web"
-   - "Play X in Neontune" -> "neontune"
-
-═══ JSON SCHEMA ═══
-Returns an array of macro-tasks:
-[
-  {
-    "domain": "route_name",
-    "task": "High-level goal description"
-  }
-]
-
-═══ EXAMPLES ═══
-Input: 'Explain the importance of rig-core and save it as rig.pdf'
-Output: [
-  {"domain": "stealth", "task": "Research the importance and key features of rig-core"},
-  {"domain": "text_writer", "task": "Synthesize the research into a technical summary"},
-  {"domain": "office", "task": "Create rig.pdf from the summary in ~/projects/rig"}
-]
-
-Input: 'Open youtube and search for cats'
-Output: [
-  {"domain": "web", "task": "Navigate to youtube.com and search for 'cats'"}
-]
-
-═══ FORMAT ENFORCEMENT ═══
-- NO MARKDOWN. NO CODE BLOCKS. NO EXPLANATIONS. JUST THE JSON ARRAY.
-- CRITICAL: Your entire response must be a valid JSON array.
-"#),
-            ("web_planner", "Web Domain Planner", "web", "llama3:latest", r#"You are a Web Domain Planner.
-YOUR JOB:
-Break down a high-level web macro-task into specific, ordered, atomic browser automation steps.
-Return ONLY a valid JSON array of strings.
-
-═══ WEB DECOMPOSITION RULES ═══
-1. Steps MUST be simple and single-action (e.g., 'Open Chrome', 'Search for X', 'Click on Y').
-2. Steps MUST be self-contained and specify the target application in EVERY step (e.g., 'Click on result in Chrome').
-3. Never combine multiple actions in one step.
-4. Ensure logical flow (e.g., search before clicking a result).
-
-═══ VERBATIM RULE (CRITICAL) ═══
-- For search queries or specific text inputs, you MUST use the EXACT characters provided by the user.
-- NEVER truncate query suffixes!
-
-═══ NAVIGATION PRINCIPLES ═══
-- If a user says 'open X', use 'Open X'.
-- If a user says 'click on link', use 'Click on link in [App]'.
-
-═══ EXAMPLES ═══
-Input: 'Go to Revaycolizer github and find specific repo details'
-Output: ["Search for 'Revaycolizer github' in Chrome", "Click on the GitHub profile link", "Click on the target repository link"]
-
-═══ FORMAT ENFORCEMENT ═══
-- Output MUST be a valid JSON array of STRINGS.
-- Format: ["Step 1", "Step 2"]
-- NO MARKDOWN. NO CODE BLOCKS. NO EXPLANATIONS. JUST THE JSON ARRAY.
-"#),
-            ("web_supervisor", "Web Domain Supervisor", "web", "qwen2.5:7b-instruct", r#"You are the WEB SUPERVISOR. Your job is to manage EXECUTION in a browser.
-
-═══ RULE 0: NO CONVERSATION (CRITICAL) ═══
-NEVER output any status report, explanation, plans, or conversational text.
-Your response MUST be a SINGLE block of valid JSON or the word `done`.
-
-═══ JSON STRUCTURE (STRICT) ═══
-Every tool call MUST include observation, intent, and action fields:
-{
-  "observation": "I see a search field on the page.",
-  "intent": "I will type the search query.",
-  "action": "browser_automation",
-  "app": "chrome",
-  "code": "await page.type('input[name=\"q\"]', 'query'); await page.keyboard.press('Enter');"
-}
-
-═══ TOOLS ═══
-1. browser_automation: Execute Playwright/Node.js code. Use this for ALL browser actions.
-2. done: Use when the macro-goal is achieved.
-
-═══ BROWSER_AUTOMATION BEST PRACTICES ═══
-- Use `await page.goto(url)` for navigation.
-- Use `await page.type(selector, text)` and `await page.click(selector)`.
-- Use `await page.waitForSelector(selector)` before interacting.
-"#),
-            ("office_planner", "Office Domain Planner", "office", "qwen2.5:7b-instruct", r#"You are the Office Domain Planner.
-YOUR JOB:
-Break down a high-level document task into specific LibreOffice automation steps.
-Return ONLY a valid JSON array of strings.
-
-═══ DOCUMENT GENERATION RULES (STRICT) ═══
-1. CONVERSION FOCUS: If the previous step was "text_writer", assume the summary already exists in /tmp/summary.txt or the path mentioned in the goal.
-2. NO SYNTHESIS: Do NOT add steps to "research" or "summarize" again. Focus ONLY on PDF conversion, formatting, and opening.
-3. HEADLESS BY DEFAULT: For PDF creation, use a step like: "Convert /tmp/summary.txt to PDF in background using LibreOffice headless".
-4. UI MODE: Only add an "Open" step if the user explicitly wants to "view", "open", or "show" the document.
-
-═══ EXAMPLES ═══
-Input: 'Create rig.pdf from the summary in ~/projects/rig'
-Output: ["Convert /tmp/summary.txt to PDF in background and save as /home/revaycolizer/projects/rig/rig.pdf"]
-
-Input: 'Provide a pdf summary and open it'
-Output: ["Convert /tmp/summary.txt to PDF in background", "Open the generated PDF for viewing using LibreOffice UI"]
-
-═══ FORMAT ENFORCEMENT ═══
-- Output MUST be a valid JSON array of STRINGS.
-- NO MARKDOWN. NO CODE BLOCKS. NO EXPLANATIONS.
-"#),
-            ("office_supervisor", "Office Domain Supervisor", "office", "qwen2.5:7b-instruct", r#"You are the OfficeSupervisor, an elite specialized AI that creates, formats, and opens LibreOffice documents.
-
-═══ RULE 0: NO CONVERSATION (CRITICAL) ═══
-NEVER output a status report, explanation, or conversational text.
-Your response MUST be a SINGLE block of valid JSON or the word `done`.
-
-═══ JSON STRUCTURE (STRICT) ═══
-Every tool call MUST include these fields:
-{
-  "observation": "What do I see relevant to the goal?",
-  "intent": "What am I about to do and WHY?",
-  "action": "code_executor",
-  "language": "bash",
-  "command": "libreoffice --headless --convert-to pdf /tmp/summary.txt"
-}
-
-═══ RULES ═══
-1. DATA FLOW: Research was ALREADY done. Source text is in `/tmp/summary.txt`.
-2. ONLY use "code_executor" or "done".
-"#),
-            ("desktop_planner", "Desktop Domain Planner", "desktop", "llama3:latest", r#"You are a Desktop App Domain Planner.
-YOUR JOB:
-Break down a high-level desktop macro-task into specific, ordered, atomic UI automation steps.
-Return ONLY a valid JSON array of strings.
-
-═══ DESKTOP DECOMPOSITION RULES ═══
-1. Steps MUST be simple and single-action (e.g., 'Open Neontune', 'Search for X', 'Click on Y').
-2. Steps MUST be self-contained and specify the target application in EVERY step.
-3. Never combine multiple actions in one step.
-
-═══ EXAMPLES ═══
-Input: 'Play some jazz in Neontune.'
-Output: ["Open Neontune app", "Search for 'jazz music' in Neontune", "Click on the result containing 'Jazz'"]
-"#),
-            ("desktop_supervisor", "Desktop Domain Supervisor", "desktop", "qwen2.5:7b-instruct", r#"You are the APP SUPERVISOR. Your job is to manage EXECUTION in a DESKTOP environment.
-
-═══ RULE 0: NO CONVERSATION (CRITICAL) ═══
-NEVER output any status report or explanation.
-Your response MUST be a SINGLE block of valid JSON or {"action": "done"}.
-
-═══ JSON STRUCTURE (STRICT) ═══
-{
-  "observation": "I see NeonTune search bar.",
-  "intent": "I will type the song name.",
-  "app": "NeonTune",
-  "action": "type",
-  "text": "Tali Rush - U"
-}
-
-═══ AVAILABLE ACTIONS ═══
-- launch, focus, click, type, search, close_active, scroll, done.
-"#),
-            ("neontune_planner", "Neontune Domain Planner", "neontune", "llama3:latest", r#"You are a Neontune Domain Planner.
-YOUR JOB:
-Break down a high-level Neontune music player macro-task into specific, ordered, atomic steps.
-Return ONLY a valid JSON array of strings.
-"#),
-            ("neontune_supervisor", "Neontune Domain Supervisor", "neontune", "qwen2.5:7b-instruct", r#"You are the NEONTUNE SUPERVISOR. Your ONLY goal is to manage EXECUTION specifically for the NeonTune music player desktop application.
-
-═══ RULE 0: NO CONVERSATION (CRITICAL) ═══
-Your response MUST be a SINGLE block of valid JSON or the word `done`.
-"#),
-            ("text_writer", "Text Writer Specialist", "text_writer", "qwen2.5:7b-instruct", r#"You are the TextWriterSupervisor, an elite specialized AI that reads screen content and writes text files.
-
-═══ RULE 0: NO CONVERSATION (CRITICAL) ═══
-Your response MUST be a SINGLE block of valid JSON or the word `done`.
-
-═══ RULES ═══
-1. Use `code_executor` with `bash` and `cat << 'EOF' > /path/to/file` to write summaries.
-"#),
-            ("overseer", "Verification Specialist", "overseer", "qwen2.5:7b-instruct", r#"You are the Overseer, a high-precision verification agent for UI automation.
-YOUR JOB: Determine if a specific step was ACTUALLY successfully completed.
-"#),
-            ("chat", "Chat & Memory Assistant", "chat", "llama3:latest", r#"You are the Chat & Memory Agent.
-YOUR JOB:
-1. Answer general user questions.
-2. Retrieve information from the provided memory context.
-"#),
-            ("stealth", "Research Specialist", "stealth", "qwen2.5:7b-instruct", r#"You are the STEALTH SUPERVISOR, a Methodology-First Research Specialist.
-Your mission is DEEP, high-precision background research.
-"#),
+        // 2. Add others not in configs with real preambles
+        let codebase_agents = vec![
+            ("Master Orchestrator", "Primary system planner", "orchestrator", "qwen2.5:7b-instruct", "src/engine/agents/master_planner/preamble.md"),
+            ("Web Planner", "Web task planner", "web", "llama3", "src/engine/agents/web/planner_preamble.md"),
+            ("Chat Assistant", "General chat and help", "chat", "llama3", "src/engine/agents/chat/preamble.md"),
+            ("Vision Assistant", "Image analysis specialist", "vision", "qwen2.5:7b-instruct", ""), // Hardcoded below
         ];
 
-        for (name, desc, domain, model, instructions) in agents {
-            let id = self.next_id().await;
-            sqlx::query("INSERT INTO agents (id, name, description, domain, model, instructions) VALUES (?, ?, ?, ?, ?, ?)")
-                .bind(id)
-                .bind(name)
-                .bind(desc)
-                .bind(domain)
-                .bind(model)
-                .bind(instructions)
-                .execute(&self.pool)
-                .await?;
+        for (name, desc, domain, model, path) in codebase_agents {
+            if !agents_data.iter().any(|a| a.0 == name) {
+                let inst = if path.is_empty() && domain == "vision" {
+                    "You are a Vision and General Reasoning Assistant. ALWAYS use the vision_analysis tool for images.".to_string()
+                } else if !path.is_empty() {
+                    std::fs::read_to_string(path).unwrap_or_else(|_| "Default preamble".to_string())
+                } else {
+                    "Default preamble".to_string()
+                };
+                agents_data.push((name.to_string(), desc.to_string(), domain.to_string(), model.to_string(), inst, "1.0.0".to_string()));
+            }
         }
 
-        println!("✅ Seeding complete.");
+        let mut tx = self.pool.begin().await?;
+        for (name, desc, domain, model, inst, version) in agents_data {
+            let id = self.next_id().await;
+            sqlx::query("INSERT INTO agents (id, name, description, domain, model, instructions, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                .bind(id).bind(name).bind(desc).bind(domain).bind(model).bind(inst).bind(version)
+                .execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn seed_tools(&self) -> anyhow::Result<()> {
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tools")
+            .fetch_one(&self.pool)
+            .await?;
+
+        if count.0 > 0 { return Ok(()); }
+
+        println!("🛠️ Seeding ALL authentic tools from filesystem...");
+        let mut tools_data = Vec::new();
+
+        // Recursively scan agents-scripts
+        let script_dirs = vec!["web", "stealth", "desktop"];
+        for dir in script_dirs {
+            let path = format!("agents-scripts/{}", dir);
+            if let Ok(entries) = std::fs::read_dir(&path) {
+                for entry in entries.flatten() {
+                    if entry.path().extension().and_then(|s| s.to_str()) == Some("py") {
+                        if let Some(name) = entry.file_name().to_str() {
+                            let tool_name = name.trim_end_matches(".py").to_string();
+                            let script_path = format!("agents-scripts/{}/{}", dir, name);
+                            let code = std::fs::read_to_string(entry.path()).unwrap_or_default();
+                            let description = format!("{} tool for {} domain", tool_name, dir);
+                            tools_data.push((tool_name, description, "python".to_string(), script_path, code));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add native tools
+        tools_data.push(("os_tool".to_string(), "Native system access".to_string(), "rust".to_string(), "".to_string(), "// Native Implementation".to_string()));
+
+        let mut tx = self.pool.begin().await?;
+        for (name, desc, lang, path, code) in tools_data {
+            let id = self.next_id().await;
+            let script_path = if path.is_empty() { None } else { Some(path) };
+            sqlx::query("INSERT INTO tools (id, name, description, language, script_path, code, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                .bind(id).bind(name).bind(desc).bind(lang).bind(script_path).bind(code).bind("1.0.0")
+                .execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn seed_agent_tools(&self) -> anyhow::Result<()> {
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agent_tools")
+            .fetch_one(&self.pool)
+            .await?;
+
+        if count.0 > 0 { return Ok(()); }
+
+        println!("🔗 Linking agents and tools with comprehensive mappings...");
+        let mut tx = self.pool.begin().await?;
+        
+        let mappings = vec![
+            ("web_planner", "browser_automation"),
+            ("web_supervisor", "browser_automation"),
+            ("stealth", "stealth_search"),
+            ("desktop_supervisor", "ui_automation"),
+            ("orchestrator", "os_tool"),
+            ("orchestrator", "ui_automation"),
+            ("orchestrator", "browser_automation"),
+        ];
+
+        for (agent_name, tool_name) in mappings {
+            let agent: Option<(i64,)> = sqlx::query_as("SELECT id FROM agents WHERE name = ? LIMIT 1").bind(agent_name).fetch_optional(&mut *tx).await?;
+            let tool: Option<(i64,)> = sqlx::query_as("SELECT id FROM tools WHERE name = ? LIMIT 1").bind(tool_name).fetch_optional(&mut *tx).await?;
+
+            if let (Some(a), Some(t)) = (agent, tool) {
+                sqlx::query("INSERT INTO agent_tools (agent_id, tool_id) VALUES (?, ?)")
+                    .bind(a.0).bind(t.0)
+                    .execute(&mut *tx).await?;
+            }
+        }
+        
+        tx.commit().await?;
         Ok(())
     }
 

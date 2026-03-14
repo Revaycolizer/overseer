@@ -146,7 +146,13 @@ pub async fn process_json_value(
         }
 
         let tools_list = crate::backend::get_tools(db).await.unwrap_or_default();
-        let get_script = |tname: &str| tools_list.iter().find(|t| t.name == tname).and_then(|t| t.script_path.clone());
+        let get_script = |tname: &str| -> Option<String> {
+            if let Some(tool) = tools_list.iter().find(|t| t.name == tname) {
+                crate::engine::utils::discovery::get_tool_executable_path(tool)
+            } else {
+                None
+            }
+        };
 
         let real_name = mapped_name;
         if real_name == "DONE" {
@@ -267,7 +273,7 @@ pub async fn process_json_value(
             let action = params.get("action").and_then(|v| v.as_str()).or(default_action).unwrap_or("get_ui_tree").to_string();
             let app    = params.get("app").and_then(|v| v.as_str()).map(|s| s.to_string());
             let args = PerceptionArgs { action: action.clone(), app };
-            let tool = StructuredPerceptionTool::new();
+            let tool = StructuredPerceptionTool::new(db.clone());
             match tool.call(args).await {
                 Ok(out) => outputs.push(format!("Tool structured_perception output: {}", out)),
                 Err(e) => outputs.push(format!("Tool structured_perception error: {}", e)),

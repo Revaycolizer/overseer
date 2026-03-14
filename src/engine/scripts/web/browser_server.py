@@ -6,7 +6,7 @@ Keeps ONE browser window alive across all agent calls.
 Run once in the background: python3 browser_server.py &
 Then browser_automation.py sends HTTP commands to this server.
 
-Port: 9223
+Port: 9228
 """
 
 import asyncio

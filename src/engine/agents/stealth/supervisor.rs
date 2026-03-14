@@ -78,13 +78,14 @@ impl StealthSupervisor {
 
             println!("--- Turn {} ---\n{}\n--------------", current_turn, response);
 
-            if response.contains("done") || (!response.trim().starts_with('{') && response.len() > 30) {
-                if response.contains("done") {
-                    let final_summary = self.agent.chat("Research complete. Provide the final, verified answer to the user now in plain text based on all research turns.", history.clone()).await
+            if response.contains("done") || (!response.trim().starts_with('{') && response.len() > 20) {
+                if response.contains("done") || response.trim().starts_with('{') {
+                    println!("🏁 STEALTH: Requesting final summary...");
+                    let final_summary = self.agent.chat("Research complete. Provide the final, verified answer to the user now in PLAIN TEXT. DO NOT output JSON. Strip away any unnecessary asterisks or markdown artifacts.", history.clone()).await
                         .unwrap_or_else(|_| "Research concluded.".to_string());
-                    return Ok(final_summary);
+                    return Ok(final_summary.replace('*', "").trim().to_string());
                 }
-                return Ok(response);
+                return Ok(response.replace('*', "").trim().to_string());
             }
 
             // Redundancy Guard
@@ -97,16 +98,16 @@ impl StealthSupervisor {
                     println!("🛡️  REDUNDANCY GUARD: Blocked repeat action for '{}'", if !current_url.is_empty() { current_url } else { current_query });
                     static_data_turns += 1;
                     
-                    if static_data_turns >= 5 {
+                    if static_data_turns >= 4 {
                         println!("🛑  STAGNATION LIMIT: Forcing research conclusion.");
-                        let final_summary = self.agent.chat("Research stalled due to repeated actions. Provide the final, verified answer to the user now in plain text based on all research turns.", history.clone()).await
+                        let final_summary = self.agent.chat("Research stalled due to repeated actions. Provide the final, verified answer to the user now in PLAIN TEXT. DO NOT output JSON. Strip away any unnecessary asterisks or markdown artifacts.", history.clone()).await
                             .unwrap_or_else(|_| "Research concluded with partial data.".to_string());
-                        return Ok(final_summary);
+                        return Ok(final_summary.replace('*', "").trim().to_string());
                     }
 
                     history.push(Message::User {
                         content: rig::OneOrMany::one(rig::message::UserContent::text(format!(
-                            "ERROR: You just tried to access a URL or query that is already in the RESEARCH STATE. DO NOT repeat actions. Try a different path or output 'done' if you are stuck."
+                            "ERROR: You just tried to access a URL or query that is already in the RESEARCH STATE. DO NOT repeat actions. Try a different path or output 'done' if you have gathered enough information."
                         ))),
                     });
                     continue;
@@ -128,9 +129,9 @@ impl StealthSupervisor {
                 println!("--- TOOL OUTPUT ---\n{}\n-------------------", tool_output);
 
                 if tool_output.contains("TASK_COMPLETED") {
-                    let final_summary = self.agent.chat("Research complete. Final summary please.", history.clone()).await
+                    let final_summary = self.agent.chat("Research complete based on tool-indicated completion. Provide the final, verified answer to the user now in PLAIN TEXT. Strip away asterisks.", history.clone()).await
                         .unwrap_or_else(|_| "Research concluded.".to_string());
-                    return Ok(final_summary);
+                    return Ok(final_summary.replace('*', "").trim().to_string());
                 }
 
                 // Parse for URL tracking
@@ -138,37 +139,51 @@ impl StealthSupervisor {
                     if let Some(url) = val.get("url").and_then(|v| v.as_str()) {
                         if tool_output.contains("404") || tool_output.contains("Error") {
                             failed_urls.push(url.to_string());
+                            static_data_turns += 1;
                         } else {
                             attempted_urls.push(url.to_string());
                             
-                            // Improved heuristic extraction for commit counts
-                            let re = regex::Regex::new(r"(?i)(\d+)\s+Commits?").unwrap();
-                            let mut found_new_data = false;
-                            for cap in re.captures_iter(&tool_output) {
-                                let count = cap.get(1).map_or("", |m| m.as_str());
-                                let repo = url.split('/').last().unwrap_or("unknown");
-                                let data_point = format!("{}: {} commits", repo, count);
-                                if !extracted_data.contains(&data_point) {
-                                    extracted_data.push(data_point);
-                                    found_new_data = true;
+                            // Check for content growth as a sign of progress
+                            let stripped_output = tool_output.chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+                            let mut is_novel = true;
+                            for past_extracted in &extracted_data {
+                                if stripped_output.contains(past_extracted) || past_extracted.contains(&stripped_output) {
+                                    is_novel = false;
+                                    break;
                                 }
                             }
 
-                            if !found_new_data {
-                                static_data_turns += 1;
-                            } else {
+                            if !stripped_output.is_empty() && is_novel {
+                                // Extract a fingerprint (first 100 alphanumeric chars) to track novelty
+                                let fingerprint = stripped_output.chars().take(100).collect::<String>();
+                                extracted_data.push(fingerprint);
                                 static_data_turns = 0;
+                            } else {
+                                static_data_turns += 1;
                             }
                         }
                     } else if let Some(query) = val.get("query").and_then(|v| v.as_str()) {
-                        attempted_urls.push(query.to_string());
+                        if tool_output == "[]" || tool_output.contains("no results") {
+                            failed_urls.push(format!("QUERY: {}", query));
+                            static_data_turns += 1;
+                        } else {
+                            attempted_urls.push(query.to_string());
+                            static_data_turns = 0;
+                        }
                     }
                 }
 
                 if static_data_turns >= 3 {
                     println!("⚠️  STAGNATION WARNING: 3 turns with no new data. Encouraging conclusion.");
+                    let message = if tool_output == "[]" {
+                        "ERROR: The search returned zero results. DuckDuckGo might be blocked or the query is too specific. Try broader keywords or different terms."
+                    } else if tool_output.contains("404") {
+                        "ERROR: That page was not found (404). Do NOT guess URLs. Use 'stealth_search' to find the current valid URL for this resource."
+                    } else {
+                        "NOTE: No new data points have been extracted for 3 turns. If you have enough info, output 'done'. Otherwise, try a radically different search query."
+                    };
                     history.push(Message::User {
-                        content: rig::OneOrMany::one(rig::message::UserContent::text("NOTE: No new data points have been extracted for 3 turns. If you have enough information to answer the goal, output 'done'. If not, try a radically different methodology.")),
+                        content: rig::OneOrMany::one(rig::message::UserContent::text(message.to_string())),
                     });
                 } else {
                     history.push(Message::User {

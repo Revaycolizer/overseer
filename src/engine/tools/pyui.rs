@@ -37,7 +37,7 @@ impl std::error::Error for ToolError {}
 impl PyUITool {
     pub fn new(script_path: Option<String>) -> Self {
         Self {
-            script_path: script_path.unwrap_or_else(|| "src/engine/scripts/desktop/ui_automation.py".to_string()),
+            script_path: script_path.unwrap_or_else(|| "MISSING_TOOL_PATH".to_string()),
         }
     }
 }
