@@ -139,26 +139,119 @@ def get_screen_text(app_name, grep_str=None):
         import traceback
         return json.dumps({"error": str(e), "trace": traceback.format_exc()})
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--action", required=True, choices=["get_text", "click"])
-    parser.add_argument("--app", default="active")
-    parser.add_argument("--text", help="Text to search for or click")
-    args = parser.parse_args()
+def launch_app_safe(app_name):
+    """Launches the application using a binary search."""
+    print(f"🚀 Attempting to launch '{app_name}'...", file=sys.stderr)
+    try:
+        # 1. Try which
+        path = subprocess.check_output(['which', app_name.lower()]).decode().strip()
+        if path:
+            subprocess.Popen([path])
+            return True
+    except: pass
     
-    if args.action == "get_text":
-        print(get_screen_text(args.app, args.text))
-    elif args.action == "click":
-        if not args.text:
+    # 2. Try common locations
+    for loc in [f"/usr/bin/{app_name.lower()}", f"/usr/local/bin/{app_name.lower()}"]:
+        if os.path.exists(loc):
+            subprocess.Popen([loc])
+            return True
+            
+    # 3. Last ditch: try to run as command
+    try:
+        subprocess.Popen([app_name.lower()])
+        return True
+    except:
+        return False
+
+def main():
+    # Flexible CLI: if arguments look like 'launch neontune' or 'search song'
+    # we handle them as actions even without flags.
+    
+    raw_args = sys.argv[1:]
+    
+    action = None
+    app = "active"
+    text = None
+    
+    if len(raw_args) >= 2 and raw_args[0] in ["launch", "search", "click", "get_text"]:
+        action = raw_args[0]
+        if action == "launch":
+            app = raw_args[1]
+        else:
+            text = " ".join(raw_args[1:])
+    else:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--action", choices=["get_text", "click", "launch", "search"])
+        parser.add_argument("--app", default="active")
+        parser.add_argument("--text", help="Text to search for or click")
+        
+        args, unknown = parser.parse_known_args()
+        
+        if not args.action and unknown:
+            # Try to infer action from first unknown arg
+            if unknown[0] in ["launch", "search", "click", "get_text"]:
+                action = unknown[0]
+                if len(unknown) > 1:
+                    if action == "launch": app = unknown[1]
+                    else: text = " ".join(unknown[1:])
+        else:
+            action = args.action
+            app = args.app
+            text = args.text
+
+    if not action:
+        print("❌ No action specified (launch, search, click, get_text)")
+        sys.exit(1)
+
+    if action == "launch":
+        if launch_app_safe(app):
+            print(f"✅ Launched {app}. Waiting for window...")
+            time.sleep(5)
+            sys.exit(0)
+        else:
+            print(f"❌ Failed to launch {app}")
+            sys.exit(1)
+            
+    if action == "search":
+        if not text:
+            print("❌ Search requires text")
+            sys.exit(1)
+            
+        print(f"🔍 Searching for '{text}' in {app}...")
+        # Step 1: Find and click Search button
+        results = json.loads(get_screen_text(app, "Search"))
+        if results and len(results) > 0:
+            target = results[0]
+            print(f"🖱️ Clicking 'Search' at ({target['x']}, {target['y']})")
+            pyautogui.click(target['x'], target['y'])
+            time.sleep(1)
+            # Step 2: Type query
+            pyautogui.hotkey('ctrl', 'a')
+            pyautogui.press('backspace')
+            pyautogui.write(text, interval=0.05)
+            pyautogui.press('enter')
+            print("✅ Search query submitted")
+        else:
+            # Fallback: Just type if Search field is likely focused or we can't find it
+            print("⚠️ 'Search' button not found via OCR, trying direct type...")
+            pyautogui.hotkey('ctrl', 'f') # Typical shortcut
+            time.sleep(0.5)
+            pyautogui.write(text)
+            pyautogui.press('enter')
+            
+    elif action == "get_text":
+        print(get_screen_text(app, text))
+    elif action == "click":
+        if not text:
             print("❌ --text required for click action")
             sys.exit(1)
-        results = json.loads(get_screen_text(args.app, args.text))
+        results = json.loads(get_screen_text(app, text))
         if isinstance(results, list) and len(results) > 0:
             target = results[0]
             print(f"🖱️ Clicking '{target['text']}' at ({target['x']}, {target['y']})")
             pyautogui.click(target['x'], target['y'])
         else:
-            print(f"❌ Text '{args.text}' not found")
+            print(f"❌ Text '{text}' not found")
 
 if __name__ == "__main__":
     main()
