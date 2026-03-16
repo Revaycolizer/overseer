@@ -1,0 +1,10 @@
+7438474706661019648|Stealth Supervisor|stealth
+7438474706661019649|Web Agent|web_supervisor
+7438474706665213952|Master Orchestrator|orchestrator
+7438474706665213954|Chat Assistant|chat
+7438474706665213955|Vision Assistant|vision
+7438649930752856066|Office Supervisor|office_supervisor
+7438649930752856068|App Supervisor|desktop_supervisor
+7438649930757050369|Neontune Supervisor|neontune_supervisor
+7438649930757050370|Text Writer|text_writer
+7438649930757050371|Overseer|overseer

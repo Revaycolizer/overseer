@@ -2,7 +2,7 @@ use rig::providers::ollama;
 use rig::client::Nothing;
 use std::io::{self, Write};
 
-use crate::engine::agents::master_planner::MasterPlanner;
+use crate::engine::orchestrator::MasterPlanner;
 use crate::engine::memory::{setup_memory_table, retrieve_memories, store_memory};
 
 pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {

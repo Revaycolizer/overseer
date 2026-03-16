@@ -6,7 +6,7 @@ mod state;
 pub mod engine;
 pub mod db;
 
-use routes::{Conversations, AgentsWorkshop, Layout, WorkflowAutomation, Settings, ToolsWorkshop};
+use routes::{Conversations, AgentsWorkshop, Layout, WorkflowAutomation, Settings, ToolsWorkshop, SupervisorsWorkshop, PlannersWorkshop};
 use state::StateProvider;
 use crate::db::Database;
 use std::sync::Arc;
@@ -23,6 +23,10 @@ enum Route {
         WorkflowAutomation {},
         #[route("/tools")]
         ToolsWorkshop {},
+        #[route("/supervisors")]
+        SupervisorsWorkshop {},
+        #[route("/planners")]
+        PlannersWorkshop {},
         #[route("/settings")]
         Settings {},
     #[end_layout]

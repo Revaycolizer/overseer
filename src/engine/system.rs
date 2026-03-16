@@ -4,7 +4,7 @@ use rig::completion::Prompt;
 use std::sync::Arc;
 use std::collections::HashMap;
 
-use crate::engine::agents::master_planner::MasterPlanner;
+use crate::engine::orchestrator::MasterPlanner;
 use crate::engine::tools::StructuredPerceptionTool;
 use crate::engine::orchestrator::orchestrate_request;
 use crate::db::Database;
@@ -40,46 +40,106 @@ impl AgentSystem {
         // Fetch all agents from DB for dynamic orchestration
         let all_agents = crate::backend::get_agents(db).await.unwrap_or_default();
         
-        // Find orchestrator instructions
-        let master_instructions = all_agents.iter()
-            .find(|a| a.domain == "orchestrator")
-            .map(|a| a.instructions.clone())
-            .unwrap_or_else(|| {
-                println!("⚠️  WARNING: No orchestrator instructions found in DB.");
-                String::new()
-            });
+        // Find orchestrator agent info
+        let orchestrator_agent = all_agents.iter().find(|a| a.domain == "orchestrator");
+        let master_instructions = orchestrator_agent.map(|a| a.instructions.clone()).unwrap_or_default();
+        let master_model = orchestrator_agent.map(|a| a.model.clone()).unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
 
-        let master_planner = MasterPlanner::new(&self.ollama_client, &master_instructions, &all_agents);
-        
-        // Fetch history
-        let history = crate::backend::get_messages(db, conversation_id).await.unwrap_or_default()
-            .into_iter()
-            .map(|m| {
-                if m.role == "user" {
-                    rig::completion::Message::User {
-                        content: rig::OneOrMany::one(rig::message::UserContent::text(m.content)),
-                    }
-                } else {
-                    rig::completion::Message::Assistant {
-                        id: None,
-                        content: rig::OneOrMany::one(rig::message::AssistantContent::text(m.content)),
-                    }
-                }
-            })
-            .collect();
+        let master_planner = MasterPlanner::new(&self.ollama_client, &master_model, &master_instructions, &all_agents);
 
-        // Retrieve relevant memories
-        let memory_table = crate::engine::memory::setup_memory_table(&db.lancedb).await;
-        let memory_context = if let Some(ref table) = memory_table {
-            let memories = crate::engine::memory::retrieve_memories(table, &self.ollama_client, query, 3).await;
-            if !memories.is_empty() {
-                memories.join("\n---\n")
-            } else {
-                String::new()
-            }
+        // Fetch conversation history (scoped to this conversation only)
+        let messages = crate::backend::get_messages(db, conversation_id).await.unwrap_or_default();
+
+        // Pre-compute compact summary before consuming messages in the loop below
+        let recent_summary: String = if messages.len() > 2 {
+            let recent: Vec<String> = messages.iter().rev().take(6).rev().map(|m| {
+                format!("[{}]: {}", m.role.to_uppercase(), &m.content[..m.content.len().min(300)])
+            }).collect();
+            format!("Recent conversation context (current session only):\n{}", recent.join("\n"))
         } else {
             String::new()
         };
+
+        let mut history = Vec::new();
+        for m in messages {
+            if m.role == "user" {
+                let content_text = if m.content.trim().is_empty() { 
+                    "(user message)".to_string() 
+                } else { 
+                    m.content.clone() 
+                };
+                let mut contents = vec![rig::message::UserContent::text(content_text)];
+                
+                // Fetch attachments for this message and encode images as proper multimodal content
+                if let Ok(attachments) = crate::backend::get_attachments(db, m.id).await {
+                    for att in attachments {
+                        if att.content_type.starts_with("image/") {
+                            // Read the file from disk and encode as base64 for vision models
+                            match std::fs::read(&att.file_path) {
+                                Ok(bytes) if !bytes.is_empty() => {
+                                    use base64::{Engine as _, engine::general_purpose};
+                                    let b64 = general_purpose::STANDARD.encode(&bytes);
+                                    let media_type = match att.content_type.as_str() {
+                                        "image/png" => Some(rig::message::ImageMediaType::PNG),
+                                        "image/webp" => Some(rig::message::ImageMediaType::WEBP),
+                                        "image/gif" => Some(rig::message::ImageMediaType::GIF),
+                                        _ => Some(rig::message::ImageMediaType::JPEG), // default JPEG
+                                    };
+                                    contents.push(rig::message::UserContent::Image(
+                                        rig::completion::message::Image {
+                                            data: rig::message::DocumentSourceKind::Base64(b64),
+                                            media_type,
+                                            detail: None,
+                                            additional_params: None,
+                                        }
+                                    ));
+                                },
+                                Ok(_) => {
+                                    contents.push(rig::message::UserContent::text(
+                                        format!("\n[Attached Image: {} — file appears empty]", att.filename)
+                                    ));
+                                },
+                                Err(e) => {
+                                    contents.push(rig::message::UserContent::text(
+                                        format!("\n[Attached Image: {} — could not read: {}]", att.filename, e)
+                                    ));
+                                }
+                            }
+                        } else {
+                            // Non-image: include as a text description so the model knows about it
+                            contents.push(rig::message::UserContent::text(
+                                format!("\n[Attached File: {} (Path: {})]", att.filename, att.file_path)
+                            ));
+                        }
+                    }
+                }
+
+                history.push(rig::completion::Message::User {
+                    content: rig::OneOrMany::many(contents).unwrap(),
+                });
+            } else {
+                let content_text = if m.content.trim().is_empty() { 
+                    "(assistant message)".to_string() 
+                } else { 
+                    m.content.clone() 
+                };
+                history.push(rig::completion::Message::Assistant {
+                    id: None,
+                    content: rig::OneOrMany::one(rig::message::AssistantContent::text(content_text)),
+                });
+            }
+        }
+
+        // Use the pre-computed per-conversation context (not global LanceDB memories)
+        let memory_context = recent_summary;
+
+        println!("📜 History has {} messages.", history.len());
+        for (i, m) in history.iter().enumerate() {
+            match m {
+                rig::completion::Message::User { content } => println!("   [M{}] USER: ({} items)", i, content.len()),
+                rig::completion::Message::Assistant { content, .. } => println!("   [M{}] ASST: {}", i, content.len()),
+            }
+        }
 
         let response = orchestrate_request(
             db,
@@ -91,13 +151,6 @@ impl AgentSystem {
             &memory_context,
             &self.ollama_client,
         ).await;
-
-        // Store result in memory if successful
-        if let Some(ref table) = memory_table {
-            if !response.contains("HALTED") && !response.contains("Error") {
-                crate::engine::memory::store_memory(table, &self.ollama_client, query, &response).await;
-            }
-        }
 
         response
     }

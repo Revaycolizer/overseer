@@ -10,28 +10,37 @@ pub struct OllamaModel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemLoad {
+    pub label: String,
+    pub usage: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct OllamaTagsResponse {
     models: Vec<OllamaModel>,
 }
 
-pub async fn list_ollama_models() -> Vec<String> {
+pub async fn get_available_models() -> Vec<String> {
     let client = reqwest::Client::new();
     match client.get("http://localhost:11434/api/tags").send().await {
         Ok(resp) => {
-            if let Ok(json) = resp.json::<OllamaTagsResponse>().await {
-                json.models.into_iter().map(|m| m.name).collect()
-            } else {
-                vec!["llama3".to_string(), "qwen2.5:7b-instruct".to_string()]
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(models) = json["models"].as_array() {
+                    return models.iter()
+                        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                        .collect();
+                }
             }
+            vec!["llama3:latest".to_string(), "qwen2.5:7b-instruct".to_string()]
         }
-        Err(_) => vec!["llama3".to_string(), "qwen2.5:7b-instruct".to_string()],
+        Err(_) => vec!["llama3:latest".to_string(), "qwen2.5:7b-instruct".to_string()],
     }
 }
 
 pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT id, name, description, instructions, model, domain, version FROM agents"
+        "SELECT id, name, description, instructions, model, domain, version, code FROM agents"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -60,6 +69,7 @@ pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
             model: r.get::<Option<String>, _>("model").unwrap_or_default(),
             domain: domain.clone(),
             version: r.get::<Option<String>, _>("version").unwrap_or_default(),
+            code: r.get("code"),
             tools: tools_rows.into_iter().map(|t| t.get("name")).collect(),
             source_files: vec![],
         });
@@ -92,9 +102,9 @@ pub async fn get_tools(db: &Database) -> anyhow::Result<Vec<ToolInfo>> {
 pub async fn add_agent(db: &Database, name: &str, description: &str, domain: &str) -> anyhow::Result<i64> {
     let id = db.next_id().await;
     sqlx::query(
-        "INSERT INTO agents (id, name, description, instructions, model, domain, version) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO agents (id, name, description, instructions, model, domain, version, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(id).bind(name).bind(description).bind("").bind("llama3").bind(domain).bind("1.0.0")
+    .bind(id).bind(name).bind(description).bind("").bind("llama3").bind(domain).bind("1.0.0").bind("")
     .execute(&db.pool)
     .await?;
     Ok(id)
@@ -113,9 +123,9 @@ pub async fn add_tool(db: &Database, name: &str, description: &str, language: &s
 
 pub async fn update_agent(db: &Database, agent: AgentInfo) -> anyhow::Result<()> {
     sqlx::query(
-        "UPDATE agents SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        "UPDATE agents SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     )
-    .bind(agent.name).bind(agent.description).bind(agent.instructions).bind(agent.model).bind(agent.domain).bind(agent.version).bind(agent.id)
+    .bind(agent.name).bind(agent.description).bind(agent.instructions).bind(agent.model).bind(agent.domain).bind(agent.version).bind(agent.code).bind(agent.id)
     .execute(&db.pool)
     .await?;
     Ok(())
@@ -131,12 +141,173 @@ pub async fn update_tool(db: &Database, tool: ToolInfo) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ── SUPERVISOR CRUD ──
+
+pub async fn get_supervisors(db: &Database) -> anyhow::Result<Vec<crate::db::Supervisor>> {
+    let rows = sqlx::query_as::<_, crate::db::Supervisor>(
+        "SELECT id, name, description, instructions, model, domain, version, code FROM supervisors"
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn get_supervisor_tools(db: &Database, supervisor_id: i64) -> anyhow::Result<Vec<ToolInfo>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT DISTINCT t.id, t.name, t.description, t.code, t.language, t.script_path, t.version 
+         FROM tools t
+         JOIN agent_tools at ON t.id = at.tool_id
+         JOIN supervisor_agents sa ON at.agent_id = sa.agent_id
+         WHERE sa.supervisor_id = ?"
+    )
+    .bind(supervisor_id)
+    .fetch_all(&db.pool)
+    .await?;
+    
+    let tools = rows.into_iter().map(|r| ToolInfo {
+        id: r.get("id"),
+        name: r.get("name"),
+        description: r.get::<Option<String>, _>("description").unwrap_or_default(),
+        code: r.get::<Option<String>, _>("code").unwrap_or_default(),
+        language: r.get::<Option<String>, _>("language").unwrap_or_default(),
+        script_path: r.get("script_path"),
+        version: r.get::<Option<String>, _>("version").unwrap_or_default(),
+    }).collect();
+    
+    Ok(tools)
+}
+
+pub async fn add_supervisor(db: &Database, name: &str, description: &str, domain: &str) -> anyhow::Result<i64> {
+    let id = db.next_id().await;
+    sqlx::query(
+        "INSERT INTO supervisors (id, name, description, domain, model, version, instructions, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(id).bind(name).bind(description).bind(domain).bind("qwen2.5:7b-instruct").bind("1.0.0").bind("").bind("")
+    .execute(&db.pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn update_supervisor(db: &Database, supervisor: crate::db::Supervisor) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE supervisors SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    )
+    .bind(supervisor.name).bind(supervisor.description).bind(supervisor.instructions).bind(supervisor.model)
+    .bind(supervisor.domain).bind(supervisor.version).bind(supervisor.code).bind(supervisor.id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_supervisor(db: &Database, id: i64) -> anyhow::Result<()> {
+    sqlx::query("DELETE FROM supervisors WHERE id = ?").bind(id).execute(&db.pool).await?;
+    Ok(())
+}
+
+pub async fn get_supervisor_agents(db: &Database, supervisor_id: i64) -> anyhow::Result<Vec<AgentInfo>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT a.id, a.name, a.description, a.instructions, a.model, a.domain, a.version, a.code 
+         FROM agents a
+         JOIN supervisor_agents sa ON a.id = sa.agent_id
+         WHERE sa.supervisor_id = ?"
+    )
+    .bind(supervisor_id)
+    .fetch_all(&db.pool)
+    .await?;
+    
+    let mut agents = Vec::new();
+    for r in rows {
+        let agent_id: i64 = r.get("id");
+        let tools_rows = sqlx::query(
+            "SELECT t.name FROM tools t 
+             JOIN agent_tools at ON t.id = at.tool_id 
+             WHERE at.agent_id = ?"
+        )
+        .bind(agent_id)
+        .fetch_all(&db.pool)
+        .await?;
+
+        agents.push(AgentInfo {
+            id: agent_id,
+            name: r.get("name"),
+            description: r.get::<Option<String>, _>("description").unwrap_or_default(),
+            instructions: r.get::<Option<String>, _>("instructions").unwrap_or_default(),
+            model: r.get::<Option<String>, _>("model").unwrap_or_default(),
+            domain: r.get::<Option<String>, _>("domain").unwrap_or_default(),
+            version: r.get::<Option<String>, _>("version").unwrap_or_default(),
+            code: r.get("code"),
+            tools: tools_rows.into_iter().map(|t| t.get("name")).collect(),
+            source_files: vec![],
+        });
+    }
+    Ok(agents)
+}
+
+pub async fn link_agent_to_supervisor(db: &Database, supervisor_id: i64, agent_id: i64) -> anyhow::Result<()> {
+    let id = db.next_id().await;
+    sqlx::query(
+        "INSERT OR IGNORE INTO supervisor_agents (id, supervisor_id, agent_id) VALUES (?, ?, ?)"
+    )
+    .bind(id).bind(supervisor_id).bind(agent_id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn unlink_agent_from_supervisor(db: &Database, supervisor_id: i64, agent_id: i64) -> anyhow::Result<()> {
+    sqlx::query(
+        "DELETE FROM supervisor_agents WHERE supervisor_id = ? AND agent_id = ?"
+    )
+    .bind(supervisor_id).bind(agent_id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_planners(db: &Database) -> anyhow::Result<Vec<crate::db::Planner>> {
+    let rows = sqlx::query_as::<_, crate::db::Planner>(
+        "SELECT id, name, description, instructions, model, domain, version, code FROM planners ORDER BY name ASC"
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn add_planner(db: &Database, name: &str, description: &str, domain: &str) -> anyhow::Result<i64> {
+    let id = db.next_id().await;
+    sqlx::query(
+        "INSERT INTO planners (id, name, description, domain, model, version, instructions, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(id).bind(name).bind(description).bind(domain).bind("qwen2.5:7b-instruct").bind("1.0.0").bind("").bind("")
+    .execute(&db.pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn update_planner(db: &Database, planner: crate::db::Planner) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE planners SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ? WHERE id = ?"
+    )
+    .bind(planner.name).bind(planner.description).bind(planner.instructions).bind(planner.model)
+    .bind(planner.domain).bind(planner.version).bind(planner.code).bind(planner.id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_planner(db: &Database, id: i64) -> anyhow::Result<()> {
+    sqlx::query("DELETE FROM planners WHERE id = ?").bind(id).execute(&db.pool).await?;
+    Ok(())
+}
 
 pub async fn add_tool_to_agent(db: &Database, agent_id: i64, tool_id: i64) -> anyhow::Result<()> {
+    let id = db.next_id().await;
     sqlx::query(
-        "INSERT OR IGNORE INTO agent_tools (agent_id, tool_id) VALUES (?, ?)"
+        "INSERT OR IGNORE INTO agent_tools (id, agent_id, tool_id) VALUES (?, ?, ?)"
     )
-    .bind(agent_id).bind(tool_id)
+    .bind(id).bind(agent_id).bind(tool_id)
     .execute(&db.pool)
     .await?;
     Ok(())
@@ -248,7 +419,7 @@ pub async fn add_message(db: &Database, conversation_id: i64, role: &str, conten
 pub async fn get_agent_by_domain(db: &Database, domain: &str) -> anyhow::Result<Option<AgentInfo>> {
     use sqlx::Row;
     let r = sqlx::query(
-        "SELECT id, name, description, instructions, model, domain, version FROM agents WHERE domain = ? LIMIT 1"
+        "SELECT id, name, description, instructions, model, domain, version, code FROM agents WHERE domain = ? LIMIT 1"
     )
     .bind(domain)
     .fetch_optional(&db.pool)
@@ -272,6 +443,7 @@ pub async fn get_agent_by_domain(db: &Database, domain: &str) -> anyhow::Result<
             model: r.get::<Option<String>, _>("model").unwrap_or_default(),
             domain: r.get::<Option<String>, _>("domain").unwrap_or_default(),
             version: r.get::<Option<String>, _>("version").unwrap_or_default(),
+            code: r.get("code"),
             tools: tools_rows.into_iter().map(|t| t.get("name")).collect(),
             source_files: vec![],
         }))
@@ -488,7 +660,9 @@ pub async fn get_setting(db: &Database, key: &str) -> String {
 }
 
 pub async fn set_setting(db: &Database, key: &str, value: &str) -> anyhow::Result<()> {
-    sqlx::query("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
+    let id = db.next_id().await;
+    sqlx::query("INSERT INTO settings (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
+        .bind(id)
         .bind(key)
         .bind(value)
         .execute(&db.pool)
@@ -505,19 +679,72 @@ pub async fn get_all_settings(db: &Database) -> HashMap<String, String> {
     rows.into_iter().collect()
 }
 
-pub async fn get_available_models() -> Vec<String> {
-    let client = reqwest::Client::new();
-    let res = client.get("http://localhost:11434/api/tags").send().await;
-    
-    if let Ok(resp) = res {
-        if let Ok(json) = resp.json::<serde_json::Value>().await {
-            if let Some(models) = json["models"].as_array() {
-                return models.iter()
-                    .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-                    .collect();
+pub async fn get_attachments(db: &Database, message_id: i64) -> anyhow::Result<Vec<Attachment>> {
+    let rows = sqlx::query_as::<_, Attachment>(
+        "SELECT id, message_id, filename, file_path, content_type, size FROM attachments WHERE message_id = ?"
+    )
+    .bind(message_id)
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn get_all_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
+    get_agents(db).await
+}
+
+pub async fn get_system_load() -> SystemLoad {
+    use std::process::Command;
+
+    // 1. Try GPU Load (NVIDIA)
+    let gpu_output = Command::new("nvidia-smi")
+        .args(["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"])
+        .output();
+
+    if let Ok(output) = gpu_output {
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if let Ok(usage) = s.parse::<u32>() {
+                return SystemLoad {
+                    label: "GPU Load".to_string(),
+                    usage,
+                };
             }
         }
     }
-    
-    vec!["llama3:latest".to_string(), "qwen2.5:7b-instruct".to_string()]
+
+    // 2. Fallback to CPU Load
+    // We use top to get a quick snapshot of CPU idle time
+    let cpu_output = Command::new("sh")
+        .arg("-c")
+        .arg("top -bn1 | grep '%Cpu(s)'")
+        .output();
+
+    if let Ok(output) = cpu_output {
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout);
+            // Example: %Cpu(s):  8.3 us,  1.5 sy,  0.0 ni, 88.6 id, ...
+            if let Some(idle_part) = s.split(',').find(|part| part.contains("id")) {
+                let idle_val = idle_part
+                    .trim()
+                    .split_whitespace()
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok());
+                
+                if let Some(idle) = idle_val {
+                    let usage = (100.0 - idle).round() as u32;
+                    return SystemLoad {
+                        label: "CPU Load".to_string(),
+                        usage: usage.min(100),
+                    };
+                }
+            }
+        }
+    }
+
+    // 3. Absolute fallback
+    SystemLoad {
+        label: "System Load".to_string(),
+        usage: 0,
+    }
 }

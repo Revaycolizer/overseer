@@ -28,7 +28,7 @@ pub fn AgentsWorkshop() -> Element {
     let mut selected_agent_id = use_signal(|| agents.first().map(|a| a.id.clone()).unwrap_or_default());
     
     let _ = use_resource(move || async move {
-        let fetched_models = backend::list_ollama_models().await;
+        let fetched_models: Vec<String> = backend::get_available_models().await;
         if !fetched_models.is_empty() {
             models.set(fetched_models);
         }

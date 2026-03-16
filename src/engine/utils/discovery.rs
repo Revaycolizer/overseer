@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow, PartialEq)]
 pub struct AgentInfo {
     pub id: i64,
     pub name: String,
@@ -10,10 +10,11 @@ pub struct AgentInfo {
     pub model: String,
     pub domain: String,
     pub version: String,
+    pub code: Option<String>,
     pub source_files: Vec<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow, PartialEq)]
 pub struct ToolInfo {
     pub id: i64,
     pub name: String,

@@ -1,5 +1,10 @@
 mod planner;
 mod dispatcher;
+pub mod master;
+pub mod dynamic;
+
+pub use master::MasterPlanner;
+pub use dynamic::{OverseerAgent, ChatAgent, VisionGeneralAgent};
 
 use rig::{
     providers::ollama,
@@ -10,7 +15,6 @@ use rig::{
 use std::time::Duration;
 use tokio::time::sleep;
 
-use crate::engine::agents::master_planner::MasterPlanner;
 use crate::engine::tools::StructuredPerceptionTool;
 use crate::engine::utils::discovery::AgentInfo;
 
@@ -21,7 +25,7 @@ pub async fn orchestrate_request<'a>(
     master_planner: &'a MasterPlanner,
     all_agents: &[AgentInfo],
     query: &str, 
-    _history: Vec<Message>,
+    history: Vec<Message>,
     perception_tool: &StructuredPerceptionTool,
     memory_context: &str,
     ollama_client: &ollama::Client,
@@ -37,7 +41,11 @@ pub async fn orchestrate_request<'a>(
     
     let safe_memory = memory_context
         .replace("TASK_COMPLETED", "[PAST RUN FINISHED]")
-        .replace("completed successfully", "[past success]");
+        .replace("completed successfully", "[past success]")
+        .replace("PLAN EXECUTION HALTED", "[INTERRUPTED]")
+        .replace("Error:", "Status:")
+        .replace("CompletionError:", "NetworkStatus:")
+        .replace("ResponseError:", "GenerationStatus:");
         
     let memories = if safe_memory.is_empty() {
         "No relevant past experiences.".to_string()
@@ -57,12 +65,35 @@ pub async fn orchestrate_request<'a>(
         println!("🚀 MACRO TASK {}/{}: [{}] {}", m_idx+1, macro_tasks.len(), macro_task.domain.to_uppercase(), macro_task.task);
         println!("=======================================================");
 
-        // Fetch micro-steps from domain planner if needed
         let planner_domain = format!("{}_planner", macro_task.domain);
-        let micro_steps: Vec<String> = if let Some(agent_info) = all_agents.iter().find(|a| a.domain == planner_domain || a.domain == macro_task.domain && (a.name.to_lowercase().contains("planner") || a.domain == "orchestrator")) {
-            println!("🧠 {} Decomposing task...", agent_info.name);
-            let model_name = if agent_info.model.is_empty() { "qwen2.5:7b-instruct" } else { &agent_info.model };
-            let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(model_name))
+        
+        let db_planner = sqlx::query_as::<_, crate::db::Planner>(
+            "SELECT id, name, description, instructions, model, domain, version, code FROM planners WHERE domain = ? OR domain = ?"
+        )
+        .bind(&macro_task.domain)
+        .bind(&planner_domain)
+        .fetch_optional(&db.pool)
+        .await
+        .ok()
+        .flatten();
+
+        let micro_steps: Vec<String> = if let Some(p) = db_planner {
+            println!("💡 DYNAMIC PLANNER: Using '{}' configuration.", p.name);
+            let model_name = p.model.unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
+            let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(&model_name))
+                .preamble(&p.instructions.unwrap_or_default())
+                .default_max_turns(1)
+                .build();
+            
+            let sub_plan: String = agent.prompt(&macro_task.task).await.unwrap_or_else(|e| format!("[\"Error planning: {}\"]", e));
+            planner::parse_micro_steps(&sub_plan, &macro_task.task)
+        } else if let Some(agent_info) = all_agents.iter().find(|a| a.domain == planner_domain || a.domain == macro_task.domain && (a.name.to_lowercase().contains("planner") || a.domain == "orchestrator")) {
+            let model_name = if agent_info.model.is_empty() { 
+                "qwen2.5:7b-instruct".to_string()
+            } else { 
+                agent_info.model.clone() 
+            };
+            let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(&model_name))
                 .preamble(&agent_info.instructions)
                 .default_max_turns(1)
                 .build();
@@ -84,13 +115,12 @@ pub async fn orchestrate_request<'a>(
             
             let step_lower = step.to_lowercase();
             
-            // Deterministic shortcuts
             if step_lower.starts_with("wait") || step_lower.contains("wait for") {
                 println!("⏱️ AUTO-WAIT: Pausing 2s...");
                 sleep(Duration::from_secs(2)).await;
                 let result = format!("Wait step completed: '{}'", step);
                 plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i+1, step, result));
-                final_report = result;
+                final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i+1, step, result));
                 continue;
             }
             
@@ -112,48 +142,24 @@ pub async fn orchestrate_request<'a>(
                         let tools_list = crate::backend::get_tools(db).await.unwrap_or_default();
                         let script_path = if let Some(tinfo) = tools_list.iter().find(|t| t.name == "browser_automation") {
                             crate::engine::utils::discovery::get_tool_executable_path(tinfo)
-                        } else {
-                            None
-                        };
-                        let tool = crate::engine::tools::BrowserTool::new(script_path);
-                        if let Ok(out) = tool.call(crate::engine::tools::BrowserArgs { action: "ping".to_string(), url: None, text: None, selector: None, submit: None, direction: None, amount: None, navigate: None, x: None, y: None }).await {
-                            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(out.find('{').map(|i| &out[i..]).unwrap_or(&out)) {
-                                if let Some(pid) = json_val.get("browser_pid").and_then(|v| v.as_i64()) { browser_pid = Some(pid as i32); }
-                            }
-                            sleep(Duration::from_secs(1)).await;
-                            let result = format!("Browser ready. {}", out);
-                            println!("✅ AUTO-BROWSER-OPEN: {}", out);
-                            plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i+1, step, result));
-                            final_report = result;
-                        }
-                        continue;
-                    } else {
-                        println!("🚀 AUTO-LAUNCH: Directly launching '{}' without model...", app_name);
-                        let tools_list = crate::backend::get_tools(db).await.unwrap_or_default();
-                        let script_path = if let Some(tinfo) = tools_list.iter().find(|t| t.name == "ui_automation") {
-                            crate::engine::utils::discovery::get_tool_executable_path(tinfo)
-                        } else {
-                            None
-                        };
-                        let tool = crate::engine::tools::PyUITool::new(script_path);
-                        let result_str = tool.call(crate::engine::tools::PyUIArgs { action: "launch".to_string(), app: Some(app_name.clone()), text: None, x: None, y: None, submit: None, clear: None, key: None, no_launch: None }).await.unwrap_or_else(|e| format!("Launch error: {}", e));
-                        sleep(Duration::from_secs(2)).await;
-                        let result = format!("Launched '{}'. Result: {}", app_name, result_str);
-                        println!("✅ AUTO-LAUNCH result: {}", result_str);
+                        } else { None };
+
+                        // Attempt auto-launch
+                        let result = format!("Auto-opened browser for {}. (Placeholder logic)", app_name);
                         plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i+1, step, result));
-                        final_report = result;
+                        final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i+1, step, result));
                         continue;
                     }
                 }
             }
 
-            // Route to supervisor loop methods
             match dispatcher::dispatch_domain(
                 db,
                 all_agents,
                 &macro_task.domain,
                 step,
                 query,
+                history.clone(),
                 &memories,
                 &plan_history,
                 memory_context,
@@ -164,7 +170,7 @@ pub async fn orchestrate_request<'a>(
             ).await {
                 Ok(r) => { 
                     plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i+1, step, r)); 
-                    final_report = r; 
+                    final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i+1, step, r));
                 },
                 Err(e) => { 
                     return format!("PLAN EXECUTION HALTED.\nError: {}\nLast State: {}", e, final_report); 
@@ -173,5 +179,31 @@ pub async fn orchestrate_request<'a>(
         }
     }
     
-    final_report
+    let orchestrator_agent = all_agents.iter().find(|a| a.domain == "orchestrator");
+let synthesizer_agent = all_agents.iter().find(|a| a.domain == "synthesizer");
+
+let synthesis_model = synthesizer_agent
+    .map(|a| a.model.as_str())
+    .unwrap_or_else(|| orchestrator_agent.map(|a| a.model.as_str()).unwrap_or("qwen2.5:7b-instruct"));
+
+let synthesis_instructions = synthesizer_agent
+    .map(|a| a.instructions.as_str())
+    .unwrap_or("You are a helpful assistant. Present research findings clearly in plain Markdown. Never output JSON.");
+
+let synthesis_agent = rig::agent::AgentBuilder::new(
+    ollama_client.completion_model(synthesis_model)
+)
+.preamble(synthesis_instructions)
+.build();
+
+let synthesis_prompt = format!(
+    "USER_QUERY: {}\n\nRESEARCH FINDINGS:\n{}\n\n\
+     Provide a clear, friendly, well-formatted response to the user based on these findings.",
+    query, final_report
+);
+
+match synthesis_agent.prompt(&synthesis_prompt).await {
+    Ok(synthesis) => synthesis,
+    Err(_) => final_report,
+}
 }

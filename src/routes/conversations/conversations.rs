@@ -41,6 +41,17 @@ pub fn Conversations() -> Element {
     let mut pending_attachments = use_signal(|| Vec::<(String, String, Vec<u8>)>::new()); // (filename, content_type, data)
     let mut is_thinking = use_signal(|| false);
 
+    let mut system_load = use_resource(move || async move {
+        backend::get_system_load().await
+    });
+
+    use_future(move || async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            system_load.restart();
+        }
+    });
+
     // Auto-scroll to bottom when messages change
     use_effect(move || {
         let _ = messages_resource.read();
@@ -174,16 +185,25 @@ pub fn Conversations() -> Element {
                     }
                     div { class: "p-4 bg-slate-50 border-t border-slate-200",
                         div { class: "bg-white rounded-lg p-3 border border-slate-200 shadow-sm",
-                            div { class: "flex items-center justify-between mb-2",
-                                span { class: "text-[10px] font-bold text-slate-500 uppercase",
-                                    "GPU Load"
+                            if let Some(load) = system_load.value()() {
+                                div { class: "flex items-center justify-between mb-2",
+                                    span { class: "text-[10px] font-bold text-slate-500 uppercase",
+                                        "{load.label}"
+                                    }
+                                    span { class: "text-[10px] font-mono text-blue-600 font-bold",
+                                        "{load.usage}%"
+                                    }
                                 }
-                                span { class: "text-[10px] font-mono text-blue-600 font-bold",
-                                    "42%"
+                                div { class: "h-1.5 w-full bg-slate-100 rounded-full overflow-hidden",
+                                    div { 
+                                        class: "h-full bg-blue-500 transition-all duration-500",
+                                        style: format!("width: {}%", load.usage)
+                                    }
                                 }
-                            }
-                            div { class: "h-1.5 w-full bg-slate-100 rounded-full overflow-hidden",
-                                div { class: "h-full bg-blue-500 w-[42%]" }
+                            } else {
+                                div { class: "flex items-center justify-center py-2",
+                                    div { class: "size-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" }
+                                }
                             }
                         }
                     }
@@ -227,7 +247,7 @@ pub fn Conversations() -> Element {
                                                 if !msg.attachments.is_empty() {
                                                     div { class: "mt-3 flex flex-wrap gap-2 justify-end",
                                                         for att in &msg.attachments {
-                                                            div { class: "flex items-center gap-2 bg-white/20 px-2 py-1 rounded text-[10px] font-bold text-white border border-white/10",
+                                                            div { class: "flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 text-[10px] font-bold text-blue-600",
                                                                 MaterialIcon { name: "insert_drive_file", size: 14 }
                                                                 "{att.filename}"
                                                             }

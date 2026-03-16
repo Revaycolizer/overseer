@@ -1,42 +1,12 @@
 pub mod discovery;
 
 use tokio::process::Command;
-use crate::engine::tools::{BrowserTool, BrowserArgs};
 use rig::tool::Tool;
 
 pub async fn get_browser_dom_tree() -> Option<String> {
-    let tool = BrowserTool::new(None);
-    let args = BrowserArgs {
-        action: "get_dom_tree".to_string(),
-        url: None,
-        text: None,
-        selector: None,
-        submit: None,
-        direction: None,
-        amount: None,
-        navigate: None,
-        x: None,
-        y: None,
-    };
-    
-    match tool.call(args).await {
-        Ok(out) => {
-            let mut json_str = "";
-            for line in out.lines() {
-                if line.trim().starts_with('{') {
-                    json_str = line.trim();
-                    break;
-                }
-            }
-            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
-                if let Some(dom_tree) = json_val.get("dom_tree").and_then(|v| v.as_str()) {
-                    return Some(dom_tree.to_string());
-                }
-            }
-            None
-        },
-        Err(_) => None,
-    }
+    // Note: Legacy static tool call removed. 
+    // Domain-specific supervisors now use dynamic tools directly.
+    None
 }
 
 pub async fn focus_window_by_pid(pid: i32) {
@@ -95,6 +65,36 @@ pub fn clean_response(response: String) -> String {
             if block.starts_with('{') || block.starts_with('[') {
                 return block.to_string();
             }
+        }
+    }
+
+    // Fallback: If it's a raw JSON object but has trailing text, find the matching brace
+    let trimmed = s.trim();
+    if trimmed.starts_with('{') {
+        let mut brace_count = 0;
+        let mut end_index = 0;
+        let mut in_string = false;
+        let mut escaped = false;
+
+        for (i, c) in trimmed.chars().enumerate() {
+            if c == '"' && !escaped {
+                in_string = !in_string;
+            }
+            if !in_string {
+                if c == '{' { brace_count += 1; }
+                else if c == '}' { 
+                    brace_count -= 1; 
+                    if brace_count == 0 {
+                        end_index = i + 1;
+                        break;
+                    }
+                }
+            }
+            escaped = !escaped && c == '\\';
+        }
+
+        if end_index > 0 {
+            return trimmed[..end_index].to_string();
         }
     }
 

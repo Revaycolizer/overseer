@@ -39,6 +39,18 @@ pub fn Sidebar() -> Element {
                     MaterialIcon { name: "build", size: 22 }
                 }
                 Link { 
+                    class: if route == (Route::SupervisorsWorkshop {}) { "nav-link active" } else { "nav-link" }, 
+                    to: Route::SupervisorsWorkshop {}, 
+                    title: "Supervisors",
+                    MaterialIcon { name: "supervised_user_circle", size: 22 }
+                }
+                Link { 
+                    class: if route == (Route::PlannersWorkshop {}) { "nav-link active" } else { "nav-link" }, 
+                    to: Route::PlannersWorkshop {}, 
+                    title: "Planners",
+                    MaterialIcon { name: "architecture", size: 22 }
+                }
+                Link { 
                     class: if route == (Route::Settings {}) { "nav-link active" } else { "nav-link" }, 
                     to: Route::Settings {}, 
                     title: "Settings",
@@ -69,6 +81,8 @@ pub fn Layout() -> Element {
         Route::AgentsWorkshop {} => ("Agents Workshop", "smart_toy"),
         Route::ToolsWorkshop {} => ("Tools Workshop", "build"),
         Route::WorkflowAutomation {} => ("Workflow Automation", "terminal"),
+        Route::SupervisorsWorkshop {} => ("Supervisors Workshop", "supervised_user_circle"),
+        Route::PlannersWorkshop {} => ("Planners Workshop", "architecture"),
         Route::Settings {} => ("Settings", "settings"),
         _ => ("Overseer", "apps"),
     };
