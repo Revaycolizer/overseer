@@ -27,28 +27,25 @@ from paddleocr import PaddleOCR
 # Disable pyautogui failsafe for automation
 pyautogui.FAILSAFE = False
 
-try:
-    # Strategy 1: Modern 3.x/PaddleX initialization
-    ocr = PaddleOCR(lang='en', use_textline_orientation=False)
-except Exception:
-    try:
-        # Strategy 2: Stable 2.x initialization (Standard)
-        ocr = PaddleOCR(lang='en', use_angle_cls=False, use_gpu=False)
-    except Exception as e:
-        if "AnalysisConfig" in str(e):
-            print(f"❌ Version Mismatch detected: {e}", file=sys.stderr)
-            print("You have PaddleOCR 3.x with PaddlePaddle 2.x. This is incompatible.")
-            print("Please align them by running:")
-            print("pip install \"paddleocr<3.0.0\" \"paddlepaddle<3.0.0\" --break-system-packages")
-            sys.exit(1)
+# Global for lazy loading
+_ocr_instance = None
+
+def get_ocr():
+    """Lazily initializes and returns the PaddleOCR instance with logs disabled."""
+    global _ocr_instance
+    if _ocr_instance is None:
+        print("📥 Initializing PaddleOCR (lazy)...", file=sys.stderr)
         try:
-             # Strategy 3: Absolute barebones
-             ocr = PaddleOCR(lang='en')
-        except Exception as e:
-            print(f"❌ Failed to initialize PaddleOCR: {e}", file=sys.stderr)
-            print("Please ensure consistent versions are installed:")
-            print("pip install \"paddleocr<3.0.0\" \"paddlepaddle<3.0.0\" --break-system-packages")
-            sys.exit(1)
+            # Strategy 1: Standard initialization with logging disabled
+            _ocr_instance = PaddleOCR(lang='en', show_log=False, use_angle_cls=False, use_gpu=False)
+        except Exception:
+            try:
+                # Strategy 2: Absolute barebones
+                _ocr_instance = PaddleOCR(lang='en', show_log=False)
+            except Exception as e:
+                print(f"❌ Failed to initialize PaddleOCR: {e}", file=sys.stderr)
+                sys.exit(1)
+    return _ocr_instance
 
 def get_window_geometry(wid):
     """Returns (x, y, width, height) of the window."""
@@ -99,9 +96,9 @@ def get_screen_text(app_name, grep_str=None):
         win_x, win_y, _, _ = get_window_geometry(wid)
         
         start_time = time.time()
-        # Newer PaddleOCR might prefer predict() but ocr() should still work if flags are right
-        # We try to use the most stable call
-        result = ocr.ocr(tmp_img)
+        # LAZY LOAD HERE
+        ocr_engine = get_ocr()
+        result = ocr_engine.ocr(tmp_img)
         elapsed = time.time() - start_time
         print(f"⚡ OCR took {elapsed:.2f} seconds", file=sys.stderr)
 
@@ -164,43 +161,43 @@ def launch_app_safe(app_name):
         return False
 
 def main():
-    # Flexible CLI: if arguments look like 'launch neontune' or 'search song'
-    # we handle them as actions even without flags.
+    # Flexible CLI: handle cases where command is passed as a single string (system call)
+    # or as separate bash arguments.
     
     raw_args = sys.argv[1:]
     
+    # If we get a single string with spaces, split it
+    if len(raw_args) == 1 and " " in raw_args[0]:
+        raw_args = raw_args[0].split()
+        
     action = None
     app = "active"
     text = None
     
-    if len(raw_args) >= 2 and raw_args[0] in ["launch", "search", "click", "get_text"]:
-        action = raw_args[0]
-        if action == "launch":
-            app = raw_args[1]
+    if len(raw_args) >= 1:
+        # Check if first word is a known action
+        first_word = raw_args[0].lower()
+        if first_word in ["launch", "search", "click", "get_text"]:
+            action = first_word
+            if len(raw_args) > 1:
+                if action == "launch":
+                    app = raw_args[1]
+                else:
+                    text = " ".join(raw_args[1:])
         else:
-            text = " ".join(raw_args[1:])
-    else:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--action", choices=["get_text", "click", "launch", "search"])
-        parser.add_argument("--app", default="active")
-        parser.add_argument("--text", help="Text to search for or click")
-        
-        args, unknown = parser.parse_known_args()
-        
-        if not args.action and unknown:
-            # Try to infer action from first unknown arg
-            if unknown[0] in ["launch", "search", "click", "get_text"]:
-                action = unknown[0]
-                if len(unknown) > 1:
-                    if action == "launch": app = unknown[1]
-                    else: text = " ".join(unknown[1:])
-        else:
+            # Traditional argparse fallback
+            parser = argparse.ArgumentParser()
+            parser.add_argument("--action", choices=["get_text", "click", "launch", "search"])
+            parser.add_argument("--app", default="active")
+            parser.add_argument("--text", help="Text to search for or click")
+            
+            args, unknown = parser.parse_known_args(raw_args)
             action = args.action
             app = args.app
             text = args.text
 
     if not action:
-        print("❌ No action specified (launch, search, click, get_text)")
+        print(f"❌ No action specified in arguments: {raw_args}")
         sys.exit(1)
 
     if action == "launch":
@@ -230,7 +227,7 @@ def main():
             pyautogui.press('backspace')
             pyautogui.write(text, interval=0.05)
             pyautogui.press('enter')
-            print("✅ Search query submitted")
+            print(f"✅ DONE: Search for '{text}' submitted.")
         else:
             # Fallback: Just type if Search field is likely focused or we can't find it
             print("⚠️ 'Search' button not found via OCR, trying direct type...")
@@ -238,6 +235,7 @@ def main():
             time.sleep(0.5)
             pyautogui.write(text)
             pyautogui.press('enter')
+            print(f"✅ DONE: Fallback search for '{text}' submitted.")
             
     elif action == "get_text":
         print(get_screen_text(app, text))
@@ -250,6 +248,7 @@ def main():
             target = results[0]
             print(f"🖱️ Clicking '{target['text']}' at ({target['x']}, {target['y']})")
             pyautogui.click(target['x'], target['y'])
+            print(f"✅ SUCCESS: Clicked '{target['text']}'")
         else:
             print(f"❌ Text '{text}' not found")
 
