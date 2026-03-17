@@ -158,7 +158,7 @@ pub async fn dispatch_domain(
                         // Append result and continue loop
                         current_prompt = format!(
                             "{}\n\nTOOL RESULT for '{}' ({}):\n{}\n\n\
-                             Continue: use another tool with JSON, or provide your final answer as plain text.",
+                             Next: Call another tool using JSON, or provide your final answer (e.g., 'done').",
                             current_prompt, tool_name, input, tool_result
                         );
                         continue;

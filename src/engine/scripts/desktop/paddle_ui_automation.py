@@ -183,7 +183,20 @@ def main():
                 if action == "launch":
                     app = raw_args[1]
                 else:
-                    text = " ".join(raw_args[1:])
+                    # Collect everything after action that isn't a flag
+                    text_parts = []
+                    i = 1
+                    while i < len(raw_args):
+                        if raw_args[i] == "--app" and i + 1 < len(raw_args):
+                            app = raw_args[i+1]
+                            i += 2
+                        elif raw_args[i].startswith("--"):
+                            # Skip other potential flags and their values
+                            i += 2
+                        else:
+                            text_parts.append(raw_args[i])
+                            i += 1
+                    text = " ".join(text_parts)
         else:
             # Traditional argparse fallback
             parser = argparse.ArgumentParser()
@@ -239,18 +252,38 @@ def main():
             
     elif action == "get_text":
         print(get_screen_text(app, text))
+    elif action == "get_state":
+        results = json.loads(get_screen_text(app))
+        if isinstance(results, list):
+            # Extract unique texts, stripped and filtered
+            unique_texts = sorted(list(set(r['text'].strip() for r in results if r['text'].strip())))
+            print(json.dumps(unique_texts))
+        else:
+            print(json.dumps([]))
     elif action == "click":
         if not text:
             print("❌ --text required for click action")
             sys.exit(1)
-        results = json.loads(get_screen_text(app, text))
+        
+        target_text = text
+        pick_last = False
+        if text.lower().startswith("last "):
+            target_text = text[5:]
+            pick_last = True
+            
+        results = json.loads(get_screen_text(app, target_text))
         if isinstance(results, list) and len(results) > 0:
-            target = results[0]
+            if pick_last:
+                # Sort by Y coordinate descending (bottom-most first)
+                target = max(results, key=lambda r: r['y'])
+            else:
+                target = results[0]
+                
             print(f"🖱️ Clicking '{target['text']}' at ({target['x']}, {target['y']})")
             pyautogui.click(target['x'], target['y'])
             print(f"✅ SUCCESS: Clicked '{target['text']}'")
         else:
-            print(f"❌ Text '{text}' not found")
+            print(f"❌ Text '{target_text}' not found")
 
 if __name__ == "__main__":
     main()

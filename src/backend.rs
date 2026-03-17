@@ -40,7 +40,7 @@ pub async fn get_available_models() -> Vec<String> {
 pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT id, name, description, instructions, model, domain, version, code FROM agents"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code FROM agents"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -81,7 +81,7 @@ pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
 pub async fn get_tools(db: &Database) -> anyhow::Result<Vec<ToolInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT id, name, description, code, language, script_path, version FROM tools"
+        "SELECT id, name, description, CAST(code AS TEXT) as code, language, script_path, version FROM tools"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -145,7 +145,7 @@ pub async fn update_tool(db: &Database, tool: ToolInfo) -> anyhow::Result<()> {
 
 pub async fn get_supervisors(db: &Database) -> anyhow::Result<Vec<crate::db::Supervisor>> {
     let rows = sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT id, name, description, instructions, model, domain, version, code FROM supervisors"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code FROM supervisors"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -155,7 +155,7 @@ pub async fn get_supervisors(db: &Database) -> anyhow::Result<Vec<crate::db::Sup
 pub async fn get_supervisor_tools(db: &Database, supervisor_id: i64) -> anyhow::Result<Vec<ToolInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT DISTINCT t.id, t.name, t.description, t.code, t.language, t.script_path, t.version 
+        "SELECT DISTINCT t.id, t.name, t.description, CAST(t.code AS TEXT) as code, t.language, t.script_path, t.version 
          FROM tools t
          JOIN agent_tools at ON t.id = at.tool_id
          JOIN supervisor_agents sa ON at.agent_id = sa.agent_id
@@ -208,7 +208,7 @@ pub async fn delete_supervisor(db: &Database, id: i64) -> anyhow::Result<()> {
 pub async fn get_supervisor_agents(db: &Database, supervisor_id: i64) -> anyhow::Result<Vec<AgentInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT a.id, a.name, a.description, a.instructions, a.model, a.domain, a.version, a.code 
+        "SELECT a.id, a.name, a.description, a.instructions, a.model, a.domain, a.version, CAST(a.code AS TEXT) as code 
          FROM agents a
          JOIN supervisor_agents sa ON a.id = sa.agent_id
          WHERE sa.supervisor_id = ?"
@@ -268,7 +268,7 @@ pub async fn unlink_agent_from_supervisor(db: &Database, supervisor_id: i64, age
 
 pub async fn get_planners(db: &Database) -> anyhow::Result<Vec<crate::db::Planner>> {
     let rows = sqlx::query_as::<_, crate::db::Planner>(
-        "SELECT id, name, description, instructions, model, domain, version, code FROM planners ORDER BY name ASC"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code FROM planners ORDER BY name ASC"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -419,7 +419,7 @@ pub async fn add_message(db: &Database, conversation_id: i64, role: &str, conten
 pub async fn get_agent_by_domain(db: &Database, domain: &str) -> anyhow::Result<Option<AgentInfo>> {
     use sqlx::Row;
     let r = sqlx::query(
-        "SELECT id, name, description, instructions, model, domain, version, code FROM agents WHERE domain = ? LIMIT 1"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code FROM agents WHERE domain = ? LIMIT 1"
     )
     .bind(domain)
     .fetch_optional(&db.pool)

@@ -169,8 +169,47 @@ pub async fn orchestrate_request<'a>(
                 &mut browser_pid,
             ).await {
                 Ok(r) => { 
-                    plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i+1, step, r)); 
-                    final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i+1, step, r));
+                    let mut final_result = r.clone();
+                    
+                    // Automatic Grounding Verification
+                    if r.trim().to_lowercase() == "done" || r.to_lowercase().contains("success") {
+                        println!("🔍 GROUNDING: Verifying success state for domain '{}'...", macro_task.domain);
+                        
+                        // 1. Get current screen state
+                        let tools_list = crate::backend::get_tools(db).await.unwrap_or_default();
+                        if let Some(paddle_tool) = tools_list.iter().find(|t| t.name == "paddle_ui_automation") {
+                            if let Ok(state_json) = crate::engine::tools::call_dynamic_tool(
+                                paddle_tool, 
+                                serde_json::json!({"input": "get_state"})
+                            ).await {
+                                // 2. Consult Grounding Agent
+                                let grounding_agent = all_agents.iter().find(|a| a.name == "Grounding Agent");
+                                if let Some(ga) = grounding_agent {
+                                    let ga_client = rig::agent::AgentBuilder::new(ollama_client.completion_model(&ga.model))
+                                        .preamble(&ga.instructions)
+                                        .build();
+                                    
+                                    let ga_prompt = format!(
+                                        "GOAL: {}\n\
+                                         TASK: {}\n\n\
+                                         VISIBLE UI TEXT:\n{}\n\n\
+                                         Has the task been successfully completed? Respond with STATE_VERIFIED or STATE_MISMATCH: [reason]",
+                                        query, step, state_json
+                                    );
+                                    
+                                    if let Ok(ga_response) = ga_client.prompt(&ga_prompt).await {
+                                        println!("👁️ GROUNDING EYE: {}", ga_response);
+                                        if ga_response.contains("STATE_MISMATCH") {
+                                            final_result = format!("GROUNDING ERROR: {}", ga_response);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i+1, step, final_result)); 
+                    final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i+1, step, final_result));
                 },
                 Err(e) => { 
                     return format!("PLAN EXECUTION HALTED.\nError: {}\nLast State: {}", e, final_report); 
@@ -198,7 +237,9 @@ let synthesis_agent = rig::agent::AgentBuilder::new(
 
 let synthesis_prompt = format!(
     "USER_QUERY: {}\n\nRESEARCH FINDINGS:\n{}\n\n\
-     Provide a clear, friendly, well-formatted response to the user based on these findings.",
+     Instructions: Provide a clear response to the user. \
+     If the findings show a simple success, keep it extremely brief (one sentence). \
+     Only be detailed if the research findings are complex.",
     query, final_report
 );
 
