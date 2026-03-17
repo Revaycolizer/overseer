@@ -177,7 +177,7 @@ def main():
     if len(raw_args) >= 1:
         # Check if first word is a known action
         first_word = raw_args[0].lower()
-        if first_word in ["launch", "search", "click", "get_text"]:
+        if first_word in ["launch", "search", "click", "get_text", "get_state"]:
             action = first_word
             if len(raw_args) > 1:
                 if action == "launch":
@@ -200,7 +200,7 @@ def main():
         else:
             # Traditional argparse fallback
             parser = argparse.ArgumentParser()
-            parser.add_argument("--action", choices=["get_text", "click", "launch", "search"])
+            parser.add_argument("--action", choices=["get_text", "click", "launch", "search", "get_state"])
             parser.add_argument("--app", default="active")
             parser.add_argument("--text", help="Text to search for or click")
             
