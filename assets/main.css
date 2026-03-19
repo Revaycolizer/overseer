@@ -1,6 +1,6 @@
 /* App-wide styling */
 body {
-    background-color: #0f1116;
+    background-color: #020617; /* Tailwind slate-950 */
     color: #ffffff;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;

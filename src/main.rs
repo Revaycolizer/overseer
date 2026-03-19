@@ -144,9 +144,39 @@ fn App() -> Element {
                 }
             }
         } else {
-            div { class: "flex items-center justify-center h-screen bg-[#0f1116] text-white",
-                div { class: "animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" }
-                p { class: "ml-4", "Initializing Database..." }
+            div { class: "flex flex-col items-center justify-center h-screen bg-white/80 text-white overflow-hidden",
+                // Animated background glow
+                div { class: "absolute w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] -z-10 translate-y-[-20%] animate-pulse" }
+                
+                // Elegant loading container
+                div { class: "flex flex-col items-center gap-8",
+                    // Custom sophisticated loader
+                    div { class: "relative w-20 h-20",
+                        div { class: "absolute inset-0 rounded-full border-4 border-slate-800" }
+                        div { class: "absolute inset-0 rounded-full border-4 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent animate-spin" }
+                        div { class: "absolute inset-2 rounded-full border-2 border-slate-800" }
+                        div { class: "absolute inset-2 rounded-full border-2 border-b-blue-400 border-t-transparent border-r-transparent border-l-transparent animate-spin-reverse [animation-duration:1.5s]" }
+                    }
+                    
+                    div { class: "text-center space-y-3",
+                        h1 { class: "text-4xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400", 
+                            "OVERSEER" 
+                        }
+                        div { class: "flex flex-col items-center gap-2",
+                            p { class: "text-sm font-bold text-blue-400 uppercase tracking-[0.2em] animate-pulse", 
+                                "Initializing System" 
+                            }
+                            div { class: "w-48 h-1 bg-slate-900 rounded-full overflow-hidden",
+                                div { class: "h-full bg-blue-600 animate-[loading-bar_2s_infinite_ease-in-out]", style: "width: 40%" }
+                            }
+                        }
+                    }
+                }
+                
+                // Version badge
+                div { class: "absolute bottom-12 px-4 py-1.5 rounded-full border border-slate-800 bg-slate-900/50 text-[10px] font-bold text-slate-500 uppercase tracking-widest",
+                    "Version 1.0.0 LTS"
+                }
             }
         }
     }

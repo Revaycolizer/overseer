@@ -112,10 +112,12 @@ pub async fn dispatch_domain(
             println!("📝 PROMPT TEXT:\n{}", initial_prompt);
             println!("📜 PREAMBLE:\n{}", s.instructions.as_deref().unwrap_or(""));
 
-            // Agentic loop — handle tool calls manually
+            // Fetch max_iterations from settings
+            let max_iterations_str = crate::backend::get_setting(db, "max_iterations").await;
+            let max_iterations = max_iterations_str.parse::<usize>().unwrap_or(10);
+            
             let mut current_prompt = initial_prompt;
             let mut final_response = String::new();
-            let max_iterations = 5;
 
             for iteration in 0..max_iterations {
                 println!("🔄 AGENT ITERATION {}/{}", iteration + 1, max_iterations);
@@ -157,8 +159,8 @@ pub async fn dispatch_domain(
 
                         // Append result and continue loop
                         current_prompt = format!(
-                            "{}\n\nTOOL RESULT for '{}' ({}):\n{}\n\n\
-                             Next: Call another tool using JSON, or provide your final answer (e.g., 'done').",
+                            "{}\n\n[RESULT for '{}' ({}):\n{}]\n\n\
+                             Next: Call another tool (JSON) or provide your final answer (e.g., 'done').",
                             current_prompt, tool_name, input, tool_result
                         );
                         continue;
