@@ -92,9 +92,9 @@ pub async fn dispatch_domain(
                 format!(
                     "AVAILABLE TOOLS:\n{}\n\n\
                      To use a tool, respond ONLY with JSON: {{\"tool\": \"tool_name\", \"input\": {{...}}}}\n\
-                     CRITICAL RULE FOR CHARTING: When you call the charting tool, its result IS your entire final response.\n\
-                     Do NOT add any text before or after a chart. Do NOT describe the chart. Do NOT wrap it in markdown.\n\
-                     The chart speaks for itself. Return ONE chart per response.\n\n",
+                     OPTIONAL CHARTING: Use the charting tool ONLY if a visualization is explicitly requested or if you are comparing 3 or more data points. \n\
+                     When you call charting, its result (starting with ---CHART_SVG---) MUST be your COMPLETE final response.\n\
+                     Do NOT add any text, markdown, or summary before or after a chart marker.\n\n",
                     list
                 )
             };
@@ -170,6 +170,21 @@ pub async fn dispatch_domain(
 
                         if tool_name == "charting" {
                             println!("📊 CHARTING FINAL INPUT TO TOOL: {}", input_json);
+                            
+                            // 🔒 Intent Guardrail: ONLY allow charting if the user explicitly asked for a visualization
+                            let viz_keywords = ["chart", "graph", "plot", "visualize", "visualization", "draw", "sketch", "diagram", "pie", "bar", "mapped"];
+                            let user_query_lower = query.to_lowercase();
+                            let explicitly_requested = viz_keywords.iter().any(|&k| user_query_lower.contains(k));
+                            
+                            if !explicitly_requested {
+                                println!("🚫 INTENT GUARDRAIL: Model tried to chart but user did not use visualization keywords. Forcing plain text.");
+                                let next_instruction = "Next: Provide your answer in PLAIN TEXT. Comparison should be a list or table, NOT a chart, unless the user explicitly asks for one.";
+                                current_prompt = format!(
+                                    "{}\n\n[SYSTEM OVERRIDE: The user did not ask for a chart or graph. Provide your final answer in PLAIN TEXT ONLY. Do NOT use the charting tool for this request.]\n\n{}",
+                                    current_prompt, next_instruction
+                                );
+                                continue;
+                            }
                         }
 
                         let tool_info = tools.iter().find(|t| t.name == tool_name);

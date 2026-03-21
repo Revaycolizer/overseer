@@ -34,6 +34,20 @@ async fn call_dynamic_tool_logic(info: &ToolInfo, args: serde_json::Value) -> Re
                 }
             } else if let Some(inner) = args.get("args") {
                 inner.to_string()
+            } else if args.is_object() {
+                // If it's a JSON object, try to extract the most likely string value
+                let map = args.as_object().unwrap();
+                if map.len() == 1 {
+                    // Only one key? Take its value (handles {"url": "..."} or {"query": "..."} gracefully)
+                    let val = map.values().next().unwrap();
+                    if val.is_string() { val.as_str().unwrap().to_string() } else { val.to_string() }
+                } else if let Some(url) = map.get("url") {
+                    if url.is_string() { url.as_str().unwrap().to_string() } else { url.to_string() }
+                } else if let Some(query) = map.get("query") {
+                    if query.is_string() { query.as_str().unwrap().to_string() } else { query.to_string() }
+                } else {
+                    args.to_string()
+                }
             } else {
                 args.to_string()
             };
