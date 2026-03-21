@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Next.js Usage Growth from 2024 to 2026</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
+    <style> .container { display: flex; justify-content: center; align-items: center; } .item { margin: auto; } </style>
+  </head>
+  <body>
+      <div class="container">
+        <div class="item" id="chart" style="width: 700px; height: 450px"></div>
+      </div>
+      
+      <script type="text/javascript">
+          
+          var chart = echarts.init(document.getElementById('chart'), null, { renderer: 'canvas' });
+          var option = {
+  "title": [
+    {
+      "text": "Next.js Usage Growth from 2024 to 2026"
+    }
+  ],
+  "tooltip": {
+    "trigger": "axis"
+  },
+  "legend": {},
+  "toolbox": {
+    "feature": {
+      "saveAsImage": {}
+    }
+  },
+  "xAxis": [
+    {
+      "type": "category",
+      "data": [
+        "2024",
+        "2025",
+        "2026"
+      ]
+    }
+  ],
+  "yAxis": [
+    {
+      "type": "value"
+    }
+  ],
+  "series": [
+    {
+      "type": "line",
+      "name": "Value",
+      "data": [
+        1.8,
+        2.7,
+        3.9
+      ]
+    }
+  ]
+};
+          chart.setOption(option);
+      </script>
+  </body>
+</html>

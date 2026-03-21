@@ -557,14 +557,14 @@ pub struct EntityVersion {
     pub created_at: chrono::NaiveDateTime,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
 pub struct Conversation {
     pub id: i64,
     pub title: String,
     pub created_at: chrono::NaiveDateTime,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Message {
     pub id: i64,
     pub conversation_id: i64,
@@ -575,7 +575,7 @@ pub struct Message {
     pub attachments: Vec<Attachment>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
 pub struct Attachment {
     pub id: i64,
     pub message_id: i64,

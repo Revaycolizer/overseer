@@ -101,6 +101,8 @@ fn App() -> Element {
         document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js" }
         document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js" }
         document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js" }
+        document::Script { src: "https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js" }
+        document::Script { src: "https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js" }
 
         document::Script {
             {r#"

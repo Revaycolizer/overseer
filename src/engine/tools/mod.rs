@@ -3,6 +3,7 @@ use rig::completion::ToolDefinition;
 use serde_json::json;
 use crate::engine::utils::discovery::{ToolInfo, get_tool_executable_path};
 use std::process::Command;
+pub mod charting;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct DynamicToolError(pub String);
@@ -53,6 +54,35 @@ async fn call_dynamic_tool_logic(info: &ToolInfo, args: serde_json::Value) -> Re
             match info.name.as_str() {
                 "os_tool" => Ok("Native OS Tool called (Placeholder)".into()),
                 "vision_analysis" => Ok("Native Vision Analysis called (Placeholder)".into()),
+                "charting" => {
+                    let input_str = if let Some(input) = args.get("input") {
+                        if input.is_string() {
+                            input.as_str().unwrap_or("").to_string()
+                        } else {
+                            input.to_string()
+                        }
+                    } else {
+                        args.to_string()
+                    }.trim().to_string(); // Trim whitespace from the final input string
+
+                    // Log the raw input for debugging (it will show up in terminal)
+                    println!("📊 CHARTING INPUT: {}", input_str);
+                    
+                    let req: charting::ChartRequest = serde_json::from_str(&input_str)
+                        .or_else(|_| {
+                            // If direct parsing as ChartRequest fails, try parsing as a generic JSON Value first.
+                            // This handles cases where the agent might provide a JSON object that was then
+                            // stringified, and `from_str` expects a direct ChartRequest JSON.
+                            // If `input_str` is already a valid JSON object string, `from_str::<serde_json::Value>` will succeed.
+                            // Then, `from_value` attempts to convert that generic JSON Value into ChartRequest.
+                            let val: serde_json::Value = serde_json::from_str(&input_str)?;
+                            serde_json::from_value(val).map_err(|e| e)
+                        })
+                        .map_err(|e| DynamicToolError(format!("Invalid chart request format: {}. Ensure you provide a JSON object with: {{\"chart_type\": \"bar|line|pie\", \"title\": \"...\", \"labels\": [...], \"data\": [...]}}", e)))?;
+                    
+                    charting::generate_chart_svg(req)
+                        .map_err(|e| DynamicToolError(e))
+                }
                 _ => Err(DynamicToolError(format!("Native tool '{}' not implemented in this build", info.name))),
             }
         }

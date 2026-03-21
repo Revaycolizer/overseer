@@ -270,6 +270,7 @@ impl Database {
         // Add native tools
         tools_data.push(("os_tool".to_string(), "Native system access".to_string(), "rust".to_string(), "".to_string(), "// Native Implementation".to_string()));
         tools_data.push(("vision_analysis".to_string(), "Analyze images and perform OCR. Supports URLs and local paths.".to_string(), "rust".to_string(), "".to_string(), "// Native Implementation".to_string()));
+        tools_data.push(("charting".to_string(), "Create beautiful charts (bar, line, pie) from data. Returns SVG.".to_string(), "rust".to_string(), "".to_string(), "// Native Implementation".to_string()));
 
         let mut tx = self.pool.begin().await?;
         for (name, desc, lang, path, code) in tools_data {
@@ -301,6 +302,7 @@ impl Database {
             ("Master Orchestrator", "os_tool"),
             ("Master Orchestrator", "ui_automation"),
             ("Master Orchestrator", "browser_automation"),
+            ("Chat Supervisor", "charting"),
         ];
 
         for (agent_name, tool_name) in mappings {

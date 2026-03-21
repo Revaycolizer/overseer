@@ -171,8 +171,9 @@ pub async fn orchestrate_request<'a>(
                 Ok(r) => { 
                     let mut final_result = r.clone();
                     
-                    // Automatic Grounding Verification
-                    if r.trim().to_lowercase() == "done" || r.to_lowercase().contains("success") {
+                    // Automatic Grounding Verification (only for interactive domains)
+                    let interactive_domains = ["web", "desktop", "neontune", "app"];
+                    if (r.trim().to_lowercase() == "done" || r.to_lowercase().contains("success")) && interactive_domains.contains(&macro_task.domain.as_str()) {
                         println!("🔍 GROUNDING: Verifying success state for domain '{}'...", macro_task.domain);
                         
                         // 1. Get current screen state
@@ -239,7 +240,8 @@ let synthesis_prompt = format!(
     "USER_QUERY: {}\n\nRESEARCH FINDINGS:\n{}\n\n\
      Instructions: Provide a clear response to the user. \
      If the findings show a simple success, keep it extremely brief (one sentence). \
-     Only be detailed if the research findings are complex.",
+     Only be detailed if the research findings are complex.\n\n\
+     VISUALIZATION RULE: If the research findings contain an HTML or SVG document (e.g., a chart), you MUST include that raw HTML/SVG document at the end of your response WITHOUT any markdown wrapping or modification. This is essential for the user to see the chart.",
     query, final_report
 );
 
