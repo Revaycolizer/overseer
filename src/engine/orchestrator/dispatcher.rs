@@ -91,9 +91,10 @@ pub async fn dispatch_domain(
                     .join("\n");
                 format!(
                     "AVAILABLE TOOLS:\n{}\n\n\
-                     To use a tool, respond with JSON: {{\"tool\": \"tool_name\", \"input\": \"your input\"}}\n\
-                     You can call multiple tools sequentially. After ALL tools are done, provide your final answer.\n\
-                     For multiple charts, call the charting tool once for each chart, then return all results.\n\n",
+                     To use a tool, respond ONLY with JSON: {{\"tool\": \"tool_name\", \"input\": {{...}}}}\n\
+                     CRITICAL RULE FOR CHARTING: When you call the charting tool, its result IS your entire final response.\n\
+                     Do NOT add any text before or after a chart. Do NOT describe the chart. Do NOT wrap it in markdown.\n\
+                     The chart speaks for itself. Return ONE chart per response.\n\n",
                     list
                 )
             };
@@ -138,20 +139,37 @@ pub async fn dispatch_domain(
 
                 // Check if the response is a tool call
                 let trimmed = response.trim();
+                println!("🔍 RAW MODEL RESPONSE (first 500 chars): {}", &trimmed[..trimmed.len().min(500)]);
+
                 if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(trimmed) {
                     if let Some(tool_name) = json_val.get("tool").and_then(|v| v.as_str()) {
                         let input_val = json_val.get("input").unwrap_or(&serde_json::Value::Null);
+                        println!("🛠️ MODEL CALLED TOOL: '{}' | raw input type: {}", tool_name,
+                            if input_val.is_string() { "string (will try to parse as JSON)" }
+                            else if input_val.is_object() { "object" }
+                            else { "other" }
+                        );
+
                         let input_json = if input_val.is_string() {
                             let s = input_val.as_str().unwrap();
-                            serde_json::from_str::<serde_json::Value>(s)
-                                .unwrap_or_else(|_| serde_json::json!({"input": s}))
+                            println!("📋 RAW INPUT STRING: {}", s);
+                            match serde_json::from_str::<serde_json::Value>(s) {
+                                Ok(parsed) => {
+                                    println!("✅ Input string parsed as JSON: {}", parsed);
+                                    parsed
+                                }
+                                Err(e) => {
+                                    println!("⚠️ Input string is NOT valid JSON ({}), wrapping as {{input: s}}", e);
+                                    serde_json::json!({"input": s})
+                                }
+                            }
                         } else {
+                            println!("📋 INPUT OBJECT: {}", input_val);
                             input_val.clone()
                         };
 
-                        println!("🛠️ MODEL CALLED TOOL: '{}'", tool_name);
                         if tool_name == "charting" {
-                            println!("📊 CHARTING INPUT: {}", input_json);
+                            println!("📊 CHARTING FINAL INPUT TO TOOL: {}", input_json);
                         }
 
                         let tool_info = tools.iter().find(|t| t.name == tool_name);
@@ -165,25 +183,37 @@ pub async fn dispatch_domain(
                             None => format!("Tool '{}' not found.", tool_name),
                         };
 
-                        println!("📦 TOOL RESULT: {}", &tool_result[..tool_result.len().min(300)]);
+                        if tool_name == "charting" {
+                            println!("📦 CHARTING TOOL RESULT (first 200): {}", &tool_result[..tool_result.len().min(200)]);
+                            println!("📦 CHARTING RESULT STARTS WITH MARKER: {}",
+                                tool_result.starts_with("---CHART_SVG---") || tool_result.starts_with("---CHART_HTML---"));
+                        } else {
+                            println!("📦 TOOL RESULT: {}", &tool_result[..tool_result.len().min(300)]);
+                        }
 
-                     if tool_name == "charting" && (
-                        tool_result.starts_with("---CHART_SVG---") || 
-                        tool_result.starts_with("---CHART_HTML---")
-                    ) {
-                        println!("✅ Chart generated — returning directly without model passthrough");
-                        final_response = tool_result;
-                        break;  // ← exit the loop immediately, never ask the model to copy it
-                    }
+                        if tool_name == "charting" && (
+                            tool_result.starts_with("---CHART_SVG---") ||
+                            tool_result.starts_with("---CHART_HTML---")
+                        ) {
+                            println!("✅ Chart generated — returning directly without model passthrough");
+                            final_response = tool_result;
+                            break;
+                        }
 
-                    // For non-chart tools, continue the loop as normal
-                    let next_instruction = "Next: Call another tool (JSON) or provide your final answer.";
-                    current_prompt = format!(
-                        "{}\n\n[RESULT for '{}' ({}):\n{}]\n\n{}",
-                        current_prompt, tool_name, input_val, tool_result, next_instruction
-                    );
-                    continue;
+                        if tool_name == "charting" {
+                            println!("❌ CHARTING TOOL DID NOT RETURN A CHART MARKER — result was: {}", &tool_result[..tool_result.len().min(500)]);
+                        }
+
+                        // For non-chart tools, continue the loop as normal
+                        let next_instruction = "Next: Call another tool (JSON) or provide your final answer.";
+                        current_prompt = format!(
+                            "{}\n\n[RESULT for '{}' ({}):\n{}]\n\n{}",
+                            current_prompt, tool_name, input_val, tool_result, next_instruction
+                        );
+                        continue;
                     }
+                } else {
+                    println!("🔍 NOT A TOOL CALL — treating as final answer candidate");
                 }
 
                 // Not a tool call — check for manual SVG abuse on chat domain
@@ -286,11 +316,18 @@ fn clean_stealth_output(response: String) -> String {
 }
 
 fn post_process_agent_response(response: String) -> String {
-    // If response contains a chart marker, strip everything before it
+    // Safety net: if a chart marker somehow ended up in a text response,
+    // return only the text before it — the chart will come in its own turn.
     if let Some(pos) = response.find("---CHART_SVG---")
         .or_else(|| response.find("---CHART_HTML---"))
     {
-        return response[pos..].to_string();
+        let before = response[..pos].trim().to_string();
+        if before.is_empty() {
+            // Pure chart — return as-is
+            return response[pos..].to_string();
+        }
+        // Mixed response: return only the text, discard the embedded chart
+        return before;
     }
     response
 }

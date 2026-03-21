@@ -219,34 +219,46 @@ pub async fn orchestrate_request<'a>(
         }
     }
     
+    // ── SHORT-CIRCUIT: if any step produced a chart, return it directly ─────────
+    // The synthesizer is an LLM — it will corrupt chart SVG by wrapping it in markdown.
+    // If a chart marker is anywhere in the report, extract and return it verbatim.
+    let chart_markers = ["---CHART_SVG---", "---CHART_HTML---", "---CHART_ASSET---"];
+    for marker in &chart_markers {
+        if let Some(pos) = final_report.find(marker) {
+            let chart_payload = final_report[pos..].trim();
+            println!("📊 CHART DETECTED in final_report — bypassing synthesizer, returning chart directly.");
+            return chart_payload.to_string();
+        }
+    }
+
+    // ── SYNTHESIZER: for non-chart results, run normal synthesis ─────────────
     let orchestrator_agent = all_agents.iter().find(|a| a.domain == "orchestrator");
-let synthesizer_agent = all_agents.iter().find(|a| a.domain == "synthesizer");
+    let synthesizer_agent = all_agents.iter().find(|a| a.domain == "synthesizer");
 
-let synthesis_model = synthesizer_agent
-    .map(|a| a.model.as_str())
-    .unwrap_or_else(|| orchestrator_agent.map(|a| a.model.as_str()).unwrap_or("qwen2.5:7b-instruct"));
+    let synthesis_model = synthesizer_agent
+        .map(|a| a.model.as_str())
+        .unwrap_or_else(|| orchestrator_agent.map(|a| a.model.as_str()).unwrap_or("qwen2.5:7b-instruct"));
 
-let synthesis_instructions = synthesizer_agent
-    .map(|a| a.instructions.as_str())
-    .unwrap_or("You are a helpful assistant. Present research findings clearly in plain Markdown. Never output JSON.");
+    let synthesis_instructions = synthesizer_agent
+        .map(|a| a.instructions.as_str())
+        .unwrap_or("You are a helpful assistant. Present research findings clearly in plain Markdown. Never output JSON.");
 
-let synthesis_agent = rig::agent::AgentBuilder::new(
-    ollama_client.completion_model(synthesis_model)
-)
-.preamble(synthesis_instructions)
-.build();
+    let synthesis_agent = rig::agent::AgentBuilder::new(
+        ollama_client.completion_model(synthesis_model)
+    )
+    .preamble(synthesis_instructions)
+    .build();
 
-let synthesis_prompt = format!(
-    "USER_QUERY: {}\n\nRESEARCH FINDINGS:\n{}\n\n\
-     Instructions: Provide a clear response to the user. \
-     If the findings show a simple success, keep it extremely brief (one sentence). \
-     Only be detailed if the research findings are complex.\n\n\
-     VISUALIZATION RULE: If the research findings contain an HTML or SVG document (e.g., a chart), you MUST include that raw HTML/SVG document at the end of your response WITHOUT any markdown wrapping or modification. This is essential for the user to see the chart.",
-    query, final_report
-);
+    let synthesis_prompt = format!(
+        "USER_QUERY: {}\n\nRESEARCH FINDINGS:\n{}\n\n\
+         Instructions: Provide a clear response to the user. \
+         If the findings show a simple success, keep it extremely brief (one sentence). \
+         Only be detailed if the research findings are complex.",
+        query, final_report
+    );
 
-match synthesis_agent.prompt(&synthesis_prompt).await {
-    Ok(synthesis) => synthesis,
-    Err(_) => final_report,
-}
+    match synthesis_agent.prompt(&synthesis_prompt).await {
+        Ok(synthesis) => synthesis,
+        Err(_) => final_report,
+    }
 }
