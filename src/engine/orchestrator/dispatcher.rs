@@ -168,26 +168,28 @@ pub async fn dispatch_domain(
                             input_val.clone()
                         };
 
-                        if tool_name == "charting" {
-                            println!("📊 CHARTING FINAL INPUT TO TOOL: {}", input_json);
-                            
-                            // 🔒 Intent Guardrail: ONLY allow charting if the user explicitly asked for a visualization
-                            let viz_keywords = ["chart", "graph", "plot", "visualize", "visualization", "draw", "sketch", "diagram", "pie", "bar", "mapped"];
-                            let user_query_lower = query.to_lowercase();
-                            let explicitly_requested = viz_keywords.iter().any(|&k| user_query_lower.contains(k));
-                            
-                            if !explicitly_requested {
-                                println!("🚫 INTENT GUARDRAIL: Model tried to chart but user did not use visualization keywords. Forcing plain text.");
-                                let next_instruction = "Next: Provide your answer in PLAIN TEXT. Comparison should be a list or table, NOT a chart, unless the user explicitly asks for one.";
-                                current_prompt = format!(
-                                    "{}\n\n[SYSTEM OVERRIDE: The user did not ask for a chart or graph. Provide your final answer in PLAIN TEXT ONLY. Do NOT use the charting tool for this request.]\n\n{}",
-                                    current_prompt, next_instruction
-                                );
-                                continue;
+                        let tool_info = tools.iter().find(|t| t.name == tool_name);
+
+                        // 🔒 Dynamic Intent Guardrail: Check if this tool requires specific keywords in the prompt
+                        if let Some(info) = tool_info {
+                            if let Some(ref required_intent) = info.required_intent {
+                                if !required_intent.trim().is_empty() {
+                                    let keywords: Vec<&str> = required_intent.split(',').map(|s| s.trim()).collect();
+                                    let user_query_lower = query.to_lowercase();
+                                    let explicitly_requested = keywords.iter().any(|&k| user_query_lower.contains(k));
+                                    
+                                    if !explicitly_requested {
+                                        println!("🚫 DYNAMIC INTENT GUARDRAIL: Tool '{}' requires intent keywords [{}] but user query did not match.", tool_name, required_intent);
+                                        let next_instruction = format!("Next: Provide your answer in PLAIN TEXT. The tool '{}' requires an explicit request or specific keywords ({}).", tool_name, required_intent);
+                                        current_prompt = format!(
+                                            "{}\n\n[SYSTEM OVERRIDE: The user did not explicitly ask for specialized output from '{}'. Provide your final answer in PLAIN TEXT ONLY.]\n\n{}",
+                                            current_prompt, tool_name, next_instruction
+                                        );
+                                        continue;
+                                    }
+                                }
                             }
                         }
-
-                        let tool_info = tools.iter().find(|t| t.name == tool_name);
 
                         let tool_result = match tool_info {
                             Some(info) => {

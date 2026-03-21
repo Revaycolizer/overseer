@@ -349,6 +349,32 @@ pub fn ToolsWorkshop() -> Element {
                                             }
                                         }
                                     }
+                                    div { class: "mt-4",
+                                        label { class: "block text-[10px] font-bold text-slate-1000 uppercase tracking-widest mb-2", 
+                                            span { class: "text-brand-blue", "🛡️ Intent Guardrail Keywords" } 
+                                        }
+                                        input { 
+                                            class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-mono text-slate-600 focus:ring-1 focus:ring-brand-blue/20 focus:border-brand-blue transition-all",
+                                            placeholder: "e.g., chart,graph,plot (comma separated). Tool will only run if query contains these.",
+                                            value: tool.required_intent.clone().unwrap_or_default(),
+                                            oninput: {
+                                                let mut tools_resource = tools_resource.clone();
+                                                let db = db.clone();
+                                                let tool_for_intent = tool.clone();
+                                                move |e| {
+                                                    let new_intent = e.value();
+                                                    let db = db.clone();
+                                                    let mut tools_resource = tools_resource.clone();
+                                                    let mut updated_tool = tool_for_intent.clone();
+                                                    updated_tool.required_intent = if new_intent.is_empty() { None } else { Some(new_intent) };
+                                                    spawn(async move {
+                                                        let _ = backend::update_tool(&db, updated_tool).await;
+                                                        tools_resource.restart();
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
 
                                 // Agent relationships section

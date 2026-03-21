@@ -81,7 +81,7 @@ pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
 pub async fn get_tools(db: &Database) -> anyhow::Result<Vec<ToolInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT id, name, description, CAST(code AS TEXT) as code, language, script_path, version FROM tools"
+        "SELECT id, name, description, CAST(code AS TEXT) as code, language, script_path, required_intent, version FROM tools"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -93,6 +93,7 @@ pub async fn get_tools(db: &Database) -> anyhow::Result<Vec<ToolInfo>> {
         code: r.get::<Option<String>, _>("code").unwrap_or_default(),
         language: r.get::<Option<String>, _>("language").unwrap_or_default(),
         script_path: r.get("script_path"),
+        required_intent: r.get("required_intent"),
         version: r.get::<Option<String>, _>("version").unwrap_or_default(),
     }).collect();
     
@@ -113,9 +114,9 @@ pub async fn add_agent(db: &Database, name: &str, description: &str, domain: &st
 pub async fn add_tool(db: &Database, name: &str, description: &str, language: &str) -> anyhow::Result<i64> {
     let id = db.next_id().await;
     sqlx::query(
-        "INSERT INTO tools (id, name, description, code, language, script_path, version) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO tools (id, name, description, code, language, script_path, required_intent, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(id).bind(name).bind(description).bind("").bind(language).bind("").bind("1.0.0")
+    .bind(id).bind(name).bind(description).bind("").bind(language).bind("").bind(None::<String>).bind("1.0.0")
     .execute(&db.pool)
     .await?;
     Ok(id)
@@ -133,9 +134,9 @@ pub async fn update_agent(db: &Database, agent: AgentInfo) -> anyhow::Result<()>
 
 pub async fn update_tool(db: &Database, tool: ToolInfo) -> anyhow::Result<()> {
     sqlx::query(
-        "UPDATE tools SET name = ?, description = ?, code = ?, language = ?, script_path = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        "UPDATE tools SET name = ?, description = ?, code = ?, language = ?, script_path = ?, required_intent = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     )
-    .bind(tool.name).bind(tool.description).bind(tool.code).bind(tool.language).bind(tool.script_path).bind(tool.version).bind(tool.id)
+    .bind(tool.name).bind(tool.description).bind(tool.code).bind(tool.language).bind(tool.script_path).bind(tool.required_intent).bind(tool.version).bind(tool.id)
     .execute(&db.pool)
     .await?;
     Ok(())
@@ -155,7 +156,7 @@ pub async fn get_supervisors(db: &Database) -> anyhow::Result<Vec<crate::db::Sup
 pub async fn get_supervisor_tools(db: &Database, supervisor_id: i64) -> anyhow::Result<Vec<ToolInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT DISTINCT t.id, t.name, t.description, CAST(t.code AS TEXT) as code, t.language, t.script_path, t.version 
+        "SELECT DISTINCT t.id, t.name, t.description, CAST(t.code AS TEXT) as code, t.language, t.script_path, t.required_intent, t.version 
          FROM tools t
          JOIN agent_tools at ON t.id = at.tool_id
          JOIN supervisor_agents sa ON at.agent_id = sa.agent_id
@@ -172,6 +173,7 @@ pub async fn get_supervisor_tools(db: &Database, supervisor_id: i64) -> anyhow::
         code: r.get::<Option<String>, _>("code").unwrap_or_default(),
         language: r.get::<Option<String>, _>("language").unwrap_or_default(),
         script_path: r.get("script_path"),
+        required_intent: r.get("required_intent"),
         version: r.get::<Option<String>, _>("version").unwrap_or_default(),
     }).collect();
     

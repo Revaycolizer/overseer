@@ -22,6 +22,7 @@ pub struct ToolInfo {
     pub code: String,
     pub language: String,
     pub script_path: Option<String>,
+    pub required_intent: Option<String>,
     pub version: String,
 }
 
