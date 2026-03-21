@@ -63,6 +63,7 @@ pub fn SupervisorModal(
     mut instructions_input: Signal<String>,
     mut model_input: Signal<String>,
     mut code_input: Signal<String>,
+    mut bypass_synthesizer: Signal<bool>,
     // ── Available models (passed from workshop) ───────────────
     available_models: Signal<Vec<String>>,
     // ── Save handler ─────────────────────────────────────────
@@ -221,6 +222,40 @@ pub fn SupervisorModal(
                                         div { class: "absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400",
                                             MaterialIcon { name: "unfold_more", size: 16 }
                                         }
+                                    }
+                                }
+                            }
+
+                            // Bypass Synthesizer toggle
+                            div { class: "flex items-center justify-between p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl",
+                                div { class: "flex items-center gap-3",
+                                    div { class: "w-7 h-7 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center",
+                                        MaterialIcon {
+                                            name: "flash_on",
+                                            size: 14,
+                                            color: MaterialIconColor::Custom("#f59e0b".into())
+                                        }
+                                    }
+                                    div {
+                                        p { class: "text-xs font-semibold text-[#0F172A]", "Bypass Synthesizer" }
+                                        p { class: "text-[10px] text-slate-400 leading-relaxed mt-0.5",
+                                            "Return this supervisor's output directly, skipping the Synthesizer LLM."
+                                        }
+                                    }
+                                }
+                                // Toggle switch
+                                button {
+                                    r#type: "button",
+                                    class: format!(
+                                        "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none {}",
+                                        if bypass_synthesizer() { "bg-blue-500" } else { "bg-slate-200" }
+                                    ),
+                                    onclick: move |_| bypass_synthesizer.set(!bypass_synthesizer()),
+                                    span {
+                                        class: format!(
+                                            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {}",
+                                            if bypass_synthesizer() { "translate-x-4" } else { "translate-x-0" }
+                                        )
                                     }
                                 }
                             }

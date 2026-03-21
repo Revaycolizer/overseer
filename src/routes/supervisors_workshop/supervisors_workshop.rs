@@ -45,6 +45,7 @@ pub fn SupervisorsWorkshop() -> Element {
     let mut instructions_input  = use_signal(|| String::new());
     let mut model_input         = use_signal(|| String::new());
     let mut code_input          = use_signal(|| String::new());
+    let mut bypass_synthesizer_input = use_signal(|| false);
 
     // ── Selected supervisor + its agents ──────────────────────────────────
     let mut selected_supervisor = use_signal(|| None::<Supervisor>);
@@ -82,6 +83,7 @@ pub fn SupervisorsWorkshop() -> Element {
                 s.instructions = Some(instructions_input());
                 s.model        = Some(model_input());
                 s.code         = Some(code_input());
+                s.bypass_synthesizer = bypass_synthesizer_input();
                 let _ = update_supervisor(&db, s).await;
             } else {
                 let new_id = add_supervisor(
@@ -100,6 +102,7 @@ pub fn SupervisorsWorkshop() -> Element {
                         instructions: Some(instructions_input()),
                         model: Some(model_input()),
                         code: Some(code_input()),
+                        bypass_synthesizer: bypass_synthesizer_input(),
                         version: None,
                     }).await;
                 }
@@ -132,6 +135,7 @@ pub fn SupervisorsWorkshop() -> Element {
             available_models().into_iter().next().unwrap_or_default()
         );
         code_input.set(String::new());
+        bypass_synthesizer_input.set(false);
         show_modal.set(true);
     };
 
@@ -166,6 +170,7 @@ pub fn SupervisorsWorkshop() -> Element {
                     instructions_input,
                     model_input,
                     code_input,
+                    bypass_synthesizer_input,
                     show_modal,
                     handle_delete,
                 }
@@ -187,6 +192,7 @@ pub fn SupervisorsWorkshop() -> Element {
                     instructions_input,
                     model_input,
                     code_input,
+                    bypass_synthesizer: bypass_synthesizer_input,
                     available_models,
                     handle_save,
                 }

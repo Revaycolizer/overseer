@@ -15,6 +15,7 @@ pub fn SupervisorList(
     mut instructions_input: Signal<String>,
     mut model_input: Signal<String>,
     mut code_input: Signal<String>,
+    mut bypass_synthesizer_input: Signal<bool>,
     mut show_modal: Signal<bool>,
     handle_delete: EventHandler<i64>,
 ) -> Element {
@@ -133,6 +134,7 @@ pub fn SupervisorList(
                                                                     instructions_input.set(s_edit.instructions.clone().unwrap_or_default());
                                                                     model_input.set(s_edit.model.clone().unwrap_or_default());
                                                                     code_input.set(s_edit.code.clone().unwrap_or_default());
+                                                                    bypass_synthesizer_input.set(s_edit.bypass_synthesizer);
                                                                     show_modal.set(true);
                                                                 },
                                                                 MaterialIcon { name: "edit", size: 13 }

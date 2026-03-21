@@ -23,6 +23,8 @@ pub struct Supervisor {
     pub domain: String,
     pub version: Option<String>,
     pub code: Option<String>,
+    #[sqlx(default)]
+    pub bypass_synthesizer: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]

@@ -59,6 +59,7 @@ pub async fn orchestrate_request<'a>(
     };
 
     let mut plan_history = "Plan execution just started.".to_string();
+    let mut bypass_result: Option<String> = None; // set when a bypass_synthesizer supervisor responds
 
     for (m_idx, macro_task) in macro_tasks.iter().enumerate() {
         println!("\n=======================================================");
@@ -191,10 +192,7 @@ pub async fn orchestrate_request<'a>(
                                         .build();
                                     
                                     let ga_prompt = format!(
-                                        "GOAL: {}\n\
-                                         TASK: {}\n\n\
-                                         VISIBLE UI TEXT:\n{}\n\n\
-                                         Has the task been successfully completed? Respond with STATE_VERIFIED or STATE_MISMATCH: [reason]",
+                                        "GOAL: {}\nTASK: {}\n\nVISIBLE UI TEXT:\n{}\n\nHas the task been successfully completed? Respond with STATE_VERIFIED or STATE_MISMATCH: [reason]",
                                         query, step, state_json
                                     );
                                     
@@ -208,10 +206,30 @@ pub async fn orchestrate_request<'a>(
                             }
                         }
                     }
+
+                    // ── DB-DRIVEN BYPASS CHECK ──────────────────────────────────────
+                    // If this supervisor has bypass_synthesizer = true, stash its result.
+                    // We do NOT break early so other macro tasks can still run
+                    // (e.g., a stealth research step before the chat charting step).
+                    let supervisor_bypasses = sqlx::query_scalar::<_, bool>(
+                        "SELECT bypass_synthesizer FROM supervisors WHERE domain = ? LIMIT 1"
+                    )
+                    .bind(&macro_task.domain)
+                    .fetch_optional(&db.pool)
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or(false);
+
+                    if supervisor_bypasses {
+                        println!("⚡ BYPASS: domain '{}' has bypass_synthesizer=true — stashing result, will skip synthesizer.", macro_task.domain);
+                        bypass_result = Some(final_result.clone());
+                    }
                     
                     plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i+1, step, final_result)); 
                     final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i+1, step, final_result));
                 },
+
                 Err(e) => { 
                     return format!("PLAN EXECUTION HALTED.\nError: {}\nLast State: {}", e, final_report); 
                 }
@@ -219,15 +237,18 @@ pub async fn orchestrate_request<'a>(
         }
     }
     
-    // ── SHORT-CIRCUIT: if any step produced a chart, return it directly ─────────
-    // The synthesizer is an LLM — it will corrupt chart SVG by wrapping it in markdown.
-    // If a chart marker is anywhere in the report, extract and return it verbatim.
+    // ── BYPASS SYNTHESIZER if any domain flagged it ─────────────────────────
+    if let Some(bypass) = bypass_result {
+        println!("⚡ BYPASS SYNTHESIZER: returning bypass result directly.");
+        return bypass;
+    }
+
+    // ── LEGACY SAFETY NET: chart markers always bypass (catches any edge cases) ─
     let chart_markers = ["---CHART_SVG---", "---CHART_HTML---", "---CHART_ASSET---"];
     for marker in &chart_markers {
         if let Some(pos) = final_report.find(marker) {
-            let chart_payload = final_report[pos..].trim();
-            println!("📊 CHART DETECTED in final_report — bypassing synthesizer, returning chart directly.");
-            return chart_payload.to_string();
+            println!("📊 CHART MARKER found in final_report — bypassing synthesizer.");
+            return final_report[pos..].trim().to_string();
         }
     }
 
