@@ -1,9 +1,9 @@
 use rig::{
     agent::Agent,
     agent::AgentBuilder,
-    completion::{Message, Prompt, Chat},
-    providers::ollama,
     client::CompletionClient,
+    completion::{Chat, Message, Prompt},
+    providers::ollama,
 };
 
 #[derive(Clone)]
@@ -56,7 +56,10 @@ impl ChatAgent {
 
     pub async fn answer(&self, prompt: &str, context: &str) -> String {
         let full_prompt = format!("Context:\n{}\n\nUser Question: {}", context, prompt);
-        self.agent.prompt(&full_prompt).await.unwrap_or_else(|e| format!("Chat error: {}", e))
+        self.agent
+            .prompt(&full_prompt)
+            .await
+            .unwrap_or_else(|e| format!("Chat error: {}", e))
     }
 }
 
@@ -74,6 +77,9 @@ impl VisionGeneralAgent {
     }
 
     pub async fn chat(&self, prompt: &str, history: &[Message]) -> String {
-        self.agent.chat(prompt, history.to_vec()).await.unwrap_or_else(|e| format!("Vision error: {}", e))
+        self.agent
+            .chat(prompt, history.to_vec())
+            .await
+            .unwrap_or_else(|e| format!("Vision error: {}", e))
     }
 }
