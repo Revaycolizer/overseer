@@ -1,13 +1,49 @@
+use rig::agent::AgentBuilder;
+use rig::client::CompletionClient;
+use rig::completion::{Message, Prompt};
 use rig::providers::ollama;
+
 use crate::engine::orchestrator::OverseerAgent;
 use crate::engine::tools::StructuredPerceptionTool;
 use crate::engine::utils::discovery::AgentInfo;
-use rig::agent::AgentBuilder;
-use rig::completion::{Message, Prompt};
-use rig::client::CompletionClient;
+
+async fn log_event(
+    db: &crate::db::Database,
+    run_id: Option<i64>,
+    sequence: &mut i64,
+    event_type: &str,
+    status: &str,
+    domain: Option<&str>,
+    step_text: Option<&str>,
+    tool_name: Option<&str>,
+    model: Option<&str>,
+    message: Option<&str>,
+    details: Option<&str>,
+) {
+    if let Some(run_id) = run_id {
+        let current_sequence = *sequence;
+        *sequence += 1;
+        let _ = crate::backend::log_execution_event(
+            db,
+            run_id,
+            current_sequence,
+            event_type,
+            status,
+            domain,
+            step_text,
+            tool_name,
+            model,
+            message,
+            details,
+        )
+        .await;
+    }
+}
 
 pub async fn dispatch_domain(
     db: &crate::db::Database,
+    run_id: Option<i64>,
+    event_sequence: &mut i64,
     agent_registry: &[AgentInfo],
     domain: &str,
     step: &str,
@@ -19,18 +55,17 @@ pub async fn dispatch_domain(
     _macro_task_description: &str,
     _perception_tool: &StructuredPerceptionTool,
     ollama_client: &ollama::Client,
+    model_timeout_ms: u64,
     _browser_pid: &mut Option<i32>,
 ) -> Result<String, String> {
-    // 1. Resolve the supervisor for this domain from the DB
     let supervisor = sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT id, name, description, instructions, model, domain, version, code FROM supervisors WHERE domain = ?"
+        "SELECT id, name, description, instructions, model, domain, version, code, bypass_synthesizer FROM supervisors WHERE domain = ?"
     )
     .bind(domain)
     .fetch_optional(&db.pool)
     .await
     .map_err(|e| format!("Database error resolving supervisor: {}", e))?;
 
-    // 2. Resolve the agents associated with this supervisor
     let _linked_agents = if let Some(ref s) = supervisor {
         crate::backend::get_supervisor_agents(db, s.id).await
             .map_err(|e| format!("Error fetching supervisor agents: {}", e))?
@@ -38,7 +73,6 @@ pub async fn dispatch_domain(
         vec![]
     };
 
-    // 3. Helper to find agent info or fallback to registry/defaults
     let get_agent = |domain_name: &str| {
         agent_registry.iter().find(|a| a.domain == domain_name)
             .cloned()
@@ -56,241 +90,330 @@ pub async fn dispatch_domain(
             })
     };
 
-    // Instantiate overseer (needed by most supervisors)
     let overseer_info = get_agent("overseer");
     let _overseer = OverseerAgent::new(ollama_client, &overseer_info.model, &overseer_info.instructions);
 
-    // 4. Dispatch
-    match domain {
-        _ => {
-            println!("🤖 DISPATCH: Dynamic supervisor for domain '{}'", domain);
-            let s = supervisor.clone().ok_or_else(|| format!("No supervisor found in DB for domain '{}'.", domain))?;
-            println!("🤖 DISPATCH: Dynamic supervisor '{}' using model '{:?}'", s.name, s.model);
+    println!("🤖 DISPATCH: Dynamic supervisor for domain '{}'", domain);
+    let s = supervisor.clone().ok_or_else(|| format!("No supervisor found in DB for domain '{}'.", domain))?;
+    println!("🤖 DISPATCH: Dynamic supervisor '{}' using model '{:?}'", s.name, s.model);
 
-            // Fetch tools
-            let tools = if let Some(ref s) = supervisor {
-                crate::backend::get_supervisor_tools(db, s.id).await.unwrap_or_default()
-            } else {
-                vec![]
-            };
+    let tools = crate::backend::get_supervisor_tools(db, s.id)
+        .await
+        .unwrap_or_default();
 
-            // Build agent WITHOUT Rig's tool system — we handle tool calling manually
-            let agent = AgentBuilder::new(
-                ollama_client.completion_model(s.model.as_deref().unwrap_or("qwen2.5:7b-instruct"))
-            )
-            .preamble(s.instructions.as_deref().unwrap_or(""))
-            .build();
+    let agent = AgentBuilder::new(
+        ollama_client.completion_model(s.model.as_deref().unwrap_or("qwen2.5:7b-instruct"))
+    )
+    .preamble(s.instructions.as_deref().unwrap_or(""))
+    .build();
 
-            // Format tool schemas into the prompt
-            let tool_descriptions = if tools.is_empty() {
-                String::new()
-            } else {
-                let list = tools.iter()
-                    .map(|t| format!("- {}: {}", t.name, t.description))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                format!(
-                    "AVAILABLE TOOLS:\n{}\n\n\
-                     To use a tool, respond ONLY with JSON: {{\"tool\": \"tool_name\", \"input\": {{...}}}}\n\
-                     OPTIONAL CHARTING: Use the charting tool ONLY if a visualization is explicitly requested or if you are comparing 3 or more data points. \n\
-                     When you call charting, its result (starting with ---CHART_SVG---) MUST be your COMPLETE final response.\n\
-                     Do NOT add any text, markdown, or summary before or after a chart marker.\n\n",
-                    list
-                )
-            };
+    let tool_descriptions = if tools.is_empty() {
+        String::new()
+    } else {
+        let list = tools.iter()
+            .map(|t| format!("- {} [{}]: {}", t.name, t.safety_level, t.description))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!(
+            "AVAILABLE TOOLS:\n{}\n\n\
+             To use a tool, respond ONLY with JSON: {{\"tool\": \"tool_name\", \"input\": {{...}}}}\n\
+             OPTIONAL CHARTING: Use the charting tool ONLY if a visualization is explicitly requested or if you are comparing 3 or more data points.\n\
+             SAFETY: Prefer lower-risk tools first. Treat tools marked 'dangerous' or 'high' as explicit-intent-only.\n\
+             When you call charting, its result (starting with ---CHART_SVG---) MUST be your COMPLETE final response.\n\
+             Do NOT add any text, markdown, or summary before or after a chart marker.\n\n",
+            list
+        )
+    };
 
-            // Check if this is a chat domain with charting tools available
-            let has_charting_tool = tools.iter().any(|t| t.name == "charting");
+    let has_charting_tool = tools.iter().any(|t| t.name == "charting");
+    let clean_context = sanitize_context(memory_context);
+    let clean_plan = sanitize_context(plan_history);
 
-            let clean_context = sanitize_context(memory_context);
+    let initial_prompt = format!(
+        "GOAL: {}\n\
+         TASK: {}\n\n\
+         {}CONTEXT:\n{}\n\n\
+         PROGRESS:\n{}\n\n\
+         COMMAND: Execute the task using tools if necessary. Provide your final findings.",
+        query, step, tool_descriptions, clean_context, clean_plan
+    );
 
-            let clean_plan = sanitize_context(plan_history);
+    log_event(
+        db,
+        run_id,
+        event_sequence,
+        "supervisor_selected",
+        "running",
+        Some(domain),
+        Some(step),
+        None,
+        s.model.as_deref(),
+        Some("Supervisor selected for micro-step."),
+        None,
+    )
+    .await;
 
-            let initial_prompt = format!(
-                "GOAL: {}\n\
-                 TASK: {}\n\n\
-                 {}CONTEXT:\n{}\n\n\
-                 PROGRESS:\n{}\n\n\
-                 COMMAND: Execute the task using tools if necessary. Provide your final findings.",
-                query, step, tool_descriptions, clean_context, clean_plan
-            );
+    println!("📝 PROMPT TEXT:\n{}", initial_prompt);
+    println!("📜 PREAMBLE:\n{}", s.instructions.as_deref().unwrap_or(""));
 
-            println!("📝 PROMPT TEXT:\n{}", initial_prompt);
-            println!("📜 PREAMBLE:\n{}", s.instructions.as_deref().unwrap_or(""));
+    let max_iterations = crate::backend::get_setting_i64(db, "max_iterations", 10).await.max(1) as usize;
+    let tool_timeout_ms = crate::backend::get_setting_i64(db, "tool_timeout_ms", 45_000).await.max(1) as u64;
 
-            // Fetch max_iterations from settings
-            let max_iterations_str = crate::backend::get_setting(db, "max_iterations").await;
-            let max_iterations = max_iterations_str.parse::<usize>().unwrap_or(10);
+    let mut current_prompt = initial_prompt;
+    let mut final_response = String::new();
+    let mut manual_svg_retries = 0;
+    const MAX_SVG_RETRIES: usize = 2;
 
-            let mut current_prompt = initial_prompt;
-            let mut final_response = String::new();
-            let mut manual_svg_retries = 0;
-            const MAX_SVG_RETRIES: usize = 2;
+    for iteration in 0..max_iterations {
+        println!("🔄 AGENT ITERATION {}/{}", iteration + 1, max_iterations);
 
-            for iteration in 0..max_iterations {
-                println!("🔄 AGENT ITERATION {}/{}", iteration + 1, max_iterations);
+        let iteration_message = format!("Supervisor iteration {}", iteration + 1);
+        log_event(
+            db,
+            run_id,
+            event_sequence,
+            "supervisor_iteration",
+            "running",
+            Some(domain),
+            Some(step),
+            None,
+            s.model.as_deref(),
+            Some(&iteration_message),
+            None,
+        )
+        .await;
 
-                let response = agent.prompt(&current_prompt)
-                    .await
-                    .map_err(|e| {
-                        eprintln!("❌ ERROR calling dynamic agent: {}", e);
-                        format!("Dynamic supervisor error for domain '{}': {}", domain, e)
-                    })?;
+        let response = tokio::time::timeout(
+            std::time::Duration::from_millis(model_timeout_ms),
+            agent.prompt(&current_prompt),
+        )
+        .await
+        .map_err(|_| format!("Dynamic supervisor '{}' timed out after {} ms.", s.name, model_timeout_ms))?
+        .map_err(|e| {
+            eprintln!("❌ ERROR calling dynamic agent: {}", e);
+            format!("Dynamic supervisor error for domain '{}': {}", domain, e)
+        })?;
 
-                // Check if the response is a tool call
-                let trimmed = response.trim();
-                println!("🔍 RAW MODEL RESPONSE (first 500 chars): {}", &trimmed[..trimmed.len().min(500)]);
+        let trimmed = response.trim();
+        println!("🔍 RAW MODEL RESPONSE (first 500 chars): {}", &trimmed[..trimmed.len().min(500)]);
 
-                if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                    if let Some(tool_name) = json_val.get("tool").and_then(|v| v.as_str()) {
-                        let input_val = json_val.get("input").unwrap_or(&serde_json::Value::Null);
-                        println!("🛠️ MODEL CALLED TOOL: '{}' | raw input type: {}", tool_name,
-                            if input_val.is_string() { "string (will try to parse as JSON)" }
-                            else if input_val.is_object() { "object" }
-                            else { "other" }
-                        );
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            if let Some(tool_name) = json_val.get("tool").and_then(|v| v.as_str()) {
+                let input_val = json_val.get("input").unwrap_or(&serde_json::Value::Null);
+                println!(
+                    "🛠️ MODEL CALLED TOOL: '{}' | raw input type: {}",
+                    tool_name,
+                    if input_val.is_string() {
+                        "string (will try to parse as JSON)"
+                    } else if input_val.is_object() {
+                        "object"
+                    } else {
+                        "other"
+                    }
+                );
 
-                        let input_json = if input_val.is_string() {
-                            let s = input_val.as_str().unwrap();
-                            println!("📋 RAW INPUT STRING: {}", s);
-                            match serde_json::from_str::<serde_json::Value>(s) {
-                                Ok(parsed) => {
-                                    println!("✅ Input string parsed as JSON: {}", parsed);
-                                    parsed
-                                }
-                                Err(e) => {
-                                    println!("⚠️ Input string is NOT valid JSON ({}), wrapping as {{input: s}}", e);
-                                    serde_json::json!({"input": s})
-                                }
-                            }
-                        } else {
-                            println!("📋 INPUT OBJECT: {}", input_val);
-                            input_val.clone()
-                        };
-
-                        let tool_info = tools.iter().find(|t| t.name == tool_name);
-
-                        // 🔒 Dynamic Intent Guardrail: Check if this tool requires specific keywords in the prompt
-                        if let Some(info) = tool_info {
-                            if let Some(ref required_intent) = info.required_intent {
-                                if !required_intent.trim().is_empty() {
-                                    let keywords: Vec<&str> = required_intent.split(',').map(|s| s.trim()).collect();
-                                    let user_query_lower = query.to_lowercase();
-                                    let explicitly_requested = keywords.iter().any(|&k| user_query_lower.contains(k));
-                                    
-                                    if !explicitly_requested {
-                                        println!("🚫 DYNAMIC INTENT GUARDRAIL: Tool '{}' requires intent keywords [{}] but user query did not match.", tool_name, required_intent);
-                                        let next_instruction = format!("Next: Provide your answer in PLAIN TEXT. The tool '{}' requires an explicit request or specific keywords ({}).", tool_name, required_intent);
-                                        current_prompt = format!(
-                                            "{}\n\n[SYSTEM OVERRIDE: The user did not explicitly ask for specialized output from '{}'. Provide your final answer in PLAIN TEXT ONLY.]\n\n{}",
-                                            current_prompt, tool_name, next_instruction
-                                        );
-                                        continue;
-                                    }
-                                }
-                            }
+                let input_json = if input_val.is_string() {
+                    let s = input_val.as_str().unwrap();
+                    println!("📋 RAW INPUT STRING: {}", s);
+                    match serde_json::from_str::<serde_json::Value>(s) {
+                        Ok(parsed) => {
+                            println!("✅ Input string parsed as JSON: {}", parsed);
+                            parsed
                         }
-
-                        let tool_result = match tool_info {
-                            Some(info) => {
-                                crate::engine::tools::call_dynamic_tool(info, input_json)
-                                    .await
-                                    .unwrap_or_else(|e| format!("Tool error: {}", e))
-                            }
-                            None => format!("Tool '{}' not found.", tool_name),
-                        };
-
-                        if tool_name == "charting" {
-                            println!("📦 CHARTING TOOL RESULT (first 200): {}", &tool_result[..tool_result.len().min(200)]);
-                            println!("📦 CHARTING RESULT STARTS WITH MARKER: {}",
-                                tool_result.starts_with("---CHART_SVG---") || tool_result.starts_with("---CHART_HTML---"));
-                        } else {
-                            println!("📦 TOOL RESULT: {}", &tool_result[..tool_result.len().min(300)]);
+                        Err(e) => {
+                            println!("⚠️ Input string is NOT valid JSON ({}), wrapping as {{input: s}}", e);
+                            serde_json::json!({"input": s})
                         }
-
-                        if tool_name == "charting" && (
-                            tool_result.starts_with("---CHART_SVG---") ||
-                            tool_result.starts_with("---CHART_HTML---")
-                        ) {
-                            println!("✅ Chart generated — returning directly without model passthrough");
-                            final_response = tool_result;
-                            break;
-                        }
-
-                        if tool_name == "charting" {
-                            println!("❌ CHARTING TOOL DID NOT RETURN A CHART MARKER — result was: {}", &tool_result[..tool_result.len().min(500)]);
-                        }
-
-                        // For non-chart tools, continue the loop as normal
-                        let next_instruction = "Next: Call another tool (JSON) or provide your final answer.";
-                        current_prompt = format!(
-                            "{}\n\n[RESULT for '{}' ({}):\n{}]\n\n{}",
-                            current_prompt, tool_name, input_val, tool_result, next_instruction
-                        );
-                        continue;
                     }
                 } else {
-                    println!("🔍 NOT A TOOL CALL — treating as final answer candidate");
-                }
+                    println!("📋 INPUT OBJECT: {}", input_val);
+                    input_val.clone()
+                };
 
-                // Not a tool call — check for manual SVG abuse on chat domain
-                if domain == "chat" && has_charting_tool && contains_manual_visualization(&response) {
-                    manual_svg_retries += 1;
-                    println!("⚠️ Agent wrote manual SVG/HTML (retry {}/{}). Forcing charting tool call.", manual_svg_retries, MAX_SVG_RETRIES);
+                let tool_info = tools.iter().find(|t| t.name == tool_name);
 
-                    if manual_svg_retries <= MAX_SVG_RETRIES {
-                        // Extract any data values from the response to help the retry
-                        let retry_instruction = format!(
-                            "{}\n\n[SYSTEM OVERRIDE: Your previous response contained manual SVG/HTML code. \
-                            This is FORBIDDEN. You MUST call the charting tool instead. \
-                            Do NOT write any SVG, HTML, or visualization code. \
-                            Extract the data values from your previous response and call the charting tool now: \
-                            {{\"tool\": \"charting\", \"input\": {{\"chart_type\": \"pie|bar|line\", \
-                            \"title\": \"your title\", \"labels\": [\"2024\", \"2025\", \"2026\"], \
-                            \"data\": [value1, value2, value3]}}}}]\n\n\
-                            Call the charting tool NOW with the correct data.",
-                            current_prompt
-                        );
-                        current_prompt = retry_instruction;
-                        continue;
-                    } else {
-                        // Max retries exceeded — give up and return error
-                        println!("❌ Max SVG retries exceeded. Agent refuses to use charting tool.");
-                        final_response = "Chart generation failed — model wrote manual SVG instead of using the charting tool. Please try again.".to_string();
-                        break;
+                if let Some(info) = tool_info {
+                    let requires_intent = info.required_intent.as_ref().map(|v| !v.trim().is_empty()).unwrap_or(false);
+                    let is_high_risk = matches!(info.safety_level.as_str(), "high" | "dangerous");
+                    if requires_intent || is_high_risk {
+                        let keywords: Vec<&str> = info.required_intent
+                            .as_deref()
+                            .unwrap_or("")
+                            .split(',')
+                            .map(|s| s.trim())
+                            .filter(|s| !s.is_empty())
+                            .collect();
+                        let user_query_lower = query.to_lowercase();
+                        let explicitly_requested = if keywords.is_empty() {
+                            !is_high_risk
+                        } else {
+                            keywords.iter().any(|&k| user_query_lower.contains(k))
+                        };
+
+                        if !explicitly_requested {
+                            let reason = if keywords.is_empty() {
+                                format!("Tool '{}' is marked '{}' and requires explicit user intent.", tool_name, info.safety_level)
+                            } else {
+                                format!(
+                                    "Tool '{}' requires intent keywords [{}] before it can run.",
+                                    tool_name,
+                                    info.required_intent.as_deref().unwrap_or("")
+                                )
+                            };
+                            println!("🚫 DYNAMIC INTENT GUARDRAIL: {}", reason);
+                            let blocked_details = input_json.to_string();
+                            log_event(
+                                db,
+                                run_id,
+                                event_sequence,
+                                "tool_blocked",
+                                "blocked",
+                                Some(domain),
+                                Some(step),
+                                Some(tool_name),
+                                s.model.as_deref(),
+                                Some(&reason),
+                                Some(&blocked_details),
+                            )
+                            .await;
+                            let next_instruction = format!("Next: Provide your answer in PLAIN TEXT. {}", reason);
+                            current_prompt = format!(
+                                "{}\n\n[SYSTEM OVERRIDE: {}]\n\n{}",
+                                current_prompt,
+                                reason,
+                                next_instruction
+                            );
+                            continue;
+                        }
                     }
+
+                    let tool_details = input_json.to_string();
+                    log_event(
+                        db,
+                        run_id,
+                        event_sequence,
+                        "tool_requested",
+                        "running",
+                        Some(domain),
+                        Some(step),
+                        Some(tool_name),
+                        s.model.as_deref(),
+                        Some("Supervisor requested tool execution."),
+                        Some(&tool_details),
+                    )
+                    .await;
                 }
 
-                // Valid final response
-                println!("✅ FINAL RESPONSE received at iteration {}", iteration + 1);
-                final_response = post_process_for_domain(domain, response);
+                let tool_result = match tool_info {
+                    Some(info) => {
+                        match tokio::time::timeout(
+                            std::time::Duration::from_millis(tool_timeout_ms),
+                            crate::engine::tools::call_dynamic_tool(info, input_json.clone()),
+                        )
+                        .await
+                        {
+                            Ok(Ok(result)) => result,
+                            Ok(Err(e)) => format!("Tool error: {}", e),
+                            Err(_) => format!("Tool error: '{}' timed out after {} ms.", tool_name, tool_timeout_ms),
+                        }
+                    }
+                    None => format!("Tool '{}' not found.", tool_name),
+                };
+
+                log_event(
+                    db,
+                    run_id,
+                    event_sequence,
+                    "tool_completed",
+                    "completed",
+                    Some(domain),
+                    Some(step),
+                    Some(tool_name),
+                    s.model.as_deref(),
+                    Some("Tool finished execution."),
+                    Some(&tool_result),
+                )
+                .await;
+
+                if tool_name == "charting" {
+                    println!("📦 CHARTING TOOL RESULT (first 200): {}", &tool_result[..tool_result.len().min(200)]);
+                    println!(
+                        "📦 CHARTING RESULT STARTS WITH MARKER: {}",
+                        tool_result.starts_with("---CHART_SVG---") || tool_result.starts_with("---CHART_HTML---")
+                    );
+                } else {
+                    println!("📦 TOOL RESULT: {}", &tool_result[..tool_result.len().min(300)]);
+                }
+
+                if tool_name == "charting"
+                    && (tool_result.starts_with("---CHART_SVG---") || tool_result.starts_with("---CHART_HTML---"))
+                {
+                    println!("✅ Chart generated — returning directly without model passthrough");
+                    final_response = tool_result;
+                    break;
+                }
+
+                if tool_name == "charting" {
+                    println!(
+                        "❌ CHARTING TOOL DID NOT RETURN A CHART MARKER — result was: {}",
+                        &tool_result[..tool_result.len().min(500)]
+                    );
+                }
+
+                current_prompt = format!(
+                    "{}\n\n[RESULT for '{}' ({}):\n{}]\n\nNext: Call another tool (JSON) or provide your final answer.",
+                    current_prompt, tool_name, input_val, tool_result
+                );
+                continue;
+            }
+        } else {
+            println!("🔍 NOT A TOOL CALL — treating as final answer candidate");
+        }
+
+        if domain == "chat" && has_charting_tool && contains_manual_visualization(&response) {
+            manual_svg_retries += 1;
+            println!("⚠️ Agent wrote manual SVG/HTML (retry {}/{}). Forcing charting tool call.", manual_svg_retries, MAX_SVG_RETRIES);
+
+            if manual_svg_retries <= MAX_SVG_RETRIES {
+                current_prompt = format!(
+                    "{}\n\n[SYSTEM OVERRIDE: Your previous response contained manual SVG/HTML code. \
+                    This is FORBIDDEN. You MUST call the charting tool instead. \
+                    Do NOT write any SVG, HTML, or visualization code. \
+                    Extract the data values from your previous response and call the charting tool now: \
+                    {{\"tool\": \"charting\", \"input\": {{\"chart_type\": \"pie|bar|line\", \
+                    \"title\": \"your title\", \"labels\": [\"2024\", \"2025\", \"2026\"], \
+                    \"data\": [value1, value2, value3]}}}}]\n\n\
+                    Call the charting tool NOW with the correct data.",
+                    current_prompt
+                );
+                continue;
+            } else {
+                println!("❌ Max SVG retries exceeded. Agent refuses to use charting tool.");
+                final_response = "Chart generation failed — model wrote manual SVG instead of using the charting tool. Please try again.".to_string();
                 break;
             }
-
-            if final_response.is_empty() {
-                final_response = "Max tool iterations reached without a final response.".to_string();
-            }
-
-            Ok(final_response)
         }
+
+        println!("✅ FINAL RESPONSE received at iteration {}", iteration + 1);
+        final_response = post_process_for_domain(domain, response);
+        break;
     }
+
+    if final_response.is_empty() {
+        final_response = "Max tool iterations reached without a final response.".to_string();
+    }
+
+    Ok(final_response)
 }
 
-/// Check if a response contains manual visualization code that should have used the charting tool
 fn contains_manual_visualization(response: &str) -> bool {
     let lower = response.to_lowercase();
-    // Raw SVG without proper chart marker
     if lower.contains("<svg") && !lower.contains("---chart_svg---") {
         return true;
     }
-    // Fenced code blocks with visual content
-    if lower.contains("```html") 
-        || lower.contains("```svg") 
-        || lower.contains("```xml") 
-    {
+    if lower.contains("```html") || lower.contains("```svg") || lower.contains("```xml") {
         return true;
     }
-    // Comment-style SVG markers the agent uses as fake markers
     if lower.contains("<!-- svg") || lower.contains("<!-- chart") {
         return true;
     }
@@ -309,49 +432,52 @@ fn clean_stealth_output(response: String) -> String {
         .lines()
         .filter_map(|line| {
             let trimmed = line.trim();
-            // Skip markdown headers
-            if trimmed.starts_with('#') { return None; }
-            // Skip code fence lines
-            if trimmed.starts_with("```") { return None; }
-            // Skip pure separator lines
-            if trimmed == "---" || trimmed == "***" { return None; }
-            // Strip inline markdown: bold, italic, bullet points
+            if trimmed.starts_with('#') || trimmed.starts_with("```") || trimmed == "---" || trimmed == "***" {
+                return None;
+            }
             let cleaned = trimmed
                 .trim_start_matches("- ")
                 .trim_start_matches("* ")
-                .trim_start_matches("• ");
-            let cleaned = cleaned
+                .trim_start_matches("• ")
                 .replace("**", "")
                 .replace("__", "")
                 .replace('*', "")
                 .replace('_', "");
-            if cleaned.trim().is_empty() { return None; }
-            Some(cleaned)
+            if cleaned.trim().is_empty() {
+                None
+            } else {
+                Some(cleaned)
+            }
         })
         .collect::<Vec<_>>()
         .join(" ")
 }
 
 fn post_process_agent_response(response: String) -> String {
-    // Safety net: if a chart marker somehow ended up in a text response,
-    // return only the text before it — the chart will come in its own turn.
-    if let Some(pos) = response.find("---CHART_SVG---")
-        .or_else(|| response.find("---CHART_HTML---"))
-    {
+    if let Some(pos) = response.find("---CHART_SVG---").or_else(|| response.find("---CHART_HTML---")) {
         let before = response[..pos].trim().to_string();
         if before.is_empty() {
-            // Pure chart — return as-is
             return response[pos..].to_string();
         }
-        // Mixed response: return only the text, discard the embedded chart
         return before;
     }
     response
 }
 
 fn sanitize_context(context: &str) -> String {
-    let svg_tags = ["<rect ", "<path ", "<polyline ", "<text ", "<svg", "</svg>", 
-                    "<style", "<defs", "<clipPath", "data:image/svg"];
+    let svg_tags = [
+        "<rect ",
+        "<path ",
+        "<polyline ",
+        "<text ",
+        "<svg",
+        "</svg>",
+        "<style",
+        "<defs",
+        "<clipPath",
+        "data:image/svg",
+    ];
+
     context
         .lines()
         .filter(|line| {
