@@ -1,6 +1,6 @@
+use crate::db::Supervisor;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::db::Supervisor;
 
 #[component]
 pub fn SupervisorHeroCard(
@@ -90,7 +90,7 @@ pub fn SupervisorHeroCard(
 
             // ── Bottom row: model dropdown + version input + bypass toggle ──────
             div { class: "grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 border-t border-slate-50",
-                
+
                 // Model Assignment
                 div { class: "space-y-3",
                     label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Model Assignment" }
