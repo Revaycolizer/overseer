@@ -1,9 +1,13 @@
+use crate::db::Planner;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::db::Planner;
 
 #[derive(Clone, PartialEq)]
-enum ModalTab { Basic, Preamble, Code }
+enum ModalTab {
+    Basic,
+    Preamble,
+    Code,
+}
 
 #[component]
 pub fn PlannerModal(
