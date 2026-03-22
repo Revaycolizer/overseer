@@ -1,7 +1,7 @@
-use dioxus::prelude::*;
-use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 use crate::backend;
 use crate::state::use_global_state;
+use dioxus::prelude::*;
+use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 #[derive(Props, Clone, PartialEq)]
 pub struct ChatInputProps {
@@ -59,7 +59,12 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         let path = format!("{folder}/{name}");
                         let _ = std::fs::write(&path, &data);
                         let _ = backend::add_attachment(
-                            &db_inner, msg_id, &name, &path, &mime, data.len() as i64,
+                            &db_inner,
+                            msg_id,
+                            &name,
+                            &path,
+                            &mime,
+                            data.len() as i64,
                         )
                         .await;
                     }

@@ -5,42 +5,46 @@ use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 pub fn Settings() -> Element {
     let state = crate::state::use_global_state();
     let db = state.read().db.clone();
-    
+
     let mut settings = use_resource(move || {
         let db = db.clone();
-        async move {
-            crate::backend::get_all_settings(&db).await
-        }
+        async move { crate::backend::get_all_settings(&db).await }
     });
 
-    let mut models = use_resource(move || async move {
-        crate::backend::get_available_models().await
-    });
+    let mut models =
+        use_resource(move || async move { crate::backend::get_available_models().await });
 
     let current_settings = settings.read().cloned().unwrap_or_default();
     let available_models = models.read().cloned().unwrap_or_default();
 
-    let title_model = current_settings.get("title_generator_model")
+    let title_model = current_settings
+        .get("title_generator_model")
         .cloned()
         .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
-    
-    let default_chat_model = current_settings.get("default_chat_model")
+
+    let default_chat_model = current_settings
+        .get("default_chat_model")
         .cloned()
         .unwrap_or_else(|| "llama3:latest".to_string());
 
-    let max_iterations = current_settings.get("max_iterations")
+    let max_iterations = current_settings
+        .get("max_iterations")
         .cloned()
         .unwrap_or_else(|| "10".to_string());
 
-    let tool_timeout_ms = current_settings.get("tool_timeout_ms")
+    let tool_timeout_ms = current_settings
+        .get("tool_timeout_ms")
         .cloned()
         .unwrap_or_else(|| "45000".to_string());
 
-    let model_timeout_ms = current_settings.get("model_timeout_ms")
+    let model_timeout_ms = current_settings
+        .get("model_timeout_ms")
         .cloned()
         .unwrap_or_else(|| "90000".to_string());
 
-    let runtime_dir = crate::engine::utils::discovery::runtime_dir().display().to_string();
+    let runtime_dir = crate::engine::utils::discovery::runtime_dir()
+        .display()
+        .to_string();
     let python_command = crate::engine::utils::discovery::python_command_label();
 
     rsx! {
@@ -55,7 +59,7 @@ pub fn Settings() -> Element {
                         "Tailor your AI experience. Manage local models, agent constraints, and application preferences."
                     }
                 }
-                
+
                 div { class: "space-y-12",
                     // AI Configuration Section
                     section {
@@ -68,7 +72,7 @@ pub fn Settings() -> Element {
                                 p { class: "text-sm text-slate-500", "Configure models and execution limits." }
                             }
                         }
-                        
+
                         div { class: "grid gap-6",
                             // Default Chat Model
                             // div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
@@ -80,7 +84,7 @@ pub fn Settings() -> Element {
                             //             "The default model for conversation and general tasks."
                             //         }
                             //     }
-                            //     select { 
+                            //     select {
                             //         class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full md:w-72 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm cursor-pointer font-medium text-slate-700 transition-all",
                             //         value: "{default_chat_model}",
                             //         onchange: move |evt| {
@@ -197,7 +201,7 @@ pub fn Settings() -> Element {
                                         "Lightweight model for titles and summaries."
                                     }
                                 }
-                                select { 
+                                select {
                                     class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full md:w-72 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm cursor-pointer font-medium text-slate-700 transition-all",
                                     value: "{title_model}",
                                     onchange: move |evt| {
@@ -227,7 +231,7 @@ pub fn Settings() -> Element {
                                 p { class: "text-sm text-slate-500", "Privacy settings and local environment control." }
                             }
                         }
-                        
+
                         div { class: "grid gap-6",
                             div { class: "group flex items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
                                 div {
@@ -267,7 +271,7 @@ pub fn Settings() -> Element {
                         }
                     }
                 }
-                
+
                 // Footer Branding
                 div { class: "mt-20 pt-8 border-t border-slate-200 text-center",
                     p { class: "text-sm font-bold text-slate-400 uppercase tracking-widest",

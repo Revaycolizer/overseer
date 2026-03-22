@@ -1,7 +1,7 @@
-use dioxus::prelude::*;
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::db::Database;
+use dioxus::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone)]

@@ -1,6 +1,6 @@
+use crate::backend;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::backend;
 
 #[component]
 pub fn ToolsWorkshop() -> Element {
@@ -8,25 +8,29 @@ pub fn ToolsWorkshop() -> Element {
     let db = global_state.read().db.clone();
 
     let db_resource = db.clone();
-    let mut tools_resource = use_resource::<Vec<crate::engine::utils::discovery::ToolInfo>, _>(move || {
-        let db_inner = db_resource.clone();
-        async move {
-            backend::get_tools(&db_inner).await.unwrap_or_default()
-        }
-    });
+    let mut tools_resource =
+        use_resource::<Vec<crate::engine::utils::discovery::ToolInfo>, _>(move || {
+            let db_inner = db_resource.clone();
+            async move { backend::get_tools(&db_inner).await.unwrap_or_default() }
+        });
 
     let tools = tools_resource.read().cloned().unwrap_or_default();
     let mut selected_tool_id = use_signal(|| tools.first().map(|t| t.id).unwrap_or(0i64));
     let mut selected_version_tag = use_signal(String::new);
-    
+
     let selected_tool = tools.iter().find(|t| t.id == selected_tool_id()).cloned();
-    let mut local_code = use_signal(|| selected_tool.as_ref().map(|t| t.code.clone()).unwrap_or_default());
-    
+    let mut local_code = use_signal(|| {
+        selected_tool
+            .as_ref()
+            .map(|t| t.code.clone())
+            .unwrap_or_default()
+    });
+
     let mut is_fullscreen = use_signal(|| false);
     let mut test_output = use_signal(|| "Run a test to see output here.".to_string());
     let mut is_testing = use_signal(|| false);
     let mut test_query = use_signal(|| String::new());
-    
+
     // Sync code and handle initial selection
     let tools_for_effect = tools.clone();
     use_effect(move || {
@@ -49,7 +53,9 @@ pub fn ToolsWorkshop() -> Element {
         let tool_id = selected_tool_id();
         async move {
             if tool_id != 0 {
-                backend::get_version_history(&db, "tool", tool_id).await.unwrap_or_default()
+                backend::get_version_history(&db, "tool", tool_id)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             }
@@ -63,7 +69,9 @@ pub fn ToolsWorkshop() -> Element {
         let version_tag = selected_version_tag();
         async move {
             if tool_id != 0 && !version_tag.is_empty() {
-                backend::get_version_content(&db, "tool", tool_id, &version_tag).await.unwrap_or_default()
+                backend::get_version_content(&db, "tool", tool_id, &version_tag)
+                    .await
+                    .unwrap_or_default()
             } else {
                 None
             }
@@ -91,7 +99,7 @@ pub fn ToolsWorkshop() -> Element {
                         }
                     }
                     div { class: "flex items-center gap-3",
-                        button { 
+                        button {
                             class: "bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-slate-800 shadow-sm transition-all active:scale-[0.98]",
                             onclick: {
                                 let db_click = db.clone();
@@ -121,7 +129,7 @@ pub fn ToolsWorkshop() -> Element {
                             }
                         }
                         for tool in tools.clone().into_iter() {
-                            div { 
+                            div {
                                 class: format!("bg-white border-2 rounded-xl p-4 shadow-sm cursor-pointer transition-all {}", if selected_tool_id() == tool.id { "border-brand-blue shadow-md" } else { "border-slate-100 hover:border-slate-200" }),
                                 onclick: {
                                     let tool_id = tool.id;
@@ -130,7 +138,7 @@ pub fn ToolsWorkshop() -> Element {
                                 div { class: "flex items-center justify-between mb-3",
                                     div { class: "flex items-center gap-3",
                                         div { class: "w-8 h-8 bg-blue-50 text-brand-blue rounded flex items-center justify-center",
-                                            MaterialIcon { 
+                                            MaterialIcon {
                                                 name: "build",
                                                 size: 20,
                                                 color: MaterialIconColor::Custom("text-brand-blue".into())
@@ -161,7 +169,7 @@ pub fn ToolsWorkshop() -> Element {
                                     div { class: "flex items-center gap-4",
                                         div {
                                             label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1", "Tool Name" }
-                                                input { 
+                                                input {
                                                     class: "font-bold text-slate-900 border-none focus:ring-0 p-0",
                                                     value: "{tool.name}",
                                                     oninput: {
@@ -193,7 +201,7 @@ pub fn ToolsWorkshop() -> Element {
                                             onclick: move |_| is_fullscreen.set(!is_fullscreen()),
                                             MaterialIcon { name: if is_fullscreen() { "fullscreen_exit" } else { "fullscreen" }, size: 20 }
                                         }
-                                        button { 
+                                        button {
                                             class: "bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-sm active:scale-95",
                                             onclick: {
                                                 let t = tool.clone();
@@ -218,7 +226,7 @@ pub fn ToolsWorkshop() -> Element {
                                             MaterialIcon { name: "play_arrow", size: 14, color: MaterialIconColor::Light }
                                             if is_testing() { " Testing... " } else { " Test Tool " }
                                         }
-                                        button { 
+                                        button {
                                             class: "bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-sm active:scale-95",
                                             onclick: {
                                                 let t = tool.clone();
@@ -244,7 +252,7 @@ pub fn ToolsWorkshop() -> Element {
                                             MaterialIcon { name: "publish", size: 14 }
                                             " Publish Version "
                                         }
-                                        button { 
+                                        button {
                                             class: "bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm active:scale-95",
                                             onclick: {
                                                 let t = tool.clone();
@@ -271,7 +279,7 @@ pub fn ToolsWorkshop() -> Element {
                                         }
                                     }
                                 }
-                                div { 
+                                div {
                                     class: if is_fullscreen() {
                                         "fixed inset-0 z-50 bg-[#1e1e1e] flex flex-col p-6 animate-fade-in"
                                     } else {
@@ -316,7 +324,7 @@ pub fn ToolsWorkshop() -> Element {
                                             }
                                         }
                                     }
-                                    
+
                                     div { class: if is_fullscreen() { "flex-1 relative overflow-hidden bg-black/20 rounded-xl" } else { "w-full h-full relative" },
                                         textarea {
                                             class: "code-editor-textarea",
@@ -329,13 +337,13 @@ pub fn ToolsWorkshop() -> Element {
                                         }
                                     }
                                 }
-                                
+
                                 // Tool Metadata Section
                                 div { class: "border-t border-slate-200 p-6 bg-white",
                                     div { class: "grid grid-cols-2 gap-6",
                                         div {
                                             label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Description" }
-                                            textarea { 
+                                            textarea {
                                                 class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs text-slate-600 focus:ring-1 focus:ring-brand-blue/20 focus:border-brand-blue transition-all min-h-[60px]",
                                                 value: "{tool.description}",
                                                 oninput: {
@@ -384,7 +392,7 @@ pub fn ToolsWorkshop() -> Element {
                                         }
                                         div {
                                             label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Legacy Script Path (Fallback)" }
-                                            input { 
+                                            input {
                                                 class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-mono text-slate-600",
                                                 placeholder: "Leave empty to use DB code exclusively",
                                                 value: tool.script_path.clone().unwrap_or_default(),
@@ -408,10 +416,10 @@ pub fn ToolsWorkshop() -> Element {
                                         }
                                     }
                                     div { class: "mt-4",
-                                        label { class: "block text-[10px] font-bold text-slate-1000 uppercase tracking-widest mb-2", 
-                                            span { class: "text-brand-blue", "🛡️ Intent Guardrail Keywords" } 
+                                        label { class: "block text-[10px] font-bold text-slate-1000 uppercase tracking-widest mb-2",
+                                            span { class: "text-brand-blue", "🛡️ Intent Guardrail Keywords" }
                                         }
-                                        input { 
+                                        input {
                                             class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-mono text-slate-600 focus:ring-1 focus:ring-brand-blue/20 focus:border-brand-blue transition-all",
                                             placeholder: "e.g., chart,graph,plot (comma separated). Tool will only run if query contains these.",
                                             value: tool.required_intent.clone().unwrap_or_default(),
@@ -441,7 +449,7 @@ pub fn ToolsWorkshop() -> Element {
                                     div { class: "flex flex-wrap gap-2",
                                         {
                                             let agents = backend::get_agents(&db);
-                                            rsx! { 
+                                            rsx! {
                                                 // This is a bit heavy for a loop, but for now it's fine for simple workshops
                                                 span { class: "text-[10px] text-slate-400 italic", "Equipped on some system agents" }
                                             }

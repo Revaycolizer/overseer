@@ -1,13 +1,13 @@
-use rig::providers::ollama;
-use rig::client::{Nothing, CompletionClient};
+use rig::client::{CompletionClient, Nothing};
 use rig::completion::Prompt;
-use std::sync::Arc;
+use rig::providers::ollama;
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use crate::db::Database;
+use crate::engine::orchestrator::orchestrate_request;
 use crate::engine::orchestrator::MasterPlanner;
 use crate::engine::tools::StructuredPerceptionTool;
-use crate::engine::orchestrator::orchestrate_request;
-use crate::db::Database;
 
 #[derive(Clone)]
 pub struct AgentSystem {
@@ -24,7 +24,7 @@ impl PartialEq for AgentSystem {
 impl AgentSystem {
     pub fn new(db: crate::db::Database) -> Self {
         let client = ollama::Client::new(Nothing).expect("Failed to create Ollama client");
-        
+
         Self {
             ollama_client: client,
             perception_tool: StructuredPerceptionTool::new(db),
@@ -39,23 +39,47 @@ impl AgentSystem {
 
         // Fetch all agents from DB for dynamic orchestration
         let all_agents = crate::backend::get_agents(db).await.unwrap_or_default();
-        
+
         // Find orchestrator agent info
         let orchestrator_agent = all_agents.iter().find(|a| a.domain == "orchestrator");
-        let master_instructions = orchestrator_agent.map(|a| a.instructions.clone()).unwrap_or_default();
-        let master_model = orchestrator_agent.map(|a| a.model.clone()).unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
+        let master_instructions = orchestrator_agent
+            .map(|a| a.instructions.clone())
+            .unwrap_or_default();
+        let master_model = orchestrator_agent
+            .map(|a| a.model.clone())
+            .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
 
-        let master_planner = MasterPlanner::new(&self.ollama_client, &master_model, &master_instructions, &all_agents);
+        let master_planner = MasterPlanner::new(
+            &self.ollama_client,
+            &master_model,
+            &master_instructions,
+            &all_agents,
+        );
 
         // Fetch conversation history (scoped to this conversation only)
-        let messages = crate::backend::get_messages(db, conversation_id).await.unwrap_or_default();
+        let messages = crate::backend::get_messages(db, conversation_id)
+            .await
+            .unwrap_or_default();
 
         // Pre-compute compact summary before consuming messages in the loop below
         let recent_summary: String = if messages.len() > 2 {
-            let recent: Vec<String> = messages.iter().rev().take(6).rev().map(|m| {
-                format!("[{}]: {}", m.role.to_uppercase(), &m.content[..m.content.len().min(300)])
-            }).collect();
-            format!("Recent conversation context (current session only):\n{}", recent.join("\n"))
+            let recent: Vec<String> = messages
+                .iter()
+                .rev()
+                .take(6)
+                .rev()
+                .map(|m| {
+                    format!(
+                        "[{}]: {}",
+                        m.role.to_uppercase(),
+                        &m.content[..m.content.len().min(300)]
+                    )
+                })
+                .collect();
+            format!(
+                "Recent conversation context (current session only):\n{}",
+                recent.join("\n")
+            )
         } else {
             String::new()
         };
@@ -63,13 +87,13 @@ impl AgentSystem {
         let mut history = Vec::new();
         for m in messages {
             if m.role == "user" {
-                let content_text = if m.content.trim().is_empty() { 
-                    "(user message)".to_string() 
-                } else { 
-                    m.content.clone() 
+                let content_text = if m.content.trim().is_empty() {
+                    "(user message)".to_string()
+                } else {
+                    m.content.clone()
                 };
                 let mut contents = vec![rig::message::UserContent::text(content_text)];
-                
+
                 // Fetch attachments for this message and encode images as proper multimodal content
                 if let Ok(attachments) = crate::backend::get_attachments(db, m.id).await {
                     for att in attachments {
@@ -77,7 +101,7 @@ impl AgentSystem {
                             // Read the file from disk and encode as base64 for vision models
                             match std::fs::read(&att.file_path) {
                                 Ok(bytes) if !bytes.is_empty() => {
-                                    use base64::{Engine as _, engine::general_purpose};
+                                    use base64::{engine::general_purpose, Engine as _};
                                     let b64 = general_purpose::STANDARD.encode(&bytes);
                                     let media_type = match att.content_type.as_str() {
                                         "image/png" => Some(rig::message::ImageMediaType::PNG),
@@ -91,25 +115,28 @@ impl AgentSystem {
                                             media_type,
                                             detail: None,
                                             additional_params: None,
-                                        }
+                                        },
                                     ));
-                                },
+                                }
                                 Ok(_) => {
-                                    contents.push(rig::message::UserContent::text(
-                                        format!("\n[Attached Image: {} — file appears empty]", att.filename)
-                                    ));
-                                },
+                                    contents.push(rig::message::UserContent::text(format!(
+                                        "\n[Attached Image: {} — file appears empty]",
+                                        att.filename
+                                    )));
+                                }
                                 Err(e) => {
-                                    contents.push(rig::message::UserContent::text(
-                                        format!("\n[Attached Image: {} — could not read: {}]", att.filename, e)
-                                    ));
+                                    contents.push(rig::message::UserContent::text(format!(
+                                        "\n[Attached Image: {} — could not read: {}]",
+                                        att.filename, e
+                                    )));
                                 }
                             }
                         } else {
                             // Non-image: include as a text description so the model knows about it
-                            contents.push(rig::message::UserContent::text(
-                                format!("\n[Attached File: {} (Path: {})]", att.filename, att.file_path)
-                            ));
+                            contents.push(rig::message::UserContent::text(format!(
+                                "\n[Attached File: {} (Path: {})]",
+                                att.filename, att.file_path
+                            )));
                         }
                     }
                 }
@@ -118,14 +145,16 @@ impl AgentSystem {
                     content: rig::OneOrMany::many(contents).unwrap(),
                 });
             } else {
-                let content_text = if m.content.trim().is_empty() { 
-                    "(assistant message)".to_string() 
-                } else { 
-                    m.content.clone() 
+                let content_text = if m.content.trim().is_empty() {
+                    "(assistant message)".to_string()
+                } else {
+                    m.content.clone()
                 };
                 history.push(rig::completion::Message::Assistant {
                     id: None,
-                    content: rig::OneOrMany::one(rig::message::AssistantContent::text(content_text)),
+                    content: rig::OneOrMany::one(rig::message::AssistantContent::text(
+                        content_text,
+                    )),
                 });
             }
         }
@@ -136,8 +165,12 @@ impl AgentSystem {
         println!("📜 History has {} messages.", history.len());
         for (i, m) in history.iter().enumerate() {
             match m {
-                rig::completion::Message::User { content } => println!("   [M{}] USER: ({} items)", i, content.len()),
-                rig::completion::Message::Assistant { content, .. } => println!("   [M{}] ASST: {}", i, content.len()),
+                rig::completion::Message::User { content } => {
+                    println!("   [M{}] USER: ({} items)", i, content.len())
+                }
+                rig::completion::Message::Assistant { content, .. } => {
+                    println!("   [M{}] ASST: {}", i, content.len())
+                }
             }
         }
 
@@ -151,27 +184,35 @@ impl AgentSystem {
             &self.perception_tool,
             &memory_context,
             &self.ollama_client,
-        ).await;
+        )
+        .await;
 
         response
     }
 
     pub async fn generate_title(&self, db: &Database, query: &str) -> String {
-        let model_name = crate::backend::get_setting_or(db, "title_generator_model", "qwen2.5:7b-instruct").await;
-        let model_timeout_ms = crate::backend::get_setting_i64(db, "model_timeout_ms", 90_000).await as u64;
+        let model_name =
+            crate::backend::get_setting_or(db, "title_generator_model", "qwen2.5:7b-instruct")
+                .await;
+        let model_timeout_ms =
+            crate::backend::get_setting_i64(db, "model_timeout_ms", 90_000).await as u64;
 
         let agent = rig::agent::AgentBuilder::new(self.ollama_client.completion_model(&model_name))
             .preamble("Summarize this user request in exactly 3-5 words for a conversation title. Output ONLY the title, no quotes or punctuation.")
             .build();
-        
+
         match tokio::time::timeout(
             std::time::Duration::from_millis(model_timeout_ms),
-            agent.prompt(query)
-        ).await {
+            agent.prompt(query),
+        )
+        .await
+        {
             Ok(Ok(resp)) => {
                 let title = crate::engine::utils::clean_response(resp);
-                title.trim_matches(|c| c == '"' || c == '*' || c == '.').to_string()
-            },
+                title
+                    .trim_matches(|c| c == '"' || c == '*' || c == '.')
+                    .to_string()
+            }
             Ok(Err(_)) | Err(_) => "New Conversation".to_string(),
         }
     }

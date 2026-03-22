@@ -67,14 +67,17 @@ pub async fn dispatch_domain(
     .map_err(|e| format!("Database error resolving supervisor: {}", e))?;
 
     let _linked_agents = if let Some(ref s) = supervisor {
-        crate::backend::get_supervisor_agents(db, s.id).await
+        crate::backend::get_supervisor_agents(db, s.id)
+            .await
             .map_err(|e| format!("Error fetching supervisor agents: {}", e))?
     } else {
         vec![]
     };
 
     let get_agent = |domain_name: &str| {
-        agent_registry.iter().find(|a| a.domain == domain_name)
+        agent_registry
+            .iter()
+            .find(|a| a.domain == domain_name)
             .cloned()
             .unwrap_or_else(|| AgentInfo {
                 id: 0,
@@ -91,18 +94,27 @@ pub async fn dispatch_domain(
     };
 
     let overseer_info = get_agent("overseer");
-    let _overseer = OverseerAgent::new(ollama_client, &overseer_info.model, &overseer_info.instructions);
+    let _overseer = OverseerAgent::new(
+        ollama_client,
+        &overseer_info.model,
+        &overseer_info.instructions,
+    );
 
     println!("🤖 DISPATCH: Dynamic supervisor for domain '{}'", domain);
-    let s = supervisor.clone().ok_or_else(|| format!("No supervisor found in DB for domain '{}'.", domain))?;
-    println!("🤖 DISPATCH: Dynamic supervisor '{}' using model '{:?}'", s.name, s.model);
+    let s = supervisor
+        .clone()
+        .ok_or_else(|| format!("No supervisor found in DB for domain '{}'.", domain))?;
+    println!(
+        "🤖 DISPATCH: Dynamic supervisor '{}' using model '{:?}'",
+        s.name, s.model
+    );
 
     let tools = crate::backend::get_supervisor_tools(db, s.id)
         .await
         .unwrap_or_default();
 
     let agent = AgentBuilder::new(
-        ollama_client.completion_model(s.model.as_deref().unwrap_or("qwen2.5:7b-instruct"))
+        ollama_client.completion_model(s.model.as_deref().unwrap_or("qwen2.5:7b-instruct")),
     )
     .preamble(s.instructions.as_deref().unwrap_or(""))
     .build();
@@ -110,7 +122,8 @@ pub async fn dispatch_domain(
     let tool_descriptions = if tools.is_empty() {
         String::new()
     } else {
-        let list = tools.iter()
+        let list = tools
+            .iter()
             .map(|t| format!("- {} [{}]: {}", t.name, t.safety_level, t.description))
             .collect::<Vec<_>>()
             .join("\n");
@@ -156,8 +169,12 @@ pub async fn dispatch_domain(
     println!("📝 PROMPT TEXT:\n{}", initial_prompt);
     println!("📜 PREAMBLE:\n{}", s.instructions.as_deref().unwrap_or(""));
 
-    let max_iterations = crate::backend::get_setting_i64(db, "max_iterations", 10).await.max(1) as usize;
-    let tool_timeout_ms = crate::backend::get_setting_i64(db, "tool_timeout_ms", 45_000).await.max(1) as u64;
+    let max_iterations = crate::backend::get_setting_i64(db, "max_iterations", 10)
+        .await
+        .max(1) as usize;
+    let tool_timeout_ms = crate::backend::get_setting_i64(db, "tool_timeout_ms", 45_000)
+        .await
+        .max(1) as u64;
 
     let mut current_prompt = initial_prompt;
     let mut final_response = String::new();
@@ -188,14 +205,22 @@ pub async fn dispatch_domain(
             agent.prompt(&current_prompt),
         )
         .await
-        .map_err(|_| format!("Dynamic supervisor '{}' timed out after {} ms.", s.name, model_timeout_ms))?
+        .map_err(|_| {
+            format!(
+                "Dynamic supervisor '{}' timed out after {} ms.",
+                s.name, model_timeout_ms
+            )
+        })?
         .map_err(|e| {
             eprintln!("❌ ERROR calling dynamic agent: {}", e);
             format!("Dynamic supervisor error for domain '{}': {}", domain, e)
         })?;
 
         let trimmed = response.trim();
-        println!("🔍 RAW MODEL RESPONSE (first 500 chars): {}", &trimmed[..trimmed.len().min(500)]);
+        println!(
+            "🔍 RAW MODEL RESPONSE (first 500 chars): {}",
+            &trimmed[..trimmed.len().min(500)]
+        );
 
         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(trimmed) {
             if let Some(tool_name) = json_val.get("tool").and_then(|v| v.as_str()) {
@@ -221,7 +246,10 @@ pub async fn dispatch_domain(
                             parsed
                         }
                         Err(e) => {
-                            println!("⚠️ Input string is NOT valid JSON ({}), wrapping as {{input: s}}", e);
+                            println!(
+                                "⚠️ Input string is NOT valid JSON ({}), wrapping as {{input: s}}",
+                                e
+                            );
                             serde_json::json!({"input": s})
                         }
                     }
@@ -233,10 +261,15 @@ pub async fn dispatch_domain(
                 let tool_info = tools.iter().find(|t| t.name == tool_name);
 
                 if let Some(info) = tool_info {
-                    let requires_intent = info.required_intent.as_ref().map(|v| !v.trim().is_empty()).unwrap_or(false);
+                    let requires_intent = info
+                        .required_intent
+                        .as_ref()
+                        .map(|v| !v.trim().is_empty())
+                        .unwrap_or(false);
                     let is_high_risk = matches!(info.safety_level.as_str(), "high" | "dangerous");
                     if requires_intent || is_high_risk {
-                        let keywords: Vec<&str> = info.required_intent
+                        let keywords: Vec<&str> = info
+                            .required_intent
                             .as_deref()
                             .unwrap_or("")
                             .split(',')
@@ -252,7 +285,10 @@ pub async fn dispatch_domain(
 
                         if !explicitly_requested {
                             let reason = if keywords.is_empty() {
-                                format!("Tool '{}' is marked '{}' and requires explicit user intent.", tool_name, info.safety_level)
+                                format!(
+                                    "Tool '{}' is marked '{}' and requires explicit user intent.",
+                                    tool_name, info.safety_level
+                                )
                             } else {
                                 format!(
                                     "Tool '{}' requires intent keywords [{}] before it can run.",
@@ -276,12 +312,11 @@ pub async fn dispatch_domain(
                                 Some(&blocked_details),
                             )
                             .await;
-                            let next_instruction = format!("Next: Provide your answer in PLAIN TEXT. {}", reason);
+                            let next_instruction =
+                                format!("Next: Provide your answer in PLAIN TEXT. {}", reason);
                             current_prompt = format!(
                                 "{}\n\n[SYSTEM OVERRIDE: {}]\n\n{}",
-                                current_prompt,
-                                reason,
-                                next_instruction
+                                current_prompt, reason, next_instruction
                             );
                             continue;
                         }
@@ -314,7 +349,10 @@ pub async fn dispatch_domain(
                         {
                             Ok(Ok(result)) => result,
                             Ok(Err(e)) => format!("Tool error: {}", e),
-                            Err(_) => format!("Tool error: '{}' timed out after {} ms.", tool_name, tool_timeout_ms),
+                            Err(_) => format!(
+                                "Tool error: '{}' timed out after {} ms.",
+                                tool_name, tool_timeout_ms
+                            ),
                         }
                     }
                     None => format!("Tool '{}' not found.", tool_name),
@@ -336,17 +374,25 @@ pub async fn dispatch_domain(
                 .await;
 
                 if tool_name == "charting" {
-                    println!("📦 CHARTING TOOL RESULT (first 200): {}", &tool_result[..tool_result.len().min(200)]);
+                    println!(
+                        "📦 CHARTING TOOL RESULT (first 200): {}",
+                        &tool_result[..tool_result.len().min(200)]
+                    );
                     println!(
                         "📦 CHARTING RESULT STARTS WITH MARKER: {}",
-                        tool_result.starts_with("---CHART_SVG---") || tool_result.starts_with("---CHART_HTML---")
+                        tool_result.starts_with("---CHART_SVG---")
+                            || tool_result.starts_with("---CHART_HTML---")
                     );
                 } else {
-                    println!("📦 TOOL RESULT: {}", &tool_result[..tool_result.len().min(300)]);
+                    println!(
+                        "📦 TOOL RESULT: {}",
+                        &tool_result[..tool_result.len().min(300)]
+                    );
                 }
 
                 if tool_name == "charting"
-                    && (tool_result.starts_with("---CHART_SVG---") || tool_result.starts_with("---CHART_HTML---"))
+                    && (tool_result.starts_with("---CHART_SVG---")
+                        || tool_result.starts_with("---CHART_HTML---"))
                 {
                     println!("✅ Chart generated — returning directly without model passthrough");
                     final_response = tool_result;
@@ -372,7 +418,10 @@ pub async fn dispatch_domain(
 
         if domain == "chat" && has_charting_tool && contains_manual_visualization(&response) {
             manual_svg_retries += 1;
-            println!("⚠️ Agent wrote manual SVG/HTML (retry {}/{}). Forcing charting tool call.", manual_svg_retries, MAX_SVG_RETRIES);
+            println!(
+                "⚠️ Agent wrote manual SVG/HTML (retry {}/{}). Forcing charting tool call.",
+                manual_svg_retries, MAX_SVG_RETRIES
+            );
 
             if manual_svg_retries <= MAX_SVG_RETRIES {
                 current_prompt = format!(
@@ -432,7 +481,11 @@ fn clean_stealth_output(response: String) -> String {
         .lines()
         .filter_map(|line| {
             let trimmed = line.trim();
-            if trimmed.starts_with('#') || trimmed.starts_with("```") || trimmed == "---" || trimmed == "***" {
+            if trimmed.starts_with('#')
+                || trimmed.starts_with("```")
+                || trimmed == "---"
+                || trimmed == "***"
+            {
                 return None;
             }
             let cleaned = trimmed
@@ -454,7 +507,10 @@ fn clean_stealth_output(response: String) -> String {
 }
 
 fn post_process_agent_response(response: String) -> String {
-    if let Some(pos) = response.find("---CHART_SVG---").or_else(|| response.find("---CHART_HTML---")) {
+    if let Some(pos) = response
+        .find("---CHART_SVG---")
+        .or_else(|| response.find("---CHART_HTML---"))
+    {
         let before = response[..pos].trim().to_string();
         if before.is_empty() {
             return response[pos..].to_string();

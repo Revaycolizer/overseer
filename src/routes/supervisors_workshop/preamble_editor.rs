@@ -1,6 +1,6 @@
+use crate::db::Supervisor;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::db::Supervisor;
 
 #[component]
 pub fn PreambleEditor(

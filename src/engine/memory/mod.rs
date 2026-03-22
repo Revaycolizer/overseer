@@ -1,13 +1,13 @@
+use arrow::array::{Array, ArrayRef, FixedSizeListArray, Float32Array, StringArray};
+use arrow::datatypes::{DataType, Field, FieldRef, Schema};
+use arrow::record_batch::RecordBatch;
+use arrow::record_batch::RecordBatchIterator;
+use futures::TryStreamExt;
+use lancedb::query::*;
+use rig::completion::Message;
 use rig::providers::ollama;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use arrow::datatypes::{Schema, Field, DataType, FieldRef};
-use arrow::array::{Array, StringArray, FixedSizeListArray, Float32Array, ArrayRef};
-use lancedb::query::*;
-use arrow::record_batch::RecordBatchIterator;
-use arrow::record_batch::RecordBatch;
-use rig::completion::Message;
-use futures::TryStreamExt;
 
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -36,7 +36,8 @@ pub async fn get_embedding(_client: &ollama::Client, text: &str) -> Option<Vec<f
             if let Ok(json) = resp.json::<serde_json::Value>().await {
                 if let Some(embeddings) = json.get("embeddings").and_then(|e| e.as_array()) {
                     if let Some(first) = embeddings.first().and_then(|e| e.as_array()) {
-                        let vec: Vec<f32> = first.iter()
+                        let vec: Vec<f32> = first
+                            .iter()
                             .filter_map(|v| v.as_f64().map(|f| f as f32))
                             .collect();
                         if vec.len() == EMBEDDING_DIM {
@@ -46,7 +47,7 @@ pub async fn get_embedding(_client: &ollama::Client, text: &str) -> Option<Vec<f
                 }
             }
             None
-        },
+        }
         Err(e) => {
             eprintln!("⚠️ Embedding request failed: {}", e);
             None
@@ -81,7 +82,10 @@ pub async fn setup_memory_table(db: &lancedb::Connection) -> Option<lancedb::Tab
     let values = Float32Array::from(zero_vec);
     let field_ref: FieldRef = Arc::new(Field::new("item", DataType::Float32, true)).into();
     let list = FixedSizeListArray::new(
-        field_ref, EMBEDDING_DIM as i32, Arc::new(values) as ArrayRef, None
+        field_ref,
+        EMBEDDING_DIM as i32,
+        Arc::new(values) as ArrayRef,
+        None,
     );
 
     let batch = RecordBatch::try_new(
@@ -91,14 +95,19 @@ pub async fn setup_memory_table(db: &lancedb::Connection) -> Option<lancedb::Tab
             Arc::new(contents) as ArrayRef,
             Arc::new(list) as ArrayRef,
         ],
-    ).ok()?;
+    )
+    .ok()?;
 
     let batches = RecordBatchIterator::new(vec![Ok(batch)], schema);
-    match db.create_table("memories", Box::new(batches)).execute().await {
+    match db
+        .create_table("memories", Box::new(batches))
+        .execute()
+        .await
+    {
         Ok(table) => {
             println!("📚 Memory table created.");
             Some(table)
-        },
+        }
         Err(e) => {
             eprintln!("⚠️ Failed to create memory table: {}", e);
             None
@@ -140,7 +149,10 @@ pub async fn store_memory(
     let values = Float32Array::from(embedding);
     let field_ref: FieldRef = Arc::new(Field::new("item", DataType::Float32, true)).into();
     let list = FixedSizeListArray::new(
-        field_ref, EMBEDDING_DIM as i32, Arc::new(values) as ArrayRef, None
+        field_ref,
+        EMBEDDING_DIM as i32,
+        Arc::new(values) as ArrayRef,
+        None,
     );
 
     let batch = RecordBatch::try_new(
@@ -160,14 +172,14 @@ pub async fn store_memory(
             } else {
                 println!("💾 Memory stored successfully.");
             }
-        },
+        }
         Err(e) => eprintln!("⚠️ Failed to create memory batch: {}", e),
     }
 }
 
 pub async fn retrieve_memories(
-    table: &lancedb::Table, 
-    client: &ollama::Client, 
+    table: &lancedb::Table,
+    client: &ollama::Client,
     query: &str,
     limit: usize,
 ) -> Vec<String> {
@@ -176,11 +188,12 @@ pub async fn retrieve_memories(
         None => return vec![],
     };
 
-    match table.vector_search(embedding)
+    match table
+        .vector_search(embedding)
         .expect("Failed to create vector search")
         .limit(limit)
         .execute()
-        .await 
+        .await
     {
         Ok(mut results) => {
             let mut memories = Vec::new();
@@ -199,7 +212,7 @@ pub async fn retrieve_memories(
                 }
             }
             memories
-        },
+        }
         Err(e) => {
             eprintln!("⚠️ Memory search failed: {}", e);
             vec![]
@@ -212,16 +225,18 @@ pub fn parse_memory_to_messages(content: &str) -> Vec<Message> {
     if let Some((user_part, assistant_part)) = content.split_once("\nAssistant replied: ") {
         let user_text = user_part.trim_start_matches("User asked: ").trim();
         let assistant_text = assistant_part.trim();
-        if user_text.is_empty() { return vec![]; }
-        let mut msgs = vec![
-            Message::User {
-                content: rig::OneOrMany::one(rig::message::UserContent::text(user_text.to_string())),
-            },
-        ];
+        if user_text.is_empty() {
+            return vec![];
+        }
+        let mut msgs = vec![Message::User {
+            content: rig::OneOrMany::one(rig::message::UserContent::text(user_text.to_string())),
+        }];
         if !assistant_text.is_empty() {
             msgs.push(Message::Assistant {
                 id: None,
-                content: rig::OneOrMany::one(rig::message::AssistantContent::text(assistant_text.to_string())),
+                content: rig::OneOrMany::one(rig::message::AssistantContent::text(
+                    assistant_text.to_string(),
+                )),
             });
         }
         msgs

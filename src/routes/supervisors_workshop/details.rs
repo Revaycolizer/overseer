@@ -1,24 +1,36 @@
+use crate::backend::{get_agents, get_available_models, get_supervisor_agents, update_supervisor};
+use crate::db::Supervisor;
+use crate::engine::utils::discovery::AgentInfo;
+use crate::state::use_global_state;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::backend::{update_supervisor, get_available_models, get_supervisor_agents, get_agents};
-use crate::db::Supervisor;
-use crate::state::use_global_state;
-use crate::engine::utils::discovery::AgentInfo;
 
+use super::agent_assignments::AgentAssignments;
+use super::code_editor::CodeEditor;
 use super::hero_card::SupervisorHeroCard;
 use super::preamble_editor::PreambleEditor;
-use super::code_editor::CodeEditor;
-use super::agent_assignments::AgentAssignments;
 
 #[derive(Clone, PartialEq)]
-enum Tab { Preamble, Code, Agents }
+enum Tab {
+    Preamble,
+    Code,
+    Agents,
+}
 
 impl Tab {
     fn label(&self) -> &'static str {
-        match self { Tab::Preamble => "Execution Preamble", Tab::Code => "Orchestration Logic", Tab::Agents => "Agent Assignments" }
+        match self {
+            Tab::Preamble => "Execution Preamble",
+            Tab::Code => "Orchestration Logic",
+            Tab::Agents => "Agent Assignments",
+        }
     }
     fn icon(&self) -> &'static str {
-        match self { Tab::Preamble => "description", Tab::Code => "code", Tab::Agents => "hub" }
+        match self {
+            Tab::Preamble => "description",
+            Tab::Code => "code",
+            Tab::Agents => "hub",
+        }
     }
 }
 
@@ -34,12 +46,16 @@ pub fn SupervisorDetails(
     let supervisor_id = supervisor.as_ref().map(|s| s.id).unwrap_or(0);
 
     let mut supervisor_agents = use_resource(move || async move {
-        let res: Vec<crate::engine::utils::discovery::AgentInfo> = get_supervisor_agents(&state.read().db, supervisor_id).await.unwrap_or_default();
+        let res: Vec<crate::engine::utils::discovery::AgentInfo> =
+            get_supervisor_agents(&state.read().db, supervisor_id)
+                .await
+                .unwrap_or_default();
         res
     });
 
     let agents = use_resource(move || async move {
-        let res: Vec<crate::engine::utils::discovery::AgentInfo> = get_agents(&state.read().db).await.unwrap_or_default();
+        let res: Vec<crate::engine::utils::discovery::AgentInfo> =
+            get_agents(&state.read().db).await.unwrap_or_default();
         res
     });
 
@@ -47,15 +63,23 @@ pub fn SupervisorDetails(
     let mut models = use_signal(|| vec!["loading...".to_string()]);
     let _ = use_resource(move || async move {
         let fetched: Vec<String> = get_available_models().await;
-        if !fetched.is_empty() { models.set(fetched); }
+        if !fetched.is_empty() {
+            models.set(fetched);
+        }
     });
 
     // ── Local editing signals ──────────────────────────────────────────────
     let mut local_instructions = use_signal(|| {
-        supervisor.as_ref().and_then(|sv| sv.instructions.clone()).unwrap_or_default()
+        supervisor
+            .as_ref()
+            .and_then(|sv| sv.instructions.clone())
+            .unwrap_or_default()
     });
     let mut local_code = use_signal(|| {
-        supervisor.as_ref().and_then(|sv| sv.code.clone()).unwrap_or_default()
+        supervisor
+            .as_ref()
+            .and_then(|sv| sv.code.clone())
+            .unwrap_or_default()
     });
 
     use_effect(move || {

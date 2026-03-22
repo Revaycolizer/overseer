@@ -1,6 +1,6 @@
+use crate::backend;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::backend;
 
 #[derive(Props, Clone, PartialEq)]
 pub struct SidebarProps {
@@ -12,9 +12,7 @@ pub struct SidebarProps {
 
 #[component]
 pub fn Sidebar(props: SidebarProps) -> Element {
-    let mut system_load = use_resource(move || async move {
-        backend::get_system_load().await
-    });
+    let mut system_load = use_resource(move || async move { backend::get_system_load().await });
 
     use_future(move || async move {
         loop {

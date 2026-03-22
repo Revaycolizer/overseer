@@ -21,24 +21,46 @@ pub enum DynamicToolError {
 impl std::fmt::Display for DynamicToolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingExecutable { tool } => write!(f, "No executable path could be resolved for tool '{}'.", tool),
+            Self::MissingExecutable { tool } => write!(
+                f,
+                "No executable path could be resolved for tool '{}'.",
+                tool
+            ),
             Self::MissingPython { details } => write!(f, "Python runtime unavailable: {}", details),
-            Self::InvalidChartRequest(details) => write!(f, "Invalid chart request format: {}", details),
-            Self::UnsupportedLanguage(language) => write!(f, "Unsupported tool language: {}", language),
-            Self::NativeNotImplemented(tool) => write!(f, "Native tool '{}' is not implemented in this build.", tool),
-            Self::ExecutionFailed { tool, details } => write!(f, "Tool '{}' failed: {}", tool, details),
-            Self::TimedOut { tool, timeout_ms } => write!(f, "Tool '{}' timed out after {} ms.", tool, timeout_ms),
+            Self::InvalidChartRequest(details) => {
+                write!(f, "Invalid chart request format: {}", details)
+            }
+            Self::UnsupportedLanguage(language) => {
+                write!(f, "Unsupported tool language: {}", language)
+            }
+            Self::NativeNotImplemented(tool) => write!(
+                f,
+                "Native tool '{}' is not implemented in this build.",
+                tool
+            ),
+            Self::ExecutionFailed { tool, details } => {
+                write!(f, "Tool '{}' failed: {}", tool, details)
+            }
+            Self::TimedOut { tool, timeout_ms } => {
+                write!(f, "Tool '{}' timed out after {} ms.", tool, timeout_ms)
+            }
         }
     }
 }
 
 impl std::error::Error for DynamicToolError {}
 
-async fn call_dynamic_tool_logic(info: &ToolInfo, args: serde_json::Value) -> Result<String, DynamicToolError> {
+async fn call_dynamic_tool_logic(
+    info: &ToolInfo,
+    args: serde_json::Value,
+) -> Result<String, DynamicToolError> {
     match info.language.as_str() {
         "python" => {
-            let executable_path = get_tool_executable_path(info)
-                .ok_or_else(|| DynamicToolError::MissingExecutable { tool: info.name.clone() })?;
+            let executable_path = get_tool_executable_path(info).ok_or_else(|| {
+                DynamicToolError::MissingExecutable {
+                    tool: info.name.clone(),
+                }
+            })?;
 
             let parts = build_python_command()
                 .map_err(|details| DynamicToolError::MissingPython { details })?;
@@ -87,7 +109,8 @@ async fn call_dynamic_tool_logic(info: &ToolInfo, args: serde_json::Value) -> Re
 
             cmd.arg(input_str);
 
-            let output = cmd.output()
+            let output = cmd
+                .output()
                 .await
                 .map_err(|e| DynamicToolError::ExecutionFailed {
                     tool: info.name.clone(),
@@ -136,9 +159,11 @@ async fn call_dynamic_tool_logic(info: &ToolInfo, args: serde_json::Value) -> Re
                         ))
                     })?;
 
-                charting::generate_chart_svg(req).map_err(|details| DynamicToolError::ExecutionFailed {
-                    tool: info.name.clone(),
-                    details,
+                charting::generate_chart_svg(req).map_err(|details| {
+                    DynamicToolError::ExecutionFailed {
+                        tool: info.name.clone(),
+                        details,
+                    }
                 })
             }
             _ => Err(DynamicToolError::NativeNotImplemented(info.name.clone())),
@@ -147,7 +172,10 @@ async fn call_dynamic_tool_logic(info: &ToolInfo, args: serde_json::Value) -> Re
     }
 }
 
-pub async fn call_dynamic_tool(info: &ToolInfo, args: serde_json::Value) -> Result<String, DynamicToolError> {
+pub async fn call_dynamic_tool(
+    info: &ToolInfo,
+    args: serde_json::Value,
+) -> Result<String, DynamicToolError> {
     call_dynamic_tool_logic(info, args).await
 }
 
@@ -168,14 +196,14 @@ impl Tool for DynamicToolRouter {
     type Error = DynamicToolError;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
-        let tool_list = self.tools.iter()
+        let tool_list = self
+            .tools
+            .iter()
             .map(|t| format!("{}: {}", t.name, t.description))
             .collect::<Vec<_>>()
             .join("\n");
 
-        let enum_values = self.tools.iter()
-            .map(|t| json!(t.name))
-            .collect::<Vec<_>>();
+        let enum_values = self.tools.iter().map(|t| json!(t.name)).collect::<Vec<_>>();
 
         ToolDefinition {
             name: "execute_tool".to_string(),
@@ -202,14 +230,17 @@ impl Tool for DynamicToolRouter {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let tool_name = args.get("tool_name")
+        let tool_name = args
+            .get("tool_name")
             .and_then(|v| v.as_str())
             .ok_or_else(|| DynamicToolError::ExecutionFailed {
                 tool: "execute_tool".to_string(),
                 details: "Missing tool_name".to_string(),
             })?;
 
-        let tool_info = self.tools.iter()
+        let tool_info = self
+            .tools
+            .iter()
             .find(|t| t.name == tool_name)
             .ok_or_else(|| DynamicToolError::ExecutionFailed {
                 tool: tool_name.to_string(),

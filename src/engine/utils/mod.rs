@@ -1,21 +1,21 @@
 pub mod discovery;
 
-use tokio::process::Command;
 use rig::tool::Tool;
+use tokio::process::Command;
 
 pub async fn get_browser_dom_tree() -> Option<String> {
-    // Note: Legacy static tool call removed. 
+    // Note: Legacy static tool call removed.
     // Domain-specific supervisors now use dynamic tools directly.
     None
 }
 
 pub async fn focus_window_by_pid(pid: i32) {
-    println!("🎯 TARGET-FOCUS: Attempting to focus window for PID {}...", pid);
+    println!(
+        "🎯 TARGET-FOCUS: Attempting to focus window for PID {}...",
+        pid
+    );
     // wmctrl -lp returns: <window_id> <desktop> <pid> <machine> <title>
-    let output = Command::new("wmctrl")
-        .arg("-lp")
-        .output()
-        .await;
+    let output = Command::new("wmctrl").arg("-lp").output().await;
 
     if let Ok(out) = output {
         let stdout = String::from_utf8_lossy(&out.stdout);
@@ -23,7 +23,10 @@ pub async fn focus_window_by_pid(pid: i32) {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 3 && parts[2] == pid.to_string() {
                 let xid = parts[0];
-                println!("🎯 TARGET-FOCUS: Found XID {} for PID {}. Focusing...", xid, pid);
+                println!(
+                    "🎯 TARGET-FOCUS: Found XID {} for PID {}. Focusing...",
+                    xid, pid
+                );
                 let _ = Command::new("wmctrl")
                     .arg("-i")
                     .arg("-a")
@@ -34,21 +37,32 @@ pub async fn focus_window_by_pid(pid: i32) {
             }
         }
     }
-    
+
     // Fallback if PID search fails
-    let _ = Command::new("wmctrl").arg("-x").arg("-a").arg("chromium").output().await;
-    let _ = Command::new("wmctrl").arg("-x").arg("-a").arg("google-chrome").output().await;
+    let _ = Command::new("wmctrl")
+        .arg("-x")
+        .arg("-a")
+        .arg("chromium")
+        .output()
+        .await;
+    let _ = Command::new("wmctrl")
+        .arg("-x")
+        .arg("-a")
+        .arg("google-chrome")
+        .output()
+        .await;
 }
 
 pub fn clean_response(response: String) -> String {
     let mut s = response;
-    
+
     // Remove think blocks
     while let Some(start) = s.find("<think>") {
         if let Some(end) = s.find("</think>") {
             s.replace_range(start..=(end + "</think>".len() - 1), "");
         } else {
-            s.truncate(start); break;
+            s.truncate(start);
+            break;
         }
     }
 
@@ -81,9 +95,10 @@ pub fn clean_response(response: String) -> String {
                 in_string = !in_string;
             }
             if !in_string {
-                if c == '{' { brace_count += 1; }
-                else if c == '}' { 
-                    brace_count -= 1; 
+                if c == '{' {
+                    brace_count += 1;
+                } else if c == '}' {
+                    brace_count -= 1;
                     if brace_count == 0 {
                         end_index = i + 1;
                         break;

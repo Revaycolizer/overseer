@@ -1,10 +1,10 @@
-use dioxus::prelude::*;
-use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+use super::agent_assignments::AgentAssignments;
+use crate::backend::{get_agents, get_supervisor_agents};
 use crate::db::Supervisor;
 use crate::engine::utils::discovery::AgentInfo;
-use crate::backend::{get_supervisor_agents, get_agents};
 use crate::state::use_global_state;
-use super::agent_assignments::AgentAssignments;
+use dioxus::prelude::*;
+use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 #[derive(Clone, Copy, PartialEq)]
 enum ModalTab {
@@ -48,7 +48,8 @@ pub fn SupervisorModal(
     let agents = use_resource(move || {
         let db = state.read().db.clone();
         async move {
-            let res: Vec<crate::engine::utils::discovery::AgentInfo> = get_agents(&db).await.unwrap_or_default();
+            let res: Vec<crate::engine::utils::discovery::AgentInfo> =
+                get_agents(&db).await.unwrap_or_default();
             res
         }
     });
@@ -57,7 +58,7 @@ pub fn SupervisorModal(
     const PRISM_HIGHLIGHT_JS: &str = "if (window.Prism) { window.Prism.highlightAll(); }";
 
     rsx! {
-        div { 
+        div {
             class: "fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300",
             onclick: move |_| show_modal.set(false),
 
@@ -294,7 +295,7 @@ pub fn SupervisorModal(
                             div {
                                 class: format!(
                                     "rounded-full transition-all duration-500 {}",
-                                    if active_tab() == dot_tab { "w-6 h-1.5 bg-brand-blue" } 
+                                    if active_tab() == dot_tab { "w-6 h-1.5 bg-brand-blue" }
                                     else { "w-1.5 h-1.5 bg-slate-200" }
                                 )
                             }

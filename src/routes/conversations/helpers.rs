@@ -13,7 +13,8 @@ pub fn clean_content(content: &str) -> String {
     //    We only need to clean up any stray separator lines that appear
     //    before the marker in the conversation history.
     if let Some(pos) = trimmed.find("---CHART_") {
-        let before = trimmed[..pos].trim()
+        let before = trimmed[..pos]
+            .trim()
             .trim_end_matches("---")
             .trim_end_matches("--")
             .trim();
@@ -78,8 +79,12 @@ mod tests {
 
     #[test]
     fn test_chart_marker_with_text_before() {
-        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" baseProfile="full" viewBox="0 0 800 500"/>"#;
-        let content = format!("Next.js grew from 1.8% to 3.0%.\n\n---\n---CHART_SVG---\n{}", svg);
+        let svg =
+            r#"<svg xmlns="http://www.w3.org/2000/svg" baseProfile="full" viewBox="0 0 800 500"/>"#;
+        let content = format!(
+            "Next.js grew from 1.8% to 3.0%.\n\n---\n---CHART_SVG---\n{}",
+            svg
+        );
         let cleaned = clean_content(&content);
         assert!(cleaned.starts_with("Next.js grew"));
         assert!(cleaned.contains("---CHART_SVG---"));

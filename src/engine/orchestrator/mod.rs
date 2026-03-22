@@ -1,7 +1,7 @@
-mod planner;
 mod dispatcher;
-pub mod master;
 pub mod dynamic;
+pub mod master;
+mod planner;
 
 pub use dynamic::{ChatAgent, OverseerAgent, VisionGeneralAgent};
 pub use master::MasterPlanner;
@@ -65,8 +65,11 @@ pub async fn orchestrate_request<'a>(
     memory_context: &str,
     ollama_client: &ollama::Client,
 ) -> String {
-    let model_timeout_ms = crate::backend::get_setting_i64(db, "model_timeout_ms", 90_000).await as u64;
-    let run_id = crate::backend::start_execution_run(db, conversation_id, query).await.ok();
+    let model_timeout_ms =
+        crate::backend::get_setting_i64(db, "model_timeout_ms", 90_000).await as u64;
+    let run_id = crate::backend::start_execution_run(db, conversation_id, query)
+        .await
+        .ok();
     let mut event_sequence = 1_i64;
 
     record_event(
@@ -109,7 +112,14 @@ pub async fn orchestrate_request<'a>(
             )
             .await;
             if let Some(run_id) = run_id {
-                let _ = crate::backend::finish_execution_run(db, run_id, "failed", None, Some(&message)).await;
+                let _ = crate::backend::finish_execution_run(
+                    db,
+                    run_id,
+                    "failed",
+                    None,
+                    Some(&message),
+                )
+                .await;
             }
             return format!("PLAN EXECUTION HALTED.\nError: {}", message);
         }
@@ -160,7 +170,13 @@ pub async fn orchestrate_request<'a>(
 
     for (m_idx, macro_task) in macro_tasks.iter().enumerate() {
         println!("\n=======================================================");
-        println!("🚀 MACRO TASK {}/{}: [{}] {}", m_idx + 1, macro_tasks.len(), macro_task.domain.to_uppercase(), macro_task.task);
+        println!(
+            "🚀 MACRO TASK {}/{}: [{}] {}",
+            m_idx + 1,
+            macro_tasks.len(),
+            macro_task.domain.to_uppercase(),
+            macro_task.task
+        );
         println!("=======================================================");
 
         record_event(
@@ -192,7 +208,10 @@ pub async fn orchestrate_request<'a>(
 
         let micro_steps: Vec<String> = if let Some(p) = db_planner {
             println!("💡 DYNAMIC PLANNER: Using '{}' configuration.", p.name);
-            let model_name = p.model.clone().unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
+            let model_name = p
+                .model
+                .clone()
+                .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
             let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(&model_name))
                 .preamble(&p.instructions.clone().unwrap_or_default())
                 .default_max_turns(1)
@@ -227,7 +246,8 @@ pub async fn orchestrate_request<'a>(
             planner::parse_micro_steps(&sub_plan, &macro_task.task)
         } else if let Some(agent_info) = all_agents.iter().find(|a| {
             a.domain == planner_domain
-                || a.domain == macro_task.domain && (a.name.to_lowercase().contains("planner") || a.domain == "orchestrator")
+                || a.domain == macro_task.domain
+                    && (a.name.to_lowercase().contains("planner") || a.domain == "orchestrator")
         }) {
             let model_name = if agent_info.model.is_empty() {
                 "qwen2.5:7b-instruct".to_string()
@@ -270,7 +290,10 @@ pub async fn orchestrate_request<'a>(
             let fallback_steps = match macro_task.domain.as_str() {
                 "math" | "text_writer" | "chat" | "stealth" => vec![macro_task.task.clone()],
                 _ => {
-                    println!("⚠️ No specific planner found for domain '{}', using task directly.", macro_task.domain);
+                    println!(
+                        "⚠️ No specific planner found for domain '{}', using task directly.",
+                        macro_task.domain
+                    );
                     vec![macro_task.task.clone()]
                 }
             };
@@ -294,7 +317,11 @@ pub async fn orchestrate_request<'a>(
         };
 
         for (i, step) in micro_steps.iter().enumerate() {
-            println!("\n▶️ EXECUTING MICRO-STEP {}/{}...", i + 1, micro_steps.len());
+            println!(
+                "\n▶️ EXECUTING MICRO-STEP {}/{}...",
+                i + 1,
+                micro_steps.len()
+            );
 
             record_event(
                 db,
@@ -317,7 +344,12 @@ pub async fn orchestrate_request<'a>(
                 println!("⏱️ AUTO-WAIT: Pausing 2s...");
                 sleep(Duration::from_secs(2)).await;
                 let result = format!("Wait step completed: '{}'", step);
-                plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i + 1, step, result));
+                plan_history.push_str(&format!(
+                    "\nStep {}: '{}' -> Result: {}",
+                    i + 1,
+                    step,
+                    result
+                ));
                 final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i + 1, step, result));
                 record_event(
                     db,
@@ -337,23 +369,57 @@ pub async fn orchestrate_request<'a>(
             }
 
             let open_app = if step_lower.starts_with("open ") {
-                Some(step_lower.trim_start_matches("open ").split_whitespace().next().unwrap_or("").to_string())
+                Some(
+                    step_lower
+                        .trim_start_matches("open ")
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or("")
+                        .to_string(),
+                )
             } else if step_lower.starts_with("launch ") {
-                Some(step_lower.trim_start_matches("launch ").split_whitespace().next().unwrap_or("").to_string())
+                Some(
+                    step_lower
+                        .trim_start_matches("launch ")
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or("")
+                        .to_string(),
+                )
             } else {
                 None
             };
 
             if let Some(ref app_name) = open_app {
-                let is_pure_open = !step_lower.contains(" and ") && !step_lower.contains(", ") && !step_lower.contains(" then ");
-                let stop_words = ["the", "a", "an", "repo", "link", "his", "go", "to", "open", "launch", "github", "website"];
-                if is_pure_open && !app_name.is_empty() && !stop_words.contains(&app_name.as_str()) {
+                let is_pure_open = !step_lower.contains(" and ")
+                    && !step_lower.contains(", ")
+                    && !step_lower.contains(" then ");
+                let stop_words = [
+                    "the", "a", "an", "repo", "link", "his", "go", "to", "open", "launch",
+                    "github", "website",
+                ];
+                if is_pure_open && !app_name.is_empty() && !stop_words.contains(&app_name.as_str())
+                {
                     let browser_apps = ["chrome", "firefox", "browser", "chromium", "web"];
                     if browser_apps.iter().any(|b| app_name.contains(b)) {
-                        println!("🌐 AUTO-BROWSER-OPEN: Starting Playwright daemon for '{}'...", app_name);
-                        let result = format!("Auto-opened browser for {}. (Placeholder logic)", app_name);
-                        plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i + 1, step, result));
-                        final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i + 1, step, result));
+                        println!(
+                            "🌐 AUTO-BROWSER-OPEN: Starting Playwright daemon for '{}'...",
+                            app_name
+                        );
+                        let result =
+                            format!("Auto-opened browser for {}. (Placeholder logic)", app_name);
+                        plan_history.push_str(&format!(
+                            "\nStep {}: '{}' -> Result: {}",
+                            i + 1,
+                            step,
+                            result
+                        ));
+                        final_report.push_str(&format!(
+                            "\n\n### Step {}: {}\n{}",
+                            i + 1,
+                            step,
+                            result
+                        ));
                         record_event(
                             db,
                             run_id,
@@ -400,21 +466,29 @@ pub async fn orchestrate_request<'a>(
                     if (r.trim().to_lowercase() == "done" || r.to_lowercase().contains("success"))
                         && interactive_domains.contains(&macro_task.domain.as_str())
                     {
-                        println!("🔍 GROUNDING: Verifying success state for domain '{}'...", macro_task.domain);
+                        println!(
+                            "🔍 GROUNDING: Verifying success state for domain '{}'...",
+                            macro_task.domain
+                        );
 
                         let tools_list = crate::backend::get_tools(db).await.unwrap_or_default();
-                        if let Some(paddle_tool) = tools_list.iter().find(|t| t.name == "paddle_ui_automation") {
+                        if let Some(paddle_tool) =
+                            tools_list.iter().find(|t| t.name == "paddle_ui_automation")
+                        {
                             if let Ok(state_json) = crate::engine::tools::call_dynamic_tool(
                                 paddle_tool,
                                 serde_json::json!({"input": "get_state"}),
                             )
                             .await
                             {
-                                let grounding_agent = all_agents.iter().find(|a| a.name == "Grounding Agent");
+                                let grounding_agent =
+                                    all_agents.iter().find(|a| a.name == "Grounding Agent");
                                 if let Some(ga) = grounding_agent {
-                                    let ga_client = rig::agent::AgentBuilder::new(ollama_client.completion_model(&ga.model))
-                                        .preamble(&ga.instructions)
-                                        .build();
+                                    let ga_client = rig::agent::AgentBuilder::new(
+                                        ollama_client.completion_model(&ga.model),
+                                    )
+                                    .preamble(&ga.instructions)
+                                    .build();
 
                                     let ga_prompt = format!(
                                         "GOAL: {}\nTASK: {}\n\nVISIBLE UI TEXT:\n{}\n\nHas the task been successfully completed? Respond with STATE_VERIFIED or STATE_MISMATCH: [reason]",
@@ -429,7 +503,8 @@ pub async fn orchestrate_request<'a>(
                                     {
                                         println!("👁️ GROUNDING EYE: {}", ga_response);
                                         if ga_response.contains("STATE_MISMATCH") {
-                                            final_result = format!("GROUNDING ERROR: {}", ga_response);
+                                            final_result =
+                                                format!("GROUNDING ERROR: {}", ga_response);
                                         }
                                     }
                                 }
@@ -438,7 +513,7 @@ pub async fn orchestrate_request<'a>(
                     }
 
                     let supervisor_bypasses = sqlx::query_scalar::<_, bool>(
-                        "SELECT bypass_synthesizer FROM supervisors WHERE domain = ? LIMIT 1"
+                        "SELECT bypass_synthesizer FROM supervisors WHERE domain = ? LIMIT 1",
                     )
                     .bind(&macro_task.domain)
                     .fetch_optional(&db.pool)
@@ -452,8 +527,18 @@ pub async fn orchestrate_request<'a>(
                         bypass_result = Some(final_result.clone());
                     }
 
-                    plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i + 1, step, final_result));
-                    final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i + 1, step, final_result));
+                    plan_history.push_str(&format!(
+                        "\nStep {}: '{}' -> Result: {}",
+                        i + 1,
+                        step,
+                        final_result
+                    ));
+                    final_report.push_str(&format!(
+                        "\n\n### Step {}: {}\n{}",
+                        i + 1,
+                        step,
+                        final_result
+                    ));
                     record_event(
                         db,
                         run_id,
@@ -485,9 +570,19 @@ pub async fn orchestrate_request<'a>(
                     )
                     .await;
                     if let Some(run_id) = run_id {
-                        let _ = crate::backend::finish_execution_run(db, run_id, "failed", None, Some(&e)).await;
+                        let _ = crate::backend::finish_execution_run(
+                            db,
+                            run_id,
+                            "failed",
+                            None,
+                            Some(&e),
+                        )
+                        .await;
                     }
-                    return format!("PLAN EXECUTION HALTED.\nError: {}\nLast State: {}", e, final_report);
+                    return format!(
+                        "PLAN EXECUTION HALTED.\nError: {}\nLast State: {}",
+                        e, final_report
+                    );
                 }
             }
         }
@@ -496,7 +591,9 @@ pub async fn orchestrate_request<'a>(
     if let Some(bypass) = bypass_result {
         println!("⚡ BYPASS SYNTHESIZER: returning bypass result directly.");
         if let Some(run_id) = run_id {
-            let _ = crate::backend::finish_execution_run(db, run_id, "completed", Some(&bypass), None).await;
+            let _ =
+                crate::backend::finish_execution_run(db, run_id, "completed", Some(&bypass), None)
+                    .await;
         }
         return bypass;
     }
@@ -507,7 +604,14 @@ pub async fn orchestrate_request<'a>(
             println!("📊 CHART MARKER found in final_report — bypassing synthesizer.");
             let chart_result = final_report[pos..].trim().to_string();
             if let Some(run_id) = run_id {
-                let _ = crate::backend::finish_execution_run(db, run_id, "completed", Some(&chart_result), None).await;
+                let _ = crate::backend::finish_execution_run(
+                    db,
+                    run_id,
+                    "completed",
+                    Some(&chart_result),
+                    None,
+                )
+                .await;
             }
             return chart_result;
         }
@@ -518,17 +622,20 @@ pub async fn orchestrate_request<'a>(
 
     let synthesis_model = synthesizer_agent
         .map(|a| a.model.as_str())
-        .unwrap_or_else(|| orchestrator_agent.map(|a| a.model.as_str()).unwrap_or("qwen2.5:7b-instruct"));
+        .unwrap_or_else(|| {
+            orchestrator_agent
+                .map(|a| a.model.as_str())
+                .unwrap_or("qwen2.5:7b-instruct")
+        });
 
     let synthesis_instructions = synthesizer_agent
         .map(|a| a.instructions.as_str())
         .unwrap_or("You are a helpful assistant. Present research findings clearly in plain Markdown. Never output JSON.");
 
-    let synthesis_agent = rig::agent::AgentBuilder::new(
-        ollama_client.completion_model(synthesis_model)
-    )
-    .preamble(synthesis_instructions)
-    .build();
+    let synthesis_agent =
+        rig::agent::AgentBuilder::new(ollama_client.completion_model(synthesis_model))
+            .preamble(synthesis_instructions)
+            .build();
 
     let synthesis_prompt = format!(
         "USER_QUERY: {}\n\nRESEARCH FINDINGS:\n{}\n\n\
@@ -579,7 +686,14 @@ pub async fn orchestrate_request<'a>(
     .await;
 
     if let Some(run_id) = run_id {
-        let _ = crate::backend::finish_execution_run(db, run_id, "completed", Some(&final_response), None).await;
+        let _ = crate::backend::finish_execution_run(
+            db,
+            run_id,
+            "completed",
+            Some(&final_response),
+            None,
+        )
+        .await;
     }
 
     final_response

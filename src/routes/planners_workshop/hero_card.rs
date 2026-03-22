@@ -1,13 +1,17 @@
+use crate::db::Planner;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::db::Planner;
 
 #[component]
 pub fn PlannerHeroCard(
     mut selected_planner: Signal<Option<Planner>>,
     models: Signal<Vec<String>>,
 ) -> Element {
-    let planner = if let Some(p) = selected_planner() { p } else { return rsx! {} };
+    let planner = if let Some(p) = selected_planner() {
+        p
+    } else {
+        return rsx! {};
+    };
 
     rsx! {
         div { class: "bg-white p-8 rounded-2xl border border-slate-200 shadow-soft space-y-6 animate-in fade-in slide-in-from-top-4 duration-500",
@@ -16,9 +20,9 @@ pub fn PlannerHeroCard(
                 div { class: "flex items-center gap-6",
                     // Large Animated Icon
                     div { class: "w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 shadow-sm group transition-all duration-500 hover:bg-brand-blue hover:shadow-blue-200 hover:shadow-xl",
-                        MaterialIcon { 
-                            name: "architecture", 
-                            color: MaterialIconColor::Custom("var(--color-brand-blue)".into()), 
+                        MaterialIcon {
+                            name: "architecture",
+                            color: MaterialIconColor::Custom("var(--color-brand-blue)".into()),
                             size: 32,
                         }
                     }
@@ -53,11 +57,11 @@ pub fn PlannerHeroCard(
                 // Status & Version Badges
                 div { class: "flex flex-col items-end gap-3",
                     div { class: "flex items-center gap-2",
-                        span { class: "px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-black uppercase tracking-widest border border-slate-200", 
-                            "v{planner.version.clone().unwrap_or_else(|| \"1.0.0\".into())}" 
+                        span { class: "px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-black uppercase tracking-widest border border-slate-200",
+                            "v{planner.version.clone().unwrap_or_else(|| \"1.0.0\".into())}"
                         }
-                        span { class: "px-3 py-1 bg-blue-50 text-brand-blue rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100 animate-pulse", 
-                            "Ready" 
+                        span { class: "px-3 py-1 bg-blue-50 text-brand-blue rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100 animate-pulse",
+                            "Ready"
                         }
                     }
                     div { class: "flex items-center gap-1.5",

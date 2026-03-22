@@ -1,11 +1,11 @@
-use sqlx::sqlite::{SqlitePoolOptions, SqliteConnectOptions, SqliteJournalMode}; 
+use anyhow::Context;
+use serde::{Deserialize, Serialize};
+use snowflake::SnowflakeIdGenerator;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::{ConnectOptions, Connection};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use snowflake::SnowflakeIdGenerator;
-use serde::{Deserialize, Serialize};
-use anyhow::Context;
 
 #[derive(Clone)]
 pub struct Database {
@@ -56,7 +56,7 @@ impl Database {
     pub async fn new() -> anyhow::Result<Self> {
         let db_url = "sqlite:overseer.db?mode=rwc";
         println!("🚀 Connecting to SQLite at {}...", db_url);
-        
+
         let mut connection_options = SqliteConnectOptions::from_str(db_url)?
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
@@ -103,8 +103,11 @@ impl Database {
             snowflake: Arc::new(Mutex::new(generator)),
         };
 
-        database.seed_all().await.context("failed to seed or normalize database content")?;
-        
+        database
+            .seed_all()
+            .await
+            .context("failed to seed or normalize database content")?;
+
         println!("🏗️  Staging tools to runtime environment...");
         if let Err(e) = crate::engine::utils::discovery::prepare_runtime_env(&database).await {
             println!("⚠️  Tool runtime staging failed: {}", e);
@@ -122,7 +125,7 @@ impl Database {
         self.seed_supervisors().await?;
         self.seed_planners().await?;
         self.ensure_setting_defaults().await?;
-        self.ensure_system_agents().await?; 
+        self.ensure_system_agents().await?;
         self.backfill_ids().await?;
         Ok(())
     }
@@ -140,7 +143,7 @@ impl Database {
             let id = self.next_id().await;
             sqlx::query(
                 "INSERT INTO settings (id, key, value) VALUES (?, ?, ?) \
-                 ON CONFLICT(key) DO NOTHING"
+                 ON CONFLICT(key) DO NOTHING",
             )
             .bind(id)
             .bind(key)
@@ -152,11 +155,10 @@ impl Database {
         Ok(())
     }
 
-
     async fn ensure_system_agents(&self) -> anyhow::Result<()> {
-    // Upserts agents that must always exist regardless of seeding state.
-    // Safe to run every startup — uses INSERT OR IGNORE so no duplicates.
-    let system_agents: Vec<(&str, &str, &str, &str, &str)> = vec![
+        // Upserts agents that must always exist regardless of seeding state.
+        // Safe to run every startup — uses INSERT OR IGNORE so no duplicates.
+        let system_agents: Vec<(&str, &str, &str, &str, &str)> = vec![
         (
             "Synthesizer",
             "Synthesizes research findings into clean user-friendly responses",
@@ -167,15 +169,15 @@ impl Database {
         // Add future always-required agents here
     ];
 
-    for (name, desc, domain, model, inst) in system_agents {
-        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agents WHERE domain = ?")
-            .bind(domain)
-            .fetch_one(&self.pool)
-            .await?;
+        for (name, desc, domain, model, inst) in system_agents {
+            let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agents WHERE domain = ?")
+                .bind(domain)
+                .fetch_one(&self.pool)
+                .await?;
 
-        if exists.0 == 0 {
-            let id = self.next_id().await;
-            sqlx::query(
+            if exists.0 == 0 {
+                let id = self.next_id().await;
+                sqlx::query(
                 "INSERT OR IGNORE INTO agents (id, name, description, domain, model, instructions, version, code, creator_id) 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
@@ -191,43 +193,48 @@ impl Database {
             .execute(&self.pool)
             .await?;
 
-            println!("✅ Inserted missing system agent: {} ({})", name, domain);
-        } else {
-            println!("✓ System agent '{}' already exists, skipping.", domain);
+                println!("✅ Inserted missing system agent: {} ({})", name, domain);
+            } else {
+                println!("✓ System agent '{}' already exists, skipping.", domain);
+            }
         }
+
+        Ok(())
     }
-
-    Ok(())
-}
-
-    
 
     async fn seed_agents(&self) -> anyhow::Result<()> {
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agents")
             .fetch_one(&self.pool)
             .await?;
 
-        if count.0 > 0 { return Ok(()); }
+        if count.0 > 0 {
+            return Ok(());
+        }
 
         println!("🌱 Seeding authentic agents from configs and codebase...");
-        
+
         let mut agents_data = Vec::new();
 
         // 1. Try to load from config/agents/*.json
-        if let Ok(entries) = std::fs::read_dir("config/agents") {
-            for entry in entries.flatten() {
-                if entry.path().extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
-                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                            agents_data.push((
-                                val["name"].as_str().unwrap_or("Unknown").to_string(),
-                                val["description"].as_str().unwrap_or("").to_string(),
-                                val["domain"].as_str().unwrap_or("core").to_string(),
-                                val["model"].as_str().unwrap_or("qwen2.5:7b-instruct").to_string(),
-                                val["instructions"].as_str().unwrap_or("").to_string(),
-                                val["version"].as_str().unwrap_or("1.0.0").to_string(),
-                                val["code"].as_str().map(|s| s.to_string()),
-                            ));
+        if let Some(config_dir) = crate::engine::utils::discovery::config_agents_dir() {
+            if let Ok(entries) = std::fs::read_dir(config_dir) {
+                for entry in entries.flatten() {
+                    if entry.path().extension().and_then(|s| s.to_str()) == Some("json") {
+                        if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                                agents_data.push((
+                                    val["name"].as_str().unwrap_or("Unknown").to_string(),
+                                    val["description"].as_str().unwrap_or("").to_string(),
+                                    val["domain"].as_str().unwrap_or("core").to_string(),
+                                    val["model"]
+                                        .as_str()
+                                        .unwrap_or("qwen2.5:7b-instruct")
+                                        .to_string(),
+                                    val["instructions"].as_str().unwrap_or("").to_string(),
+                                    val["version"].as_str().unwrap_or("1.0.0").to_string(),
+                                    val["code"].as_str().map(|s| s.to_string()),
+                                ));
+                            }
                         }
                     }
                 }
@@ -236,14 +243,62 @@ impl Database {
 
         // 2. Add others not in configs with real preambles
         let codebase_agents = vec![
-            ("Master Orchestrator", "Primary system planner", "orchestrator", "qwen2.5:7b-instruct", "src/engine/agents/master_planner/preamble.md"),
-            ("Overseer Agent", "Task verification and grounding supervisor", "overseer", "qwen2.5:7b-instruct", ""),
-            ("Web Planner", "Web task planner", "web_planner", "llama3", "src/engine/agents/web/planner_preamble.md"),
-            ("Office Planner", "Office task planner", "office_planner", "qwen2.5:7b-instruct", ""),
-            ("Desktop Planner", "Desktop task planner", "desktop_planner", "qwen2.5:7b-instruct", ""),
-            ("Neontune Planner", "Music task planner", "neontune_planner", "qwen2.5:7b-instruct", ""),
-            ("Chat Assistant", "General chat and help", "chat", "llama3", "src/engine/agents/chat/preamble.md"),
-            ("Vision Assistant", "Image analysis specialist", "vision", "llava", ""),
+            (
+                "Master Orchestrator",
+                "Primary system planner",
+                "orchestrator",
+                "qwen2.5:7b-instruct",
+                "src/engine/agents/master_planner/preamble.md",
+            ),
+            (
+                "Overseer Agent",
+                "Task verification and grounding supervisor",
+                "overseer",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Web Planner",
+                "Web task planner",
+                "web_planner",
+                "llama3",
+                "src/engine/agents/web/planner_preamble.md",
+            ),
+            (
+                "Office Planner",
+                "Office task planner",
+                "office_planner",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Desktop Planner",
+                "Desktop task planner",
+                "desktop_planner",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Neontune Planner",
+                "Music task planner",
+                "neontune_planner",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Chat Assistant",
+                "General chat and help",
+                "chat",
+                "llama3",
+                "src/engine/agents/chat/preamble.md",
+            ),
+            (
+                "Vision Assistant",
+                "Image analysis specialist",
+                "vision",
+                "llava",
+                "",
+            ),
         ];
 
         for (name, desc, domain, model, path) in codebase_agents {
@@ -257,7 +312,15 @@ impl Database {
                 } else {
                     "Default preamble".to_string()
                 };
-                agents_data.push((name.to_string(), desc.to_string(), domain.to_string(), model.to_string(), inst, "1.0.0".to_string(), None::<String>));
+                agents_data.push((
+                    name.to_string(),
+                    desc.to_string(),
+                    domain.to_string(),
+                    model.to_string(),
+                    inst,
+                    "1.0.0".to_string(),
+                    None::<String>,
+                ));
             }
         }
 
@@ -277,28 +340,46 @@ impl Database {
             .fetch_one(&self.pool)
             .await?;
 
-        if count.0 > 0 { return Ok(()); }
+        if count.0 > 0 {
+            return Ok(());
+        }
 
         println!("🛠️ Seeding ALL authentic tools from filesystem...");
         let mut tools_data = Vec::new();
 
         let script_dirs = ["web", "stealth", "desktop"];
-        let script_roots = ["src/engine/scripts", "agents-scripts"];
+        let script_roots = crate::engine::utils::discovery::candidate_tool_script_roots();
         for root in script_roots {
             for dir in script_dirs {
-                let path = format!("{root}/{dir}");
+                let path = root.join(dir);
                 if let Ok(entries) = std::fs::read_dir(&path) {
                     for entry in entries.flatten() {
                         if entry.path().extension().and_then(|s| s.to_str()) == Some("py") {
                             if let Some(name) = entry.file_name().to_str() {
                                 let tool_name = name.trim_end_matches(".py").to_string();
-                                if tools_data.iter().any(|existing: &(String, String, String, String, String)| existing.0.as_str() == tool_name.as_str()) {
+                                if tools_data.iter().any(
+                                    |existing: &(String, String, String, String, String)| {
+                                        existing.0.as_str() == tool_name.as_str()
+                                    },
+                                ) {
                                     continue;
                                 }
-                                let script_path = format!("{path}/{name}");
-                                let code = std::fs::read_to_string(entry.path()).unwrap_or_default();
+                                let script_path = format!(
+                                    "{}/{}/{}",
+                                    crate::engine::utils::discovery::logical_script_root(&root),
+                                    dir,
+                                    name
+                                );
+                                let code =
+                                    std::fs::read_to_string(entry.path()).unwrap_or_default();
                                 let description = format!("{} tool for {} domain", tool_name, dir);
-                                tools_data.push((tool_name, description, "python".to_string(), script_path, code));
+                                tools_data.push((
+                                    tool_name,
+                                    description,
+                                    "python".to_string(),
+                                    script_path,
+                                    code,
+                                ));
                             }
                         }
                     }
@@ -307,9 +388,27 @@ impl Database {
         }
 
         // Add native tools
-        tools_data.push(("os_tool".to_string(), "Native system access".to_string(), "rust".to_string(), "".to_string(), "// Native Implementation".to_string()));
-        tools_data.push(("vision_analysis".to_string(), "Analyze images and perform OCR. Supports URLs and local paths.".to_string(), "rust".to_string(), "".to_string(), "// Native Implementation".to_string()));
-        tools_data.push(("charting".to_string(), "Create beautiful charts (bar, line, pie) from data. Returns SVG.".to_string(), "rust".to_string(), "".to_string(), "// Native Implementation".to_string()));
+        tools_data.push((
+            "os_tool".to_string(),
+            "Native system access".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
+        tools_data.push((
+            "vision_analysis".to_string(),
+            "Analyze images and perform OCR. Supports URLs and local paths.".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
+        tools_data.push((
+            "charting".to_string(),
+            "Create beautiful charts (bar, line, pie) from data. Returns SVG.".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
 
         let mut tx = self.pool.begin().await?;
         for (name, desc, lang, path, code) in tools_data {
@@ -328,11 +427,13 @@ impl Database {
             .fetch_one(&self.pool)
             .await?;
 
-        if count.0 > 0 { return Ok(()); }
+        if count.0 > 0 {
+            return Ok(());
+        }
 
         println!("🔗 Linking agents and tools with comprehensive mappings...");
         let mut tx = self.pool.begin().await?;
-        
+
         let mappings = vec![
             ("Web Planner", "browser_automation"),
             ("Web Supervisor", "browser_automation"),
@@ -345,17 +446,30 @@ impl Database {
         ];
 
         for (agent_name, tool_name) in mappings {
-            let agent: Option<(i64,)> = sqlx::query_as("SELECT id FROM agents WHERE name = ? LIMIT 1").bind(agent_name).fetch_optional(&mut *tx).await?;
-            let tool: Option<(i64,)> = sqlx::query_as("SELECT id FROM tools WHERE name = ? LIMIT 1").bind(tool_name).fetch_optional(&mut *tx).await?;
+            let agent: Option<(i64,)> =
+                sqlx::query_as("SELECT id FROM agents WHERE name = ? LIMIT 1")
+                    .bind(agent_name)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+            let tool: Option<(i64,)> =
+                sqlx::query_as("SELECT id FROM tools WHERE name = ? LIMIT 1")
+                    .bind(tool_name)
+                    .fetch_optional(&mut *tx)
+                    .await?;
 
             if let (Some(a), Some(t)) = (agent, tool) {
                 let id = self.next_id().await;
-                sqlx::query("INSERT OR IGNORE INTO agent_tools (id, agent_id, tool_id) VALUES (?, ?, ?)")
-                    .bind(id).bind(a.0).bind(t.0)
-                    .execute(&mut *tx).await?;
+                sqlx::query(
+                    "INSERT OR IGNORE INTO agent_tools (id, agent_id, tool_id) VALUES (?, ?, ?)",
+                )
+                .bind(id)
+                .bind(a.0)
+                .bind(t.0)
+                .execute(&mut *tx)
+                .await?;
             }
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
@@ -365,18 +479,68 @@ impl Database {
             .fetch_one(&self.pool)
             .await?;
 
-        if count.0 > 0 { return Ok(()); }
+        if count.0 > 0 {
+            return Ok(());
+        }
 
         println!("🛸 Seeding dynamic supervisors...");
         let supervisors = vec![
-            ("Web Supervisor", "Orchestrates web research and automation", "web", "llama3", "src/engine/agents/web/planner_preamble.md"),
-            ("Office Supervisor", "Manages document and productivity tasks", "office", "qwen2.5:7b-instruct", ""), 
-            ("Desktop Supervisor", "Controls native desktop applications", "desktop", "qwen2.5:7b-instruct", ""),
-            ("Stealth Supervisor", "Executes sensitive background research", "stealth", "qwen2.5:7b-instruct", ""),
-            ("Neontune Supervisor", "Specialized music and media metadata manager", "neontune", "qwen2.5:7b-instruct", ""),
-            ("Text Writer Supervisor", "High-quality content generation and editing", "text_writer", "qwen2.5:7b-instruct", ""),
-            ("Chat Supervisor", "General conversation manager", "chat", "llama3", ""),
-            ("Vision Supervisor", "Visual perception manager", "vision", "qwen2.5:7b-instruct", ""),
+            (
+                "Web Supervisor",
+                "Orchestrates web research and automation",
+                "web",
+                "llama3",
+                "src/engine/agents/web/planner_preamble.md",
+            ),
+            (
+                "Office Supervisor",
+                "Manages document and productivity tasks",
+                "office",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Desktop Supervisor",
+                "Controls native desktop applications",
+                "desktop",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Stealth Supervisor",
+                "Executes sensitive background research",
+                "stealth",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Neontune Supervisor",
+                "Specialized music and media metadata manager",
+                "neontune",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Text Writer Supervisor",
+                "High-quality content generation and editing",
+                "text_writer",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Chat Supervisor",
+                "General conversation manager",
+                "chat",
+                "llama3",
+                "",
+            ),
+            (
+                "Vision Supervisor",
+                "Visual perception manager",
+                "vision",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
         ];
 
         let mut tx = self.pool.begin().await?;
@@ -391,7 +555,7 @@ impl Database {
             sqlx::query("INSERT INTO supervisors (id, name, description, instructions, model, domain, version, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
                 .bind(id).bind(name).bind(desc).bind(inst).bind(model).bind(domain).bind("1.0.0").bind(None::<String>)
                 .execute(&mut *tx).await?;
-            
+
             // Auto-link agents based on domain
             let agent_domain = match domain {
                 "web" => Some("web"),
@@ -406,9 +570,13 @@ impl Database {
             };
 
             if let Some(d) = agent_domain {
-                let agents: Vec<(i64,)> = sqlx::query_as("SELECT id FROM agents WHERE domain = ? OR domain LIKE ?")
-                    .bind(d).bind(format!("{}%", d)).fetch_all(&mut *tx).await?;
-                
+                let agents: Vec<(i64,)> =
+                    sqlx::query_as("SELECT id FROM agents WHERE domain = ? OR domain LIKE ?")
+                        .bind(d)
+                        .bind(format!("{}%", d))
+                        .fetch_all(&mut *tx)
+                        .await?;
+
                 for (a_id,) in agents {
                     let rel_id = self.next_id().await;
                     sqlx::query("INSERT INTO supervisor_agents (id, supervisor_id, agent_id) VALUES (?, ?, ?)")
@@ -425,14 +593,36 @@ impl Database {
             .fetch_one(&self.pool)
             .await?;
 
-        if count.0 > 0 { return Ok(()); }
+        if count.0 > 0 {
+            return Ok(());
+        }
 
         println!("🌱 Seeding Planners...");
         let planners = vec![
-            ("Web Planner", "Plans browser-based tasks step-by-step.", "web", "web_planner"),
-            ("Office Planner", "Plans office document tasks (Writer, Calc, etc).", "office", "office_planner"),
-            ("Desktop Planner", "Plans desktop and application-level tasks.", "desktop", "desktop_planner"),
-            ("Neontune Planner", "Plans music and audio library operations.", "neontune", "neontune_planner"),
+            (
+                "Web Planner",
+                "Plans browser-based tasks step-by-step.",
+                "web",
+                "web_planner",
+            ),
+            (
+                "Office Planner",
+                "Plans office document tasks (Writer, Calc, etc).",
+                "office",
+                "office_planner",
+            ),
+            (
+                "Desktop Planner",
+                "Plans desktop and application-level tasks.",
+                "desktop",
+                "desktop_planner",
+            ),
+            (
+                "Neontune Planner",
+                "Plans music and audio library operations.",
+                "neontune",
+                "neontune_planner",
+            ),
         ];
 
         for (name, desc, domain, domain_id) in planners {
@@ -457,54 +647,77 @@ impl Database {
 
     async fn backfill_ids(&self) -> anyhow::Result<()> {
         let mut conn = self.pool.acquire().await?;
-        
+
         // Disable foreign keys temporarily for ID migration
-        sqlx::query("PRAGMA foreign_keys = OFF").execute(&mut *conn).await?;
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *conn)
+            .await?;
 
         let mut tx = conn.begin().await?;
 
         println!("🔄 Backfilling Missing Snowflake IDs...");
 
         // 1. Backfill settings
-        let settings_to_backfill: Vec<(String,)> = sqlx::query_as("SELECT key FROM settings WHERE id IS NULL")
-            .fetch_all(&mut *tx).await?;
+        let settings_to_backfill: Vec<(String,)> =
+            sqlx::query_as("SELECT key FROM settings WHERE id IS NULL")
+                .fetch_all(&mut *tx)
+                .await?;
         for (key,) in settings_to_backfill {
             let id = self.next_id().await;
             sqlx::query("UPDATE settings SET id = ? WHERE key = ?")
-                .bind(id).bind(key).execute(&mut *tx).await?;
+                .bind(id)
+                .bind(key)
+                .execute(&mut *tx)
+                .await?;
         }
 
         // 2. Backfill agent_tools
-        let agent_tools_to_backfill: Vec<(i64, i64)> = sqlx::query_as("SELECT agent_id, tool_id FROM agent_tools WHERE id IS NULL")
-            .fetch_all(&mut *tx).await?;
+        let agent_tools_to_backfill: Vec<(i64, i64)> =
+            sqlx::query_as("SELECT agent_id, tool_id FROM agent_tools WHERE id IS NULL")
+                .fetch_all(&mut *tx)
+                .await?;
         for (a_id, t_id) in agent_tools_to_backfill {
             let id = self.next_id().await;
             sqlx::query("UPDATE agent_tools SET id = ? WHERE agent_id = ? AND tool_id = ?")
-                .bind(id).bind(a_id).bind(t_id).execute(&mut *tx).await?;
+                .bind(id)
+                .bind(a_id)
+                .bind(t_id)
+                .execute(&mut *tx)
+                .await?;
         }
 
         // 3. Backfill agents with sequential IDs (and update foreign keys)
-        let agents_to_backfill: Vec<(i64,)> = sqlx::query_as("SELECT id FROM agents WHERE id < 1000000000000000000")
-            .fetch_all(&mut *tx).await?;
-        
+        let agents_to_backfill: Vec<(i64,)> =
+            sqlx::query_as("SELECT id FROM agents WHERE id < 1000000000000000000")
+                .fetch_all(&mut *tx)
+                .await?;
+
         for (old_id,) in agents_to_backfill {
             let new_id = self.next_id().await;
-            
+
             // Update foreign keys in agent_tools
             sqlx::query("UPDATE agent_tools SET agent_id = ? WHERE agent_id = ?")
-                .bind(new_id).bind(old_id).execute(&mut *tx).await?;
-            
+                .bind(new_id)
+                .bind(old_id)
+                .execute(&mut *tx)
+                .await?;
+
             // Update main agent ID
             sqlx::query("UPDATE agents SET id = ? WHERE id = ?")
-                .bind(new_id).bind(old_id).execute(&mut *tx).await?;
-            
+                .bind(new_id)
+                .bind(old_id)
+                .execute(&mut *tx)
+                .await?;
+
             println!("✅ Migrated agent ID {} -> {}", old_id, new_id);
         }
 
         tx.commit().await?;
 
         // Re-enable foreign keys
-        sqlx::query("PRAGMA foreign_keys = ON").execute(&mut *conn).await?;
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *conn)
+            .await?;
         Ok(())
     }
 

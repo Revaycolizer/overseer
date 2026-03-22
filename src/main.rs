@@ -1,14 +1,17 @@
 use dioxus::prelude::*;
-use dioxus_material_icons::{MaterialIconStylesheet};
-mod routes;
+use dioxus_material_icons::MaterialIconStylesheet;
 mod backend;
-mod state;
-pub mod engine;
 pub mod db;
+pub mod engine;
+mod routes;
+mod state;
 
-use routes::{Conversations, AgentsWorkshop, Layout, WorkflowAutomation, Settings, ToolsWorkshop, SupervisorsWorkshop, PlannersWorkshop};
-use state::StateProvider;
 use crate::db::Database;
+use routes::{
+    AgentsWorkshop, Conversations, Layout, PlannersWorkshop, Settings, SupervisorsWorkshop,
+    ToolsWorkshop, WorkflowAutomation,
+};
+use state::StateProvider;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Routable, PartialEq)]
@@ -35,22 +38,29 @@ enum Route {
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
-const MAIN_CSS: Asset = asset!("/assets/main.css",AssetOptions::css().with_static_head(true));
+const MAIN_CSS: Asset = asset!(
+    "/assets/main.css",
+    AssetOptions::css().with_static_head(true)
+);
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
-const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css",AssetOptions::css().with_static_head(true));
+const TAILWIND_CSS: Asset = asset!(
+    "/assets/tailwind.css",
+    AssetOptions::css().with_static_head(true)
+);
 
 pub fn common_head_content() -> String {
-
-	format!(r#" 
+    format!(
+        r#" 
 					<link rel="icon" href="{FAVICON}">
 					<link rel="stylesheet" href="{MAIN_CSS}" blocking="render">
 					<link rel="stylesheet" href="{TAILWIND_CSS}" blocking="render">
-				"#)
+				"#
+    )
 }
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     println!("📍 Overseer launched with args: {:?}", args);
-    
+
     // Check if we should run in CLI mode
     if args.len() > 1 && (args[1] == "info" || args[1] == "--info" || !args[1].starts_with("-")) {
         println!("🖥️ Entering CLI mode...");
@@ -69,9 +79,11 @@ fn main() {
             .with_window(
                 WindowBuilder::new()
                     .with_title("Overseer")
-                    .with_decorations(false)
+                    .with_decorations(false),
             );
-        dioxus::LaunchBuilder::desktop().with_cfg(config).launch(App);
+        dioxus::LaunchBuilder::desktop()
+            .with_cfg(config)
+            .launch(App);
     }
     #[cfg(not(feature = "desktop"))]
     dioxus::launch(App);
@@ -94,7 +106,7 @@ fn App() -> Element {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
-        
+
         // PrismJS for Syntax Highlighting
         document::Link { rel: "stylesheet", href: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" }
         document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" }
@@ -117,7 +129,7 @@ fn App() -> Element {
         }
 
         MaterialIconStylesheet {}
-        
+
         if let Some(res) = db.cloned() {
             match res {
                 Ok(database) => rsx! {
@@ -134,7 +146,7 @@ fn App() -> Element {
                             pre { class: "bg-black/40 p-4 rounded text-xs overflow-auto max-h-64 text-red-300 whitespace-pre-wrap",
                                 "{error_message}"
                             }
-                            button { 
+                            button {
                                 class: "mt-6 px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition-colors font-medium",
                                 onclick: move |_| db.restart(),
                                 "Retry Initialization"
@@ -147,7 +159,7 @@ fn App() -> Element {
             div { class: "flex flex-col items-center justify-center h-screen bg-white/80 text-white overflow-hidden",
                 // Animated background glow
                 div { class: "absolute w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] -z-10 translate-y-[-20%] animate-pulse" }
-                
+
                 // Elegant loading container
                 div { class: "flex flex-col items-center gap-8",
                     // Custom sophisticated loader
@@ -157,14 +169,14 @@ fn App() -> Element {
                         div { class: "absolute inset-2 rounded-full border-2 border-slate-800" }
                         div { class: "absolute inset-2 rounded-full border-2 border-b-blue-400 border-t-transparent border-r-transparent border-l-transparent animate-spin-reverse [animation-duration:1.5s]" }
                     }
-                    
+
                     div { class: "text-center space-y-3",
-                        h1 { class: "text-4xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400", 
-                            "OVERSEER" 
+                        h1 { class: "text-4xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400",
+                            "OVERSEER"
                         }
                         div { class: "flex flex-col items-center gap-2",
-                            p { class: "text-sm font-bold text-blue-400 uppercase tracking-[0.2em] animate-pulse", 
-                                "Initializing System" 
+                            p { class: "text-sm font-bold text-blue-400 uppercase tracking-[0.2em] animate-pulse",
+                                "Initializing System"
                             }
                             div { class: "w-48 h-1 bg-slate-900 rounded-full overflow-hidden",
                                 div { class: "h-full bg-blue-600 animate-[loading-bar_2s_infinite_ease-in-out]", style: "width: 40%" }
@@ -172,7 +184,7 @@ fn App() -> Element {
                         }
                     }
                 }
-                
+
                 // Version badge
                 div { class: "absolute bottom-12 px-4 py-1.5 rounded-full border border-slate-800 bg-slate-900/50 text-[10px] font-bold text-slate-500 uppercase tracking-widest",
                     "Version 1.0.0 LTS"

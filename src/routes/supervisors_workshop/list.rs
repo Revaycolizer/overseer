@@ -1,6 +1,6 @@
+use crate::db::Supervisor;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::db::Supervisor;
 
 #[component]
 pub fn SupervisorGrid(
@@ -19,7 +19,7 @@ pub fn SupervisorGrid(
                     let filtered: Vec<_> = items.iter()
                         .filter(|s| {
                             let q = search_query().to_lowercase();
-                            s.name.to_lowercase().contains(&q) || 
+                            s.name.to_lowercase().contains(&q) ||
                             s.domain.to_lowercase().contains(&q) ||
                             s.description.as_ref().map(|d| d.to_lowercase().contains(&q)).unwrap_or(false)
                         })
@@ -79,7 +79,7 @@ pub fn SupervisorCard(
             onclick: move |_| {
                 selected_supervisor.set(Some(s_card.clone()));
             },
-            
+
             // Subtle background glow
             div { class: "absolute -top-24 -right-24 w-48 h-48 bg-brand-blue/5 rounded-full blur-3xl group-hover:bg-brand-blue/10 transition-colors duration-500" }
 
@@ -103,7 +103,7 @@ pub fn SupervisorCard(
 
             // Content
             h3 { class: "text-xl font-black text-slate-900 mb-3 truncate group-hover:text-brand-blue transition-colors duration-300", "{supervisor.name}" }
-            p { class: "text-slate-500 text-sm font-medium line-clamp-3 leading-relaxed mb-8 flex-1", 
+            p { class: "text-slate-500 text-sm font-medium line-clamp-3 leading-relaxed mb-8 flex-1",
                 {supervisor.description.as_deref().unwrap_or("No operational summary provided for this node.")}
             }
 
@@ -114,7 +114,7 @@ pub fn SupervisorCard(
                     span { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "{supervisor.model.as_deref().unwrap_or(\"llama3\")}" }
                 }
                 div { class: "flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0",
-                    button { 
+                    button {
                         class: "w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 hover:bg-brand-blue hover:text-white rounded-xl transition-all shadow-sm active:scale-90",
                         title: "Edit Infrastructure",
                         onclick: move |e| {
@@ -123,7 +123,7 @@ pub fn SupervisorCard(
                         },
                         MaterialIcon { name: "edit", size: 18 }
                     }
-                    button { 
+                    button {
                         class: "w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-90",
                         title: "Terminate Node",
                         onclick: move |e| {

@@ -1,19 +1,28 @@
-use dioxus::prelude::*;
-use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::backend::{update_planner, get_available_models};
+use super::hero_card::PlannerHeroCard;
+use crate::backend::{get_available_models, update_planner};
 use crate::db::Planner;
 use crate::state::use_global_state;
-use super::hero_card::PlannerHeroCard;
+use dioxus::prelude::*;
+use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 #[derive(Clone, PartialEq)]
-enum Tab { Preamble, Code }
+enum Tab {
+    Preamble,
+    Code,
+}
 
 impl Tab {
     fn label(&self) -> &'static str {
-        match self { Tab::Preamble => "Strategy Preamble", Tab::Code => "Workflow Logic" }
+        match self {
+            Tab::Preamble => "Strategy Preamble",
+            Tab::Code => "Workflow Logic",
+        }
     }
     fn icon(&self) -> &'static str {
-        match self { Tab::Preamble => "description", Tab::Code => "code" }
+        match self {
+            Tab::Preamble => "description",
+            Tab::Code => "code",
+        }
     }
 }
 
@@ -23,21 +32,27 @@ pub fn PlannerDetails(
     mut planners: Resource<Vec<Planner>>,
 ) -> Element {
     let state = use_global_state();
-    
+
     // ── Available models ───────────────────────────────────────────────────
     let mut models = use_signal(|| vec!["loading...".to_string()]);
     let _ = use_resource(move || async move {
         let fetched: Vec<String> = get_available_models().await;
-        if !fetched.is_empty() { models.set(fetched); }
+        if !fetched.is_empty() {
+            models.set(fetched);
+        }
     });
 
     // ── Local editing signals (synced when selection changes) ──────────────
     let p = selected_planner();
     let mut local_instructions = use_signal(|| {
-        p.as_ref().and_then(|sup| sup.instructions.clone()).unwrap_or_default()
+        p.as_ref()
+            .and_then(|sup| sup.instructions.clone())
+            .unwrap_or_default()
     });
     let mut local_code = use_signal(|| {
-        p.as_ref().and_then(|sup| sup.code.clone()).unwrap_or_default()
+        p.as_ref()
+            .and_then(|sup| sup.code.clone())
+            .unwrap_or_default()
     });
 
     use_effect(move || {
@@ -54,7 +69,7 @@ pub fn PlannerDetails(
         div { class: "w-full bg-slate-50 overflow-y-auto p-8 custom-scrollbar h-full",
             if let Some(planner) = selected_planner() {
                 div { class: "max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500",
-                    
+
                     // ── Hero card ──────────────────────────────────────
                     PlannerHeroCard {
                         selected_planner,

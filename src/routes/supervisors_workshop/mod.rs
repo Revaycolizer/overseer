@@ -1,26 +1,28 @@
+use crate::backend::{
+    add_supervisor, delete_supervisor, get_available_models, get_supervisors, update_supervisor,
+};
+use crate::db::Supervisor;
+use crate::state::use_global_state;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::db::{Supervisor};
-use crate::backend::{get_supervisors, add_supervisor, update_supervisor, delete_supervisor, get_available_models};
-use crate::state::use_global_state;
 
-pub mod list;
-pub mod details;
-pub mod modal;
 pub mod agent_assignments;
 pub mod code_editor;
+pub mod details;
+pub mod hero_card;
+pub mod list;
+pub mod modal;
 pub mod preamble_editor;
 pub mod test_panel;
-pub mod hero_card;
 
-pub use list::SupervisorGrid;
 pub use details::SupervisorDetails;
+pub use list::SupervisorGrid;
 pub use modal::SupervisorModal;
 
 #[component]
 pub fn SupervisorsWorkshop() -> Element {
     let state = use_global_state();
-    
+
     let mut supervisors: Resource<Vec<Supervisor>> = use_resource(move || {
         let db = state.read().db.clone();
         async move {
@@ -32,7 +34,7 @@ pub fn SupervisorsWorkshop() -> Element {
     let mut selected_supervisor = use_signal(|| None::<Supervisor>);
     let mut show_modal = use_signal(|| false);
     let mut editing_supervisor = use_signal(|| None::<Supervisor>);
-    
+
     // ── Input State ──────────────────────────────────────────────────────
     let mut name_input = use_signal(|| String::new());
     let mut description_input = use_signal(|| String::new());
@@ -47,7 +49,9 @@ pub fn SupervisorsWorkshop() -> Element {
     let mut available_models = use_signal(|| vec!["loading...".to_string()]);
     let _ = use_resource(move || async move {
         let fetched: Vec<String> = get_available_models().await;
-        if !fetched.is_empty() { available_models.set(fetched); }
+        if !fetched.is_empty() {
+            available_models.set(fetched);
+        }
     });
 
     let handle_save = move |()| {
@@ -65,7 +69,8 @@ pub fn SupervisorsWorkshop() -> Element {
                 s.bypass_synthesizer = bypass_synthesizer_input();
                 let _ = update_supervisor(&db, s).await;
             } else {
-                let _ = add_supervisor(&db, &name_input(), &description_input(), &domain_input()).await;
+                let _ =
+                    add_supervisor(&db, &name_input(), &description_input(), &domain_input()).await;
             }
             show_modal.set(false);
             supervisors.restart();
@@ -96,7 +101,7 @@ pub fn SupervisorsWorkshop() -> Element {
 
     rsx! {
         div { class: "flex-1 flex flex-col h-screen bg-slate-50 overflow-hidden",
-            
+
             // ── Unified Workshop Header ──────────────────────────────────────
             div { class: "flex flex-col shrink-0 px-10 pt-10 pb-6 space-y-8 animate-in fade-in slide-in-from-top-4 duration-700",
                 div { class: "flex items-center justify-between",
@@ -114,9 +119,9 @@ pub fn SupervisorsWorkshop() -> Element {
                         // Search Bar
                         div { class: "relative group",
                             div { class: "absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-brand-blue transition-colors flex items-center justify-center",
-                                MaterialIcon { 
-                                    name: "search", 
-                                    size: 18, 
+                                MaterialIcon {
+                                    name: "search",
+                                    size: 18,
                                 }
                             }
                             input {
@@ -126,9 +131,9 @@ pub fn SupervisorsWorkshop() -> Element {
                                 oninput: move |e| search_query.set(e.value()),
                             }
                         }
-                        
+
                         // Create Button
-                        button { 
+                        button {
                             class: "bg-brand-blue text-white px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg shadow-blue-100 active:scale-95 flex items-center gap-2",
                             onclick: move |_| {
                                 editing_supervisor.set(None);
@@ -170,18 +175,18 @@ pub fn SupervisorsWorkshop() -> Element {
 
             // ── Modal ─────────────────────────────────────────────────────
             if show_modal() {
-                SupervisorModal { 
-                    show_modal, 
-                    editing_supervisor, 
-                    name_input, 
+                SupervisorModal {
+                    show_modal,
+                    editing_supervisor,
+                    name_input,
                     description_input,
-                    domain_input, 
+                    domain_input,
                     instructions_input,
                     model_input,
                     code_input,
                     bypass_synthesizer: bypass_synthesizer_input,
                     available_models,
-                    handle_save 
+                    handle_save
                 }
             }
         }

@@ -1,10 +1,5 @@
-use rig::{
-    agent::AgentBuilder,
-    completion::Prompt,
-    providers::ollama,
-    client::CompletionClient,
-};
 use crate::engine::utils::discovery::AgentInfo;
+use rig::{agent::AgentBuilder, client::CompletionClient, completion::Prompt, providers::ollama};
 
 #[derive(Clone)]
 pub struct MasterPlanner {
@@ -12,15 +7,30 @@ pub struct MasterPlanner {
 }
 
 impl MasterPlanner {
-    pub fn new(ollama_client: &ollama::Client, model: &str, base_instructions: &str, agents: &[AgentInfo]) -> Self {
+    pub fn new(
+        ollama_client: &ollama::Client,
+        model: &str,
+        base_instructions: &str,
+        agents: &[AgentInfo],
+    ) -> Self {
         let mut domains_str = String::new();
         for (i, agent) in agents.iter().enumerate() {
             // Skip orchestrator and overseer from the planning domain list
-            if agent.domain == "orchestrator" || agent.domain == "overseer" { continue; }
-            domains_str.push_str(&format!("{}. \"{}\" - {}\n", i + 1, agent.domain, agent.description));
+            if agent.domain == "orchestrator" || agent.domain == "overseer" {
+                continue;
+            }
+            domains_str.push_str(&format!(
+                "{}. \"{}\" - {}\n",
+                i + 1,
+                agent.domain,
+                agent.description
+            ));
         }
 
-        let preamble = format!(r#"{}\n\n═══ AVAILABLE DOMAINS ═══\n{}\n"#, base_instructions, domains_str);
+        let preamble = format!(
+            r#"{}\n\n═══ AVAILABLE DOMAINS ═══\n{}\n"#,
+            base_instructions, domains_str
+        );
 
         let agent = AgentBuilder::new(ollama_client.completion_model(model))
             .preamble(&preamble)
@@ -30,7 +40,11 @@ impl MasterPlanner {
     }
 
     pub async fn plan(&self, prompt: &str) -> String {
-        let safe_prompt = if prompt.trim().is_empty() { "current user query" } else { prompt };
+        let safe_prompt = if prompt.trim().is_empty() {
+            "current user query"
+        } else {
+            prompt
+        };
         self.agent
             .prompt(safe_prompt)
             .await

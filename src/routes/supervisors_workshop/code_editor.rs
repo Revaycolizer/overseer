@@ -1,7 +1,7 @@
-use dioxus::prelude::*;
-use dioxus::prelude::document::eval;
-use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 use crate::db::Supervisor;
+use dioxus::prelude::document::eval;
+use dioxus::prelude::*;
+use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 use super::test_panel::TestPanel;
 
@@ -96,8 +96,8 @@ pub fn CodeEditor(
     mut selected_supervisor: Signal<Option<Supervisor>>,
     mut local_code: Signal<String>,
 ) -> Element {
-    let mut fullscreen    = use_signal(|| false);
-    let mut show_test     = use_signal(|| false);
+    let mut fullscreen = use_signal(|| false);
+    let mut show_test = use_signal(|| false);
 
     // Re-highlight on every code change
     use_effect(move || {

@@ -1,7 +1,7 @@
+use super::helpers::{clean_content, copy_to_clipboard};
+use crate::backend;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::backend;
-use super::helpers::{clean_content, copy_to_clipboard};
 
 // ── A single visualization block extracted from message content ───────────────
 #[derive(Clone, Debug, PartialEq)]
@@ -21,8 +21,8 @@ enum VizKind {
 /// and zero or more visualization blocks.
 fn parse_content(content: &str) -> (Option<String>, Vec<VizBlock>) {
     let markers = [
-        ("---CHART_SVG---",   VizKind::Svg),
-        ("---CHART_HTML---",  VizKind::Html),
+        ("---CHART_SVG---", VizKind::Svg),
+        ("---CHART_HTML---", VizKind::Html),
         ("---CHART_ASSET---", VizKind::Asset),
     ];
 
@@ -31,9 +31,7 @@ fn parse_content(content: &str) -> (Option<String>, Vec<VizBlock>) {
     let mut remaining = content;
 
     // Find first marker position to split off leading text
-    let first_marker_pos = markers.iter()
-        .filter_map(|(m, _)| remaining.find(m))
-        .min();
+    let first_marker_pos = markers.iter().filter_map(|(m, _)| remaining.find(m)).min();
 
     if let Some(pos) = first_marker_pos {
         let before = remaining[..pos].trim();
@@ -57,20 +55,17 @@ fn parse_content(content: &str) -> (Option<String>, Vec<VizBlock>) {
             if remaining.starts_with(marker) {
                 let after = &remaining[marker.len()..];
                 // Find where this block ends (next marker or end of string)
-                let next_marker_pos = markers.iter()
-                    .filter_map(|(m, _)| {
-                        if *m == *marker { None } else { after.find(m) }
-                    })
-                    .chain(
-                        markers.iter().filter_map(|(m, _)| {
-                            if *m == *marker {
-                                // Also check same marker again
-                                after.find(m)
-                            } else {
-                                None
-                            }
-                        })
-                    )
+                let next_marker_pos = markers
+                    .iter()
+                    .filter_map(|(m, _)| if *m == *marker { None } else { after.find(m) })
+                    .chain(markers.iter().filter_map(|(m, _)| {
+                        if *m == *marker {
+                            // Also check same marker again
+                            after.find(m)
+                        } else {
+                            None
+                        }
+                    }))
                     .min();
 
                 // Also check for same marker appearing again
@@ -102,9 +97,7 @@ fn parse_content(content: &str) -> (Option<String>, Vec<VizBlock>) {
         }
         if !found {
             // Skip non-marker content between blocks
-            let next_pos = markers.iter()
-                .filter_map(|(m, _)| remaining.find(m))
-                .min();
+            let next_pos = markers.iter().filter_map(|(m, _)| remaining.find(m)).min();
             match next_pos {
                 Some(pos) => remaining = &remaining[pos..],
                 None => break,
@@ -124,7 +117,9 @@ fn ChartBlock(block: VizBlock) -> Element {
     let html_from_file = use_resource(move || {
         let p = payload.clone();
         async move {
-            if p.is_empty() { return None; }
+            if p.is_empty() {
+                return None;
+            }
             let clean = p
                 .trim_start_matches("file:///")
                 .trim_start_matches("file://")
