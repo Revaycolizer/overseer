@@ -1,12 +1,12 @@
 // src/routes/conversations/conversations.rs
-use dioxus::prelude::*;
-use dioxus::prelude::document::eval;
+use super::chat_input::ChatInput;
+use super::helpers::copy_to_clipboard;
+use super::message_bubble::{MessageBubble, ThinkingBubble};
+use super::sidebar::Sidebar;
 use crate::backend;
 use crate::routes::execution_trace::ExecutionTracePanel;
-use super::message_bubble::{MessageBubble, ThinkingBubble};
-use super::helpers::copy_to_clipboard;
-use super::sidebar::Sidebar;
-use super::chat_input::ChatInput;
+use dioxus::prelude::document::eval;
+use dioxus::prelude::*;
 
 #[component]
 pub fn Conversations() -> Element {
@@ -22,8 +22,7 @@ pub fn Conversations() -> Element {
     });
 
     let conversations = conversations_resource.read().cloned().unwrap_or_default();
-    let mut selected_conversation_id =
-        use_signal(|| conversations.first().map(|c| c.id));
+    let mut selected_conversation_id = use_signal(|| conversations.first().map(|c| c.id));
 
     let db_for_msg = db.clone();
     let messages_resource = use_resource(move || {
@@ -49,7 +48,9 @@ pub fn Conversations() -> Element {
         let conv_id = selected_conversation_id();
         async move {
             if let Some(id) = conv_id {
-                backend::get_execution_runs_for_conversation(&db, id, 10).await.unwrap_or_default()
+                backend::get_execution_runs_for_conversation(&db, id, 10)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             }
@@ -78,14 +79,19 @@ pub fn Conversations() -> Element {
         let run_id = selected_execution_run_id();
         async move {
             if let Some(id) = run_id {
-                backend::get_execution_events(&db, id).await.unwrap_or_default()
+                backend::get_execution_events(&db, id)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             }
         }
     });
 
-    let execution_events = execution_events_resource.read().cloned().unwrap_or_default();
+    let execution_events = execution_events_resource
+        .read()
+        .cloned()
+        .unwrap_or_default();
     let events_loading = execution_events_resource.read().is_none();
 
     let mut execution_runs_poll = execution_runs_resource.clone();
@@ -104,7 +110,8 @@ pub fn Conversations() -> Element {
         let _ = is_thinking();
         spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            let eval = eval(r#"
+            let eval = eval(
+                r#"
                 const container = document.getElementById('chat-scroll-container');
                 if (container) {
                     const scrollToBottom = (force = false) => {
@@ -128,7 +135,8 @@ pub fn Conversations() -> Element {
                         });
                     }
                 }
-            "#);
+            "#,
+            );
             let _ = eval.await;
         });
     });
