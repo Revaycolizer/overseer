@@ -1,0 +1,29 @@
+{
+  "product": "Overseer",
+  "updated_at": "2026-03-22T00:00:00Z",
+  "latest": "v0.1.0",
+  "releases": [
+    {
+      "version": "0.1.0",
+      "tag": "v0.1.0",
+      "channel": "stable",
+      "published_at": "2026-03-22T00:00:00Z",
+      "summary": "First packaged desktop release with workflow runs, execution traces, and local installer support.",
+      "notes_file": "releases/notes/v0.1.0.md",
+      "assets": [
+        {
+          "name": "Overseer-v0.1.0-windows-x64.zip",
+          "platform": "windows-x64",
+          "kind": "portable-zip",
+          "path": "dist/v0.1.0/Overseer-v0.1.0-windows-x64.zip"
+        },
+        {
+          "name": "install-overseer.ps1",
+          "platform": "windows-x64",
+          "kind": "installer-script",
+          "path": "dist/v0.1.0/install-overseer.ps1"
+        }
+      ]
+    }
+  ]
+}
