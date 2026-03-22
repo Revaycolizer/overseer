@@ -1,30 +1,53 @@
-use rig::tool::Tool;
 use rig::completion::ToolDefinition;
+use rig::tool::Tool;
 use serde_json::json;
-use crate::engine::utils::discovery::{ToolInfo, get_tool_executable_path};
-use std::process::Command;
+use tokio::process::Command;
+
+use crate::engine::utils::discovery::{build_python_command, get_tool_executable_path, ToolInfo};
+
 pub mod charting;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
-pub struct DynamicToolError(pub String);
+#[derive(Debug, Clone)]
+pub enum DynamicToolError {
+    MissingExecutable { tool: String },
+    MissingPython { details: String },
+    InvalidChartRequest(String),
+    UnsupportedLanguage(String),
+    NativeNotImplemented(String),
+    ExecutionFailed { tool: String, details: String },
+    TimedOut { tool: String, timeout_ms: u64 },
+}
 
 impl std::fmt::Display for DynamicToolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            Self::MissingExecutable { tool } => write!(f, "No executable path could be resolved for tool '{}'.", tool),
+            Self::MissingPython { details } => write!(f, "Python runtime unavailable: {}", details),
+            Self::InvalidChartRequest(details) => write!(f, "Invalid chart request format: {}", details),
+            Self::UnsupportedLanguage(language) => write!(f, "Unsupported tool language: {}", language),
+            Self::NativeNotImplemented(tool) => write!(f, "Native tool '{}' is not implemented in this build.", tool),
+            Self::ExecutionFailed { tool, details } => write!(f, "Tool '{}' failed: {}", tool, details),
+            Self::TimedOut { tool, timeout_ms } => write!(f, "Tool '{}' timed out after {} ms.", tool, timeout_ms),
+        }
     }
 }
 
 impl std::error::Error for DynamicToolError {}
 
-// Internal tool execution logic — shared by DynamicToolRouter and call_dynamic_tool
 async fn call_dynamic_tool_logic(info: &ToolInfo, args: serde_json::Value) -> Result<String, DynamicToolError> {
     match info.language.as_str() {
         "python" => {
             let executable_path = get_tool_executable_path(info)
-                .ok_or_else(|| DynamicToolError("No executable path for tool".into()))?;
+                .ok_or_else(|| DynamicToolError::MissingExecutable { tool: info.name.clone() })?;
 
-            let mut cmd = Command::new("python3");
+            let parts = build_python_command()
+                .map_err(|details| DynamicToolError::MissingPython { details })?;
+            let mut cmd = Command::new(&parts[0]);
+            if parts.len() > 1 {
+                cmd.args(&parts[1..]);
+            }
             cmd.arg(&executable_path);
+            cmd.kill_on_drop(true);
 
             let input_str = if let Some(input) = args.get("input") {
                 if input.is_string() {
@@ -35,16 +58,26 @@ async fn call_dynamic_tool_logic(info: &ToolInfo, args: serde_json::Value) -> Re
             } else if let Some(inner) = args.get("args") {
                 inner.to_string()
             } else if args.is_object() {
-                // If it's a JSON object, try to extract the most likely string value
                 let map = args.as_object().unwrap();
                 if map.len() == 1 {
-                    // Only one key? Take its value (handles {"url": "..."} or {"query": "..."} gracefully)
                     let val = map.values().next().unwrap();
-                    if val.is_string() { val.as_str().unwrap().to_string() } else { val.to_string() }
+                    if val.is_string() {
+                        val.as_str().unwrap().to_string()
+                    } else {
+                        val.to_string()
+                    }
                 } else if let Some(url) = map.get("url") {
-                    if url.is_string() { url.as_str().unwrap().to_string() } else { url.to_string() }
+                    if url.is_string() {
+                        url.as_str().unwrap().to_string()
+                    } else {
+                        url.to_string()
+                    }
                 } else if let Some(query) = map.get("query") {
-                    if query.is_string() { query.as_str().unwrap().to_string() } else { query.to_string() }
+                    if query.is_string() {
+                        query.as_str().unwrap().to_string()
+                    } else {
+                        query.to_string()
+                    }
                 } else {
                     args.to_string()
                 }
@@ -54,62 +87,70 @@ async fn call_dynamic_tool_logic(info: &ToolInfo, args: serde_json::Value) -> Re
 
             cmd.arg(input_str);
 
-            let output = cmd.output().map_err(|e| DynamicToolError(format!("Failed to execute python tool: {}", e)))?;
+            let output = cmd.output()
+                .await
+                .map_err(|e| DynamicToolError::ExecutionFailed {
+                    tool: info.name.clone(),
+                    details: e.to_string(),
+                })?;
+
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
             if output.status.success() {
                 Ok(stdout)
             } else {
-                Err(DynamicToolError(format!("Tool execution failed: {}\n{}", stdout, stderr)))
+                Err(DynamicToolError::ExecutionFailed {
+                    tool: info.name.clone(),
+                    details: format!("{}\n{}", stdout, stderr).trim().to_string(),
+                })
             }
         }
-        "rust" => {
-            match info.name.as_str() {
-                "os_tool" => Ok("Native OS Tool called (Placeholder)".into()),
-                "vision_analysis" => Ok("Native Vision Analysis called (Placeholder)".into()),
-                "charting" => {
-                    let input_str = if let Some(input) = args.get("input") {
-                        if input.is_string() {
-                            input.as_str().unwrap_or("").to_string()
-                        } else {
-                            input.to_string()
-                        }
+        "rust" => match info.name.as_str() {
+            "os_tool" => Ok("Native OS Tool called (Placeholder)".into()),
+            "vision_analysis" => Ok("Native Vision Analysis called (Placeholder)".into()),
+            "charting" => {
+                let input_str = if let Some(input) = args.get("input") {
+                    if input.is_string() {
+                        input.as_str().unwrap_or("").to_string()
                     } else {
-                        args.to_string()
-                    }.trim().to_string(); // Trim whitespace from the final input string
-
-                    // Log the raw input for debugging (it will show up in terminal)
-                    println!("📊 CHARTING INPUT: {}", input_str);
-                    
-                    let req: charting::ChartRequest = serde_json::from_str(&input_str)
-                        .or_else(|_| {
-                            // If direct parsing as ChartRequest fails, try parsing as a generic JSON Value first.
-                            // This handles cases where the agent might provide a JSON object that was then
-                            // stringified, and `from_str` expects a direct ChartRequest JSON.
-                            // If `input_str` is already a valid JSON object string, `from_str::<serde_json::Value>` will succeed.
-                            // Then, `from_value` attempts to convert that generic JSON Value into ChartRequest.
-                            let val: serde_json::Value = serde_json::from_str(&input_str)?;
-                            serde_json::from_value(val).map_err(|e| e)
-                        })
-                        .map_err(|e| DynamicToolError(format!("Invalid chart request format: {}. Ensure you provide a JSON object with: {{\"chart_type\": \"bar|line|pie\", \"title\": \"...\", \"labels\": [...], \"data\": [...]}}", e)))?;
-                    
-                    charting::generate_chart_svg(req)
-                        .map_err(|e| DynamicToolError(e))
+                        input.to_string()
+                    }
+                } else {
+                    args.to_string()
                 }
-                _ => Err(DynamicToolError(format!("Native tool '{}' not implemented in this build", info.name))),
+                .trim()
+                .to_string();
+
+                println!("📊 CHARTING INPUT: {}", input_str);
+
+                let req: charting::ChartRequest = serde_json::from_str(&input_str)
+                    .or_else(|_| {
+                        let val: serde_json::Value = serde_json::from_str(&input_str)?;
+                        serde_json::from_value(val)
+                    })
+                    .map_err(|e| {
+                        DynamicToolError::InvalidChartRequest(format!(
+                            "{}. Provide {{\"chart_type\":\"bar|line|pie\",\"title\":\"...\",\"labels\":[...],\"data\":[...]}}",
+                            e
+                        ))
+                    })?;
+
+                charting::generate_chart_svg(req).map_err(|details| DynamicToolError::ExecutionFailed {
+                    tool: info.name.clone(),
+                    details,
+                })
             }
-        }
-        _ => Err(DynamicToolError(format!("Unsupported tool language: {}", info.language))),
+            _ => Err(DynamicToolError::NativeNotImplemented(info.name.clone())),
+        },
+        _ => Err(DynamicToolError::UnsupportedLanguage(info.language.clone())),
     }
 }
 
-/// Public entry point for manual tool dispatch from dispatcher.rs
 pub async fn call_dynamic_tool(info: &ToolInfo, args: serde_json::Value) -> Result<String, DynamicToolError> {
     call_dynamic_tool_logic(info, args).await
 }
 
-// DynamicToolRouter kept for backward compatibility but no longer used in dynamic dispatch
 pub struct DynamicToolRouter {
     pub tools: Vec<ToolInfo>,
 }
@@ -163,17 +204,22 @@ impl Tool for DynamicToolRouter {
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let tool_name = args.get("tool_name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| DynamicToolError("Missing tool_name".into()))?;
+            .ok_or_else(|| DynamicToolError::ExecutionFailed {
+                tool: "execute_tool".to_string(),
+                details: "Missing tool_name".to_string(),
+            })?;
 
         let tool_info = self.tools.iter()
             .find(|t| t.name == tool_name)
-            .ok_or_else(|| DynamicToolError(format!("Tool '{}' not found in this router", tool_name)))?;
+            .ok_or_else(|| DynamicToolError::ExecutionFailed {
+                tool: tool_name.to_string(),
+                details: "Tool not found in this router".to_string(),
+            })?;
 
         call_dynamic_tool_logic(tool_info, args).await
     }
 }
 
-// Structured perception tool — unchanged
 #[derive(Clone)]
 pub struct StructuredPerceptionTool {
     pub db: crate::db::Database,
