@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 use crate::backend::{self, Workflow, WorkflowRun, WorkflowStep};
+use crate::routes::execution_trace::ExecutionTracePanel;
 use crate::state::use_global_state;
 
 #[component]
@@ -190,6 +191,79 @@ fn WorkflowEditor(
     let agent_system = state.read().agent_system.clone();
     let steps = steps_resource.read().cloned().unwrap_or_default();
     let runs = runs_resource.read().cloned().unwrap_or_default();
+    let mut selected_workflow_run_id = use_signal(|| runs.first().map(|run| run.id));
+
+    let runs_for_effect = runs.clone();
+    use_effect(move || {
+        let current = selected_workflow_run_id();
+        if runs_for_effect.is_empty() {
+            if current.is_some() {
+                selected_workflow_run_id.set(None);
+            }
+        } else if !runs_for_effect.iter().any(|run| Some(run.id) == current) {
+            selected_workflow_run_id.set(Some(runs_for_effect[0].id));
+        }
+    });
+
+    let db_for_trace_runs = db.clone();
+    let trace_runs_resource = use_resource(move || {
+        let db = db_for_trace_runs.clone();
+        let workflow_run_id = selected_workflow_run_id();
+        async move {
+            if let Some(id) = workflow_run_id {
+                backend::get_execution_runs_for_workflow_run(&db, id, 10).await.unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
+
+    let trace_runs = trace_runs_resource.read().cloned().unwrap_or_default();
+    let mut selected_execution_run_id = use_signal(|| trace_runs.first().map(|run| run.id));
+
+    let trace_runs_for_effect = trace_runs.clone();
+    use_effect(move || {
+        let current = selected_execution_run_id();
+        if trace_runs_for_effect.is_empty() {
+            if current.is_some() {
+                selected_execution_run_id.set(None);
+            }
+        } else if !trace_runs_for_effect.iter().any(|run| Some(run.id) == current) {
+            selected_execution_run_id.set(Some(trace_runs_for_effect[0].id));
+        }
+    });
+
+    let db_for_trace_events = db.clone();
+    let trace_events_resource = use_resource(move || {
+        let db = db_for_trace_events.clone();
+        let run_id = selected_execution_run_id();
+        async move {
+            if let Some(id) = run_id {
+                backend::get_execution_events(&db, id).await.unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
+
+    let trace_events = trace_events_resource.read().cloned().unwrap_or_default();
+    let trace_runs_loading = trace_runs_resource.read().is_none();
+    let trace_events_loading = trace_events_resource.read().is_none();
+
+    let db_for_step_runs = db.clone();
+    let step_runs_resource = use_resource(move || {
+        let db = db_for_step_runs.clone();
+        let workflow_run_id = selected_workflow_run_id();
+        async move {
+            if let Some(id) = workflow_run_id {
+                backend::get_workflow_step_runs(&db, id).await.unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
+
+    let step_runs = step_runs_resource.read().cloned().unwrap_or_default();
 
     rsx! {
         div { class: "flex-1 overflow-y-auto custom-scrollbar p-8 space-y-8",
@@ -338,7 +412,7 @@ fn WorkflowEditor(
                 }
             }
 
-            div { class: "grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_360px] gap-8",
+            div { class: "grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_400px] gap-8",
                 div { class: "space-y-4",
                     h3 { class: "text-sm font-bold uppercase tracking-widest text-slate-400", "Workflow Steps" }
                     if steps.is_empty() {
@@ -366,7 +440,18 @@ fn WorkflowEditor(
                             for run in runs {
                                 div {
                                     key: "{run.id}",
-                                    class: "p-4 border-b border-slate-100 last:border-b-0 space-y-2",
+                                    class: format!(
+                                        "p-4 border-b border-slate-100 last:border-b-0 space-y-2 cursor-pointer transition-colors {}",
+                                        if Some(run.id) == selected_workflow_run_id() {
+                                            "bg-blue-50/60"
+                                        } else {
+                                            "hover:bg-slate-50"
+                                        }
+                                    ),
+                                    onclick: {
+                                        let run_id = run.id;
+                                        move |_| selected_workflow_run_id.set(Some(run_id))
+                                    },
                                     div { class: "flex items-center justify-between gap-3",
                                         span { class: format!(
                                             "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
@@ -389,6 +474,65 @@ fn WorkflowEditor(
                                 }
                             }
                         }
+                    }
+
+                    if let Some(run_id) = selected_workflow_run_id() {
+                        div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden",
+                            div { class: "px-4 py-3 border-b border-slate-100 bg-slate-50/80",
+                                h4 { class: "text-xs font-black uppercase tracking-[0.24em] text-slate-500", "Workflow Step Outputs" }
+                                p { class: "text-[11px] text-slate-400 mt-1", "Inspect the recorded output for workflow run #{run_id}." }
+                            }
+                            if step_runs_resource.read().is_none() {
+                                div { class: "p-6 text-sm text-slate-400", "Loading step outputs..." }
+                            } else if step_runs.is_empty() {
+                                div { class: "p-6 text-sm text-slate-400", "No step outputs recorded for this run yet." }
+                            } else {
+                                div { class: "divide-y divide-slate-100",
+                                    for step_run in step_runs {
+                                        div {
+                                            key: "{step_run.id}",
+                                            class: "p-4 space-y-2",
+                                            div { class: "flex items-center justify-between gap-3",
+                                                p { class: "text-xs font-bold text-slate-700", "Step {step_run.step_order}" }
+                                                span { class: format!(
+                                                    "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                                    match step_run.status.as_str() {
+                                                        "completed" => "bg-emerald-50 text-emerald-600",
+                                                        "failed" => "bg-red-50 text-red-600",
+                                                        _ => "bg-blue-50 text-blue-600",
+                                                    }
+                                                ),
+                                                    "{step_run.status}"
+                                                }
+                                            }
+                                            if let Some(output) = step_run.output.clone().filter(|value| !value.trim().is_empty()) {
+                                                pre { class: "text-[11px] text-slate-600 whitespace-pre-wrap break-words bg-slate-50 border border-slate-200 rounded-2xl p-3 max-h-56 overflow-auto custom-scrollbar",
+                                                    "{output}"
+                                                }
+                                            } else if let Some(error_message) = step_run.error_message.clone().filter(|value| !value.trim().is_empty()) {
+                                                pre { class: "text-[11px] text-red-600 whitespace-pre-wrap break-words bg-red-50 border border-red-100 rounded-2xl p-3 max-h-56 overflow-auto custom-scrollbar",
+                                                    "{error_message}"
+                                                }
+                                            } else {
+                                                p { class: "text-[11px] text-slate-400", "No output captured." }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ExecutionTracePanel {
+                        heading: "Workflow Trace".to_string(),
+                        subtitle: "Inspect the execution runs and event timeline generated by the selected workflow run.".to_string(),
+                        empty_title: "No orchestration trace yet".to_string(),
+                        empty_body: "Run the workflow and select a run to inspect the planner, supervisor, and tool events behind it.".to_string(),
+                        runs: trace_runs,
+                        events: trace_events,
+                        selected_run_id: selected_execution_run_id,
+                        runs_loading: trace_runs_loading,
+                        events_loading: trace_events_loading,
                     }
                 }
             }

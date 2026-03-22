@@ -621,7 +621,7 @@ pub struct Attachment {
     pub size: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
 pub struct ExecutionRun {
     pub id: i64,
     pub conversation_id: Option<i64>,
@@ -633,7 +633,7 @@ pub struct ExecutionRun {
     pub finished_at: Option<chrono::NaiveDateTime>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
 pub struct ExecutionEvent {
     pub id: i64,
     pub run_id: i64,
@@ -677,6 +677,7 @@ pub struct WorkflowStep {
 pub struct WorkflowRun {
     pub id: i64,
     pub workflow_id: i64,
+    pub conversation_id: Option<i64>,
     pub status: String,
     pub summary: Option<String>,
     pub error_message: Option<String>,
@@ -760,6 +761,61 @@ pub async fn log_execution_event(
     .execute(&db.pool)
     .await?;
     Ok(())
+}
+
+pub async fn get_execution_runs_for_conversation(
+    db: &Database,
+    conversation_id: i64,
+    limit: i64,
+) -> anyhow::Result<Vec<ExecutionRun>> {
+    let rows = sqlx::query_as::<_, ExecutionRun>(
+        "SELECT id, conversation_id, user_query, status, final_response, error_message, started_at, finished_at
+         FROM execution_runs
+         WHERE conversation_id = ?
+         ORDER BY started_at DESC
+         LIMIT ?"
+    )
+    .bind(conversation_id)
+    .bind(limit.max(1))
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn get_execution_runs_for_workflow_run(
+    db: &Database,
+    workflow_run_id: i64,
+    limit: i64,
+) -> anyhow::Result<Vec<ExecutionRun>> {
+    let rows = sqlx::query_as::<_, ExecutionRun>(
+        "SELECT er.id, er.conversation_id, er.user_query, er.status, er.final_response, er.error_message, er.started_at, er.finished_at
+         FROM execution_runs er
+         INNER JOIN workflow_runs wr ON wr.conversation_id = er.conversation_id
+         WHERE wr.id = ?
+         ORDER BY er.started_at DESC
+         LIMIT ?"
+    )
+    .bind(workflow_run_id)
+    .bind(limit.max(1))
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn get_execution_events(
+    db: &Database,
+    run_id: i64,
+) -> anyhow::Result<Vec<ExecutionEvent>> {
+    let rows = sqlx::query_as::<_, ExecutionEvent>(
+        "SELECT id, run_id, sequence, event_type, status, domain, step_text, tool_name, model, message, details, created_at
+         FROM execution_events
+         WHERE run_id = ?
+         ORDER BY sequence ASC, created_at ASC"
+    )
+    .bind(run_id)
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
 }
 
 pub async fn get_workflows(db: &Database) -> anyhow::Result<Vec<Workflow>> {
@@ -908,7 +964,7 @@ pub async fn delete_workflow_step(db: &Database, step_id: i64) -> anyhow::Result
 
 pub async fn get_workflow_runs(db: &Database, workflow_id: i64) -> anyhow::Result<Vec<WorkflowRun>> {
     let rows = sqlx::query_as::<_, WorkflowRun>(
-        "SELECT id, workflow_id, status, summary, error_message, created_at, finished_at
+        "SELECT id, workflow_id, conversation_id, status, summary, error_message, created_at, finished_at
          FROM workflow_runs
          WHERE workflow_id = ?
          ORDER BY created_at DESC"
@@ -972,6 +1028,13 @@ pub async fn run_workflow(
     }
 
     let conversation_id = add_conversation(db, &format!("Workflow Run: {}", workflow.name)).await?;
+    sqlx::query(
+        "UPDATE workflow_runs SET conversation_id = ? WHERE id = ?"
+    )
+    .bind(conversation_id)
+    .bind(run_id)
+    .execute(&db.pool)
+    .await?;
     let mut last_output = String::new();
 
     for step in steps {

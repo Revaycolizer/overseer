@@ -6,6 +6,7 @@ mod settings;
 mod tools_workshop;
 mod supervisors_workshop;
 mod planners_workshop;
+mod execution_trace;
 
 pub use conversations::Conversations;
 pub use agents_workshop::AgentsWorkshop;
