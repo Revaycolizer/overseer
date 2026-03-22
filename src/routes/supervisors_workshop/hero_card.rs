@@ -89,18 +89,15 @@ pub fn SupervisorHeroCard(
                 }
             }
 
-            // ── Bottom row: model dropdown + version input ─────────────
-            div { class: "grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-50",
-
+            // ── Bottom row: model dropdown + version input + bypass toggle ──────
+            div { class: "grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 border-t border-slate-50",
+                
                 // Model Assignment
-                div {
-                    label {
-                        class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3",
-                        "Model Assignment"
-                    }
+                div { class: "space-y-3",
+                    label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Model Assignment" }
                     div { class: "relative",
                         select {
-                            class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 appearance-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all cursor-pointer",
+                            class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 appearance-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all cursor-pointer",
                             value: supervisor.model.clone().unwrap_or_default(),
                             onchange: {
                                 let mut sv = supervisor.clone();
@@ -114,25 +111,58 @@ pub fn SupervisorHeroCard(
                             }
                         }
                         div { class: "absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400",
-                            MaterialIcon { name: "unfold_more", size: 18 }
+                            MaterialIcon { name: "unfold_more", size: 16 }
                         }
                     }
                 }
 
                 // Version
-                div {
-                    label {
-                        class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3",
-                        "Version"
-                    }
+                div { class: "space-y-3",
+                    label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Version" }
                     input {
-                        class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all",
+                        class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all",
                         value: supervisor.version.clone().unwrap_or_else(|| "1.0.0".into()),
                         oninput: {
                             let mut sv = supervisor.clone();
                             move |e| {
                                 sv.version = Some(e.value());
                                 selected_supervisor.set(Some(sv.clone()));
+                            }
+                        }
+                    }
+                }
+
+                // Bypass Synthesizer
+                div { class: "space-y-3",
+                    label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Output Routing" }
+                    div { class: "flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl",
+                        div { class: "flex items-center gap-2.5",
+                            div { class: "w-8 h-8 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500",
+                                MaterialIcon { name: "bolt", size: 16 }
+                            }
+                            div {
+                                p { class: "text-[11px] font-bold text-slate-700", "Bypass Mode" }
+                                p { class: "text-[9px] text-slate-400 font-medium", "Direct Output" }
+                            }
+                        }
+                        button {
+                            r#type: "button",
+                            class: format!(
+                                "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none {}",
+                                if supervisor.bypass_synthesizer { "bg-blue-600" } else { "bg-slate-300" }
+                            ),
+                            onclick: {
+                                let mut sv = supervisor.clone();
+                                move |_| {
+                                    sv.bypass_synthesizer = !sv.bypass_synthesizer;
+                                    selected_supervisor.set(Some(sv.clone()));
+                                }
+                            },
+                            span {
+                                class: format!(
+                                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {}",
+                                    if supervisor.bypass_synthesizer { "translate-x-4" } else { "translate-x-0" }
+                                )
                             }
                         }
                     }

@@ -3,6 +3,11 @@ use dioxus::prelude::document::eval;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 use crate::db::Supervisor;
 
+use crate::backend::{get_supervisor_agents, get_available_models};
+use crate::state::use_global_state;
+use crate::engine::utils::discovery::AgentInfo;
+use super::agent_assignments::AgentAssignments;
+
 // Re-use the same Prism highlight helper from the code editor
 static PRISM_HIGHLIGHT_JS: &str = r#"
 (function() { if (window.Prism) { window.Prism.highlightAll(); } })();
@@ -49,7 +54,7 @@ static MODAL_CODE_CSS: &str = r#"
 "#;
 
 #[derive(Clone, PartialEq)]
-enum ModalTab { Basic, Preamble, Code }
+enum ModalTab { Basic, Preamble, Code, Agents }
 
 #[component]
 pub fn SupervisorModal(
@@ -66,11 +71,28 @@ pub fn SupervisorModal(
     mut bypass_synthesizer: Signal<bool>,
     // ── Available models (passed from workshop) ───────────────
     available_models: Signal<Vec<String>>,
+    // ── Global tools (passed from workshop) ──────────────────
+    agents: Resource<Vec<AgentInfo>>,
     // ── Save handler ─────────────────────────────────────────
     handle_save: EventHandler<()>,
 ) -> Element {
+    let state = use_global_state();
     let mut active_tab = use_signal(|| ModalTab::Basic);
     let is_editing = editing_supervisor().is_some();
+
+    // ── Local resource for agents assigned to THIS supervisor ────────────────
+    let mut modal_supervisor_agents = use_resource(move || {
+        let state = state;
+        let s = editing_supervisor();
+        async move {
+            if let Some(supervisor) = s {
+                let db = state.read().db.clone();
+                get_supervisor_agents(&db, supervisor.id).await.unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
 
     // Re-highlight whenever code changes or tab switches
     use_effect(move || {
@@ -118,7 +140,7 @@ pub fn SupervisorModal(
                                 }
                                 p { class: "text-slate-400 text-xs mt-0.5",
                                     if is_editing {
-                                        "Update identity, preamble, and code logic."
+                                        "Update identity, orchestration agents, and logic."
                                     } else {
                                         "Configure a new orchestrator for your agent hierarchy."
                                     }
@@ -137,8 +159,9 @@ pub fn SupervisorModal(
                 div { class: "flex gap-1 mx-6 mb-1 bg-slate-50 border border-[#E2E8F0] rounded-xl p-1",
                     for (tab, label, icon) in [
                         (ModalTab::Basic,    "Identity",  "badge"),
+                        (ModalTab::Agents,   "Agents",    "hub"),
                         (ModalTab::Preamble, "Preamble",  "description"),
-                        (ModalTab::Code,     "Code",      "code"),
+                        (ModalTab::Code,     "Logic",     "code"),
                     ] {
                         {
                             let is_active = active_tab() == tab;
@@ -147,7 +170,7 @@ pub fn SupervisorModal(
                                 button {
                                     key: "{label}",
                                     class: format!(
-                                        "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold transition-all {}",
+                                        "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-bold transition-all {}",
                                         if is_active { "bg-white text-[#0F172A] shadow-soft border border-[#E2E8F0]" }
                                         else { "text-slate-400 hover:text-slate-600" }
                                     ),
@@ -262,6 +285,29 @@ pub fn SupervisorModal(
                         }
                     }
 
+                    // ── AGENTS tab ─────────────────────────────────────
+                    if active_tab() == ModalTab::Agents {
+                        div { class: "space-y-6 animate-in fade-in duration-150 py-2",
+                            if let Some(sv) = editing_supervisor() {
+                                AgentAssignments {
+                                    supervisor_id: sv.id,
+                                    supervisor_agents: modal_supervisor_agents,
+                                    agents,
+                                }
+                            } else {
+                                div { class: "flex flex-col items-center justify-center py-12 px-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center",
+                                    div { class: "w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 text-slate-300",
+                                        MaterialIcon { name: "hub", size: 24 }
+                                    }
+                                    h4 { class: "text-sm font-bold text-slate-900", "Initialize Supervisor First" }
+                                    p { class: "text-xs text-slate-400 mt-2 max-w-[240px] leading-relaxed",
+                                        "To assign agents, you must first create this supervisor. Save the basic configuration to continue."
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // ── PREAMBLE tab ───────────────────────────────────
                     if active_tab() == ModalTab::Preamble {
                         div { class: "space-y-2 animate-in fade-in duration-150",
@@ -338,6 +384,7 @@ pub fn SupervisorModal(
                     div { class: "flex items-center gap-1.5",
                         for (dot_tab, _) in [
                             (ModalTab::Basic, ""),
+                            (ModalTab::Agents, ""),
                             (ModalTab::Preamble, ""),
                             (ModalTab::Code, ""),
                         ] {

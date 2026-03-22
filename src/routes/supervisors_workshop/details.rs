@@ -29,6 +29,7 @@ impl Tab {
 #[component]
 pub fn SupervisorDetails(
     mut selected_supervisor: Signal<Option<Supervisor>>,
+    mut supervisors: Resource<Vec<Supervisor>>,
     mut supervisor_agents: Resource<Vec<AgentInfo>>,
     agents: Resource<Vec<AgentInfo>>,
 ) -> Element {
@@ -137,16 +138,16 @@ pub fn SupervisorDetails(
                         }
                         button {
                             class: "bg-slate-900 text-white px-8 py-3 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-md active:scale-95 flex items-center gap-2",
-                            onclick: {
-                                let sv = supervisor.clone();
-                                move |_| {
-                                    let mut sv = sv.clone();
+                            onclick: move |_| {
+                                // Capture the latest state from the signal
+                                if let Some(mut sv) = selected_supervisor() {
                                     sv.instructions = Some(local_instructions());
                                     sv.code = Some(local_code());
                                     let state = state;
                                     spawn(async move {
                                         let db = state.read().db.clone();
                                         let _ = update_supervisor(&db, sv).await;
+                                        supervisors.restart();
                                     });
                                 }
                             },
