@@ -37,7 +37,9 @@ pub fn WorkflowAutomation() -> Element {
         let workflow_id = selected_workflow_id();
         async move {
             if let Some(workflow_id) = workflow_id {
-                backend::get_workflow_steps(&db, workflow_id).await.unwrap_or_default()
+                backend::get_workflow_steps(&db, workflow_id)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             }
@@ -50,7 +52,9 @@ pub fn WorkflowAutomation() -> Element {
         let workflow_id = selected_workflow_id();
         async move {
             if let Some(workflow_id) = workflow_id {
-                backend::get_workflow_runs(&db, workflow_id).await.unwrap_or_default()
+                backend::get_workflow_runs(&db, workflow_id)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             }
@@ -211,7 +215,9 @@ fn WorkflowEditor(
         let workflow_run_id = selected_workflow_run_id();
         async move {
             if let Some(id) = workflow_run_id {
-                backend::get_execution_runs_for_workflow_run(&db, id, 10).await.unwrap_or_default()
+                backend::get_execution_runs_for_workflow_run(&db, id, 10)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             }
@@ -228,7 +234,10 @@ fn WorkflowEditor(
             if current.is_some() {
                 selected_execution_run_id.set(None);
             }
-        } else if !trace_runs_for_effect.iter().any(|run| Some(run.id) == current) {
+        } else if !trace_runs_for_effect
+            .iter()
+            .any(|run| Some(run.id) == current)
+        {
             selected_execution_run_id.set(Some(trace_runs_for_effect[0].id));
         }
     });
@@ -239,7 +248,9 @@ fn WorkflowEditor(
         let run_id = selected_execution_run_id();
         async move {
             if let Some(id) = run_id {
-                backend::get_execution_events(&db, id).await.unwrap_or_default()
+                backend::get_execution_events(&db, id)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             }
@@ -256,7 +267,9 @@ fn WorkflowEditor(
         let workflow_run_id = selected_workflow_run_id();
         async move {
             if let Some(id) = workflow_run_id {
-                backend::get_workflow_step_runs(&db, id).await.unwrap_or_default()
+                backend::get_workflow_step_runs(&db, id)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             }
@@ -541,7 +554,10 @@ fn WorkflowEditor(
 }
 
 #[component]
-fn WorkflowStepCard(step: WorkflowStep, mut steps_resource: Resource<Vec<WorkflowStep>>) -> Element {
+fn WorkflowStepCard(
+    step: WorkflowStep,
+    mut steps_resource: Resource<Vec<WorkflowStep>>,
+) -> Element {
     let state = use_global_state();
     let db = state.read().db.clone();
 
