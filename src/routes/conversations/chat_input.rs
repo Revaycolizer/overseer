@@ -7,6 +7,7 @@ use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 pub struct ChatInputProps {
     pub selected_conversation_id: Signal<Option<i64>>,
     pub messages_resource: Resource<Vec<backend::Message>>,
+    pub visible_messages: Signal<Vec<backend::Message>>,
     pub conversations_resource: Resource<Vec<backend::Conversation>>,
     pub is_first_msg: bool,
     pub is_thinking: Signal<bool>,
@@ -25,6 +26,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let mut is_thinking = props.is_thinking;
 
     let mut messages_resource = props.messages_resource.clone();
+    let mut visible_messages = props.visible_messages;
     let mut conversations_resource = props.conversations_resource.clone();
     let selected_conversation_id = props.selected_conversation_id.clone();
     let is_first_msg = props.is_first_msg;
@@ -41,9 +43,24 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         let db_inner = db.clone();
         let agent_inner = agent_system.clone();
         let mut messages_inner = messages_resource.clone();
+        let mut visible_messages_inner = visible_messages;
         let mut conversations_inner = conversations_resource.clone();
         let conv_id = selected_conversation_id();
         let query = val.clone();
+        let optimistic_id = -chrono::Utc::now().timestamp_micros();
+
+        if let Some(id) = conv_id {
+            visible_messages.with_mut(|messages| {
+                messages.push(backend::Message {
+                    id: optimistic_id,
+                    conversation_id: id,
+                    role: "user".to_string(),
+                    content: query.clone(),
+                    created_at: chrono::Utc::now().naive_utc(),
+                    attachments: vec![],
+                });
+            });
+        }
 
         spawn(async move {
             if let Some(id) = conv_id {
@@ -74,6 +91,10 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                     is_thinking.set(false);
                     let _ = backend::add_message(&db_inner, id, "assistant", &response).await;
                     messages_inner.restart();
+                } else {
+                    visible_messages_inner
+                        .write()
+                        .retain(|message| message.id != optimistic_id);
                 }
             }
         });

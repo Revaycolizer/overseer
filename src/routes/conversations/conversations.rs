@@ -37,7 +37,27 @@ pub fn Conversations() -> Element {
         }
     });
 
-    let messages = messages_resource.read().cloned().unwrap_or_default();
+    let mut visible_messages = use_signal(Vec::<backend::Message>::new);
+    let mut selected_conversation_for_cache = use_signal(|| None::<i64>);
+
+    use_effect(move || {
+        let conv_id = selected_conversation_id();
+        if selected_conversation_for_cache() != conv_id {
+            selected_conversation_for_cache.set(conv_id);
+            visible_messages.set(Vec::new());
+        }
+    });
+
+    use_effect(move || {
+        if let Some(latest_messages) = messages_resource.read().cloned() {
+            visible_messages.set(latest_messages);
+        }
+    });
+
+    let messages = messages_resource
+        .read()
+        .cloned()
+        .unwrap_or_else(|| visible_messages());
     let is_first_msg = messages.is_empty();
     let mut is_thinking: Signal<bool> = use_signal(|| false);
     let mut selected_execution_run_id = use_signal(|| None::<i64>);
@@ -171,6 +191,7 @@ pub fn Conversations() -> Element {
                             ChatInput {
                                 selected_conversation_id: selected_conversation_id,
                                 messages_resource: messages_resource.clone(),
+                                visible_messages: visible_messages,
                                 conversations_resource: conversations_resource.clone(),
                                 is_first_msg: is_first_msg,
                                 is_thinking: is_thinking,

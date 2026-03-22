@@ -12,11 +12,259 @@ use rig::{
     completion::{Message, Prompt},
     providers::ollama,
 };
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
 
 use crate::engine::tools::StructuredPerceptionTool;
 use crate::engine::utils::discovery::AgentInfo;
+
+fn user_facing_runtime_error(details: &str) -> Option<String> {
+    let lower = details.to_lowercase();
+
+    let ollama_related = lower.contains("localhost:11434")
+        || lower.contains("/api/chat")
+        || lower.contains("/api/generate")
+        || lower.contains("/api/embed")
+        || lower.contains("ollama");
+
+    let connection_related = lower.contains("error sending request")
+        || lower.contains("connection refused")
+        || lower.contains("failed to connect")
+        || lower.contains("http client error")
+        || lower.contains("tcp connect error")
+        || lower.contains("dns error");
+
+    if ollama_related || connection_related {
+        return Some(
+            "Model backend unavailable. Overseer could not reach Ollama on `http://localhost:11434`.\n\n\
+             Try this:\n\
+             1. Start Ollama with `ollama serve`\n\
+             2. Check it responds with `ollama list`\n\
+             3. Pull the required models, for example `ollama pull qwen2.5:7b-instruct`\n\n\
+             After Ollama is healthy, send the message again."
+                .to_string(),
+        );
+    }
+
+    None
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum OrchestrationRoute {
+    DirectChat,
+    SingleDomain,
+    MultiStep,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OrchestrationDecision {
+    route: OrchestrationRoute,
+    domain: Option<String>,
+    personality_mode: String,
+    reason: String,
+}
+
+fn infer_domain_from_query(query: &str) -> Option<String> {
+    let lower = query.to_lowercase();
+
+    if lower.contains("research")
+        || lower.contains("search")
+        || lower.contains("browse")
+        || lower.contains("website")
+        || lower.contains("web")
+    {
+        Some("stealth".to_string())
+    } else if lower.contains("browser")
+        || lower.contains("open site")
+        || lower.contains("open website")
+        || lower.contains("click")
+    {
+        Some("web".to_string())
+    } else if lower.contains("desktop")
+        || lower.contains("app")
+        || lower.contains("window")
+        || lower.contains("ui")
+        || lower.contains("folder")
+        || lower.contains("file")
+    {
+        Some("desktop".to_string())
+    } else if lower.contains("document")
+        || lower.contains("pdf")
+        || lower.contains("spreadsheet")
+        || lower.contains("writer")
+        || lower.contains("calc")
+        || lower.contains("office")
+    {
+        Some("office".to_string())
+    } else if lower.contains("image")
+        || lower.contains("vision")
+        || lower.contains("screenshot")
+        || lower.contains("photo")
+    {
+        Some("vision".to_string())
+    } else if lower.contains("music") || lower.contains("audio") || lower.contains("neontune") {
+        Some("neontune".to_string())
+    } else {
+        None
+    }
+}
+
+fn heuristic_decision(query: &str) -> OrchestrationDecision {
+    let lower = query.to_lowercase();
+    let direct_chat_markers = [
+        "what",
+        "who",
+        "when",
+        "where",
+        "why",
+        "how",
+        "explain",
+        "tell me",
+        "help me understand",
+        "summarize",
+    ];
+    let delegation_markers = [
+        "open ",
+        "launch ",
+        "click",
+        "create",
+        "generate",
+        "research",
+        "search",
+        "browse",
+        "download",
+        "analyze",
+        "compare",
+        "workflow",
+        "step by step",
+        "automation",
+    ];
+
+    let looks_like_direct_chat = query.len() < 220
+        && direct_chat_markers.iter().any(|marker| lower.contains(marker))
+        && !delegation_markers
+            .iter()
+            .any(|marker| lower.contains(marker));
+
+    if looks_like_direct_chat {
+        return OrchestrationDecision {
+            route: OrchestrationRoute::DirectChat,
+            domain: Some("chat".to_string()),
+            personality_mode: "assistant".to_string(),
+            reason: "Short informational request with no clear automation or tool need.".to_string(),
+        };
+    }
+
+    if let Some(domain) = infer_domain_from_query(query) {
+        return OrchestrationDecision {
+            route: OrchestrationRoute::SingleDomain,
+            domain: Some(domain.clone()),
+            personality_mode: match domain.as_str() {
+                "stealth" => "analyst".to_string(),
+                "web" | "desktop" | "office" | "neontune" => "operator".to_string(),
+                "vision" => "vision".to_string(),
+                _ => "specialist".to_string(),
+            },
+            reason: "Request maps cleanly to a single operational domain.".to_string(),
+        };
+    }
+
+    OrchestrationDecision {
+        route: OrchestrationRoute::MultiStep,
+        domain: None,
+        personality_mode: "orchestrator".to_string(),
+        reason: "Request appears to require orchestration or multi-step delegation.".to_string(),
+    }
+}
+
+async fn decide_orchestration(
+    all_agents: &[AgentInfo],
+    query: &str,
+    memory_context: &str,
+    ollama_client: &ollama::Client,
+) -> Result<OrchestrationDecision, String> {
+    let heuristic = heuristic_decision(query);
+
+    if matches!(heuristic.route, OrchestrationRoute::DirectChat) {
+        return Ok(heuristic);
+    }
+
+    let Some(orchestrator_agent) = all_agents.iter().find(|a| a.domain == "orchestrator") else {
+        return Ok(heuristic);
+    };
+
+    let decision_agent =
+        rig::agent::AgentBuilder::new(ollama_client.completion_model(&orchestrator_agent.model))
+            .preamble(&format!(
+                "{}\n\nYou are the routing control layer for Overseer.\n\
+                 Decide how the request should be handled.\n\
+                 Return JSON only with this shape:\n\
+                 {{\"route\":\"direct_chat|single_domain|multi_step\",\"domain\":\"chat|web|stealth|desktop|office|vision|neontune|null\",\"personality_mode\":\"assistant|analyst|operator|vision|orchestrator\",\"reason\":\"short explanation\"}}\n\
+                 Rules:\n\
+                 - direct_chat: use when the request can be answered conversationally without tools or execution.\n\
+                 - single_domain: use when one domain should handle the request.\n\
+                 - multi_step: use when the request needs planning across steps or domains.\n\
+                 - Prefer direct_chat for simple Q&A.\n\
+                 - Prefer single_domain when one supervisor should own execution.\n\
+                 - Use multi_step for compound or ambiguous tasks.",
+                orchestrator_agent.instructions
+            ))
+            .default_max_turns(1)
+            .build();
+
+    let prompt = format!(
+        "USER_REQUEST:\n{}\n\nRECENT_CONTEXT:\n{}\n\nReturn only JSON.",
+        query,
+        if memory_context.is_empty() {
+            "No recent context.".to_string()
+        } else {
+            memory_context.to_string()
+        }
+    );
+
+    let raw = decision_agent
+        .prompt(&prompt)
+        .await
+        .map_err(|e| e.to_string())?;
+    let cleaned = crate::engine::utils::clean_response(raw);
+
+    serde_json::from_str::<OrchestrationDecision>(&cleaned)
+        .or_else(|_| {
+            serde_json::from_str::<serde_json::Value>(&cleaned).map(|value| {
+                let route = match value
+                    .get("route")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("multi_step")
+                {
+                    "direct_chat" => OrchestrationRoute::DirectChat,
+                    "single_domain" => OrchestrationRoute::SingleDomain,
+                    _ => OrchestrationRoute::MultiStep,
+                };
+
+                OrchestrationDecision {
+                    route,
+                    domain: value
+                        .get("domain")
+                        .and_then(|v| v.as_str())
+                        .filter(|value| !value.trim().is_empty() && *value != "null")
+                        .map(|value| value.to_string()),
+                    personality_mode: value
+                        .get("personality_mode")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("orchestrator")
+                        .to_string(),
+                    reason: value
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Decision returned by orchestrator classifier.")
+                        .to_string(),
+                }
+            })
+        })
+        .or_else(|_| Ok(heuristic))
+}
 
 async fn record_event(
     db: &crate::db::Database,
@@ -87,28 +335,114 @@ pub async fn orchestrate_request<'a>(
     )
     .await;
 
-    println!("🧠 MASTER PLANNER Thinking...");
-    let plan_text: String = match timeout(
-        Duration::from_millis(model_timeout_ms),
-        master_planner.plan(query),
-    )
-    .await
+    let decision = match decide_orchestration(all_agents, query, memory_context, ollama_client).await
     {
-        Ok(plan) => plan,
-        Err(_) => {
-            let message = format!("Master planner timed out after {} ms.", model_timeout_ms);
+        Ok(decision) => decision,
+        Err(err) => {
+            if let Some(friendly_error) = user_facing_runtime_error(&err) {
+                record_event(
+                    db,
+                    run_id,
+                    &mut event_sequence,
+                    "model_backend_unavailable",
+                    "error",
+                    Some("orchestrator"),
+                    None,
+                    None,
+                    None,
+                    Some("Model backend unavailable during orchestration decision."),
+                    Some(&err),
+                )
+                .await;
+                if let Some(run_id) = run_id {
+                    let _ = crate::backend::finish_execution_run(
+                        db,
+                        run_id,
+                        "failed",
+                        None,
+                        Some(&friendly_error),
+                    )
+                    .await;
+                }
+                return friendly_error;
+            }
+            heuristic_decision(query)
+        }
+    };
+
+    let decision_details = serde_json::to_string(&decision).unwrap_or_default();
+    record_event(
+        db,
+        run_id,
+        &mut event_sequence,
+        "orchestration_decision",
+        "completed",
+        decision.domain.as_deref(),
+        None,
+        None,
+        None,
+        Some(&format!(
+            "Orchestrator chose {:?} with personality '{}'.",
+            decision.route, decision.personality_mode
+        )),
+        Some(&decision_details),
+    )
+    .await;
+
+    if matches!(decision.route, OrchestrationRoute::DirectChat) {
+        let chat_info = all_agents
+            .iter()
+            .find(|a| a.domain == "chat")
+            .cloned()
+            .unwrap_or_else(|| AgentInfo {
+                id: 0,
+                name: "Chat Assistant".to_string(),
+                description: "Direct chat fallback".to_string(),
+                tools: Vec::new(),
+                instructions: "You are a concise, helpful assistant. Answer directly and clearly without using tools unless explicitly required.".to_string(),
+                model: "qwen2.5:7b-instruct".to_string(),
+                domain: "chat".to_string(),
+                version: "1.0.0".to_string(),
+                code: None,
+                source_files: Vec::new(),
+            });
+
+        let chat_agent = ChatAgent::new(ollama_client, &chat_info.model, &chat_info.instructions);
+        let direct_context = if memory_context.is_empty() {
+            "No recent context.".to_string()
+        } else {
+            memory_context.to_string()
+        };
+
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "direct_chat_started",
+            "running",
+            Some("chat"),
+            Some(query),
+            None,
+            Some(&chat_info.model),
+            Some("Routing request directly to chat agent."),
+            Some(&decision_details),
+        )
+        .await;
+
+        let direct_response = chat_agent.answer(query, &direct_context).await;
+        if let Some(friendly_error) = user_facing_runtime_error(&direct_response) {
             record_event(
                 db,
                 run_id,
                 &mut event_sequence,
-                "planner_timeout",
+                "direct_chat_failed",
                 "error",
-                Some("orchestrator"),
+                Some("chat"),
+                Some(query),
                 None,
-                None,
-                None,
-                Some(&message),
-                None,
+                Some(&chat_info.model),
+                Some("Direct chat failed because the model backend is unavailable."),
+                Some(&direct_response),
             )
             .await;
             if let Some(run_id) = run_id {
@@ -117,31 +451,152 @@ pub async fn orchestrate_request<'a>(
                     run_id,
                     "failed",
                     None,
-                    Some(&message),
+                    Some(&friendly_error),
                 )
                 .await;
             }
-            return format!("PLAN EXECUTION HALTED.\nError: {}", message);
+            return friendly_error;
         }
+
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "direct_chat_completed",
+            "completed",
+            Some("chat"),
+            Some(query),
+            None,
+            Some(&chat_info.model),
+            Some("Direct chat completed."),
+            None,
+        )
+        .await;
+
+        if let Some(run_id) = run_id {
+            let _ = crate::backend::finish_execution_run(
+                db,
+                run_id,
+                "completed",
+                Some(&direct_response),
+                None,
+            )
+            .await;
+        }
+
+        return direct_response;
+    }
+
+    let macro_tasks = if matches!(decision.route, OrchestrationRoute::SingleDomain) {
+        let domain = decision
+            .domain
+            .clone()
+            .unwrap_or_else(|| "chat".to_string());
+        let synthetic_plan = serde_json::json!([{
+            "domain": domain,
+            "task": query,
+        }])
+        .to_string();
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "macro_plan_generated",
+            "completed",
+            decision.domain.as_deref(),
+            Some(query),
+            None,
+            None,
+            Some("Orchestrator routed request directly to a single domain."),
+            Some(&synthetic_plan),
+        )
+        .await;
+        planner::sanitize_plan(&synthetic_plan, query)
+    } else {
+        println!("🧠 MASTER PLANNER Thinking...");
+        let plan_text: String = match timeout(
+            Duration::from_millis(model_timeout_ms),
+            master_planner.plan(query),
+        )
+        .await
+        {
+            Ok(plan) => plan,
+            Err(_) => {
+                let message = format!("Master planner timed out after {} ms.", model_timeout_ms);
+                record_event(
+                    db,
+                    run_id,
+                    &mut event_sequence,
+                    "planner_timeout",
+                    "error",
+                    Some("orchestrator"),
+                    None,
+                    None,
+                    None,
+                    Some(&message),
+                    None,
+                )
+                .await;
+                if let Some(run_id) = run_id {
+                    let _ = crate::backend::finish_execution_run(
+                        db,
+                        run_id,
+                        "failed",
+                        None,
+                        Some(&message),
+                    )
+                    .await;
+                }
+                return format!("PLAN EXECUTION HALTED.\nError: {}", message);
+            }
+        };
+        println!("📋 MASTER PLAN RAW: {}", plan_text);
+
+        if let Some(friendly_error) = user_facing_runtime_error(&plan_text) {
+            record_event(
+                db,
+                run_id,
+                &mut event_sequence,
+                "model_backend_unavailable",
+                "error",
+                Some("orchestrator"),
+                None,
+                None,
+                None,
+                Some("Model backend unavailable during master planning."),
+                Some(&plan_text),
+            )
+            .await;
+            if let Some(run_id) = run_id {
+                let _ = crate::backend::finish_execution_run(
+                    db,
+                    run_id,
+                    "failed",
+                    None,
+                    Some(&friendly_error),
+                )
+                .await;
+            }
+            return friendly_error;
+        }
+
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "macro_plan_generated",
+            "completed",
+            Some("orchestrator"),
+            None,
+            None,
+            None,
+            Some("Master planner generated a macro plan."),
+            Some(&plan_text),
+        )
+        .await;
+
+        planner::sanitize_plan(&plan_text, query)
     };
-    println!("📋 MASTER PLAN RAW: {}", plan_text);
-
-    record_event(
-        db,
-        run_id,
-        &mut event_sequence,
-        "macro_plan_generated",
-        "completed",
-        Some("orchestrator"),
-        None,
-        None,
-        None,
-        Some("Master planner generated a macro plan."),
-        Some(&plan_text),
-    )
-    .await;
-
-    let macro_tasks = planner::sanitize_plan(&plan_text, query);
 
     let mut final_report = String::new();
     let mut browser_pid: Option<i32> = None;
@@ -243,6 +698,34 @@ pub async fn orchestrate_request<'a>(
             )
             .await;
 
+            if let Some(friendly_error) = user_facing_runtime_error(&sub_plan) {
+                record_event(
+                    db,
+                    run_id,
+                    &mut event_sequence,
+                    "model_backend_unavailable",
+                    "error",
+                    Some(&macro_task.domain),
+                    Some(&macro_task.task),
+                    None,
+                    Some(&model_name),
+                    Some("Model backend unavailable during domain planning."),
+                    Some(&sub_plan),
+                )
+                .await;
+                if let Some(run_id) = run_id {
+                    let _ = crate::backend::finish_execution_run(
+                        db,
+                        run_id,
+                        "failed",
+                        None,
+                        Some(&friendly_error),
+                    )
+                    .await;
+                }
+                return friendly_error;
+            }
+
             planner::parse_micro_steps(&sub_plan, &macro_task.task)
         } else if let Some(agent_info) = all_agents.iter().find(|a| {
             a.domain == planner_domain
@@ -284,6 +767,34 @@ pub async fn orchestrate_request<'a>(
                 Some(&sub_plan),
             )
             .await;
+
+            if let Some(friendly_error) = user_facing_runtime_error(&sub_plan) {
+                record_event(
+                    db,
+                    run_id,
+                    &mut event_sequence,
+                    "model_backend_unavailable",
+                    "error",
+                    Some(&macro_task.domain),
+                    Some(&macro_task.task),
+                    None,
+                    Some(&model_name),
+                    Some("Model backend unavailable during fallback planning."),
+                    Some(&sub_plan),
+                )
+                .await;
+                if let Some(run_id) = run_id {
+                    let _ = crate::backend::finish_execution_run(
+                        db,
+                        run_id,
+                        "failed",
+                        None,
+                        Some(&friendly_error),
+                    )
+                    .await;
+                }
+                return friendly_error;
+            }
 
             planner::parse_micro_steps(&sub_plan, &macro_task.task)
         } else {
@@ -460,10 +971,18 @@ pub async fn orchestrate_request<'a>(
             .await
             {
                 Ok(r) => {
-                    let mut final_result = r.clone();
+                    let mut supervisor_result = r.clone();
+                    let mut final_result = if supervisor_result.raw_response.starts_with("---CHART_SVG---")
+                        || supervisor_result.raw_response.starts_with("---CHART_HTML---")
+                        || supervisor_result.raw_response.starts_with("---CHART_ASSET---")
+                    {
+                        supervisor_result.raw_response.clone()
+                    } else {
+                        supervisor_result.display_text()
+                    };
 
                     let interactive_domains = ["web", "desktop", "neontune", "app"];
-                    if (r.trim().to_lowercase() == "done" || r.to_lowercase().contains("success"))
+                    if supervisor_result.status == "completed"
                         && interactive_domains.contains(&macro_task.domain.as_str())
                     {
                         println!(
@@ -503,13 +1022,61 @@ pub async fn orchestrate_request<'a>(
                                     {
                                         println!("👁️ GROUNDING EYE: {}", ga_response);
                                         if ga_response.contains("STATE_MISMATCH") {
-                                            final_result =
-                                                format!("GROUNDING ERROR: {}", ga_response);
+                                            supervisor_result =
+                                                dispatcher::SupervisorExecutionResult {
+                                                    status: "failed".to_string(),
+                                                    summary: "Grounding verification failed."
+                                                        .to_string(),
+                                                    evidence: Vec::new(),
+                                                    artifacts: Vec::new(),
+                                                    verified: false,
+                                                    error: Some(ga_response.clone()),
+                                                    raw_response: ga_response.clone(),
+                                                };
+                                            final_result = supervisor_result.display_text();
                                         }
                                     }
                                 }
                             }
                         }
+                    }
+
+                    let event_status = match supervisor_result.status.as_str() {
+                        "failed" => "error",
+                        _ if supervisor_result.verified => "verified",
+                        _ => "unverified",
+                    };
+                    let supervisor_details = serde_json::to_string(&supervisor_result).ok();
+
+                    if supervisor_result.status == "failed" {
+                        record_event(
+                            db,
+                            run_id,
+                            &mut event_sequence,
+                            "micro_step_failed",
+                            event_status,
+                            Some(&macro_task.domain),
+                            Some(step),
+                            None,
+                            None,
+                            Some(&final_result),
+                            supervisor_details.as_deref(),
+                        )
+                        .await;
+                        if let Some(run_id) = run_id {
+                            let _ = crate::backend::finish_execution_run(
+                                db,
+                                run_id,
+                                "failed",
+                                None,
+                                supervisor_result.error.as_deref().or(Some(&final_result)),
+                            )
+                            .await;
+                        }
+                        return format!(
+                            "PLAN EXECUTION HALTED.\nError: {}\nLast State: {}",
+                            final_result, final_report
+                        );
                     }
 
                     let supervisor_bypasses = sqlx::query_scalar::<_, bool>(
@@ -544,13 +1111,13 @@ pub async fn orchestrate_request<'a>(
                         run_id,
                         &mut event_sequence,
                         "micro_step_completed",
-                        "completed",
+                        event_status,
                         Some(&macro_task.domain),
                         Some(step),
                         None,
                         None,
                         Some(&final_result),
-                        None,
+                        supervisor_details.as_deref(),
                     )
                     .await;
                 }
