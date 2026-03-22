@@ -17,6 +17,7 @@ pub fn ToolsWorkshop() -> Element {
 
     let tools = tools_resource.read().cloned().unwrap_or_default();
     let mut selected_tool_id = use_signal(|| tools.first().map(|t| t.id).unwrap_or(0i64));
+    let mut selected_version_tag = use_signal(String::new);
     
     let selected_tool = tools.iter().find(|t| t.id == selected_tool_id()).cloned();
     let mut local_code = use_signal(|| selected_tool.as_ref().map(|t| t.code.clone()).unwrap_or_default());
@@ -38,6 +39,34 @@ pub fn ToolsWorkshop() -> Element {
 
         if let Some(tool) = current_tools.iter().find(|t| t.id == selected_tool_id()) {
             local_code.set(tool.code.clone());
+        }
+        selected_version_tag.set(String::new());
+    });
+
+    let db_for_versions = db.clone();
+    let mut version_history_resource = use_resource(move || {
+        let db = db_for_versions.clone();
+        let tool_id = selected_tool_id();
+        async move {
+            if tool_id != 0 {
+                backend::get_version_history(&db, "tool", tool_id).await.unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
+
+    let db_for_version_content = db.clone();
+    let version_content_resource = use_resource(move || {
+        let db = db_for_version_content.clone();
+        let tool_id = selected_tool_id();
+        let version_tag = selected_version_tag();
+        async move {
+            if tool_id != 0 && !version_tag.is_empty() {
+                backend::get_version_content(&db, "tool", tool_id, &version_tag).await.unwrap_or_default()
+            } else {
+                None
+            }
         }
     });
 
@@ -202,10 +231,13 @@ pub fn ToolsWorkshop() -> Element {
                                                     let db_spawn = db_click.clone();
                                                     let mut tools_resource_spawn = tools_resource_click.clone();
                                                     let tool_id = t.id;
+                                                    let mut version_history_resource = version_history_resource.clone();
                                                     spawn(async move {
+                                                        let version_tag = format!("snapshot-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
                                                         let _ = backend::update_tool(&db_spawn, updated_tool).await;
-                                                        let _ = backend::publish_tool_version(&db_spawn, tool_id, "1.1.0", "Version snapshot").await;
+                                                        let _ = backend::publish_tool_version(&db_spawn, tool_id, &version_tag, "Version snapshot").await;
                                                         tools_resource_spawn.restart();
+                                                        version_history_resource.restart();
                                                     });
                                                 }
                                             },
@@ -325,6 +357,32 @@ pub fn ToolsWorkshop() -> Element {
                                             }
                                         }
                                         div {
+                                            label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Safety Level" }
+                                            select {
+                                                class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-semibold text-slate-600 focus:ring-1 focus:ring-brand-blue/20 focus:border-brand-blue transition-all",
+                                                value: "{tool.safety_level}",
+                                                onchange: {
+                                                    let mut tools_resource = tools_resource.clone();
+                                                    let db = db.clone();
+                                                    let tool_for_safety = tool.clone();
+                                                    move |e| {
+                                                        let new_level = e.value();
+                                                        let db = db.clone();
+                                                        let mut tools_resource = tools_resource.clone();
+                                                        let mut updated_tool = tool_for_safety.clone();
+                                                        updated_tool.safety_level = new_level;
+                                                        spawn(async move {
+                                                            let _ = backend::update_tool(&db, updated_tool).await;
+                                                            tools_resource.restart();
+                                                        });
+                                                    }
+                                                },
+                                                option { value: "standard", "Standard" }
+                                                option { value: "high", "High Risk" }
+                                                option { value: "dangerous", "Dangerous" }
+                                            }
+                                        }
+                                        div {
                                             label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Legacy Script Path (Fallback)" }
                                             input { 
                                                 class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-mono text-slate-600",
@@ -386,6 +444,73 @@ pub fn ToolsWorkshop() -> Element {
                                             rsx! { 
                                                 // This is a bit heavy for a loop, but for now it's fine for simple workshops
                                                 span { class: "text-[10px] text-slate-400 italic", "Equipped on some system agents" }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                div { class: "border-t border-slate-200 p-4 bg-white",
+                                    div { class: "flex items-center justify-between mb-4",
+                                        h4 { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Version History" }
+                                        if !selected_version_tag().is_empty() {
+                                            button {
+                                                class: "bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-slate-800 transition-all",
+                                                onclick: {
+                                                    let db = db.clone();
+                                                    let mut tools_resource = tools_resource.clone();
+                                                    let mut version_history_resource = version_history_resource.clone();
+                                                    let version_tag = selected_version_tag();
+                                                    move |_| {
+                                                        let db = db.clone();
+                                                        let mut tools_resource = tools_resource.clone();
+                                                        let mut version_history_resource = version_history_resource.clone();
+                                                        let version_tag = version_tag.clone();
+                                                        spawn(async move {
+                                                            let _ = backend::rollback_version(&db, "tool", tool.id, &version_tag).await;
+                                                            tools_resource.restart();
+                                                            version_history_resource.restart();
+                                                        });
+                                                    }
+                                                },
+                                                "Rollback to Snapshot"
+                                            }
+                                        }
+                                    }
+                                    div { class: "grid grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] gap-4",
+                                        div { class: "space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1",
+                                            for version in version_history_resource.read().cloned().unwrap_or_default() {
+                                                button {
+                                                    key: "{version.id}",
+                                                    class: format!(
+                                                        "w-full text-left rounded-xl border px-3 py-2 transition-all {}",
+                                                        if selected_version_tag() == version.version_tag {
+                                                            "border-blue-300 bg-blue-50"
+                                                        } else {
+                                                            "border-slate-200 bg-slate-50 hover:border-slate-300"
+                                                        }
+                                                    ),
+                                                    onclick: {
+                                                        let tag = version.version_tag.clone();
+                                                        move |_| selected_version_tag.set(tag.clone())
+                                                    },
+                                                    div { class: "text-[11px] font-bold text-slate-700", "{version.version_tag}" }
+                                                    div { class: "text-[10px] text-slate-400 mt-1", {version.created_at.format("%Y-%m-%d %H:%M").to_string()} }
+                                                    div { class: "text-[10px] text-slate-500 mt-1 line-clamp-2", "{version.changelog.clone().unwrap_or_default()}" }
+                                                }
+                                            }
+                                        }
+                                        div { class: "grid grid-cols-1 xl:grid-cols-2 gap-4",
+                                            div {
+                                                label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Current Logic" }
+                                                pre { class: "min-h-[180px] max-h-[240px] overflow-auto custom-scrollbar bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-700 whitespace-pre-wrap",
+                                                    "{local_code}"
+                                                }
+                                            }
+                                            div {
+                                                label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Selected Snapshot" }
+                                                pre { class: "min-h-[180px] max-h-[240px] overflow-auto custom-scrollbar bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-700 whitespace-pre-wrap",
+                                                    "{version_content_resource.read().cloned().flatten().unwrap_or_else(|| \"Select a snapshot to compare or rollback.\".to_string())}"
+                                                }
                                             }
                                         }
                                     }
