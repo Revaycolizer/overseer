@@ -31,6 +31,20 @@ function Copy-RequiredItem {
     Copy-Item -Path $Source -Destination $Destination -Recurse -Force
 }
 
+function Resolve-FirstExistingPath {
+    param(
+        [string[]]$Candidates
+    )
+
+    foreach ($candidate in $Candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $cargoToml = Join-Path $repoRoot "Cargo.toml"
 
@@ -50,8 +64,15 @@ $zipPath = Join-Path $releaseRoot $zipName
 $manifestPath = Join-Path $releaseRoot "release.json"
 $checksumsPath = Join-Path $releaseRoot "SHA256SUMS.txt"
 $exeSource = Join-Path $repoRoot "target\release\overseer.exe"
-$toolScriptsSource = Join-Path $repoRoot "src\engine\scripts"
-$agentSeedsSource = Join-Path $repoRoot "src\engine\agents"
+$toolScriptsSource = Resolve-FirstExistingPath -Candidates @(
+    (Join-Path $repoRoot "tool_scripts"),
+    (Join-Path $repoRoot "src\engine\scripts"),
+    (Join-Path $repoRoot "agents-scripts")
+)
+$agentSeedsSource = Resolve-FirstExistingPath -Candidates @(
+    (Join-Path $repoRoot "src\engine\agents"),
+    (Join-Path $repoRoot "config\agents")
+)
 $releaseNotesSource = Join-Path $repoRoot "releases\notes\$Tag.md"
 
 if (-not $SkipBuild) {
@@ -77,8 +98,16 @@ Write-Host "[INFO] Staging portable package..."
 Copy-RequiredItem -Source $exeSource -Destination (Join-Path $portableRoot "Overseer.exe")
 Copy-RequiredItem -Source (Join-Path $repoRoot "assets") -Destination (Join-Path $portableRoot "assets")
 Copy-RequiredItem -Source (Join-Path $repoRoot "config") -Destination (Join-Path $portableRoot "config")
-Copy-RequiredItem -Source $toolScriptsSource -Destination (Join-Path $portableRoot "tool_scripts")
-Copy-RequiredItem -Source $agentSeedsSource -Destination (Join-Path $portableRoot "src\engine\agents")
+if ($toolScriptsSource) {
+    Copy-RequiredItem -Source $toolScriptsSource -Destination (Join-Path $portableRoot "tool_scripts")
+} else {
+    Write-Host "[WARN] No tool scripts directory found. Continuing without packaged Python tool sources."
+}
+if ($agentSeedsSource) {
+    Copy-RequiredItem -Source $agentSeedsSource -Destination (Join-Path $portableRoot "src\engine\agents")
+} else {
+    Write-Host "[WARN] No code-based agent seed directory found. Continuing with packaged config agents only."
+}
 Copy-RequiredItem -Source (Join-Path $repoRoot "CHANGELOG.md") -Destination (Join-Path $portableRoot "CHANGELOG.md")
 Copy-RequiredItem -Source (Join-Path $repoRoot "README.md") -Destination (Join-Path $portableRoot "README.md")
 
@@ -96,9 +125,9 @@ if (Test-Path $zipPath) {
 Compress-Archive -Path (Join-Path $portableRoot "*") -DestinationPath $zipPath -CompressionLevel Optimal
 
 $assets = @(
-    Get-Item $zipPath,
-    Get-Item (Join-Path $releaseRoot "install-overseer.ps1"),
-    Get-Item (Join-Path $releaseRoot "uninstall-overseer.ps1")
+    (Get-Item $zipPath),
+    (Get-Item (Join-Path $releaseRoot "install-overseer.ps1")),
+    (Get-Item (Join-Path $releaseRoot "uninstall-overseer.ps1"))
 )
 
 $hashLines = foreach ($asset in $assets) {
