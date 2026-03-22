@@ -1,202 +1,507 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
+use crate::backend::{self, Workflow, WorkflowRun, WorkflowStep};
+use crate::state::use_global_state;
+
 #[component]
 pub fn WorkflowAutomation() -> Element {
+    let state = use_global_state();
+    let db = state.read().db.clone();
+
+    let db_for_workflows = db.clone();
+    let mut workflows_resource = use_resource(move || {
+        let db = db_for_workflows.clone();
+        async move { backend::get_workflows(&db).await.unwrap_or_default() }
+    });
+
+    let workflows = workflows_resource.read().cloned().unwrap_or_default();
+    let mut selected_workflow_id = use_signal(|| workflows.first().map(|w| w.id));
+    let mut run_feedback = use_signal(String::new);
+    let mut is_running = use_signal(|| false);
+
+    let workflow_list_for_effect = workflows.clone();
+    use_effect(move || {
+        let workflow_list = workflow_list_for_effect.clone();
+        if selected_workflow_id().is_none() {
+            if let Some(first) = workflow_list.first() {
+                selected_workflow_id.set(Some(first.id));
+            }
+        }
+    });
+
+    let db_for_steps = db.clone();
+    let steps_resource = use_resource(move || {
+        let db = db_for_steps.clone();
+        let workflow_id = selected_workflow_id();
+        async move {
+            if let Some(workflow_id) = workflow_id {
+                backend::get_workflow_steps(&db, workflow_id).await.unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
+
+    let db_for_runs = db.clone();
+    let runs_resource = use_resource(move || {
+        let db = db_for_runs.clone();
+        let workflow_id = selected_workflow_id();
+        async move {
+            if let Some(workflow_id) = workflow_id {
+                backend::get_workflow_runs(&db, workflow_id).await.unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
+
+    let selected_workflow = workflows
+        .iter()
+        .find(|workflow| Some(workflow.id) == selected_workflow_id())
+        .cloned();
+
     rsx! {
-        
-                main { class: "flex-1 overflow-y-auto custom-scrollbar p-8",
-                    div { class: "mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6",
+        main { class: "flex-1 min-h-0 bg-[#F7FAFC] overflow-hidden",
+            div { class: "h-full grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)]",
+                div { class: "border-r border-slate-200 bg-white overflow-y-auto custom-scrollbar p-5",
+                    div { class: "flex items-end justify-between gap-4 mb-6",
                         div {
-                            h2 { class: "text-3xl font-extrabold tracking-tight text-slate-900 mb-2",
-                                "Workflow Automation"
-                            }
-                            p { class: "text-base text-slate-500 max-w-2xl",
-                                " Record, edit, and schedule multi-step macros across your connected applications. "
-                            }
+                            h2 { class: "text-2xl font-extrabold tracking-tight text-slate-900", "Workflow Automation" }
+                            p { class: "text-sm text-slate-500 mt-1", "Persist reusable multi-step runs and replay them on demand." }
                         }
-                        div { class: "flex items-center gap-3",
-                            button { class: "bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-red-600 shadow-sm transition-all active:scale-[0.98]",
-                                MaterialIcon { name: "radio_button_checked", size: 28, color: MaterialIconColor::Custom("".to_string()) }
-                                " Record New "
-                            }
-                        }
-                    }
-                    div { class: "grid grid-cols-1 lg:grid-cols-3 gap-8",
-                        div { class: "lg:col-span-1 space-y-4",
-                            div { class: "flex items-center justify-between mb-2",
-                                h3 { class: "text-sm font-bold text-slate-400 uppercase tracking-widest",
-                                    "Recent Macros"
-                                }
-                            }
-                            div { class: "bg-white border-2 border-brand-blue rounded-xl p-4 shadow-sm cursor-pointer",
-                                div { class: "flex justify-between items-start mb-3",
-                                    div { class: "w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center",
-                                        MaterialIcon { name: "summarize", size: 24, color: MaterialIconColor::Custom("text-brand-blue".to_string()) }
-                                    }
-                                    span { class: "text-[10px] font-bold text-brand-blue bg-blue-50 px-2 py-0.5 rounded uppercase",
-                                        "Active"
-                                    }
-                                }
-                                h4 { class: "font-bold text-slate-900", "Daily Report Sync" }
-                                p { class: "text-xs text-slate-500 mt-1",
-                                    "Extracts Jira tasks and posts to Slack daily."
-                                }
-                                div { class: "mt-4 pt-4 border-t border-slate-100 flex items-center justify-between",
-                                    span { class: "text-[11px] text-slate-400", "8 steps • 2m 14s" }
-                                    MaterialIcon { name: "play_circle", size: 28, color: MaterialIconColor::Custom("text-slate-400".to_string()) }
-                                }
-                            }
-                            div { class: "bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-slate-300 cursor-pointer transition-colors",
-                                div { class: "flex justify-between items-start mb-3",
-                                    div { class: "w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center",
-                                        MaterialIcon { name: "mail", size: 24, color: MaterialIconColor::Custom("text-slate-400".to_string()) }
-                                    }
-                                }
-                                h4 { class: "font-bold text-slate-900", "Email Auto-Sorter" }
-                                p { class: "text-xs text-slate-500 mt-1",
-                                    "Categorizes incoming mail based on LLM analysis."
-                                }
-                                div { class: "mt-4 pt-4 border-t border-slate-100 flex items-center justify-between",
-                                    span { class: "text-[11px] text-slate-400", "5 steps • 45s" }
-                                    MaterialIcon { name: "play_circle", size: 28, color: MaterialIconColor::Custom("text-slate-400".to_string()) }
-                                }
-                            }
-                        }
-                        div { class: "lg:col-span-2",
-                            div { class: "bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden h-full flex flex-col",
-                                div { class: "p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50",
-                                    div { class: "flex items-center gap-3",
-                                        h3 { class: "font-bold text-slate-900",
-                                            "Editor: Daily Report Sync"
+                        button {
+                            class: "bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all flex items-center gap-2",
+                            onclick: {
+                                let db = db.clone();
+                                let mut workflows_resource = workflows_resource.clone();
+                                move |_| {
+                                    let db = db.clone();
+                                    let mut workflows_resource = workflows_resource.clone();
+                                    spawn(async move {
+                                        if let Ok(id) = backend::add_workflow(&db, "New Workflow").await {
+                                            selected_workflow_id.set(Some(id));
+                                            workflows_resource.restart();
                                         }
-                                        span { class: "bg-slate-200 w-[1px] h-4" }
-                                        span { class: "text-xs text-slate-500",
-                                            "Last edited 2 hours ago"
-                                        }
-                                    }
-                                    div { class: "flex items-center gap-2",
-                                        button { class: "p-2 text-slate-400 hover:text-slate-600 transition-colors",
-                                            MaterialIcon { name: "settings", size: 32, color: MaterialIconColor::Custom("".to_string()) }
-                                        }
-                                        button { class: "bg-slate-900 text-white px-4 py-1.5 rounded-lg text-xs font-bold",
-                                            "Save Changes"
-                                        }
-                                    }
+                                    });
                                 }
-                                div { class: "flex-1 p-8 overflow-y-auto custom-scrollbar",
-                                    div { class: "relative ml-4 border-l-2 border-slate-100 pl-8 space-y-8",
-                                        div { class: "relative macro-step-dot",
-                                            div { class: "flex items-center gap-4 mb-2",
-                                                span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
-                                                    "Step 1"
-                                                }
-                                                span { class: "bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded uppercase",
-                                                    "Trigger"
-                                                }
-                                            }
-                                            div { class: "bg-slate-50 rounded-xl p-4 border border-slate-100",
-                                                div { class: "flex items-center gap-3",
-                                                    MaterialIcon { name: "schedule", size: 24, color: MaterialIconColor::Custom("text-slate-500".to_string()) }
-                                                    div {
-                                                        p { class: "text-sm font-semibold text-slate-900",
-                                                            "Scheduled Trigger"
-                                                        }
-                                                        p { class: "text-xs text-slate-500",
-                                                            "Runs every weekday at 09:00 AM"
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        div { class: "relative macro-step-dot",
-                                            div { class: "flex items-center gap-4 mb-2",
-                                                span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
-                                                    "Step 2"
-                                                }
-                                                span { class: "bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded uppercase",
-                                                    "Action"
-                                                }
-                                            }
-                                            div { class: "bg-white rounded-xl p-4 border border-slate-200",
-                                                div { class: "flex items-center justify-between",
-                                                    div { class: "flex items-center gap-3",
-                                                        MaterialIcon { name: "database", size: 24, color: MaterialIconColor::Custom("text-slate-500".to_string()) }
-                                                        div {
-                                                            p { class: "text-sm font-semibold text-slate-900",
-                                                                "Fetch Jira Tickets"
-                                                            }
-                                                            p { class: "text-xs text-slate-500",
-                                                                "Filter: status=\"In Progress\" AND assignee=currentUser()"
-                                                            }
-                                                        }
-                                                    }
-                                                    MaterialIcon { name: "drag_indicator", size: 24, color: MaterialIconColor::Custom("text-slate-300".to_string()) }
-                                                }
-                                            }
-                                        }
-                                        div { class: "relative macro-step-dot",
-                                            div { class: "flex items-center gap-4 mb-2",
-                                                span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
-                                                    "Step 3"
-                                                }
-                                                span { class: "bg-purple-50 text-purple-600 text-[10px] font-bold px-2 py-0.5 rounded uppercase",
-                                                    "AI Logic"
-                                                }
-                                            }
-                                            div { class: "bg-white rounded-xl p-4 border border-slate-200",
-                                                div { class: "flex items-center justify-between",
-                                                    div { class: "flex items-center gap-3",
-                                                        MaterialIcon { name: "psychology", size: 24, color: MaterialIconColor::Custom("text-slate-500".to_string()) }
-                                                        div {
-                                                            p { class: "text-sm font-semibold text-slate-900",
-                                                                "Summarize Content"
-                                                            }
-                                                            p { class: "text-xs text-slate-500",
-                                                                "Prompt: \"Summarize these tickets into a bulleted list for Slack...\""
-                                                            }
-                                                        }
-                                                    }
-                                                    MaterialIcon { name: "drag_indicator", size: 24, color: MaterialIconColor::Custom("text-slate-300".to_string()) }
-                                                }
-                                            }
-                                        }
-                                        div { class: "relative",
-                                            button { class: "flex items-center gap-2 text-brand-blue font-bold text-xs hover:bg-blue-50 p-2 -ml-2 rounded-lg transition-colors",
-                                                MaterialIcon { name: "add_circle", size: 18, color: MaterialIconColor::Custom("".to_string()) }
-                                                " ADD NEW STEP "
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            },
+                            MaterialIcon { name: "add", size: 18, color: MaterialIconColor::Light }
+                            "New"
                         }
                     }
-                    footer { class: "py-12 border-t border-slate-200 mt-12",
-                        div { class: "flex flex-col md:flex-row justify-between items-center gap-8",
-                            div { class: "flex items-center gap-2 text-slate-400",
-                                MaterialIcon { name: "verified_user", size: 28, color: MaterialIconColor::Custom("".to_string()) }
-                                span { class: "text-[11px] font-bold uppercase tracking-widest",
-                                    "Secure Local Environment • v2.4.0"
-                                }
+
+                    div { class: "space-y-3",
+                        if workflows.is_empty() {
+                            div { class: "rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400",
+                                "No workflows yet. Create one to start building repeatable automations."
                             }
-                            div { class: "flex gap-10",
-                                a {
-                                    class: "text-[11px] font-bold text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-colors",
-                                    href: "#",
-                                    "Documentation"
+                        } else {
+                            for workflow in workflows.clone() {
+                                div {
+                                    key: "{workflow.id}",
+                                    class: format!(
+                                        "rounded-2xl border p-4 cursor-pointer transition-all {}",
+                                        if Some(workflow.id) == selected_workflow_id() {
+                                            "border-blue-300 bg-blue-50/60 shadow-sm"
+                                        } else {
+                                            "border-slate-200 bg-white hover:border-slate-300"
+                                        }
+                                    ),
+                                    onclick: {
+                                        let workflow_id = workflow.id;
+                                        move |_| selected_workflow_id.set(Some(workflow_id))
+                                    },
+                                    div { class: "flex items-start justify-between gap-3",
+                                        div {
+                                            h3 { class: "font-bold text-slate-900", "{workflow.name}" }
+                                            p { class: "text-xs text-slate-500 mt-1 line-clamp-2", "{workflow.description.clone().unwrap_or_default()}" }
+                                        }
+                                        span { class: "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full bg-slate-100 text-slate-500",
+                                            "{workflow.status}"
+                                        }
+                                    }
+                                    div { class: "mt-3 flex items-center justify-between text-[11px] text-slate-400",
+                                        span { "{workflow.trigger_type}" }
+                                        button {
+                                            class: "hover:text-red-500 transition-colors",
+                                            onclick: {
+                                                let workflow_id = workflow.id;
+                                                let db = db.clone();
+                                                let mut workflows_resource = workflows_resource.clone();
+                                                move |evt| {
+                                                    evt.stop_propagation();
+                                                    let db = db.clone();
+                                                    let mut workflows_resource = workflows_resource.clone();
+                                                    spawn(async move {
+                                                        let _ = backend::delete_workflow(&db, workflow_id).await;
+                                                        if selected_workflow_id() == Some(workflow_id) {
+                                                            selected_workflow_id.set(None);
+                                                        }
+                                                        workflows_resource.restart();
+                                                    });
+                                                }
+                                            },
+                                            MaterialIcon { name: "delete", size: 16 }
+                                        }
+                                    }
                                 }
-                                a {
-                                    class: "text-[11px] font-bold text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-colors",
-                                    href: "#",
-                                    "Privacy Policy"
-                                }
-                            }
-                            div { class: "text-[11px] text-slate-400 font-medium bg-slate-100 px-3 py-1 rounded-full",
-                                " Status: Optimal "
                             }
                         }
                     }
                 }
+
+                div { class: "min-w-0 flex flex-col overflow-hidden",
+                    if let Some(workflow) = selected_workflow {
+                        WorkflowEditor {
+                            workflow,
+                            steps_resource: steps_resource.clone(),
+                            runs_resource: runs_resource.clone(),
+                            workflows_resource: workflows_resource.clone(),
+                            run_feedback,
+                            is_running,
+                        }
+                    } else {
+                        div { class: "h-full flex flex-col items-center justify-center text-center text-slate-400 p-12",
+                            div { class: "w-24 h-24 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center mb-6",
+                                MaterialIcon { name: "account_tree", size: 42, color: MaterialIconColor::Custom("#94a3b8".into()) }
+                            }
+                            h3 { class: "text-xl font-bold text-slate-900 mb-2", "Select a workflow" }
+                            p { class: "max-w-md", "Choose a workflow from the left or create a new one to start composing multi-step automation runs." }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn WorkflowEditor(
+    workflow: Workflow,
+    mut steps_resource: Resource<Vec<WorkflowStep>>,
+    mut runs_resource: Resource<Vec<WorkflowRun>>,
+    mut workflows_resource: Resource<Vec<Workflow>>,
+    mut run_feedback: Signal<String>,
+    mut is_running: Signal<bool>,
+) -> Element {
+    let state = use_global_state();
+    let db = state.read().db.clone();
+    let agent_system = state.read().agent_system.clone();
+    let steps = steps_resource.read().cloned().unwrap_or_default();
+    let runs = runs_resource.read().cloned().unwrap_or_default();
+
+    rsx! {
+        div { class: "flex-1 overflow-y-auto custom-scrollbar p-8 space-y-8",
+            div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-6",
+                div { class: "flex flex-col lg:flex-row lg:items-start justify-between gap-6",
+                    div { class: "flex-1 space-y-4",
+                        input {
+                            class: "w-full text-3xl font-black tracking-tight text-slate-900 bg-transparent border-none focus:ring-0 p-0",
+                            value: "{workflow.name}",
+                            oninput: {
+                                let db = db.clone();
+                                let mut workflows_resource = workflows_resource.clone();
+                                let workflow_for_name = workflow.clone();
+                                move |evt| {
+                                    let mut updated = workflow_for_name.clone();
+                                    updated.name = evt.value();
+                                    let db = db.clone();
+                                    let mut workflows_resource = workflows_resource.clone();
+                                    spawn(async move {
+                                        let _ = backend::update_workflow(&db, updated).await;
+                                        workflows_resource.restart();
+                                    });
+                                }
+                            }
+                        }
+                        textarea {
+                            class: "w-full min-h-[80px] bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-600 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all",
+                            value: "{workflow.description.clone().unwrap_or_default()}",
+                            placeholder: "Describe what this workflow should achieve...",
+                            oninput: {
+                                let db = db.clone();
+                                let mut workflows_resource = workflows_resource.clone();
+                                let workflow_for_description = workflow.clone();
+                                move |evt| {
+                                    let mut updated = workflow_for_description.clone();
+                                    updated.description = if evt.value().trim().is_empty() { None } else { Some(evt.value()) };
+                                    let db = db.clone();
+                                    let mut workflows_resource = workflows_resource.clone();
+                                    spawn(async move {
+                                        let _ = backend::update_workflow(&db, updated).await;
+                                        workflows_resource.restart();
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    div { class: "flex flex-col gap-3 lg:w-[260px]",
+                        select {
+                            class: "bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700",
+                            value: "{workflow.trigger_type}",
+                            onchange: {
+                                let db = db.clone();
+                                let mut workflows_resource = workflows_resource.clone();
+                                let workflow_for_trigger = workflow.clone();
+                                move |evt| {
+                                    let mut updated = workflow_for_trigger.clone();
+                                    updated.trigger_type = evt.value();
+                                    let db = db.clone();
+                                    let mut workflows_resource = workflows_resource.clone();
+                                    spawn(async move {
+                                        let _ = backend::update_workflow(&db, updated).await;
+                                        workflows_resource.restart();
+                                    });
+                                }
+                            },
+                            option { value: "manual", "Manual Trigger" }
+                            option { value: "scheduled", "Scheduled Trigger" }
+                            option { value: "event", "Event Trigger" }
+                        }
+                        select {
+                            class: "bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700",
+                            value: "{workflow.status}",
+                            onchange: {
+                                let db = db.clone();
+                                let mut workflows_resource = workflows_resource.clone();
+                                let workflow_for_status = workflow.clone();
+                                move |evt| {
+                                    let mut updated = workflow_for_status.clone();
+                                    updated.status = evt.value();
+                                    let db = db.clone();
+                                    let mut workflows_resource = workflows_resource.clone();
+                                    spawn(async move {
+                                        let _ = backend::update_workflow(&db, updated).await;
+                                        workflows_resource.restart();
+                                    });
+                                }
+                            },
+                            option { value: "draft", "Draft" }
+                            option { value: "active", "Active" }
+                            option { value: "paused", "Paused" }
+                        }
+                        button {
+                            class: "bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-sm",
+                            onclick: {
+                                let db = db.clone();
+                                let agent_system = agent_system.clone();
+                                let mut runs_resource = runs_resource.clone();
+                                move |_| {
+                                    let db = db.clone();
+                                    let agent_system = agent_system.clone();
+                                    let mut runs_resource = runs_resource.clone();
+                                    is_running.set(true);
+                                    run_feedback.set("Running workflow...".to_string());
+                                    spawn(async move {
+                                        match backend::run_workflow(&db, &agent_system, workflow.id).await {
+                                            Ok(run_id) => {
+                                                run_feedback.set(format!("Workflow run {} completed.", run_id));
+                                                runs_resource.restart();
+                                            }
+                                            Err(err) => {
+                                                run_feedback.set(format!("Workflow run failed: {}", err));
+                                            }
+                                        }
+                                        is_running.set(false);
+                                    });
+                                }
+                            },
+                            MaterialIcon { name: "play_arrow", size: 18, color: MaterialIconColor::Light }
+                            if is_running() { "Running..." } else { "Run Workflow" }
+                        }
+                        button {
+                            class: "bg-slate-900 text-white px-4 py-3 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-sm",
+                            onclick: {
+                                let db = db.clone();
+                                let mut steps_resource = steps_resource.clone();
+                                move |_| {
+                                    let db = db.clone();
+                                    let mut steps_resource = steps_resource.clone();
+                                    spawn(async move {
+                                        let _ = backend::add_workflow_step(&db, workflow.id).await;
+                                        steps_resource.restart();
+                                    });
+                                }
+                            },
+                            MaterialIcon { name: "add", size: 18, color: MaterialIconColor::Light }
+                            "Add Step"
+                        }
+                    }
+                }
+
+                if !run_feedback().is_empty() {
+                    div { class: "rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 font-medium",
+                        "{run_feedback}"
+                    }
+                }
+            }
+
+            div { class: "grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_360px] gap-8",
+                div { class: "space-y-4",
+                    h3 { class: "text-sm font-bold uppercase tracking-widest text-slate-400", "Workflow Steps" }
+                    if steps.is_empty() {
+                        div { class: "rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-400",
+                            "No steps yet. Add a step and describe the prompt or action it should run."
+                        }
+                    } else {
+                        for step in steps {
+                            WorkflowStepCard {
+                                step,
+                                steps_resource: steps_resource.clone(),
+                            }
+                        }
+                    }
+                }
+
+                div { class: "space-y-4",
+                    h3 { class: "text-sm font-bold uppercase tracking-widest text-slate-400", "Recent Runs" }
+                    div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden",
+                        if runs.is_empty() {
+                            div { class: "p-8 text-sm text-slate-400 text-center",
+                                "No runs yet. Use the run button to execute this workflow."
+                            }
+                        } else {
+                            for run in runs {
+                                div {
+                                    key: "{run.id}",
+                                    class: "p-4 border-b border-slate-100 last:border-b-0 space-y-2",
+                                    div { class: "flex items-center justify-between gap-3",
+                                        span { class: format!(
+                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                            match run.status.as_str() {
+                                                "completed" => "bg-emerald-50 text-emerald-600",
+                                                "failed" => "bg-red-50 text-red-600",
+                                                _ => "bg-blue-50 text-blue-600",
+                                            }
+                                        ),
+                                            "{run.status}"
+                                        }
+                                        span { class: "text-[11px] text-slate-400",
+                                            {run.created_at.format("%Y-%m-%d %H:%M").to_string()}
+                                        }
+                                    }
+                                    p { class: "text-xs font-semibold text-slate-700", "Run #{run.id}" }
+                                    p { class: "text-xs text-slate-500 whitespace-pre-wrap line-clamp-4",
+                                        "{run.summary.clone().or(run.error_message.clone()).unwrap_or_else(|| \"No summary yet.\".to_string())}"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn WorkflowStepCard(step: WorkflowStep, mut steps_resource: Resource<Vec<WorkflowStep>>) -> Element {
+    let state = use_global_state();
+    let db = state.read().db.clone();
+
+    rsx! {
+        div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4",
+            div { class: "flex flex-col lg:flex-row lg:items-center gap-4",
+                div { class: "flex items-center gap-3",
+                    input {
+                        r#type: "checkbox",
+                        checked: step.enabled,
+                        onchange: {
+                            let db = db.clone();
+                            let mut steps_resource = steps_resource.clone();
+                            let step_for_enabled = step.clone();
+                            move |_| {
+                                let db = db.clone();
+                                let mut steps_resource = steps_resource.clone();
+                                let mut updated = step_for_enabled.clone();
+                                updated.enabled = !updated.enabled;
+                                spawn(async move {
+                                    let _ = backend::update_workflow_step(&db, updated).await;
+                                    steps_resource.restart();
+                                });
+                            }
+                        }
+                    }
+                    input {
+                        class: "w-16 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700",
+                        value: "{step.step_order}",
+                        oninput: {
+                            let db = db.clone();
+                            let mut steps_resource = steps_resource.clone();
+                            let step_for_order = step.clone();
+                            move |evt| {
+                                if let Ok(order) = evt.value().parse::<i64>() {
+                                    let db = db.clone();
+                                    let mut steps_resource = steps_resource.clone();
+                                    let mut updated = step_for_order.clone();
+                                    updated.step_order = order.max(1);
+                                    spawn(async move {
+                                        let _ = backend::update_workflow_step(&db, updated).await;
+                                        steps_resource.restart();
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                input {
+                    class: "flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800",
+                    value: "{step.name}",
+                    oninput: {
+                        let db = db.clone();
+                        let mut steps_resource = steps_resource.clone();
+                        let step_for_name = step.clone();
+                        move |evt| {
+                            let db = db.clone();
+                            let mut steps_resource = steps_resource.clone();
+                            let mut updated = step_for_name.clone();
+                            updated.name = evt.value();
+                            spawn(async move {
+                                let _ = backend::update_workflow_step(&db, updated).await;
+                                steps_resource.restart();
+                            });
+                        }
+                    }
+                }
+                button {
+                    class: "text-slate-400 hover:text-red-500 transition-colors self-start lg:self-auto",
+                    onclick: {
+                        let db = db.clone();
+                        let mut steps_resource = steps_resource.clone();
+                        move |_| {
+                            let db = db.clone();
+                            let mut steps_resource = steps_resource.clone();
+                            spawn(async move {
+                                let _ = backend::delete_workflow_step(&db, step.id).await;
+                                steps_resource.restart();
+                            });
+                        }
+                    },
+                    MaterialIcon { name: "delete", size: 18 }
+                }
+            }
+            textarea {
+                class: "w-full min-h-[150px] bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all",
+                value: "{step.prompt}",
+                placeholder: "Describe the instruction this step should run...",
+                oninput: {
+                    let db = db.clone();
+                    let mut steps_resource = steps_resource.clone();
+                    let step_for_prompt = step.clone();
+                    move |evt| {
+                        let db = db.clone();
+                        let mut steps_resource = steps_resource.clone();
+                        let mut updated = step_for_prompt.clone();
+                        updated.prompt = evt.value();
+                        spawn(async move {
+                            let _ = backend::update_workflow_step(&db, updated).await;
+                            steps_resource.restart();
+                        });
+                    }
+                }
+            }
+        }
     }
 }
