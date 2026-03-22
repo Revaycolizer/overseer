@@ -12,17 +12,16 @@ pub fn SupervisorHeroCard(
     };
 
     rsx! {
-        div { class: "bg-white p-8 rounded-2xl border border-[#E2E8F0] shadow-soft space-y-6",
+        div { class: "bg-white p-8 rounded-2xl border border-slate-200 shadow-soft space-y-6 animate-in fade-in slide-in-from-top-4 duration-500",
 
             // ── Top row: icon + name/description + version/domain ──────
             div { class: "flex items-start justify-between",
 
                 // Left: icon + editable name + description
                 div { class: "flex items-center gap-6",
-                    div { class: "w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 shadow-sm",
+                    div { class: "w-16 h-16 bg-blue-50 text-brand-blue rounded-2xl flex items-center justify-center border border-blue-100 shadow-sm transition-all duration-300 hover:bg-brand-blue hover:text-white hover:shadow-blue-200 hover:shadow-xl group",
                         MaterialIcon {
                             name: "account_tree",
-                            color: MaterialIconColor::Custom("#3b82f6".into()),
                             size: 32
                         }
                     }
@@ -32,7 +31,7 @@ pub fn SupervisorHeroCard(
                             "Supervisor Identity"
                         }
                         input {
-                            class: "text-2xl font-extrabold text-[#0F172A] leading-tight bg-transparent border-none focus:ring-1 focus:ring-blue-100 rounded p-1 -ml-1 w-full",
+                            class: "text-2xl font-extrabold text-slate-900 leading-tight bg-transparent border-none focus:ring-2 focus:ring-brand-blue/10 rounded-lg p-1 -ml-1 w-full transition-all",
                             value: "{supervisor.name}",
                             oninput: {
                                 let mut sv = supervisor.clone();
@@ -43,7 +42,7 @@ pub fn SupervisorHeroCard(
                             }
                         }
                         input {
-                            class: "text-slate-500 w-full bg-transparent border-none focus:ring-1 focus:ring-blue-100 rounded p-1 -ml-1",
+                            class: "text-slate-500 w-full bg-transparent border-none focus:ring-2 focus:ring-brand-blue/10 rounded-lg p-1 -ml-1 transition-all",
                             value: supervisor.description.clone().unwrap_or_default(),
                             placeholder: "Add a description...",
                             oninput: {
@@ -65,7 +64,7 @@ pub fn SupervisorHeroCard(
                             "v{supervisor.version.clone().unwrap_or_else(|| \"1.0.0\".into())}"
                         }
                         span {
-                            class: "px-3 py-1 bg-blue-50 text-[#3B82F6] rounded-full text-[10px] font-bold uppercase tracking-widest",
+                            class: "px-3 py-1 bg-blue-50 text-brand-blue rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100",
                             "Active"
                         }
                     }
@@ -97,7 +96,7 @@ pub fn SupervisorHeroCard(
                     label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Model Assignment" }
                     div { class: "relative",
                         select {
-                            class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 appearance-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all cursor-pointer",
+                            class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 appearance-none focus:ring-2 focus:ring-brand-blue/10 focus:border-blue-400 transition-all cursor-pointer",
                             value: supervisor.model.clone().unwrap_or_default(),
                             onchange: {
                                 let mut sv = supervisor.clone();
@@ -120,7 +119,7 @@ pub fn SupervisorHeroCard(
                 div { class: "space-y-3",
                     label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Version" }
                     input {
-                        class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all",
+                        class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-brand-blue/10 focus:border-blue-400 transition-all",
                         value: supervisor.version.clone().unwrap_or_else(|| "1.0.0".into()),
                         oninput: {
                             let mut sv = supervisor.clone();
@@ -149,7 +148,7 @@ pub fn SupervisorHeroCard(
                             r#type: "button",
                             class: format!(
                                 "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none {}",
-                                if supervisor.bypass_synthesizer { "bg-blue-600" } else { "bg-slate-300" }
+                                if supervisor.bypass_synthesizer { "bg-brand-blue" } else { "bg-slate-300" }
                             ),
                             onclick: {
                                 let mut sv = supervisor.clone();

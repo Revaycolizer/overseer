@@ -17,10 +17,10 @@ pub fn AgentAssignments(
             // Section header
             div { class: "flex justify-between items-center",
                 h3 {
-                    class: "text-sm font-semibold text-slate-400 uppercase tracking-wider",
-                    "Managed Agents"
+                    class: "text-sm font-black text-slate-400 uppercase tracking-widest",
+                    "Fleet Assignments"
                 }
-                p { class: "text-xs text-slate-400", "Select agents this supervisor can dispatch." }
+                p { class: "text-[10px] font-bold text-slate-400 uppercase tracking-tighter bg-slate-100 px-2 py-0.5 rounded", "Managed Node Cluster" }
             }
 
             // Agent grid
@@ -35,36 +35,36 @@ pub fn AgentAssignments(
                                     div {
                                         key: "{agent.id}",
                                         class: format!(
-                                            "p-5 rounded-2xl border transition-all duration-200 flex items-center justify-between {}",
+                                            "p-5 rounded-2xl border transition-all duration-300 flex items-center justify-between group {}",
                                             if is_assigned {
-                                                "bg-blue-50 border-[#3B82F6]/30 shadow-sm"
+                                                "bg-blue-50 border-blue-200 shadow-soft"
                                             } else {
-                                                "bg-white border-[#E2E8F0] hover:border-slate-300"
+                                                "bg-white border-slate-200 hover:border-slate-300"
                                             }
                                         ),
 
                                         // Agent info
-                                        div { class: "flex items-center gap-3",
+                                        div { class: "flex items-center gap-4",
                                             div {
                                                 class: format!(
-                                                    "w-8 h-8 rounded-lg flex items-center justify-center {}",
-                                                    if is_assigned { "bg-white text-[#3B82F6]" } else { "bg-slate-50 text-slate-400" }
+                                                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 {}",
+                                                    if is_assigned { "bg-white text-brand-blue shadow-sm" } else { "bg-slate-50 text-slate-400" }
                                                 ),
                                                 MaterialIcon {
-                                                    name: if is_assigned { "check_circle" } else { "radio_button_unchecked" },
+                                                    name: if is_assigned { "verified" } else { "circle" },
                                                     size: 20
                                                 }
                                             }
                                             div {
                                                 h4 {
                                                     class: format!(
-                                                        "text-sm font-bold {}",
-                                                        if is_assigned { "text-[#1E40AF]" } else { "text-[#0F172A]" }
+                                                        "text-sm font-black tracking-tight {}",
+                                                        if is_assigned { "text-blue-900" } else { "text-slate-900" }
                                                     ),
                                                     "{agent.name}"
                                                 }
                                                 p {
-                                                    class: "text-[10px] text-slate-400 font-mono uppercase tracking-tighter",
+                                                    class: "text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5",
                                                     "{agent.domain}"
                                                 }
                                             }
@@ -73,11 +73,11 @@ pub fn AgentAssignments(
                                         // Toggle button
                                         button {
                                             class: format!(
-                                                "p-2 rounded-lg transition-all {}",
+                                                "w-8 h-8 rounded-lg flex items-center justify-center transition-all {}",
                                                 if is_assigned {
-                                                    "text-[#3B82F6] hover:bg-[#3B82F6]/10"
+                                                    "text-brand-blue hover:bg-white hover:shadow-sm"
                                                 } else {
-                                                    "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                                                    "text-slate-300 hover:text-slate-600 hover:bg-slate-100"
                                                 }
                                             ),
                                             onclick: move |e| {
@@ -95,7 +95,7 @@ pub fn AgentAssignments(
                                                 });
                                             },
                                             MaterialIcon {
-                                                name: if is_assigned { "remove_circle_outline" } else { "add_circle_outline" },
+                                                name: if is_assigned { "remove_circle" } else { "add_circle" },
                                                 size: 20
                                             }
                                         }
@@ -106,7 +106,7 @@ pub fn AgentAssignments(
                     }
                 },
                 _ => rsx! {
-                    div { class: "p-8 text-center text-slate-300 animate-pulse text-sm", "Loading agents..." }
+                    div { class: "p-8 text-center text-slate-300 animate-pulse text-sm", "Synchronizing fleet data..." }
                 }
             }
         }

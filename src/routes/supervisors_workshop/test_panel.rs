@@ -48,12 +48,12 @@ pub fn TestPanel(
         div { class: "flex flex-col h-full",
 
             // ── Header ─────────────────────────────────────────────────
-            div { class: "flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-[#E2E8F0] shrink-0",
+            div { class: "flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200 shrink-0",
                 div { class: "flex items-center gap-2",
                     MaterialIcon {
                         name: "science",
                         size: 16,
-                        color: MaterialIconColor::Custom("#3b82f6".into())
+                        color: MaterialIconColor::Custom("var(--color-brand-blue)".into())
                     }
                     span {
                         class: "text-[10px] font-bold text-slate-500 uppercase tracking-widest",
@@ -79,7 +79,7 @@ pub fn TestPanel(
                         "Input Query"
                     }
                     textarea {
-                        class: "w-full min-h-[88px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-4 text-[#0F172A] font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]/50 transition-all placeholder-slate-300",
+                        class: "w-full min-h-[88px] bg-slate-50 border border-slate-200 rounded-xl p-4 text-slate-900 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue/50 transition-all placeholder-slate-300",
                         placeholder: "Enter a test query — e.g. \"Summarise today's market news\"",
                         value: "{test_query}",
                         rows: 3,
@@ -90,11 +90,11 @@ pub fn TestPanel(
                 // Run button
                 button {
                     class: format!(
-                        "w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm {}",
+                        "w-full px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-sm {}",
                         if test_running() {
                             "bg-slate-200 text-slate-400 cursor-not-allowed"
                         } else {
-                            "bg-[#3B82F6] hover:bg-blue-500 text-white active:scale-95"
+                            "bg-slate-900 hover:bg-slate-800 text-white active:scale-95 shadow-md shadow-blue-100"
                         }
                     ),
                     disabled: test_running(),
@@ -116,7 +116,7 @@ pub fn TestPanel(
                             "Output"
                         }
                         pre {
-                            class: "bg-[#0F172A] rounded-xl p-5 text-[#86efac] font-mono text-xs overflow-auto whitespace-pre-wrap leading-relaxed border border-[#1e293b]",
+                            class: "bg-slate-900 rounded-xl p-5 text-emerald-300 font-mono text-xs overflow-auto whitespace-pre-wrap leading-relaxed border border-slate-800",
                             "{test_result}"
                         }
                     }

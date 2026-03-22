@@ -1,157 +1,137 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 use crate::db::Supervisor;
-use crate::engine::utils::discovery::AgentInfo;
 
 #[component]
-pub fn SupervisorList(
-    mut supervisors: Resource<Vec<Supervisor>>,
-    mut selected_supervisor: Signal<Option<Supervisor>>,
-    mut supervisor_agents: Resource<Vec<AgentInfo>>,
-    mut editing_supervisor: Signal<Option<Supervisor>>,
-    mut name_input: Signal<String>,
-    mut description_input: Signal<String>,
-    mut domain_input: Signal<String>,
-    mut instructions_input: Signal<String>,
-    mut model_input: Signal<String>,
-    mut code_input: Signal<String>,
-    mut bypass_synthesizer_input: Signal<bool>,
-    mut show_modal: Signal<bool>,
-    handle_delete: EventHandler<i64>,
+pub fn SupervisorGrid(
+    supervisors: Resource<Vec<Supervisor>>,
+    selected_supervisor: Signal<Option<Supervisor>>,
     search_query: Signal<String>,
+    on_edit: EventHandler<Supervisor>,
+    on_delete: EventHandler<i64>,
 ) -> Element {
+    let list = supervisors.value()();
+
     rsx! {
-        div { class: "w-full md:w-80 flex flex-shrink-0 flex-col border-r border-slate-200 bg-white overflow-hidden",
+        div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700",
+            match list {
+                Some(items) => {
+                    let filtered: Vec<_> = items.iter()
+                        .filter(|s| {
+                            let q = search_query().to_lowercase();
+                            s.name.to_lowercase().contains(&q) || 
+                            s.domain.to_lowercase().contains(&q) ||
+                            s.description.as_ref().map(|d| d.to_lowercase().contains(&q)).unwrap_or(false)
+                        })
+                        .cloned()
+                        .collect();
 
-            // ── List Header ─────────────────────────────────────────────
-            div { class: "px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/30",
-                span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest", "All Supervisors" }
-                match supervisors.value()() {
-                    Some(list) => {
+                    if filtered.is_empty() {
                         rsx! {
-                            span { class: "text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-bold",
-                                "{list.len()}"
-                            }
-                        }
-                    },
-                    None => rsx! { div { class: "w-4 h-4 rounded bg-slate-100 animate-pulse" } }
-                }
-            }
-
-            // ── List ─────────────────────────────────────────────────────
-            div { class: "flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar",
-                match supervisors.value()() {
-                    Some(list) => {
-                        let query = search_query().to_lowercase();
-                        let filtered: Vec<_> = list.into_iter()
-                            .filter(|s| {
-                                query.is_empty()
-                                    || s.name.to_lowercase().contains(&query)
-                                    || s.domain.to_lowercase().contains(&query)
-                                    || s.description.as_deref().unwrap_or("").to_lowercase().contains(&query)
-                            })
-                            .collect();
-
-                        if filtered.is_empty() {
-                            rsx! {
-                                div { class: "flex flex-col items-center justify-center py-12 text-center",
-                                    p { class: "text-xs font-semibold text-slate-400", "No partial matches" }
+                            div { class: "col-span-full py-20 flex flex-col items-center justify-center text-center space-y-4 bg-white/50 border-2 border-dashed border-slate-200 rounded-[2.5rem]",
+                                div { class: "w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400",
+                                    MaterialIcon { name: "search_off", size: 32 }
                                 }
-                            }
-                        } else {
-                            rsx! {
-                                for s in filtered {
-                                    {
-                                        let s_click = s.clone();
-                                        let s_edit  = s.clone();
-                                        let s_del   = s.clone();
-                                        let is_selected = selected_supervisor()
-                                            .map(|sel| sel.id == s.id)
-                                            .unwrap_or(false);
-
-                                        rsx! {
-                                            div {
-                                                key: "{s.id}",
-                                                class: format!(
-                                                    "group relative flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-150 {}",
-                                                    if is_selected {
-                                                        "bg-blue-50 border-blue-200 shadow-sm"
-                                                    } else {
-                                                        "bg-white border-transparent hover:bg-slate-50"
-                                                    }
-                                                ),
-                                                onclick: move |_| {
-                                                    selected_supervisor.set(Some(s_click.clone()));
-                                                    supervisor_agents.restart();
-                                                },
-
-                                                // ── Icon ─────────────────────
-                                                div { class: format!(
-                                                    "mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 {}",
-                                                    if is_selected { "bg-blue-600 text-white" } else { "bg-slate-100 text-slate-400" }
-                                                ),
-                                                    span { class: "text-[10px] font-bold", "S" }
-                                                }
-
-                                                // ── Text block ────────────────────────────
-                                                div { class: "flex-1 min-w-0",
-                                                    h3 { class: format!(
-                                                        "text-xs font-bold truncate {}",
-                                                        if is_selected { "text-blue-900" } else { "text-slate-900" }
-                                                    ),
-                                                        "{s.name}"
-                                                    }
-                                                    p { class: "text-[10px] text-slate-400 truncate mt-0.5", "{s.domain}" }
-                                                }
-
-                                                // ── Actions ─────────────────
-                                                div { class: "opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5",
-                                                    button {
-                                                        class: "p-1 hover:bg-white rounded text-slate-400 hover:text-blue-600 transition-colors",
-                                                        onclick: move |e| {
-                                                            e.stop_propagation();
-                                                            editing_supervisor.set(Some(s_edit.clone()));
-                                                            name_input.set(s_edit.name.clone());
-                                                            description_input.set(s_edit.description.clone().unwrap_or_default());
-                                                            domain_input.set(s_edit.domain.clone());
-                                                            instructions_input.set(s_edit.instructions.clone().unwrap_or_default());
-                                                            model_input.set(s_edit.model.clone().unwrap_or_default());
-                                                            code_input.set(s_edit.code.clone().unwrap_or_default());
-                                                            bypass_synthesizer_input.set(s_edit.bypass_synthesizer);
-                                                                    show_modal.set(true);
-                                                        },
-                                                        span { class: "text-[10px]", "✎" }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+                                div {
+                                    h3 { class: "text-lg font-bold text-slate-900", "No supervisors found" }
+                                    p { class: "text-sm text-slate-400", "Try adjusting your search or deploy a new supervisor." }
                                 }
                             }
                         }
-                    },
-                    None => rsx! { div { "Loading..." } }
+                    } else {
+                        rsx! {
+                            for supervisor in filtered {
+                                SupervisorCard {
+                                    key: "{supervisor.id}",
+                                    supervisor,
+                                    selected_supervisor,
+                                    on_edit,
+                                    on_delete,
+                                }
+                            }
+                        }
+                    }
+                },
+                None => rsx! {
+                    for _ in 0..4 {
+                        div { class: "h-[340px] bg-white border-2 border-slate-50 rounded-[2.5rem] animate-pulse shadow-sm" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn SupervisorCard(
+    supervisor: Supervisor,
+    selected_supervisor: Signal<Option<Supervisor>>,
+    on_edit: EventHandler<Supervisor>,
+    on_delete: EventHandler<i64>,
+) -> Element {
+    let s_card = supervisor.clone();
+    let s_edit_card = supervisor.clone();
+    let s_del_card = supervisor.clone();
+
+    rsx! {
+        div {
+            class: "group bg-white border-2 border-slate-200 rounded-[2.5rem] p-8 shadow-soft hover:shadow-[0_20px_50px_rgba(59,130,246,0.08)] hover:border-blue-100 hover:-translate-y-2 transition-all duration-500 cursor-pointer flex flex-col h-[340px] relative overflow-hidden",
+            onclick: move |_| {
+                selected_supervisor.set(Some(s_card.clone()));
+            },
+            
+            // Subtle background glow
+            div { class: "absolute -top-24 -right-24 w-48 h-48 bg-brand-blue/5 rounded-full blur-3xl group-hover:bg-brand-blue/10 transition-colors duration-500" }
+
+            // Card Header: Icon + Domain
+            div { class: "flex items-start justify-between mb-6",
+                div { class: "w-14 h-14 bg-slate-50 text-brand-blue rounded-2xl flex items-center justify-center group-hover:bg-brand-blue group-hover:text-white group-hover:shadow-xl group-hover:shadow-blue-200 transition-all duration-500",
+                    MaterialIcon { name: "hub", size: 28 }
+                }
+                div { class: "flex flex-col items-end gap-1",
+                    span { class: "px-3 py-1 bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg border border-slate-200 transition-colors group-hover:bg-blue-50 group-hover:text-brand-blue group-hover:border-blue-200",
+                        "{supervisor.domain}"
+                    }
+                    div { class: "flex gap-1",
+                        if supervisor.bypass_synthesizer {
+                            span { class: "px-2 py-0.5 bg-amber-500/10 text-amber-600 text-[8px] font-black uppercase tracking-widest rounded", "Direct" }
+                        }
+                        span { class: "px-2 py-0.5 bg-brand-blue/10 text-brand-blue text-[8px] font-black uppercase tracking-widest rounded", "v1.0.0" }
+                    }
                 }
             }
 
-            // ── Footer ─────────────────────────────────────────────
-            div { class: "px-4 py-3 border-t border-slate-100 bg-slate-50/50",
-                match supervisors.value()() {
-                    Some(list) => {
-                        let query = search_query();
-                        let shown = if query.is_empty() { list.len() } else {
-                            list.iter().filter(|s| {
-                                let q = query.to_lowercase();
-                                s.name.to_lowercase().contains(&q)
-                                    || s.domain.to_lowercase().contains(&q)
-                                    || s.description.as_deref().unwrap_or("").to_lowercase().contains(&q)
-                            }).count()
-                        };
-                        rsx! {
-                            p { class: "text-[10px] text-slate-400 font-bold uppercase tracking-tighter", "{shown} Supervisors Found" }
-                        }
-                    },
-                    None => rsx! { p { "..." } }
+            // Content
+            h3 { class: "text-xl font-black text-slate-900 mb-3 truncate group-hover:text-brand-blue transition-colors duration-300", "{supervisor.name}" }
+            p { class: "text-slate-500 text-sm font-medium line-clamp-3 leading-relaxed mb-8 flex-1", 
+                {supervisor.description.as_deref().unwrap_or("No operational summary provided for this node.")}
+            }
+
+            // Footer
+            div { class: "mt-auto pt-6 border-t border-slate-50 flex items-center justify-between",
+                div { class: "flex items-center gap-2",
+                    span { class: "w-2 h-2 rounded-full bg-brand-blue group-hover:animate-ping" }
+                    span { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "{supervisor.model.as_deref().unwrap_or(\"llama3\")}" }
+                }
+                div { class: "flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0",
+                    button { 
+                        class: "w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 hover:bg-brand-blue hover:text-white rounded-xl transition-all shadow-sm active:scale-90",
+                        title: "Edit Infrastructure",
+                        onclick: move |e| {
+                            e.stop_propagation();
+                            on_edit.call(s_edit_card.clone());
+                        },
+                        MaterialIcon { name: "edit", size: 18 }
+                    }
+                    button { 
+                        class: "w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-90",
+                        title: "Terminate Node",
+                        onclick: move |e| {
+                            e.stop_propagation();
+                            on_delete.call(s_del_card.id);
+                        },
+                        MaterialIcon { name: "delete_sweep", size: 18 }
+                    }
                 }
             }
         }

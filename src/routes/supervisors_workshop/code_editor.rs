@@ -39,7 +39,7 @@ pub static CODE_EDITOR_CSS: &str = r#"
 .prism-textarea {
     background: transparent;
     color: transparent;
-    caret-color: #e2e8f0;
+    caret-color: var(--color-slate-200);
     resize: none;
     z-index: 2;
     outline: none;
@@ -124,10 +124,10 @@ pub fn CodeEditor(
 
         // ── Fullscreen overlay ─────────────────────────────────────────
         if fullscreen() {
-            div { class: "fixed inset-0 z-50 bg-[#1e1e1e] flex flex-col animate-in fade-in duration-150",
+            div { class: "fixed inset-0 z-50 bg-slate-950 flex flex-col animate-in fade-in duration-150",
 
                 // Fullscreen toolbar
-                div { class: "flex items-center justify-between px-6 py-3 bg-[#252526] border-b border-white/10 shrink-0",
+                div { class: "flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-white/10 shrink-0",
                     // Left: traffic lights + filename
                     div { class: "flex items-center gap-3",
                         div { class: "flex gap-1.5",
@@ -146,7 +146,7 @@ pub fn CodeEditor(
                         button {
                             class: format!(
                                 "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors {}",
-                                if show_test() { "bg-[#3B82F6] text-white" }
+                                if show_test() { "bg-slate-900 text-white" }
                                 else { "bg-white/10 hover:bg-white/15 text-white/70" }
                             ),
                             onclick: move |_| show_test.set(!show_test()),
@@ -166,13 +166,13 @@ pub fn CodeEditor(
                 div { class: "flex-1 flex overflow-hidden",
 
                     // Editor
-                    div { class: "flex-1 overflow-auto bg-[#1e1e1e]",
+                    div { class: "flex-1 overflow-auto bg-slate-950",
                         EditorLayers { local_code, selected_supervisor }
                     }
 
                     // Test side-drawer
                     if show_test() {
-                        div { class: "w-96 bg-[#0f172a] border-l border-white/10 flex flex-col shrink-0",
+                        div { class: "w-96 bg-slate-900 border-l border-white/10 flex flex-col shrink-0",
                             TestPanel {
                                 supervisor_id: supervisor.id,
                                 local_code,
@@ -188,10 +188,10 @@ pub fn CodeEditor(
         div { class: "space-y-4",
 
             // Editor card
-            div { class: "bg-[#1e1e1e] rounded-2xl overflow-hidden border border-white/5 shadow-xl",
+            div { class: "bg-slate-950 rounded-2xl overflow-hidden border border-white/5 shadow-xl",
 
                 // Toolbar
-                div { class: "flex items-center justify-between px-5 py-3 bg-[#252526] border-b border-white/5 shrink-0",
+                div { class: "flex items-center justify-between px-5 py-3 bg-slate-900 border-b border-white/5 shrink-0",
                     // Left: traffic lights + filename + language badge
                     div { class: "flex items-center gap-3",
                         div { class: "flex gap-1.5",
@@ -211,7 +211,7 @@ pub fn CodeEditor(
                         button {
                             class: format!(
                                 "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors {}",
-                                if show_test() { "bg-[#3B82F6] text-white" }
+                                if show_test() { "bg-slate-900 text-white" }
                                 else { "bg-white/10 hover:bg-white/15 text-white/70" }
                             ),
                             onclick: move |_| show_test.set(!show_test()),
@@ -233,7 +233,7 @@ pub fn CodeEditor(
 
             // Inline test panel (below editor)
             if show_test() {
-                div { class: "bg-white border border-[#E2E8F0] rounded-2xl shadow-soft overflow-hidden animate-in slide-in-from-top-2 duration-200",
+                div { class: "bg-white border border-slate-200 rounded-2xl shadow-soft overflow-hidden animate-in slide-in-from-top-2 duration-200",
                     TestPanel {
                         supervisor_id: supervisor.id,
                         local_code,

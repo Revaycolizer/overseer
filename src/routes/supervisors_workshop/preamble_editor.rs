@@ -16,14 +16,14 @@ pub fn PreambleEditor(
     rsx! {
         // ── Fullscreen overlay ─────────────────────────────────────────────
         if fullscreen() {
-            div { class: "fixed inset-0 z-50 bg-[#0F172A] flex flex-col animate-in fade-in duration-150",
+            div { class: "fixed inset-0 z-50 bg-slate-900 flex flex-col animate-in fade-in duration-150",
                 // Toolbar
-                div { class: "flex items-center justify-between px-6 py-4 border-b border-white/10 bg-[#0F172A]",
+                div { class: "flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-900",
                     div { class: "flex items-center gap-3",
                         MaterialIcon {
                             name: "description",
                             size: 20,
-                            color: MaterialIconColor::Custom("#94a3b8".into())
+                            color: MaterialIconColor::Custom("inherit".into())
                         }
                         span {
                             class: "text-white/70 text-sm font-bold uppercase tracking-widest",
@@ -60,15 +60,15 @@ pub fn PreambleEditor(
         }
 
         // ── Normal card ────────────────────────────────────────────────────
-        div { class: "bg-white border border-[#E2E8F0] rounded-2xl shadow-soft overflow-hidden",
+        div { class: "bg-white border border-slate-200 rounded-2xl shadow-soft overflow-hidden",
 
             // Toolbar
-            div { class: "flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-[#E2E8F0]",
+            div { class: "flex items-center justify-between px-5 py-3 bg-slate-50 text-brand-blue border-b border-slate-200",
                 div { class: "flex items-center gap-2",
                     MaterialIcon {
                         name: "description",
                         size: 16,
-                        color: MaterialIconColor::Custom("#94a3b8".into())
+                        color: MaterialIconColor::Custom("inherit".into())
                     }
                     span {
                         class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
@@ -90,7 +90,7 @@ pub fn PreambleEditor(
 
             // Textarea
             textarea {
-                class: "w-full min-h-[320px] bg-white text-[#0F172A] font-mono text-sm p-6 resize-y focus:outline-none placeholder-slate-300 leading-relaxed border-none",
+                class: "w-full min-h-[320px] bg-white text-slate-900 font-mono text-sm p-6 resize-y focus:outline-none placeholder-slate-300 leading-relaxed border-none",
                 placeholder: "Define the core identity, reasoning loop, and behavioural rules for this supervisor...",
                 value: "{local_instructions}",
                 oninput: {
