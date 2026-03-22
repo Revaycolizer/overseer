@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow, PartialEq)]
@@ -41,24 +41,107 @@ pub fn project_root() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
+pub fn app_root_candidates() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        roots.push(current_dir);
+    }
+
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            let exe_dir = exe_dir.to_path_buf();
+            if !roots.contains(&exe_dir) {
+                roots.push(exe_dir);
+            }
+        }
+    }
+
+    roots
+}
+
+pub fn find_existing_relative_path(relative: &str) -> Option<PathBuf> {
+    let relative = PathBuf::from(relative);
+    if relative.is_absolute() {
+        return relative.exists().then_some(relative);
+    }
+
+    app_root_candidates()
+        .into_iter()
+        .map(|root| root.join(&relative))
+        .find(|candidate| candidate.exists())
+}
+
+pub fn config_agents_dir() -> Option<PathBuf> {
+    find_existing_relative_path("config/agents").filter(|path| path.is_dir())
+}
+
+pub fn logical_script_root(path: &Path) -> &'static str {
+    let normalized = path.to_string_lossy().replace('\\', "/");
+    if normalized.ends_with("/tool_scripts") || normalized == "tool_scripts" {
+        "tool_scripts"
+    } else if normalized.ends_with("/src/engine/scripts") || normalized == "src/engine/scripts" {
+        "src/engine/scripts"
+    } else if normalized.ends_with("/agents-scripts") || normalized == "agents-scripts" {
+        "agents-scripts"
+    } else {
+        "tool_scripts"
+    }
+}
+
+pub fn candidate_tool_script_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+
+    for relative in ["tool_scripts", "src/engine/scripts", "agents-scripts"] {
+        if let Some(path) = find_existing_relative_path(relative) {
+            if path.is_dir() && !roots.contains(&path) {
+                roots.push(path);
+            }
+        }
+    }
+
+    roots
+}
+
 pub fn runtime_dir() -> PathBuf {
     std::env::temp_dir().join("overseer_runtime")
 }
 
-fn normalize_script_path(raw_path: &str) -> PathBuf {
+fn resolve_script_path(raw_path: &str) -> Option<PathBuf> {
     let normalized = raw_path.replace('\\', "/");
-    let rewritten = if let Some(rest) = normalized.strip_prefix("agents-scripts/") {
-        format!("src/engine/scripts/{rest}")
-    } else {
-        normalized
-    };
-
-    let path = PathBuf::from(&rewritten);
+    let path = PathBuf::from(&normalized);
     if path.is_absolute() {
-        path
-    } else {
-        project_root().join(path)
+        return path.exists().then_some(path);
     }
+
+    let mut candidates = Vec::new();
+    if let Some(rest) = normalized
+        .strip_prefix("agents-scripts/")
+        .or_else(|| normalized.strip_prefix("src/engine/scripts/"))
+        .or_else(|| normalized.strip_prefix("tool_scripts/"))
+    {
+        for root in candidate_tool_script_roots() {
+            candidates.push(root.join(rest));
+        }
+    }
+
+    for root in app_root_candidates() {
+        candidates.push(root.join(&normalized));
+    }
+
+    candidates.into_iter().find(|candidate| candidate.exists())
+}
+
+fn normalize_script_path(raw_path: &str) -> PathBuf {
+    resolve_script_path(raw_path).unwrap_or_else(|| {
+        let normalized = raw_path.replace('\\', "/");
+        let path = PathBuf::from(&normalized);
+        if path.is_absolute() {
+            path
+        } else {
+            project_root().join(path)
+        }
+    })
 }
 
 fn python_command_candidates() -> Vec<Vec<String>> {
@@ -109,8 +192,9 @@ pub fn python_command_label() -> String {
 }
 
 pub fn build_python_command() -> Result<Vec<String>, String> {
-    detect_python_command()
-        .ok_or_else(|| "No working Python interpreter found. Set OVERSEER_PYTHON or install Python 3.".to_string())
+    detect_python_command().ok_or_else(|| {
+        "No working Python interpreter found. Set OVERSEER_PYTHON or install Python 3.".to_string()
+    })
 }
 
 /// Prepares a dedicated runtime directory with all DB-backed Python tools.
@@ -141,7 +225,10 @@ pub async fn prepare_runtime_env(db: &crate::db::Database) -> anyhow::Result<Str
         };
 
         if source.is_empty() {
-            println!("⚠️  Skipping runtime staging for '{}' because no Python source was available.", tool.name);
+            println!(
+                "⚠️  Skipping runtime staging for '{}' because no Python source was available.",
+                tool.name
+            );
             continue;
         }
 
