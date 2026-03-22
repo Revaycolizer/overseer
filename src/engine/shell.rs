@@ -1,9 +1,4 @@
-use rig::providers::ollama;
-use rig::client::Nothing;
 use std::io::{self, Write};
-
-use crate::engine::orchestrator::MasterPlanner;
-use crate::engine::memory::{setup_memory_table, retrieve_memories, store_memory};
 
 pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     let sqlite_db = crate::db::Database::new().await?;
@@ -26,6 +21,10 @@ pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
         let first_arg = args[1].to_lowercase();
         if first_arg == "info" || first_arg == "--info" {
             crate::engine::utils::discovery::print_system_info(&sqlite_db).await;
+            return Ok(());
+        }
+        if first_arg == "smoke" || first_arg == "--smoke" {
+            run_smoke_test(&sqlite_db).await?;
             return Ok(());
         }
         
@@ -55,5 +54,33 @@ pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
         
         println!("\n🤖 Assistant: {}", response);
     }
+    Ok(())
+}
+
+async fn run_smoke_test(sqlite_db: &crate::db::Database) -> Result<(), Box<dyn std::error::Error>> {
+    println!("🧪 Running deterministic smoke test...");
+    let conversation_id = crate::backend::add_conversation(sqlite_db, "Smoke Test").await?;
+    let query = "Create a simple smoke test chart.";
+    let _ = crate::backend::add_message(sqlite_db, conversation_id, "user", query).await?;
+
+    let tools = crate::backend::get_tools(sqlite_db).await?;
+    let chart_tool = tools.iter()
+        .find(|t| t.name == "charting")
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "charting tool not found in database"))?;
+
+    let chart = crate::engine::tools::call_dynamic_tool(
+        chart_tool,
+        serde_json::json!({
+            "input": {
+                "chart_type": "bar",
+                "title": "Smoke Test",
+                "labels": ["runtime", "db", "tool"],
+                "data": [1, 1, 1]
+            }
+        })
+    ).await?;
+
+    let _ = crate::backend::add_message(sqlite_db, conversation_id, "assistant", &chart).await?;
+    println!("✅ Smoke test stored a user message and chart response in conversation {}.", conversation_id);
     Ok(())
 }

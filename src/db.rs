@@ -5,12 +5,12 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use snowflake::SnowflakeIdGenerator;
 use serde::{Deserialize, Serialize};
+use anyhow::Context;
 
 #[derive(Clone)]
 pub struct Database {
     pub pool: sqlx::SqlitePool,
     pub snowflake: Arc<Mutex<SnowflakeIdGenerator>>,
-    pub lancedb: lancedb::Connection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
@@ -74,35 +74,41 @@ impl Database {
             .acquire_slow_threshold(std::time::Duration::from_secs(30))
             .acquire_slow_level(log::LevelFilter::Off)
             .connect_with(connection_options)
-            .await?;
+            .await
+            .context("failed to connect to SQLite database")?;
 
         // Synchronous = OFF is safe during migrations for speed, but keep journal_mode = WAL
-        sqlx::query("PRAGMA synchronous = OFF").execute(&pool).await?;
+        sqlx::query("PRAGMA synchronous = OFF")
+            .execute(&pool)
+            .await
+            .context("failed to relax SQLite synchronous mode for migrations")?;
 
         sqlx::migrate!("./migrations")
             .run(&pool)
-            .await?;
+            .await
+            .context("failed while applying database migrations")?;
 
         // Restore durability
-        sqlx::query("PRAGMA synchronous = NORMAL").execute(&pool).await?;
+        sqlx::query("PRAGMA synchronous = NORMAL")
+            .execute(&pool)
+            .await
+            .context("failed to restore SQLite synchronous mode after migrations")?;
 
         // Pool is already created above and migrated
 
         println!("📂 Initializing LanceDB...");
-        let _ = std::fs::create_dir_all("rig_memory");
-        let lancedb = lancedb::connect("rig_memory").execute().await?;
-
         let generator = SnowflakeIdGenerator::new(1, 1);
         let database = Self {
             pool: pool.clone(),
             snowflake: Arc::new(Mutex::new(generator)),
-            lancedb,
         };
 
-        database.seed_all().await?;
+        database.seed_all().await.context("failed to seed or normalize database content")?;
         
         println!("🏗️  Staging tools to runtime environment...");
-        let _ = crate::engine::utils::discovery::prepare_runtime_env(&database).await;
+        if let Err(e) = crate::engine::utils::discovery::prepare_runtime_env(&database).await {
+            println!("⚠️  Tool runtime staging failed: {}", e);
+        }
 
         println!("✨ Database initialization complete.");
         Ok(database)
@@ -115,8 +121,34 @@ impl Database {
         self.seed_agent_tools().await?;
         self.seed_supervisors().await?;
         self.seed_planners().await?;
+        self.ensure_setting_defaults().await?;
         self.ensure_system_agents().await?; 
         self.backfill_ids().await?;
+        Ok(())
+    }
+
+    async fn ensure_setting_defaults(&self) -> anyhow::Result<()> {
+        let defaults = [
+            ("title_generator_model", "qwen2.5:7b-instruct"),
+            ("default_chat_model", "qwen2.5:7b-instruct"),
+            ("max_iterations", "10"),
+            ("tool_timeout_ms", "45000"),
+            ("model_timeout_ms", "90000"),
+        ];
+
+        for (key, value) in defaults {
+            let id = self.next_id().await;
+            sqlx::query(
+                "INSERT INTO settings (id, key, value) VALUES (?, ?, ?) \
+                 ON CONFLICT(key) DO NOTHING"
+            )
+            .bind(id)
+            .bind(key)
+            .bind(value)
+            .execute(&self.pool)
+            .await?;
+        }
+
         Ok(())
     }
 
@@ -250,19 +282,24 @@ impl Database {
         println!("🛠️ Seeding ALL authentic tools from filesystem...");
         let mut tools_data = Vec::new();
 
-        // Recursively scan agents-scripts
-        let script_dirs = vec!["web", "stealth", "desktop"];
-        for dir in script_dirs {
-            let path = format!("agents-scripts/{}", dir);
-            if let Ok(entries) = std::fs::read_dir(&path) {
-                for entry in entries.flatten() {
-                    if entry.path().extension().and_then(|s| s.to_str()) == Some("py") {
-                        if let Some(name) = entry.file_name().to_str() {
-                            let tool_name = name.trim_end_matches(".py").to_string();
-                            let script_path = format!("agents-scripts/{}/{}", dir, name);
-                            let code = std::fs::read_to_string(entry.path()).unwrap_or_default();
-                            let description = format!("{} tool for {} domain", tool_name, dir);
-                            tools_data.push((tool_name, description, "python".to_string(), script_path, code));
+        let script_dirs = ["web", "stealth", "desktop"];
+        let script_roots = ["src/engine/scripts", "agents-scripts"];
+        for root in script_roots {
+            for dir in script_dirs {
+                let path = format!("{root}/{dir}");
+                if let Ok(entries) = std::fs::read_dir(&path) {
+                    for entry in entries.flatten() {
+                        if entry.path().extension().and_then(|s| s.to_str()) == Some("py") {
+                            if let Some(name) = entry.file_name().to_str() {
+                                let tool_name = name.trim_end_matches(".py").to_string();
+                                if tools_data.iter().any(|existing: &(String, String, String, String, String)| existing.0.as_str() == tool_name.as_str()) {
+                                    continue;
+                                }
+                                let script_path = format!("{path}/{name}");
+                                let code = std::fs::read_to_string(entry.path()).unwrap_or_default();
+                                let description = format!("{} tool for {} domain", tool_name, dir);
+                                tools_data.push((tool_name, description, "python".to_string(), script_path, code));
+                            }
                         }
                     }
                 }

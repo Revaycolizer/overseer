@@ -87,7 +87,7 @@ fn App() -> Element {
             Ok(_) => println!("✅ Database resource initialization successful!"),
             Err(e) => eprintln!("❌ Database resource initialization failed: {}", e),
         }
-        result.ok()
+        result.map_err(|e| format!("{:#}", e))
     });
 
     rsx! {
@@ -101,8 +101,6 @@ fn App() -> Element {
         document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js" }
         document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js" }
         document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js" }
-        document::Script { src: "https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js" }
-        document::Script { src: "https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js" }
 
         document::Script {
             {r#"
@@ -122,19 +120,19 @@ fn App() -> Element {
         
         if let Some(res) = db.cloned() {
             match res {
-                Some(database) => rsx! {
+                Ok(database) => rsx! {
                     StateProvider {
                         database: Arc::new(database),
                         Router::<Route> {}
                     }
                 },
-                None => rsx! {
+                Err(error_message) => rsx! {
                     div { class: "flex items-center justify-center h-screen bg-[#0f1116] text-white flex-col",
                         div { class: "p-8 bg-red-900/20 border border-red-500 rounded-lg max-w-2xl",
                             h2 { class: "text-xl font-bold text-red-500 mb-4", "Database Initialization Failed" }
-                            p { class: "text-gray-300 mb-4", "The application encountered an error while setting up the database. This usually happens if migration files have been modified after being applied." }
-                            pre { class: "bg-black/40 p-4 rounded text-xs overflow-auto max-h-64 text-red-300",
-                                "Error: Migration checksum mismatch or lock issue.\nCheck terminal logs for details."
+                            p { class: "text-gray-300 mb-4", "The application encountered an error while setting up the local runtime. The message below includes the failing stage so it is easier to repair." }
+                            pre { class: "bg-black/40 p-4 rounded text-xs overflow-auto max-h-64 text-red-300 whitespace-pre-wrap",
+                                "{error_message}"
                             }
                             button { 
                                 class: "mt-6 px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition-colors font-medium",

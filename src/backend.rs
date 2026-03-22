@@ -81,7 +81,7 @@ pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
 pub async fn get_tools(db: &Database) -> anyhow::Result<Vec<ToolInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT id, name, description, CAST(code AS TEXT) as code, language, script_path, required_intent, version FROM tools"
+        "SELECT id, name, description, CAST(code AS TEXT) as code, language, script_path, required_intent, safety_level, version FROM tools"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -94,6 +94,7 @@ pub async fn get_tools(db: &Database) -> anyhow::Result<Vec<ToolInfo>> {
         language: r.get::<Option<String>, _>("language").unwrap_or_default(),
         script_path: r.get("script_path"),
         required_intent: r.get("required_intent"),
+        safety_level: r.get::<Option<String>, _>("safety_level").unwrap_or_else(|| "standard".to_string()),
         version: r.get::<Option<String>, _>("version").unwrap_or_default(),
     }).collect();
     
@@ -114,9 +115,9 @@ pub async fn add_agent(db: &Database, name: &str, description: &str, domain: &st
 pub async fn add_tool(db: &Database, name: &str, description: &str, language: &str) -> anyhow::Result<i64> {
     let id = db.next_id().await;
     sqlx::query(
-        "INSERT INTO tools (id, name, description, code, language, script_path, required_intent, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO tools (id, name, description, code, language, script_path, required_intent, safety_level, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(id).bind(name).bind(description).bind("").bind(language).bind("").bind(None::<String>).bind("1.0.0")
+    .bind(id).bind(name).bind(description).bind("").bind(language).bind("").bind(None::<String>).bind("standard").bind("1.0.0")
     .execute(&db.pool)
     .await?;
     Ok(id)
@@ -134,9 +135,17 @@ pub async fn update_agent(db: &Database, agent: AgentInfo) -> anyhow::Result<()>
 
 pub async fn update_tool(db: &Database, tool: ToolInfo) -> anyhow::Result<()> {
     sqlx::query(
-        "UPDATE tools SET name = ?, description = ?, code = ?, language = ?, script_path = ?, required_intent = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        "UPDATE tools SET name = ?, description = ?, code = ?, language = ?, script_path = ?, required_intent = ?, safety_level = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     )
-    .bind(tool.name).bind(tool.description).bind(tool.code).bind(tool.language).bind(tool.script_path).bind(tool.required_intent).bind(tool.version).bind(tool.id)
+    .bind(tool.name)
+    .bind(tool.description)
+    .bind(tool.code)
+    .bind(tool.language)
+    .bind(tool.script_path)
+    .bind(tool.required_intent)
+    .bind(tool.safety_level)
+    .bind(tool.version)
+    .bind(tool.id)
     .execute(&db.pool)
     .await?;
     Ok(())
@@ -156,7 +165,7 @@ pub async fn get_supervisors(db: &Database) -> anyhow::Result<Vec<crate::db::Sup
 pub async fn get_supervisor_tools(db: &Database, supervisor_id: i64) -> anyhow::Result<Vec<ToolInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT DISTINCT t.id, t.name, t.description, CAST(t.code AS TEXT) as code, t.language, t.script_path, t.required_intent, t.version 
+        "SELECT DISTINCT t.id, t.name, t.description, CAST(t.code AS TEXT) as code, t.language, t.script_path, t.required_intent, t.safety_level, t.version 
          FROM tools t
          JOIN agent_tools at ON t.id = at.tool_id
          JOIN supervisor_agents sa ON at.agent_id = sa.agent_id
@@ -174,6 +183,7 @@ pub async fn get_supervisor_tools(db: &Database, supervisor_id: i64) -> anyhow::
         language: r.get::<Option<String>, _>("language").unwrap_or_default(),
         script_path: r.get("script_path"),
         required_intent: r.get("required_intent"),
+        safety_level: r.get::<Option<String>, _>("safety_level").unwrap_or_else(|| "standard".to_string()),
         version: r.get::<Option<String>, _>("version").unwrap_or_default(),
     }).collect();
     
@@ -524,10 +534,20 @@ pub async fn rollback_version(db: &Database, entity_type: &str, entity_id: i64, 
     let content: String = v.get("content");
 
     if entity_type == "agent" {
+        let agent: AgentInfo = serde_json::from_str(&content)?;
         sqlx::query(
-            "UPDATE agents SET version = ?, instructions = ? WHERE id = ?"
+            "UPDATE agents
+             SET version = ?, name = ?, description = ?, instructions = ?, model = ?, domain = ?, code = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?"
         )
-        .bind(version_tag).bind(content).bind(entity_id)
+        .bind(version_tag)
+        .bind(agent.name)
+        .bind(agent.description)
+        .bind(agent.instructions)
+        .bind(agent.model)
+        .bind(agent.domain)
+        .bind(agent.code)
+        .bind(entity_id)
         .execute(&db.pool)
         .await?;
     } else if entity_type == "tool" {
@@ -540,6 +560,19 @@ pub async fn rollback_version(db: &Database, entity_type: &str, entity_id: i64, 
     }
 
     Ok(())
+}
+
+pub async fn get_version_content(db: &Database, entity_type: &str, entity_id: i64, version_tag: &str) -> anyhow::Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT content FROM versions WHERE entity_type = ? AND entity_id = ? AND version_tag = ? LIMIT 1"
+    )
+    .bind(entity_type)
+    .bind(entity_id)
+    .bind(version_tag)
+    .fetch_optional(&db.pool)
+    .await?;
+
+    Ok(row.map(|(content,)| content))
 }
 
 pub async fn get_version_history(db: &Database, entity_type: &str, entity_id: i64) -> anyhow::Result<Vec<EntityVersion>> {
@@ -588,19 +621,417 @@ pub struct Attachment {
     pub size: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ExecutionRun {
+    pub id: i64,
+    pub conversation_id: Option<i64>,
+    pub user_query: String,
+    pub status: String,
+    pub final_response: Option<String>,
+    pub error_message: Option<String>,
+    pub started_at: chrono::NaiveDateTime,
+    pub finished_at: Option<chrono::NaiveDateTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ExecutionEvent {
+    pub id: i64,
+    pub run_id: i64,
+    pub sequence: i64,
+    pub event_type: String,
+    pub status: String,
+    pub domain: Option<String>,
+    pub step_text: Option<String>,
+    pub tool_name: Option<String>,
+    pub model: Option<String>,
+    pub message: Option<String>,
+    pub details: Option<String>,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
+pub struct Workflow {
+    pub id: i64,
+    pub name: String,
+    pub description: Option<String>,
+    pub trigger_type: String,
+    pub trigger_config: Option<String>,
+    pub status: String,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
+pub struct WorkflowStep {
+    pub id: i64,
+    pub workflow_id: i64,
+    pub step_order: i64,
+    pub name: String,
+    pub prompt: String,
+    pub enabled: bool,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
+pub struct WorkflowRun {
+    pub id: i64,
+    pub workflow_id: i64,
+    pub status: String,
+    pub summary: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: chrono::NaiveDateTime,
+    pub finished_at: Option<chrono::NaiveDateTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
+pub struct WorkflowStepRun {
+    pub id: i64,
+    pub workflow_run_id: i64,
+    pub workflow_step_id: i64,
+    pub step_order: i64,
+    pub status: String,
+    pub output: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+pub async fn start_execution_run(db: &Database, conversation_id: i64, user_query: &str) -> anyhow::Result<i64> {
+    let id = db.next_id().await;
+    sqlx::query(
+        "INSERT INTO execution_runs (id, conversation_id, user_query, status) VALUES (?, ?, ?, 'running')"
+    )
+    .bind(id)
+    .bind(conversation_id)
+    .bind(user_query)
+    .execute(&db.pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn finish_execution_run(
+    db: &Database,
+    run_id: i64,
+    status: &str,
+    final_response: Option<&str>,
+    error_message: Option<&str>,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE execution_runs SET status = ?, final_response = ?, error_message = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?"
+    )
+    .bind(status)
+    .bind(final_response)
+    .bind(error_message)
+    .bind(run_id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn log_execution_event(
+    db: &Database,
+    run_id: i64,
+    sequence: i64,
+    event_type: &str,
+    status: &str,
+    domain: Option<&str>,
+    step_text: Option<&str>,
+    tool_name: Option<&str>,
+    model: Option<&str>,
+    message: Option<&str>,
+    details: Option<&str>,
+) -> anyhow::Result<()> {
+    let id = db.next_id().await;
+    sqlx::query(
+        "INSERT INTO execution_events (id, run_id, sequence, event_type, status, domain, step_text, tool_name, model, message, details)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(id)
+    .bind(run_id)
+    .bind(sequence)
+    .bind(event_type)
+    .bind(status)
+    .bind(domain)
+    .bind(step_text)
+    .bind(tool_name)
+    .bind(model)
+    .bind(message)
+    .bind(details)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_workflows(db: &Database) -> anyhow::Result<Vec<Workflow>> {
+    let rows = sqlx::query_as::<_, Workflow>(
+        "SELECT id, name, description, trigger_type, trigger_config, status, created_at, updated_at
+         FROM workflows
+         ORDER BY updated_at DESC, created_at DESC"
+    )
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn add_workflow(db: &Database, name: &str) -> anyhow::Result<i64> {
+    let id = db.next_id().await;
+    sqlx::query(
+        "INSERT INTO workflows (id, name, description, trigger_type, trigger_config, status)
+         VALUES (?, ?, ?, 'manual', ?, 'draft')"
+    )
+    .bind(id)
+    .bind(name)
+    .bind("New workflow")
+    .bind(None::<String>)
+    .execute(&db.pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn update_workflow(db: &Database, workflow: Workflow) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE workflows
+         SET name = ?, description = ?, trigger_type = ?, trigger_config = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?"
+    )
+    .bind(workflow.name)
+    .bind(workflow.description)
+    .bind(workflow.trigger_type)
+    .bind(workflow.trigger_config)
+    .bind(workflow.status)
+    .bind(workflow.id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_workflow(db: &Database, workflow_id: i64) -> anyhow::Result<()> {
+    sqlx::query("DELETE FROM workflows WHERE id = ?")
+        .bind(workflow_id)
+        .execute(&db.pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn get_workflow_steps(db: &Database, workflow_id: i64) -> anyhow::Result<Vec<WorkflowStep>> {
+    let rows = sqlx::query_as::<_, WorkflowStep>(
+        "SELECT id, workflow_id, step_order, name, prompt, enabled, created_at, updated_at
+         FROM workflow_steps
+         WHERE workflow_id = ?
+         ORDER BY step_order ASC, created_at ASC"
+    )
+    .bind(workflow_id)
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn add_workflow_step(db: &Database, workflow_id: i64) -> anyhow::Result<i64> {
+    let id = db.next_id().await;
+    let next_order: (i64,) = sqlx::query_as(
+        "SELECT COALESCE(MAX(step_order), 0) + 1 FROM workflow_steps WHERE workflow_id = ?"
+    )
+    .bind(workflow_id)
+    .fetch_one(&db.pool)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO workflow_steps (id, workflow_id, step_order, name, prompt, enabled)
+         VALUES (?, ?, ?, ?, ?, 1)"
+    )
+    .bind(id)
+    .bind(workflow_id)
+    .bind(next_order.0)
+    .bind(format!("Step {}", next_order.0))
+    .bind("Describe the action this workflow step should perform.")
+    .execute(&db.pool)
+    .await?;
+
+    sqlx::query("UPDATE workflows SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(workflow_id)
+        .execute(&db.pool)
+        .await?;
+
+    Ok(id)
+}
+
+pub async fn update_workflow_step(db: &Database, step: WorkflowStep) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE workflow_steps
+         SET step_order = ?, name = ?, prompt = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?"
+    )
+    .bind(step.step_order)
+    .bind(step.name)
+    .bind(step.prompt)
+    .bind(step.enabled)
+    .bind(step.id)
+    .execute(&db.pool)
+    .await?;
+
+    sqlx::query("UPDATE workflows SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(step.workflow_id)
+        .execute(&db.pool)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn delete_workflow_step(db: &Database, step_id: i64) -> anyhow::Result<()> {
+    let workflow: Option<(i64,)> = sqlx::query_as("SELECT workflow_id FROM workflow_steps WHERE id = ?")
+        .bind(step_id)
+        .fetch_optional(&db.pool)
+        .await?;
+
+    sqlx::query("DELETE FROM workflow_steps WHERE id = ?")
+        .bind(step_id)
+        .execute(&db.pool)
+        .await?;
+
+    if let Some((workflow_id,)) = workflow {
+        let steps = get_workflow_steps(db, workflow_id).await?;
+        for (index, step) in steps.into_iter().enumerate() {
+            sqlx::query("UPDATE workflow_steps SET step_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+                .bind((index + 1) as i64)
+                .bind(step.id)
+                .execute(&db.pool)
+                .await?;
+        }
+        sqlx::query("UPDATE workflows SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(workflow_id)
+            .execute(&db.pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn get_workflow_runs(db: &Database, workflow_id: i64) -> anyhow::Result<Vec<WorkflowRun>> {
+    let rows = sqlx::query_as::<_, WorkflowRun>(
+        "SELECT id, workflow_id, status, summary, error_message, created_at, finished_at
+         FROM workflow_runs
+         WHERE workflow_id = ?
+         ORDER BY created_at DESC"
+    )
+    .bind(workflow_id)
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn get_workflow_step_runs(db: &Database, workflow_run_id: i64) -> anyhow::Result<Vec<WorkflowStepRun>> {
+    let rows = sqlx::query_as::<_, WorkflowStepRun>(
+        "SELECT id, workflow_run_id, workflow_step_id, step_order, status, output, error_message, created_at
+         FROM workflow_step_runs
+         WHERE workflow_run_id = ?
+         ORDER BY step_order ASC"
+    )
+    .bind(workflow_run_id)
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn run_workflow(
+    db: &Database,
+    agent_system: &crate::engine::system::AgentSystem,
+    workflow_id: i64,
+) -> anyhow::Result<i64> {
+    let workflow = sqlx::query_as::<_, Workflow>(
+        "SELECT id, name, description, trigger_type, trigger_config, status, created_at, updated_at
+         FROM workflows
+         WHERE id = ?"
+    )
+    .bind(workflow_id)
+    .fetch_one(&db.pool)
+    .await?;
+
+    let steps = get_workflow_steps(db, workflow_id).await?
+        .into_iter()
+        .filter(|step| step.enabled)
+        .collect::<Vec<_>>();
+
+    let run_id = db.next_id().await;
+    sqlx::query(
+        "INSERT INTO workflow_runs (id, workflow_id, status) VALUES (?, ?, 'running')"
+    )
+    .bind(run_id)
+    .bind(workflow_id)
+    .execute(&db.pool)
+    .await?;
+
+    if steps.is_empty() {
+        sqlx::query(
+            "UPDATE workflow_runs SET status = 'failed', error_message = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?"
+        )
+        .bind("Workflow has no enabled steps.")
+        .bind(run_id)
+        .execute(&db.pool)
+        .await?;
+        return Ok(run_id);
+    }
+
+    let conversation_id = add_conversation(db, &format!("Workflow Run: {}", workflow.name)).await?;
+    let mut last_output = String::new();
+
+    for step in steps {
+        let step_run_id = db.next_id().await;
+        sqlx::query(
+            "INSERT INTO workflow_step_runs (id, workflow_run_id, workflow_step_id, step_order, status)
+             VALUES (?, ?, ?, ?, 'running')"
+        )
+        .bind(step_run_id)
+        .bind(run_id)
+        .bind(step.id)
+        .bind(step.step_order)
+        .execute(&db.pool)
+        .await?;
+
+        let user_prompt = format!("Workflow: {}\nStep {} - {}\n\n{}", workflow.name, step.step_order, step.name, step.prompt);
+        let _ = add_message(db, conversation_id, "user", &user_prompt).await?;
+        let output = agent_system.orchestrate(db, conversation_id, &user_prompt).await;
+        let _ = add_message(db, conversation_id, "assistant", &output).await?;
+        last_output = output.clone();
+
+        sqlx::query(
+            "UPDATE workflow_step_runs SET status = 'completed', output = ? WHERE id = ?"
+        )
+        .bind(output)
+        .bind(step_run_id)
+        .execute(&db.pool)
+        .await?;
+    }
+
+    sqlx::query(
+        "UPDATE workflow_runs SET status = 'completed', summary = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?"
+    )
+    .bind(last_output)
+    .bind(run_id)
+    .execute(&db.pool)
+    .await?;
+
+    Ok(run_id)
+}
+
 
 pub async fn test_tool_code(language: &str, code: &str, query: Option<&str>) -> anyhow::Result<String> {
-    use std::process::Command;
     use std::io::Write;
     use tempfile::NamedTempFile;
+    use tokio::process::Command;
 
     if language.to_lowercase() == "python" {
         let mut temp_file = NamedTempFile::new()?;
         write!(temp_file, "{}", code)?;
         let path = temp_file.path().to_str().unwrap();
 
-        let mut cmd = Command::new("python3");
+        let parts = crate::engine::utils::discovery::build_python_command()
+            .map_err(anyhow::Error::msg)?;
+        let mut cmd = Command::new(&parts[0]);
+        if parts.len() > 1 {
+            cmd.args(&parts[1..]);
+        }
         cmd.arg(path);
+        cmd.kill_on_drop(true);
 
         if let Some(q) = query {
             // Using a simple whitespace split to mimic CLI arguments from the UI text field.
@@ -609,7 +1040,14 @@ pub async fn test_tool_code(language: &str, code: &str, query: Option<&str>) -> 
             cmd.args(args);
         }
 
-        let output = cmd.output()?;
+        let timeout_ms = std::env::var("OVERSEER_TOOL_TEST_TIMEOUT_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(15_000);
+
+        let output = tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), cmd.output())
+            .await
+            .map_err(|_| anyhow::anyhow!("Tool test timed out after {} ms", timeout_ms))??;
 
         let mut result = String::new();
         if !output.stdout.is_empty() {
@@ -662,6 +1100,22 @@ pub async fn get_setting(db: &Database, key: &str) -> String {
     }
 }
 
+pub async fn get_setting_or(db: &Database, key: &str, default: &str) -> String {
+    let value = get_setting(db, key).await;
+    if value.is_empty() {
+        default.to_string()
+    } else {
+        value
+    }
+}
+
+pub async fn get_setting_i64(db: &Database, key: &str, default: i64) -> i64 {
+    get_setting(db, key)
+        .await
+        .parse::<i64>()
+        .unwrap_or(default)
+}
+
 pub async fn set_setting(db: &Database, key: &str, value: &str) -> anyhow::Result<()> {
     let id = db.next_id().await;
     sqlx::query("INSERT INTO settings (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
@@ -698,11 +1152,18 @@ pub async fn get_all_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
 
 pub async fn get_system_load() -> SystemLoad {
     use std::process::Command;
+    #[cfg(windows)]
+    use std::os::windows::process::CommandExt;
+
+    #[cfg(windows)]
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
 
     // 1. Try GPU Load (NVIDIA)
-    let gpu_output = Command::new("nvidia-smi")
-        .args(["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"])
-        .output();
+    let mut gpu_cmd = Command::new("nvidia-smi");
+    gpu_cmd.args(["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]);
+    #[cfg(windows)]
+    gpu_cmd.creation_flags(CREATE_NO_WINDOW);
+    let gpu_output = gpu_cmd.output();
 
     if let Ok(output) = gpu_output {
         if output.status.success() {
@@ -717,12 +1178,14 @@ pub async fn get_system_load() -> SystemLoad {
     }
 
     // 2. Fallback to CPU Load
-    // We use top to get a quick snapshot of CPU idle time
+    // We use top to get a quick snapshot of CPU idle time on Unix-like systems.
+    #[cfg(not(windows))]
     let cpu_output = Command::new("sh")
         .arg("-c")
         .arg("top -bn1 | grep '%Cpu(s)'")
         .output();
 
+    #[cfg(not(windows))]
     if let Ok(output) = cpu_output {
         if output.status.success() {
             let s = String::from_utf8_lossy(&output.stdout);
@@ -744,6 +1207,12 @@ pub async fn get_system_load() -> SystemLoad {
             }
         }
     }
+
+    #[cfg(windows)]
+    return SystemLoad {
+        label: "System Load".to_string(),
+        usage: 0,
+    };
 
     // 3. Absolute fallback
     SystemLoad {

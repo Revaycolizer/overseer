@@ -32,6 +32,17 @@ pub fn Settings() -> Element {
         .cloned()
         .unwrap_or_else(|| "10".to_string());
 
+    let tool_timeout_ms = current_settings.get("tool_timeout_ms")
+        .cloned()
+        .unwrap_or_else(|| "45000".to_string());
+
+    let model_timeout_ms = current_settings.get("model_timeout_ms")
+        .cloned()
+        .unwrap_or_else(|| "90000".to_string());
+
+    let runtime_dir = crate::engine::utils::discovery::runtime_dir().display().to_string();
+    let python_command = crate::engine::utils::discovery::python_command_label();
+
     rsx! {
         div { class: "flex-1 flex flex-col min-h-0 bg-slate-50 overflow-y-auto custom-scrollbar",
             main { class: "flex-1 p-6 md:p-12 max-w-4xl mx-auto w-full",
@@ -116,6 +127,66 @@ pub fn Settings() -> Element {
                                 }
                             }
 
+                            div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
+                                div { class: "mb-4 md:mb-0",
+                                    label { class: "text-base font-bold text-slate-900 block mb-1",
+                                        "Tool Timeout"
+                                    }
+                                    p { class: "text-sm text-slate-500",
+                                        "Maximum runtime allowed for each tool invocation."
+                                    }
+                                }
+                                div { class: "flex items-center gap-3 w-full md:w-72",
+                                    input {
+                                        r#type: "number",
+                                        class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm font-medium text-slate-700",
+                                        value: "{tool_timeout_ms}",
+                                        min: "1000",
+                                        max: "300000",
+                                        step: "1000",
+                                        onchange: move |evt| {
+                                            let db = state.read().db.clone();
+                                            let mut settings = settings.clone();
+                                            spawn(async move {
+                                                let _ = crate::backend::set_setting(&db, "tool_timeout_ms", &evt.value()).await;
+                                                settings.restart();
+                                            });
+                                        }
+                                    }
+                                    span { class: "text-xs font-bold text-slate-400 uppercase tracking-widest", "ms" }
+                                }
+                            }
+
+                            div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
+                                div { class: "mb-4 md:mb-0",
+                                    label { class: "text-base font-bold text-slate-900 block mb-1",
+                                        "Model Timeout"
+                                    }
+                                    p { class: "text-sm text-slate-500",
+                                        "Maximum time allowed for planner, supervisor, and synthesis model calls."
+                                    }
+                                }
+                                div { class: "flex items-center gap-3 w-full md:w-72",
+                                    input {
+                                        r#type: "number",
+                                        class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm font-medium text-slate-700",
+                                        value: "{model_timeout_ms}",
+                                        min: "1000",
+                                        max: "600000",
+                                        step: "1000",
+                                        onchange: move |evt| {
+                                            let db = state.read().db.clone();
+                                            let mut settings = settings.clone();
+                                            spawn(async move {
+                                                let _ = crate::backend::set_setting(&db, "model_timeout_ms", &evt.value()).await;
+                                                settings.restart();
+                                            });
+                                        }
+                                    }
+                                    span { class: "text-xs font-bold text-slate-400 uppercase tracking-widest", "ms" }
+                                }
+                            }
+
                             // Title Model
                             div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 opacity-80",
                                 div { class: "mb-4 md:mb-0",
@@ -174,6 +245,23 @@ pub fn Settings() -> Element {
                                         r#type: "checkbox",
                                     }
                                     div { class: "w-14 h-8 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600" }
+                                }
+                            }
+
+                            div { class: "p-6 bg-white rounded-2xl border border-slate-200 shadow-sm",
+                                div { class: "mb-4",
+                                    p { class: "text-base font-bold text-slate-900 mb-1", "Runtime Diagnostics" }
+                                    p { class: "text-sm text-slate-500", "Current local runtime paths used for tool staging and Python execution." }
+                                }
+                                div { class: "space-y-3 text-sm",
+                                    div {
+                                        span { class: "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1", "Python Command" }
+                                        code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all", "{python_command}" }
+                                    }
+                                    div {
+                                        span { class: "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1", "Runtime Directory" }
+                                        code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all", "{runtime_dir}" }
+                                    }
                                 }
                             }
                         }
