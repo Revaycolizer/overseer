@@ -26,6 +26,7 @@ pub fn AgentsWorkshop() -> Element {
     let agents = agents_resource.read().cloned().unwrap_or_default();
     let mut models = use_signal(|| vec!["loading...".to_string()]);
     let mut selected_agent_id = use_signal(|| agents.first().map(|a| a.id.clone()).unwrap_or_default());
+    let mut selected_version_tag = use_signal(String::new);
     
     let _ = use_resource(move || async move {
         let fetched_models: Vec<String> = backend::get_available_models().await;
@@ -53,6 +54,34 @@ pub fn AgentsWorkshop() -> Element {
         
         if let Some(agent) = current_agents.iter().find(|a| a.id == selected_agent_id()) {
             local_instructions.set(agent.instructions.clone());
+        }
+        selected_version_tag.set(String::new());
+    });
+
+    let db_for_versions = db.clone();
+    let mut version_history_resource = use_resource(move || {
+        let db = db_for_versions.clone();
+        let agent_id = selected_agent_id();
+        async move {
+            if agent_id != 0 {
+                backend::get_version_history(&db, "agent", agent_id).await.unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
+
+    let db_for_version_content = db.clone();
+    let version_content_resource = use_resource(move || {
+        let db = db_for_version_content.clone();
+        let agent_id = selected_agent_id();
+        let version_tag = selected_version_tag();
+        async move {
+            if agent_id != 0 && !version_tag.is_empty() {
+                backend::get_version_content(&db, "agent", agent_id, &version_tag).await.unwrap_or_default()
+            } else {
+                None
+            }
         }
     });
 
@@ -337,6 +366,75 @@ pub fn AgentsWorkshop() -> Element {
                                     }
                                 }
 
+                                div { class: "px-8 pb-8",
+                                    div { class: "border border-slate-200 rounded-xl overflow-hidden",
+                                        div { class: "px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between",
+                                            span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Version History" }
+                                            if !selected_version_tag().is_empty() {
+                                                button {
+                                                    class: "bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-slate-800 transition-all",
+                                                    onclick: {
+                                                        let db = db.clone();
+                                                        let mut agents_resource = agents_resource.clone();
+                                                        let mut version_history_resource = version_history_resource.clone();
+                                                        let version_tag = selected_version_tag();
+                                                        move |_| {
+                                                            let db = db.clone();
+                                                            let mut agents_resource = agents_resource.clone();
+                                                            let mut version_history_resource = version_history_resource.clone();
+                                                            let version_tag = version_tag.clone();
+                                                            spawn(async move {
+                                                                let _ = backend::rollback_version(&db, "agent", agent.id, &version_tag).await;
+                                                                agents_resource.restart();
+                                                                version_history_resource.restart();
+                                                            });
+                                                        }
+                                                    },
+                                                    "Rollback to Snapshot"
+                                                }
+                                            }
+                                        }
+                                        div { class: "grid grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] gap-4 p-4",
+                                            div { class: "space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1",
+                                                for version in version_history_resource.read().cloned().unwrap_or_default() {
+                                                    button {
+                                                        key: "{version.id}",
+                                                        class: format!(
+                                                            "w-full text-left rounded-xl border px-3 py-2 transition-all {}",
+                                                            if selected_version_tag() == version.version_tag {
+                                                                "border-blue-300 bg-blue-50"
+                                                            } else {
+                                                                "border-slate-200 bg-slate-50 hover:border-slate-300"
+                                                            }
+                                                        ),
+                                                        onclick: {
+                                                            let tag = version.version_tag.clone();
+                                                            move |_| selected_version_tag.set(tag.clone())
+                                                        },
+                                                        div { class: "text-[11px] font-bold text-slate-700", "{version.version_tag}" }
+                                                        div { class: "text-[10px] text-slate-400 mt-1", {version.created_at.format("%Y-%m-%d %H:%M").to_string()} }
+                                                        div { class: "text-[10px] text-slate-500 mt-1 line-clamp-2", "{version.changelog.clone().unwrap_or_default()}" }
+                                                    }
+                                                }
+                                            }
+                                            div { class: "grid grid-cols-1 xl:grid-cols-2 gap-4",
+                                                div {
+                                                    label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Current Instructions" }
+                                                    pre { class: "min-h-[180px] max-h-[240px] overflow-auto custom-scrollbar bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-700 whitespace-pre-wrap",
+                                                        "{local_instructions}"
+                                                    }
+                                                }
+                                                div {
+                                                    label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", "Selected Snapshot" }
+                                                    pre { class: "min-h-[180px] max-h-[240px] overflow-auto custom-scrollbar bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-700 whitespace-pre-wrap",
+                                                        "{version_content_resource.read().cloned().flatten().unwrap_or_else(|| \"Select a snapshot to compare or rollback.\".to_string())}"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 div { class: "px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-between items-center rounded-b-xl",
                                     div { class: "flex items-center gap-2 text-slate-400",
                                         MaterialIcon { name: "history", size: 14 }
@@ -352,9 +450,12 @@ pub fn AgentsWorkshop() -> Element {
                                                 move |_| {
                                                     let db = db.clone();
                                                     let mut agents_resource = agents_resource.clone();
+                                                    let mut version_history_resource = version_history_resource.clone();
                                                     spawn(async move {
-                                                        let _ = backend::publish_agent_version(&db, agent_id, "1.1.0", "Marketplace release").await;
+                                                        let version_tag = format!("snapshot-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
+                                                        let _ = backend::publish_agent_version(&db, agent_id, &version_tag, "Marketplace release").await;
                                                         agents_resource.restart();
+                                                        version_history_resource.restart();
                                                     });
                                                 }
                                             },
