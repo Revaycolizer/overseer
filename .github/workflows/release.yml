@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        shell: powershell
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ inputs.tag }}"
+          } else {
+            $tag = "${{ github.ref_name }}"
+          }
+          echo "value=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        shell: powershell
+        run: |
+          choco install protoc --no-progress -y
+          echo "PROTOC=C:\ProgramData\chocolatey\bin\protoc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build release package
+        shell: powershell
+        run: |
+          .\scripts\build-release-windows.ps1 -Tag "${{ steps.tag.outputs.value }}"
+
+      - name: Read release notes
+        id: notes
+        shell: powershell
+        run: |
+          $tag = "${{ steps.tag.outputs.value }}"
+          $notesPath = Join-Path $PWD "releases\notes\$tag.md"
+          if (Test-Path $notesPath) {
+            $content = Get-Content $notesPath -Raw
+          } else {
+            $content = "Automated release for $tag."
+          }
+          "body<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $content | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.value }}
+          body: ${{ steps.notes.outputs.body }}
+          files: |
+            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-windows-x64.zip
+            dist/${{ steps.tag.outputs.value }}/install-overseer.ps1
+            dist/${{ steps.tag.outputs.value }}/uninstall-overseer.ps1
+            dist/${{ steps.tag.outputs.value }}/SHA256SUMS.txt
+            dist/${{ steps.tag.outputs.value }}/release.json
