@@ -39,3 +39,15 @@ web = ["dioxus/web"]
 desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
 memory = ["dep:lancedb", "dep:arrow"]
+
+[package.metadata.bundle]
+name = "Overseer"
+identifier = "ai.overseer.desktop"
+icon = ["assets/favicon.ico"]
+short_description = "Local-first AI orchestration mission control."
+category = "DeveloperTool"
+
+[package.metadata.overseer]
+product_name = "Overseer"
+publisher = "Revaycolizer"
+channel = "stable"
