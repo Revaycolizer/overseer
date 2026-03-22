@@ -1,6 +1,6 @@
+use crate::db::Planner;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::db::Planner;
 
 #[component]
 pub fn PlannerGrid(
@@ -19,7 +19,7 @@ pub fn PlannerGrid(
                     let filtered: Vec<_> = items.iter()
                         .filter(|p| {
                             let q = search_query().to_lowercase();
-                            p.name.to_lowercase().contains(&q) || 
+                            p.name.to_lowercase().contains(&q) ||
                             p.domain.to_lowercase().contains(&q) ||
                             p.description.as_ref().map(|d| d.to_lowercase().contains(&q)).unwrap_or(false)
                         })
@@ -79,7 +79,7 @@ pub fn PlannerCard(
             onclick: move |_| {
                 selected_planner.set(Some(p_card.clone()));
             },
-            
+
             // Subtle background glow
             div { class: "absolute -top-24 -right-24 w-48 h-48 bg-brand-blue/5 rounded-full blur-3xl group-hover:bg-slate-800/10 transition-colors duration-500" }
 
@@ -98,7 +98,7 @@ pub fn PlannerCard(
 
             // Content
             h3 { class: "text-xl font-black text-slate-900 mb-3 truncate group-hover:text-brand-blue transition-colors duration-300", "{planner.name}" }
-            p { class: "text-slate-500 text-sm font-medium line-clamp-3 leading-relaxed mb-8 flex-1", 
+            p { class: "text-slate-500 text-sm font-medium line-clamp-3 leading-relaxed mb-8 flex-1",
                 {planner.description.as_deref().unwrap_or("No strategic objective defined for this planner node.")}
             }
 
@@ -109,7 +109,7 @@ pub fn PlannerCard(
                     span { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "{planner.model.as_deref().unwrap_or(\"gpt-4o\")}" }
                 }
                 div { class: "flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0",
-                    button { 
+                    button {
                         class: "w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 hover:bg-brand-blue hover:text-white rounded-xl transition-all shadow-sm active:scale-90",
                         title: "Edit Strategy",
                         onclick: move |e| {
@@ -118,7 +118,7 @@ pub fn PlannerCard(
                         },
                         MaterialIcon { name: "edit", size: 18 }
                     }
-                    button { 
+                    button {
                         class: "w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-90",
                         title: "Decommission",
                         onclick: move |e| {
