@@ -1,9 +1,8 @@
 use charming::{
-    component::{Axis, Legend, Title, Grid},
-    element::{AxisType, Tooltip, Trigger, AreaStyle, ItemStyle, Label, LineStyle},
+    component::{Axis, Grid, Legend, Title},
+    element::{AreaStyle, AxisType, ItemStyle, Label, LineStyle, Tooltip, Trigger},
     series::{Bar, Line, Pie},
-    Chart,
-    ImageRenderer,
+    Chart, ImageRenderer,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,15 +20,17 @@ pub fn generate_chart_svg(req: ChartRequest) -> Result<String, String> {
     if req.labels.len() != req.data.len() {
         return Err(format!(
             "Labels count ({}) does not match data count ({})",
-            req.labels.len(), req.data.len()
+            req.labels.len(),
+            req.data.len()
         ));
     }
-    
+
     // Reject single data point for pie charts
     if req.chart_type == "pie" && req.data.len() < 2 {
         return Err("Pie chart requires at least 2 data points".to_string());
     }
-    let data_values: Vec<charming::datatype::DataPoint> = req.data
+    let data_values: Vec<charming::datatype::DataPoint> = req
+        .data
         .iter()
         .map(|&v| charming::datatype::DataPoint::Value(charming::datatype::CompositeValue::from(v)))
         .collect();
@@ -51,19 +52,14 @@ fn make_renderer() -> ImageRenderer {
 fn render_bar(title: &str, labels: &[String], data: &[f64]) -> Result<String, String> {
     let chart = Chart::new()
         .background_color("#ffffff")
-        .title(
-            Title::new()
-                .text(title)
-                .left("center")
-                .top("10")
-        )
+        .title(Title::new().text(title).left("center").top("10"))
         .grid(
             Grid::new()
                 .left("10%")
                 .right("5%")
                 .top("15%")
                 .bottom("20%")
-                .contain_label(true)
+                .contain_label(true),
         )
         .tooltip(Tooltip::new().trigger(Trigger::Axis))
         .x_axis(
@@ -74,29 +70,22 @@ fn render_bar(title: &str, labels: &[String], data: &[f64]) -> Result<String, St
                     charming::element::AxisLabel::new()
                         .interval(0)
                         .rotate(0.0)
-                        .font_size(12.0)
-                )
+                        .font_size(12.0),
+                ),
         )
         .y_axis(
-            Axis::new()
-                .type_(AxisType::Value)
-                .min(0.0)
-                .axis_label(
-                    charming::element::AxisLabel::new()
-                        .show(true)
-                        .font_size(12.0)
-                )
+            Axis::new().type_(AxisType::Value).min(0.0).axis_label(
+                charming::element::AxisLabel::new()
+                    .show(true)
+                    .font_size(12.0),
+            ),
         )
         .series(
             Bar::new()
                 .name("Value")
                 .data(data.iter().map(|&v| v).collect::<Vec<f64>>())
-                .item_style(
-                    ItemStyle::new()
-                        .color("#3b82f6")
-                        .border_radius(4.0_f64)
-                )
-                .label(Label::new().show(true))
+                .item_style(ItemStyle::new().color("#3b82f6").border_radius(4.0_f64))
+                .label(Label::new().show(true)),
         );
 
     make_renderer()
@@ -105,21 +94,24 @@ fn render_bar(title: &str, labels: &[String], data: &[f64]) -> Result<String, St
 }
 
 fn render_line(title: &str, labels: &[String], data: &[f64]) -> Result<String, String> {
-   let min_val = data.iter().cloned().fold(f64::INFINITY, f64::min);
+    let min_val = data.iter().cloned().fold(f64::INFINITY, f64::min);
     let max_val = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let range = max_val - min_val;
-    
+
     // Always start from 0 if min is close to 0, otherwise add padding
-    let y_min = 0.0_f64;  // always start from 0
+    let y_min = 0.0_f64; // always start from 0
     let y_max = (max_val * 1.3).ceil();
 
     let chart = Chart::new()
         .background_color("#ffffff")
         .title(Title::new().text(title).left("center").top("10"))
-       .grid(
+        .grid(
             Grid::new()
-                .left("12%").right("8%").top("20%").bottom("15%")
-                .contain_label(true)
+                .left("12%")
+                .right("8%")
+                .top("20%")
+                .bottom("15%")
+                .contain_label(true),
         )
         .tooltip(Tooltip::new().trigger(Trigger::Axis))
         .x_axis(
@@ -127,18 +119,9 @@ fn render_line(title: &str, labels: &[String], data: &[f64]) -> Result<String, S
                 .type_(AxisType::Category)
                 .data(labels.to_vec())
                 .boundary_gap(false)
-                .axis_label(
-                    charming::element::AxisLabel::new()
-                        .show(true)
-                        .interval(0)
-                )
+                .axis_label(charming::element::AxisLabel::new().show(true).interval(0)),
         )
-        .y_axis(
-            Axis::new()
-                .type_(AxisType::Value)
-                .min(y_min)
-                .max(y_max)
-        )
+        .y_axis(Axis::new().type_(AxisType::Value).min(y_min).max(y_max))
         .series(
             Line::new()
                 .name("Value")
@@ -148,7 +131,7 @@ fn render_line(title: &str, labels: &[String], data: &[f64]) -> Result<String, S
                 .item_style(ItemStyle::new().color("#3b82f6"))
                 .line_style(LineStyle::new().width(3).color("#3b82f6"))
                 .area_style(AreaStyle::new().opacity(0.15))
-                .label(Label::new().show(true))
+                .label(Label::new().show(true)),
         );
 
     make_renderer()
@@ -165,18 +148,9 @@ fn render_pie(title: &str, labels: &[String], data: &[f64]) -> Result<String, St
 
     let chart = Chart::new()
         .background_color("#ffffff")
-        .title(
-            Title::new()
-                .text(title)
-                .left("center")
-                .top("16")
-        )
+        .title(Title::new().text(title).left("center").top("16"))
         .tooltip(Tooltip::new().trigger(Trigger::Item))
-        .legend(
-            Legend::new()
-                .bottom("0")
-                .left("center")
-        )
+        .legend(Legend::new().bottom("0").left("center"))
         .series(
             Pie::new()
                 .name("Value")
@@ -188,7 +162,7 @@ fn render_pie(title: &str, labels: &[String], data: &[f64]) -> Result<String, St
                 //         .show(true)
                 //         .formatter("{b}: {d}%")
                 // )
-                .item_style(ItemStyle::new().border_radius(6.0_f64))
+                .item_style(ItemStyle::new().border_radius(6.0_f64)),
         );
 
     make_renderer()
@@ -205,7 +179,11 @@ mod tests {
         let req = ChartRequest {
             chart_type: "bar".to_string(),
             title: "Fruit Sales".to_string(),
-            labels: vec!["Apples".to_string(), "Bananas".to_string(), "Oranges".to_string()],
+            labels: vec![
+                "Apples".to_string(),
+                "Bananas".to_string(),
+                "Oranges".to_string(),
+            ],
             data: vec![10.0, 20.0, 15.0],
         };
         let result = generate_chart_svg(req).unwrap();
@@ -231,7 +209,11 @@ mod tests {
         let req = ChartRequest {
             chart_type: "pie".to_string(),
             title: "Market Share".to_string(),
-            labels: vec!["Next.js".to_string(), "Nuxt".to_string(), "Other".to_string()],
+            labels: vec![
+                "Next.js".to_string(),
+                "Nuxt".to_string(),
+                "Other".to_string(),
+            ],
             data: vec![45.0, 30.0, 25.0],
         };
         let result = generate_chart_svg(req).unwrap();
