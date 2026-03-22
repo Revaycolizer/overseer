@@ -143,6 +143,7 @@ impl AgentSystem {
 
         let response = orchestrate_request(
             db,
+            conversation_id,
             &master_planner,
             &all_agents,
             query,
@@ -156,19 +157,22 @@ impl AgentSystem {
     }
 
     pub async fn generate_title(&self, db: &Database, query: &str) -> String {
-        let model_name = crate::backend::get_setting(db, "title_generator_model").await;
-        let model_name = if model_name.is_empty() { "qwen2.5:7b-instruct".to_string() } else { model_name };
+        let model_name = crate::backend::get_setting_or(db, "title_generator_model", "qwen2.5:7b-instruct").await;
+        let model_timeout_ms = crate::backend::get_setting_i64(db, "model_timeout_ms", 90_000).await as u64;
 
         let agent = rig::agent::AgentBuilder::new(self.ollama_client.completion_model(&model_name))
             .preamble("Summarize this user request in exactly 3-5 words for a conversation title. Output ONLY the title, no quotes or punctuation.")
             .build();
         
-        match agent.prompt(query).await {
-            Ok(resp) => {
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(model_timeout_ms),
+            agent.prompt(query)
+        ).await {
+            Ok(Ok(resp)) => {
                 let title = crate::engine::utils::clean_response(resp);
                 title.trim_matches(|c| c == '"' || c == '*' || c == '.').to_string()
             },
-            Err(_) => "New Conversation".to_string(),
+            Ok(Err(_)) | Err(_) => "New Conversation".to_string(),
         }
     }
 
