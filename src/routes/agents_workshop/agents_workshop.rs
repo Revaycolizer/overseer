@@ -1,33 +1,32 @@
+use crate::backend;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::backend;
 
 #[component]
 pub fn AgentsWorkshop() -> Element {
     let mut global_state = crate::state::use_global_state();
     let db = global_state.read().db.clone();
-    
+
     let db_for_agents = db.clone();
-    let mut agents_resource = use_resource::<Vec<crate::engine::utils::discovery::AgentInfo>, _>(move || {
-        let db = db_for_agents.clone();
-        async move {
-            backend::get_agents(&db).await.unwrap_or_default()
-        }
-    });
+    let mut agents_resource =
+        use_resource::<Vec<crate::engine::utils::discovery::AgentInfo>, _>(move || {
+            let db = db_for_agents.clone();
+            async move { backend::get_agents(&db).await.unwrap_or_default() }
+        });
 
     let db_for_tools = db.clone();
-    let tools_resource = use_resource::<Vec<crate::engine::utils::discovery::ToolInfo>, _>(move || {
-        let db = db_for_tools.clone();
-        async move {
-            backend::get_tools(&db).await.unwrap_or_default()
-        }
-    });
+    let tools_resource =
+        use_resource::<Vec<crate::engine::utils::discovery::ToolInfo>, _>(move || {
+            let db = db_for_tools.clone();
+            async move { backend::get_tools(&db).await.unwrap_or_default() }
+        });
 
     let agents = agents_resource.read().cloned().unwrap_or_default();
     let mut models = use_signal(|| vec!["loading...".to_string()]);
-    let mut selected_agent_id = use_signal(|| agents.first().map(|a| a.id.clone()).unwrap_or_default());
+    let mut selected_agent_id =
+        use_signal(|| agents.first().map(|a| a.id.clone()).unwrap_or_default());
     let mut selected_version_tag = use_signal(String::new);
-    
+
     let _ = use_resource(move || async move {
         let fetched_models: Vec<String> = backend::get_available_models().await;
         if !fetched_models.is_empty() {
@@ -36,8 +35,13 @@ pub fn AgentsWorkshop() -> Element {
     });
 
     let selected_agent = agents.iter().find(|a| a.id == selected_agent_id()).cloned();
-    let mut local_instructions = use_signal(|| selected_agent.as_ref().map(|a| a.instructions.clone()).unwrap_or_default());
-    
+    let mut local_instructions = use_signal(|| {
+        selected_agent
+            .as_ref()
+            .map(|a| a.instructions.clone())
+            .unwrap_or_default()
+    });
+
     let mut is_fullscreen = use_signal(|| false);
     let mut test_output = use_signal(|| "Run a test to verify agent preamble.".to_string());
     let mut is_testing = use_signal(|| false);
@@ -51,7 +55,7 @@ pub fn AgentsWorkshop() -> Element {
                 selected_agent_id.set(first.id);
             }
         }
-        
+
         if let Some(agent) = current_agents.iter().find(|a| a.id == selected_agent_id()) {
             local_instructions.set(agent.instructions.clone());
         }
@@ -64,7 +68,9 @@ pub fn AgentsWorkshop() -> Element {
         let agent_id = selected_agent_id();
         async move {
             if agent_id != 0 {
-                backend::get_version_history(&db, "agent", agent_id).await.unwrap_or_default()
+                backend::get_version_history(&db, "agent", agent_id)
+                    .await
+                    .unwrap_or_default()
             } else {
                 vec![]
             }
@@ -78,7 +84,9 @@ pub fn AgentsWorkshop() -> Element {
         let version_tag = selected_version_tag();
         async move {
             if agent_id != 0 && !version_tag.is_empty() {
-                backend::get_version_content(&db, "agent", agent_id, &version_tag).await.unwrap_or_default()
+                backend::get_version_content(&db, "agent", agent_id, &version_tag)
+                    .await
+                    .unwrap_or_default()
             } else {
                 None
             }
@@ -118,7 +126,7 @@ pub fn AgentsWorkshop() -> Element {
                     div { class: "lg:col-span-1 space-y-4",
                         h3 { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4", "Active Agents ({agents.len()})" }
                         for agent in agents.clone().into_iter() {
-                            div { 
+                            div {
                                 class: format!("bg-white border-2 rounded-xl p-4 shadow-sm cursor-pointer transition-all {}", if selected_agent_id() == agent.id { "border-brand-blue shadow-md" } else { "border-slate-100 hover:border-slate-200" }),
                                 onclick: {
                                     let agent_id = agent.id.clone();
@@ -126,10 +134,10 @@ pub fn AgentsWorkshop() -> Element {
                                 },
                                 div { class: "flex items-center gap-4",
                                     div { class: "w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center border border-slate-100",
-                                        MaterialIcon { 
-                                            name: if agent.domain == "stealth" { "visibility_off" } else if agent.domain == "web" { "language" } else { "smart_toy" }, 
-                                            color: MaterialIconColor::Custom("text-slate-500".into()), 
-                                            size: 20 
+                                        MaterialIcon {
+                                            name: if agent.domain == "stealth" { "visibility_off" } else if agent.domain == "web" { "language" } else { "smart_toy" },
+                                            color: MaterialIconColor::Custom("text-slate-500".into()),
+                                            size: 20
                                         }
                                     }
                                     div { class: "flex-1",
@@ -140,8 +148,8 @@ pub fn AgentsWorkshop() -> Element {
                                 }
                             }
                         }
-                        
-                        div { 
+
+                        div {
                             class: "p-4 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center gap-3 cursor-pointer hover:border-brand-blue/30 hover:bg-blue-50/20 transition-all",
                             onclick: move |_| {
                                 let db = global_state.read().db.clone();
@@ -253,7 +261,7 @@ pub fn AgentsWorkshop() -> Element {
                                                     div { class: "bg-white border border-slate-200 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm",
                                                         span { class: "w-1.5 h-1.5 rounded-full bg-blue-400" }
                                                         span { class: "text-xs font-bold text-slate-700", "{tool_name}" }
-                                                        button { 
+                                                        button {
                                                             class: "text-slate-300 hover:text-red-400 transition-colors",
                                                             onclick: {
                                                                 let agent_id = agent.id;
@@ -279,7 +287,7 @@ pub fn AgentsWorkshop() -> Element {
                                                         }
                                                     }
                                                 }
-                                                
+
                                                 // Add Tool dropdown/selector
                                                 div { class: "relative group",
                                                     button { class: "bg-slate-50 border-2 border-dashed border-slate-200 px-3 py-1.5 rounded-lg flex items-center gap-2 text-slate-400 hover:border-slate-300 transition-all",
@@ -290,7 +298,7 @@ pub fn AgentsWorkshop() -> Element {
                                                         // This would ideally be a fetched list of tools not already assigned
                                                         for tool in tools_resource.read().cloned().unwrap_or_default() {
                                                             if !agent.tools.contains(&tool.name) {
-                                                                div { 
+                                                                div {
                                                                     class: "px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 rounded-lg cursor-pointer",
                                                                     onclick: {
                                                                         let agent_id = agent.id;
@@ -320,7 +328,7 @@ pub fn AgentsWorkshop() -> Element {
 
                                 div { class: if is_fullscreen() { "fixed inset-0 z-50 bg-[#1e1e1e] flex flex-col p-6 animate-fade-in" } else { "p-8" },
                                     div { class: "flex justify-between items-center mb-4",
-                                        label { class: if is_fullscreen() { "block text-sm font-bold text-white mb-0" } else { "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0" }, 
+                                        label { class: if is_fullscreen() { "block text-sm font-bold text-white mb-0" } else { "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0" },
                                             "Preamble / System Instructions"
                                         }
                                         div { class: "flex items-center gap-2",
@@ -341,9 +349,9 @@ pub fn AgentsWorkshop() -> Element {
                                             oninput: move |e| local_instructions.set(e.value()),
                                             spellcheck: false,
                                         }
-                                        pre { 
+                                        pre {
                                             class: "code-editor-highlight language-markdown",
-                                            code { 
+                                            code {
                                                 "{local_instructions}\n\n"
                                             }
                                         }
@@ -441,7 +449,7 @@ pub fn AgentsWorkshop() -> Element {
                                         span { class: "text-[10px] font-bold", "Last updated: Today, 14:22" }
                                     }
                                     div { class: "flex gap-3",
-                                        button { 
+                                        button {
                                             class: "bg-emerald-600 text-white px-6 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all shadow-md active:scale-95 flex items-center gap-2",
                                             onclick: {
                                                 let agent_id = agent.id;
@@ -462,7 +470,7 @@ pub fn AgentsWorkshop() -> Element {
                                             MaterialIcon { name: "publish", size: 14 }
                                             " Publish to Marketplace "
                                         }
-                                        button { 
+                                        button {
                                             class: "bg-slate-900 text-white px-6 py-2 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all shadow-md active:scale-95",
                                             onclick: {
                                                 let agent = agent.clone();
