@@ -1,11 +1,11 @@
+use crate::Route;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::Route;
 
 #[component]
 pub fn Sidebar() -> Element {
     let route = use_route::<Route>();
-    
+
     rsx! {
         aside { class: "w-[64px] border-r border-slate-200 bg-white flex flex-col items-center py-4 shrink-0 shadow-sm",
             div { class: "mb-6",
@@ -14,45 +14,45 @@ pub fn Sidebar() -> Element {
                 }
             }
             nav { class: "flex-1 flex flex-col items-center gap-1",
-                Link { 
-                    class: if route == (Route::Conversations {}) { "nav-link active" } else { "nav-link" }, 
-                    to: Route::Conversations {}, 
+                Link {
+                    class: if route == (Route::Conversations {}) { "nav-link active" } else { "nav-link" },
+                    to: Route::Conversations {},
                     title: "Chat",
                     MaterialIcon { name: "chat", size: 22 }
                 }
-                Link { 
-                    class: if route == (Route::AgentsWorkshop {}) { "nav-link active" } else { "nav-link" }, 
-                    to: Route::AgentsWorkshop {}, 
+                Link {
+                    class: if route == (Route::AgentsWorkshop {}) { "nav-link active" } else { "nav-link" },
+                    to: Route::AgentsWorkshop {},
                     title: "Agents",
                     MaterialIcon { name: "smart_toy", size: 22 }
                 }
-                Link { 
-                    class: if route == (Route::WorkflowAutomation {}) { "nav-link active" } else { "nav-link" }, 
-                    to: Route::WorkflowAutomation {}, 
+                Link {
+                    class: if route == (Route::WorkflowAutomation {}) { "nav-link active" } else { "nav-link" },
+                    to: Route::WorkflowAutomation {},
                     title: "Workflows",
                     MaterialIcon { name: "terminal", size: 22 }
                 }
-                Link { 
-                    class: if route == (Route::ToolsWorkshop {}) { "nav-link active" } else { "nav-link" }, 
-                    to: Route::ToolsWorkshop {}, 
+                Link {
+                    class: if route == (Route::ToolsWorkshop {}) { "nav-link active" } else { "nav-link" },
+                    to: Route::ToolsWorkshop {},
                     title: "Tools",
                     MaterialIcon { name: "build", size: 22 }
                 }
-                Link { 
-                    class: if route == (Route::SupervisorsWorkshop {}) { "nav-link active" } else { "nav-link" }, 
-                    to: Route::SupervisorsWorkshop {}, 
+                Link {
+                    class: if route == (Route::SupervisorsWorkshop {}) { "nav-link active" } else { "nav-link" },
+                    to: Route::SupervisorsWorkshop {},
                     title: "Supervisors",
                     MaterialIcon { name: "supervised_user_circle", size: 22 }
                 }
-                Link { 
-                    class: if route == (Route::PlannersWorkshop {}) { "nav-link active" } else { "nav-link" }, 
-                    to: Route::PlannersWorkshop {}, 
+                Link {
+                    class: if route == (Route::PlannersWorkshop {}) { "nav-link active" } else { "nav-link" },
+                    to: Route::PlannersWorkshop {},
                     title: "Planners",
                     MaterialIcon { name: "architecture", size: 22 }
                 }
-                Link { 
-                    class: if route == (Route::Settings {}) { "nav-link active" } else { "nav-link" }, 
-                    to: Route::Settings {}, 
+                Link {
+                    class: if route == (Route::Settings {}) { "nav-link active" } else { "nav-link" },
+                    to: Route::Settings {},
                     title: "Settings",
                     MaterialIcon { name: "settings", size: 22 }
                 }
@@ -90,7 +90,7 @@ pub fn Layout() -> Element {
     rsx! {
         div { class: "window-frame h-screen bg-white flex flex-col border border-slate-300 overflow-hidden",
             // Title Bar
-            div { 
+            div {
                 class: "h-10 bg-[#f1f5f9] border-b border-slate-200 flex items-center justify-between px-4 shrink-0 select-none",
                 onmousedown: {
                     #[cfg(feature = "desktop")]
@@ -102,7 +102,7 @@ pub fn Layout() -> Element {
                 },
                 div { class: "flex items-center gap-4",
                     div { class: "flex gap-2 group/controls",
-                        div { 
+                        div {
                             class: "w-3.5 h-3.5 rounded-full bg-[#ff5f56] border border-[#e0443e] cursor-pointer flex items-center justify-center transition-all",
                             onclick: {
                                 #[cfg(feature = "desktop")]
@@ -116,7 +116,7 @@ pub fn Layout() -> Element {
                             onmousedown: |e| e.stop_propagation(),
                             span { class: "text-[10px] text-[#4c0000] opacity-0 group-hover/controls:opacity-100 transition-opacity font-bold select-none mb-[1px]", "×" }
                         }
-                        div { 
+                        div {
                             class: "w-3.5 h-3.5 rounded-full bg-[#ffbd2e] border border-[#dea123] cursor-pointer flex items-center justify-center transition-all",
                             onclick: {
                                 #[cfg(feature = "desktop")]
@@ -130,7 +130,7 @@ pub fn Layout() -> Element {
                             onmousedown: |e| e.stop_propagation(),
                             span { class: "text-[12px] text-[#9a6a00] opacity-0 group-hover/controls:opacity-100 transition-opacity font-bold select-none mb-[2px]", "−" }
                         }
-                        div { 
+                        div {
                             class: "w-3.5 h-3.5 rounded-full bg-[#27c93f] border border-[#1aab29] cursor-pointer flex items-center justify-center transition-all",
                             onclick: {
                                 #[cfg(feature = "desktop")]
