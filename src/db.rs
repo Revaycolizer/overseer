@@ -128,6 +128,8 @@ impl Database {
         self.seed_planners().await?;
         self.ensure_setting_defaults().await?;
         self.ensure_system_agents().await?;
+        self.ensure_system_agent_tools().await?;
+        self.ensure_system_supervisors().await?;
         self.backfill_ids().await?;
         Ok(())
     }
@@ -144,6 +146,18 @@ impl Database {
             ("max_iterations", "10"),
             ("tool_timeout_ms", "45000"),
             ("model_timeout_ms", "90000"),
+            ("computer_supervision_mode", "approval_required"),
+            ("computer_supervision_max_actions", "25"),
+            ("computer_supervision_session_timeout_ms", "600000"),
+            ("computer_supervision_allowlist", ""),
+            ("computer_session_state", "idle"),
+            ("computer_session_note", "No supervised computer session is active."),
+            ("computer_approval_state", "idle"),
+            ("computer_pending_tool", ""),
+            ("computer_pending_action", ""),
+            ("computer_pending_domain", ""),
+            ("computer_session_action_count", "0"),
+            ("computer_session_started_at", ""),
         ];
 
         for (key, value) in defaults {
@@ -166,15 +180,21 @@ impl Database {
         // Upserts agents that must always exist regardless of seeding state.
         // Safe to run every startup — uses INSERT OR IGNORE so no duplicates.
         let system_agents: Vec<(&str, &str, &str, &str, &str)> = vec![
-        (
-            "Synthesizer",
-            "Synthesizes research findings into clean user-friendly responses",
-            "synthesizer",
-            "qwen2.5:7b-instruct",
-            "You are a helpful assistant. Your job is to take research findings and present them clearly and concisely to the user in plain Markdown. Structure your response with headers and bullet points where appropriate. Never output raw JSON arrays or technical plan data. Always write as if speaking directly to the user.",
-        ),
-        // Add future always-required agents here
-    ];
+            (
+                "Synthesizer",
+                "Synthesizes research findings into clean user-friendly responses",
+                "synthesizer",
+                "qwen2.5:7b-instruct",
+                "You are a helpful assistant. Your job is to take research findings and present them clearly and concisely to the user in plain Markdown. Structure your response with headers and bullet points where appropriate. Never output raw JSON arrays or technical plan data. Always write as if speaking directly to the user.",
+            ),
+            (
+                "Computer Operator",
+                "Operates a supervised computer session with explicit safety boundaries, approvals, and evidence gathering.",
+                "computer",
+                "qwen2.5:7b-instruct",
+                "You are the Computer Operator for Overseer. You may observe, plan, and act on the user's computer only within approved safety policies. Prefer describing the next safe action before acting. Record evidence, mention the target window or app, and stop when confidence is low or a blocked action is encountered.",
+            ),
+        ];
 
         for (name, desc, domain, model, inst) in system_agents {
             let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agents WHERE domain = ?")
@@ -203,6 +223,98 @@ impl Database {
                 println!("✅ Inserted missing system agent: {} ({})", name, domain);
             } else {
                 println!("✓ System agent '{}' already exists, skipping.", domain);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn ensure_system_supervisors(&self) -> anyhow::Result<()> {
+        let system_supervisors: Vec<(&str, &str, &str, &str, &str)> = vec![(
+            "Computer Supervisor",
+            "Supervises broader computer-operation sessions with approvals, safety checkpoints, and evidence capture",
+            "computer",
+            "qwen2.5:7b-instruct",
+            "You are the Computer Supervisor for Overseer. You control broad computer-operation requests only through supervised execution. Respect the configured supervision mode, ask for approval when required, keep actions bounded, and never claim success without evidence from the desktop state or tool results.",
+        )];
+
+        for (name, desc, domain, model, instructions) in system_supervisors {
+            let existing: Option<(i64,)> =
+                sqlx::query_as("SELECT id FROM supervisors WHERE domain = ? LIMIT 1")
+                    .bind(domain)
+                    .fetch_optional(&self.pool)
+                    .await?;
+
+            let supervisor_id = if let Some((id,)) = existing {
+                id
+            } else {
+                let id = self.next_id().await;
+                sqlx::query(
+                    "INSERT INTO supervisors (id, name, description, instructions, model, domain, version, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                )
+                .bind(id)
+                .bind(name)
+                .bind(desc)
+                .bind(instructions)
+                .bind(model)
+                .bind(domain)
+                .bind("1.0.0")
+                .bind(None::<String>)
+                .execute(&self.pool)
+                .await?;
+                println!("✅ Inserted missing system supervisor: {} ({})", name, domain);
+                id
+            };
+
+            if let Some((agent_id,)) = sqlx::query_as::<_, (i64,)>(
+                "SELECT id FROM agents WHERE domain = ? LIMIT 1",
+            )
+            .bind(domain)
+            .fetch_optional(&self.pool)
+            .await?
+            {
+                let relation_id = self.next_id().await;
+                sqlx::query(
+                    "INSERT OR IGNORE INTO supervisor_agents (id, supervisor_id, agent_id) VALUES (?, ?, ?)",
+                )
+                .bind(relation_id)
+                .bind(supervisor_id)
+                .bind(agent_id)
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn ensure_system_agent_tools(&self) -> anyhow::Result<()> {
+        let mappings = [
+            ("computer", "os_tool"),
+            ("computer", "vision_analysis"),
+            ("computer", "charting"),
+        ];
+
+        for (agent_domain, tool_name) in mappings {
+            let agent = sqlx::query_as::<_, (i64,)>("SELECT id FROM agents WHERE domain = ? LIMIT 1")
+                .bind(agent_domain)
+                .fetch_optional(&self.pool)
+                .await?;
+            let tool = sqlx::query_as::<_, (i64,)>("SELECT id FROM tools WHERE name = ? LIMIT 1")
+                .bind(tool_name)
+                .fetch_optional(&self.pool)
+                .await?;
+
+            if let (Some((agent_id,)), Some((tool_id,))) = (agent, tool) {
+                let relation_id = self.next_id().await;
+                sqlx::query(
+                    "INSERT OR IGNORE INTO agent_tools (id, agent_id, tool_id) VALUES (?, ?, ?)",
+                )
+                .bind(relation_id)
+                .bind(agent_id)
+                .bind(tool_id)
+                .execute(&self.pool)
+                .await?;
             }
         }
 
