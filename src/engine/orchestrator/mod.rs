@@ -82,6 +82,14 @@ fn infer_domain_from_query(query: &str) -> Option<String> {
         || lower.contains("click")
     {
         Some("web".to_string())
+    } else if lower.contains("control my computer")
+        || lower.contains("take over my computer")
+        || lower.contains("use my computer")
+        || lower.contains("operate my pc")
+        || lower.contains("computer session")
+        || lower.contains("fully supervise")
+    {
+        Some("computer".to_string())
     } else if lower.contains("desktop")
         || lower.contains("app")
         || lower.contains("window")
@@ -163,7 +171,9 @@ fn heuristic_decision(query: &str) -> OrchestrationDecision {
             domain: Some(domain.clone()),
             personality_mode: match domain.as_str() {
                 "stealth" => "analyst".to_string(),
-                "web" | "desktop" | "office" | "neontune" => "operator".to_string(),
+                "web" | "desktop" | "computer" | "office" | "neontune" => {
+                    "operator".to_string()
+                }
                 "vision" => "vision".to_string(),
                 _ => "specialist".to_string(),
             },
@@ -179,6 +189,23 @@ fn heuristic_decision(query: &str) -> OrchestrationDecision {
     }
 }
 
+fn is_affirmative_follow_up(query: &str) -> bool {
+    let normalized = query.trim().to_lowercase();
+    matches!(
+        normalized.as_str(),
+        "continue"
+            | "yes"
+            | "go ahead"
+            | "proceed"
+            | "continue."
+            | "yes."
+            | "okay continue"
+            | "ok continue"
+    ) || normalized.starts_with("continue ")
+        || normalized.starts_with("go ahead")
+        || normalized.starts_with("yes,")
+}
+
 async fn decide_orchestration(
     db: &crate::db::Database,
     all_agents: &[AgentInfo],
@@ -186,6 +213,22 @@ async fn decide_orchestration(
     memory_context: &str,
     ollama_client: &ollama::Client,
 ) -> Result<OrchestrationDecision, String> {
+    let computer_session_state =
+        crate::backend::get_setting_or(db, "computer_session_state", "idle").await;
+    let computer_session_active = matches!(
+        computer_session_state.as_str(),
+        "observing" | "approval_session" | "trusted_session"
+    );
+
+    if computer_session_active && is_affirmative_follow_up(query) {
+        return Ok(OrchestrationDecision {
+            route: OrchestrationRoute::SingleDomain,
+            domain: Some("computer".to_string()),
+            personality_mode: "operator".to_string(),
+            reason: "Active computer supervision session detected, so the follow-up stays inside the computer domain.".to_string(),
+        });
+    }
+
     let heuristic = heuristic_decision(query);
 
     if matches!(heuristic.route, OrchestrationRoute::DirectChat) {
@@ -210,7 +253,7 @@ async fn decide_orchestration(
                 "{}\n\nYou are the routing control layer for Overseer.\n\
                  Decide how the request should be handled.\n\
                  Return JSON only with this shape:\n\
-                 {{\"route\":\"direct_chat|single_domain|multi_step\",\"domain\":\"chat|web|stealth|desktop|office|vision|neontune|null\",\"personality_mode\":\"assistant|analyst|operator|vision|orchestrator\",\"reason\":\"short explanation\"}}\n\
+                 {{\"route\":\"direct_chat|single_domain|multi_step\",\"domain\":\"chat|web|stealth|desktop|computer|office|vision|neontune|null\",\"personality_mode\":\"assistant|analyst|operator|vision|orchestrator\",\"reason\":\"short explanation\"}}\n\
                  Rules:\n\
                  - direct_chat: use when the request can be answered conversationally without tools or execution.\n\
                  - single_domain: use when one domain should handle the request.\n\
@@ -1002,7 +1045,7 @@ pub async fn orchestrate_request<'a>(
                         supervisor_result.display_text()
                     };
 
-                    let interactive_domains = ["web", "desktop", "neontune", "app"];
+                    let interactive_domains = ["web", "desktop", "computer", "neontune", "app"];
                     if supervisor_result.status == "completed"
                         && interactive_domains.contains(&macro_task.domain.as_str())
                     {
