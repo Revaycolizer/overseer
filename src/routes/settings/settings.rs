@@ -16,16 +16,20 @@ pub fn Settings() -> Element {
 
     let current_settings = settings.read().cloned().unwrap_or_default();
     let available_models = models.read().cloned().unwrap_or_default();
+    let first_available_model = available_models
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
 
     let title_model = current_settings
         .get("title_generator_model")
         .cloned()
-        .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
+        .unwrap_or_else(|| first_available_model.clone());
 
     let default_chat_model = current_settings
         .get("default_chat_model")
         .cloned()
-        .unwrap_or_else(|| "llama3:latest".to_string());
+        .unwrap_or_else(|| first_available_model.clone());
 
     let max_iterations = current_settings
         .get("max_iterations")
@@ -74,32 +78,31 @@ pub fn Settings() -> Element {
                         }
 
                         div { class: "grid gap-6",
-                            // Default Chat Model
-                            // div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
-                            //     div { class: "mb-4 md:mb-0",
-                            //         label { class: "text-base font-bold text-slate-900 block mb-1",
-                            //             "Primary Chat Model"
-                            //         }
-                            //         p { class: "text-sm text-slate-500",
-                            //             "The default model for conversation and general tasks."
-                            //         }
-                            //     }
-                            //     select {
-                            //         class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full md:w-72 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm cursor-pointer font-medium text-slate-700 transition-all",
-                            //         value: "{default_chat_model}",
-                            //         onchange: move |evt| {
-                            //             let db = state.read().db.clone();
-                            //             let mut settings = settings.clone();
-                            //             spawn(async move {
-                            //                 let _ = crate::backend::set_setting(&db, "default_chat_model", &evt.value()).await;
-                            //                 settings.restart();
-                            //             });
-                            //         },
-                            //         for model in &available_models {
-                            //             option { value: "{model}", selected: *model == default_chat_model, "{model}" }
-                            //         }
-                            //     }
-                            // }
+                            div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
+                                div { class: "mb-4 md:mb-0",
+                                    label { class: "text-base font-bold text-slate-900 block mb-1",
+                                        "Default Runtime Model"
+                                    }
+                                    p { class: "text-sm text-slate-500",
+                                        "Fallback model for chat, planners, supervisors, and new records when a saved model is unavailable."
+                                    }
+                                }
+                                select {
+                                    class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full md:w-72 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm cursor-pointer font-medium text-slate-700 transition-all",
+                                    value: "{default_chat_model}",
+                                    onchange: move |evt| {
+                                        let db = state.read().db.clone();
+                                        let mut settings = settings.clone();
+                                        spawn(async move {
+                                            let _ = crate::backend::set_setting(&db, "default_chat_model", &evt.value()).await;
+                                            settings.restart();
+                                        });
+                                    },
+                                    for model in &available_models {
+                                        option { value: "{model}", selected: *model == default_chat_model, "{model}" }
+                                    }
+                                }
+                            }
 
                             // Max Iterations
                             div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",

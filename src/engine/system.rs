@@ -45,9 +45,13 @@ impl AgentSystem {
         let master_instructions = orchestrator_agent
             .map(|a| a.instructions.clone())
             .unwrap_or_default();
-        let master_model = orchestrator_agent
-            .map(|a| a.model.clone())
-            .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
+        let master_model = crate::backend::resolve_model_name(
+            db,
+            orchestrator_agent.map(|a| a.model.as_str()),
+            "default_chat_model",
+            "qwen2.5:7b-instruct",
+        )
+        .await;
 
         let master_planner = MasterPlanner::new(
             &self.ollama_client,
@@ -191,9 +195,13 @@ impl AgentSystem {
     }
 
     pub async fn generate_title(&self, db: &Database, query: &str) -> String {
-        let model_name =
-            crate::backend::get_setting_or(db, "title_generator_model", "qwen2.5:7b-instruct")
-                .await;
+        let model_name = crate::backend::resolve_model_name(
+            db,
+            None,
+            "title_generator_model",
+            "qwen2.5:7b-instruct",
+        )
+        .await;
         let model_timeout_ms =
             crate::backend::get_setting_i64(db, "model_timeout_ms", 90_000).await as u64;
 

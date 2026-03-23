@@ -126,10 +126,11 @@ pub async fn add_agent(
     domain: &str,
 ) -> anyhow::Result<i64> {
     let id = db.next_id().await;
+    let model = resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
     sqlx::query(
         "INSERT INTO agents (id, name, description, instructions, model, domain, version, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(id).bind(name).bind(description).bind("").bind("llama3").bind(domain).bind("1.0.0").bind("")
+    .bind(id).bind(name).bind(description).bind("").bind(model).bind(domain).bind("1.0.0").bind("")
     .execute(&db.pool)
     .await?;
     Ok(id)
@@ -235,10 +236,11 @@ pub async fn add_supervisor(
     domain: &str,
 ) -> anyhow::Result<i64> {
     let id = db.next_id().await;
+    let model = resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
     sqlx::query(
         "INSERT INTO supervisors (id, name, description, domain, model, version, instructions, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(id).bind(name).bind(description).bind(domain).bind("qwen2.5:7b-instruct").bind("1.0.0").bind("").bind("")
+    .bind(id).bind(name).bind(description).bind(domain).bind(model).bind("1.0.0").bind("").bind("")
     .execute(&db.pool)
     .await?;
     Ok(id)
@@ -360,10 +362,11 @@ pub async fn add_planner(
     domain: &str,
 ) -> anyhow::Result<i64> {
     let id = db.next_id().await;
+    let model = resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
     sqlx::query(
         "INSERT INTO planners (id, name, description, domain, model, version, instructions, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(id).bind(name).bind(description).bind(domain).bind("qwen2.5:7b-instruct").bind("1.0.0").bind("").bind("")
+    .bind(id).bind(name).bind(description).bind(domain).bind(model).bind("1.0.0").bind("").bind("")
     .execute(&db.pool)
     .await?;
     Ok(id)
@@ -437,6 +440,35 @@ pub async fn update_conversation_title(db: &Database, id: i64, title: &str) -> a
         .bind(id)
         .execute(&db.pool)
         .await?;
+    Ok(())
+}
+
+pub async fn delete_conversation(db: &Database, id: i64) -> anyhow::Result<()> {
+    let attachment_paths: Vec<String> = sqlx::query_scalar(
+        "SELECT a.file_path
+         FROM attachments a
+         JOIN messages m ON m.id = a.message_id
+         WHERE m.conversation_id = ?",
+    )
+    .bind(id)
+    .fetch_all(&db.pool)
+    .await
+    .unwrap_or_default();
+
+    sqlx::query("DELETE FROM conversations WHERE id = ?")
+        .bind(id)
+        .execute(&db.pool)
+        .await?;
+
+    for path in attachment_paths {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let _ = std::fs::remove_file(trimmed);
+    }
+
     Ok(())
 }
 
@@ -1427,6 +1459,41 @@ pub async fn get_setting_or(db: &Database, key: &str, default: &str) -> String {
     } else {
         value
     }
+}
+
+pub async fn resolve_model_name(
+    db: &Database,
+    preferred: Option<&str>,
+    setting_key: &str,
+    hard_default: &str,
+) -> String {
+    let available_models = get_available_models().await;
+    let configured = get_setting_or(db, setting_key, hard_default).await;
+
+    let preferred_clean = preferred.map(str::trim).filter(|value| !value.is_empty());
+    let configured_clean = configured.trim();
+
+    let is_available = |model: &str| {
+        available_models.is_empty() || available_models.iter().any(|candidate| candidate == model)
+    };
+
+    if !configured_clean.is_empty() && is_available(configured_clean) {
+        return configured_clean.to_string();
+    }
+
+    if let Some(model) = preferred_clean {
+        if is_available(model) {
+            return model.to_string();
+        }
+    }
+
+    available_models.into_iter().next().unwrap_or_else(|| {
+        if configured_clean.is_empty() {
+            hard_default.to_string()
+        } else {
+            configured_clean.to_string()
+        }
+    })
 }
 
 pub async fn get_setting_i64(db: &Database, key: &str, default: i64) -> i64 {

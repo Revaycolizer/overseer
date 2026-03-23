@@ -41,7 +41,7 @@ fn user_facing_runtime_error(details: &str) -> Option<String> {
              Try this:\n\
              1. Start Ollama with `ollama serve`\n\
              2. Check it responds with `ollama list`\n\
-             3. Pull the required models, for example `ollama pull qwen2.5:7b-instruct`\n\n\
+             3. Pull at least one model, then select it in Settings if needed, for example `ollama pull qwen3:8b`\n\n\
              After Ollama is healthy, send the message again."
                 .to_string(),
         );
@@ -180,6 +180,7 @@ fn heuristic_decision(query: &str) -> OrchestrationDecision {
 }
 
 async fn decide_orchestration(
+    db: &crate::db::Database,
     all_agents: &[AgentInfo],
     query: &str,
     memory_context: &str,
@@ -195,8 +196,16 @@ async fn decide_orchestration(
         return Ok(heuristic);
     };
 
+    let orchestrator_model = crate::backend::resolve_model_name(
+        db,
+        Some(&orchestrator_agent.model),
+        "default_chat_model",
+        "qwen2.5:7b-instruct",
+    )
+    .await;
+
     let decision_agent =
-        rig::agent::AgentBuilder::new(ollama_client.completion_model(&orchestrator_agent.model))
+        rig::agent::AgentBuilder::new(ollama_client.completion_model(&orchestrator_model))
             .preamble(&format!(
                 "{}\n\nYou are the routing control layer for Overseer.\n\
                  Decide how the request should be handled.\n\
@@ -335,7 +344,7 @@ pub async fn orchestrate_request<'a>(
     )
     .await;
 
-    let decision = match decide_orchestration(all_agents, query, memory_context, ollama_client).await
+    let decision = match decide_orchestration(db, all_agents, query, memory_context, ollama_client).await
     {
         Ok(decision) => decision,
         Err(err) => {
@@ -400,14 +409,21 @@ pub async fn orchestrate_request<'a>(
                 description: "Direct chat fallback".to_string(),
                 tools: Vec::new(),
                 instructions: "You are a concise, helpful assistant. Answer directly and clearly without using tools unless explicitly required.".to_string(),
-                model: "qwen2.5:7b-instruct".to_string(),
+                model: String::new(),
                 domain: "chat".to_string(),
                 version: "1.0.0".to_string(),
                 code: None,
                 source_files: Vec::new(),
             });
+        let chat_model = crate::backend::resolve_model_name(
+            db,
+            Some(&chat_info.model),
+            "default_chat_model",
+            "qwen2.5:7b-instruct",
+        )
+        .await;
 
-        let chat_agent = ChatAgent::new(ollama_client, &chat_info.model, &chat_info.instructions);
+        let chat_agent = ChatAgent::new(ollama_client, &chat_model, &chat_info.instructions);
         let direct_context = if memory_context.is_empty() {
             "No recent context.".to_string()
         } else {
@@ -423,7 +439,7 @@ pub async fn orchestrate_request<'a>(
             Some("chat"),
             Some(query),
             None,
-            Some(&chat_info.model),
+            Some(&chat_model),
             Some("Routing request directly to chat agent."),
             Some(&decision_details),
         )
@@ -440,7 +456,7 @@ pub async fn orchestrate_request<'a>(
                 Some("chat"),
                 Some(query),
                 None,
-                Some(&chat_info.model),
+                Some(&chat_model),
                 Some("Direct chat failed because the model backend is unavailable."),
                 Some(&direct_response),
             )
@@ -467,7 +483,7 @@ pub async fn orchestrate_request<'a>(
             Some("chat"),
             Some(query),
             None,
-            Some(&chat_info.model),
+            Some(&chat_model),
             Some("Direct chat completed."),
             None,
         )
@@ -663,10 +679,13 @@ pub async fn orchestrate_request<'a>(
 
         let micro_steps: Vec<String> = if let Some(p) = db_planner {
             println!("💡 DYNAMIC PLANNER: Using '{}' configuration.", p.name);
-            let model_name = p
-                .model
-                .clone()
-                .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
+            let model_name = crate::backend::resolve_model_name(
+                db,
+                p.model.as_deref(),
+                "default_chat_model",
+                "qwen2.5:7b-instruct",
+            )
+            .await;
             let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(&model_name))
                 .preamble(&p.instructions.clone().unwrap_or_default())
                 .default_max_turns(1)
@@ -732,11 +751,13 @@ pub async fn orchestrate_request<'a>(
                 || a.domain == macro_task.domain
                     && (a.name.to_lowercase().contains("planner") || a.domain == "orchestrator")
         }) {
-            let model_name = if agent_info.model.is_empty() {
-                "qwen2.5:7b-instruct".to_string()
-            } else {
-                agent_info.model.clone()
-            };
+            let model_name = crate::backend::resolve_model_name(
+                db,
+                Some(&agent_info.model),
+                "default_chat_model",
+                "qwen2.5:7b-instruct",
+            )
+            .await;
             let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(&model_name))
                 .preamble(&agent_info.instructions)
                 .default_max_turns(1)
@@ -1003,8 +1024,15 @@ pub async fn orchestrate_request<'a>(
                                 let grounding_agent =
                                     all_agents.iter().find(|a| a.name == "Grounding Agent");
                                 if let Some(ga) = grounding_agent {
+                                    let grounding_model = crate::backend::resolve_model_name(
+                                        db,
+                                        Some(&ga.model),
+                                        "default_chat_model",
+                                        "qwen2.5:7b-instruct",
+                                    )
+                                    .await;
                                     let ga_client = rig::agent::AgentBuilder::new(
-                                        ollama_client.completion_model(&ga.model),
+                                        ollama_client.completion_model(&grounding_model),
                                     )
                                     .preamble(&ga.instructions)
                                     .build();
@@ -1187,20 +1215,22 @@ pub async fn orchestrate_request<'a>(
     let orchestrator_agent = all_agents.iter().find(|a| a.domain == "orchestrator");
     let synthesizer_agent = all_agents.iter().find(|a| a.domain == "synthesizer");
 
-    let synthesis_model = synthesizer_agent
-        .map(|a| a.model.as_str())
-        .unwrap_or_else(|| {
-            orchestrator_agent
-                .map(|a| a.model.as_str())
-                .unwrap_or("qwen2.5:7b-instruct")
-        });
+    let synthesis_model = crate::backend::resolve_model_name(
+        db,
+        synthesizer_agent
+            .map(|a| a.model.as_str())
+            .or_else(|| orchestrator_agent.map(|a| a.model.as_str())),
+        "default_chat_model",
+        "qwen2.5:7b-instruct",
+    )
+    .await;
 
     let synthesis_instructions = synthesizer_agent
         .map(|a| a.instructions.as_str())
         .unwrap_or("You are a helpful assistant. Present research findings clearly in plain Markdown. Never output JSON.");
 
     let synthesis_agent =
-        rig::agent::AgentBuilder::new(ollama_client.completion_model(synthesis_model))
+        rig::agent::AgentBuilder::new(ollama_client.completion_model(&synthesis_model))
             .preamble(synthesis_instructions)
             .build();
 
@@ -1221,7 +1251,7 @@ pub async fn orchestrate_request<'a>(
         Some("orchestrator"),
         None,
         None,
-        Some(synthesis_model),
+        Some(&synthesis_model),
         Some("Synthesizing final response."),
         None,
     )
@@ -1246,7 +1276,7 @@ pub async fn orchestrate_request<'a>(
         Some("orchestrator"),
         None,
         None,
-        Some(synthesis_model),
+        Some(&synthesis_model),
         Some("Execution run completed."),
         None,
     )

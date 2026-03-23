@@ -184,7 +184,7 @@ pub async fn dispatch_domain(
                 description: String::new(),
                 tools: Vec::new(),
                 instructions: String::new(),
-                model: "qwen2.5:7b-instruct".to_string(),
+                model: String::new(),
                 domain: domain_name.to_string(),
                 version: "1.0.0".to_string(),
                 code: None,
@@ -193,9 +193,16 @@ pub async fn dispatch_domain(
     };
 
     let overseer_info = get_agent("overseer");
+    let overseer_model = crate::backend::resolve_model_name(
+        db,
+        Some(&overseer_info.model),
+        "default_chat_model",
+        "qwen2.5:7b-instruct",
+    )
+    .await;
     let _overseer = OverseerAgent::new(
         ollama_client,
-        &overseer_info.model,
+        &overseer_model,
         &overseer_info.instructions,
     );
 
@@ -207,14 +214,19 @@ pub async fn dispatch_domain(
         "Dispatching supervisor '{}' using model '{:?}'",
         s.name, s.model
     );
+    let supervisor_model = crate::backend::resolve_model_name(
+        db,
+        s.model.as_deref(),
+        "default_chat_model",
+        "qwen2.5:7b-instruct",
+    )
+    .await;
 
     let tools = crate::backend::get_supervisor_tools(db, s.id)
         .await
         .unwrap_or_default();
 
-    let agent = AgentBuilder::new(
-        ollama_client.completion_model(s.model.as_deref().unwrap_or("qwen2.5:7b-instruct")),
-    )
+    let agent = AgentBuilder::new(ollama_client.completion_model(&supervisor_model))
     .preamble(s.instructions.as_deref().unwrap_or(""))
     .build();
 
@@ -262,7 +274,7 @@ pub async fn dispatch_domain(
         Some(domain),
         Some(step),
         None,
-        s.model.as_deref(),
+        Some(&supervisor_model),
         Some("Supervisor selected for micro-step."),
         None,
     )
@@ -296,7 +308,7 @@ pub async fn dispatch_domain(
             Some(domain),
             Some(step),
             None,
-            s.model.as_deref(),
+            Some(&supervisor_model),
             Some(&iteration_message),
             None,
         )

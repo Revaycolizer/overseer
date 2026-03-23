@@ -131,9 +131,14 @@ impl Database {
     }
 
     async fn ensure_setting_defaults(&self) -> anyhow::Result<()> {
+        let default_model = crate::backend::get_available_models()
+            .await
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
         let defaults = [
-            ("title_generator_model", "qwen2.5:7b-instruct"),
-            ("default_chat_model", "qwen2.5:7b-instruct"),
+            ("title_generator_model", default_model.as_str()),
+            ("default_chat_model", default_model.as_str()),
             ("max_iterations", "10"),
             ("tool_timeout_ms", "45000"),
             ("model_timeout_ms", "90000"),

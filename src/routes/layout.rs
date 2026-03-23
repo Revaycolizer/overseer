@@ -89,7 +89,6 @@ pub fn Layout() -> Element {
 
     rsx! {
         div { class: "window-frame h-screen bg-white flex flex-col border border-slate-300 overflow-hidden",
-            // Title Bar
             div {
                 class: "h-10 bg-[#f1f5f9] border-b border-slate-200 flex items-center justify-between px-4 shrink-0 select-none",
                 onmousedown: {
@@ -114,7 +113,7 @@ pub fn Layout() -> Element {
                                 }
                             },
                             onmousedown: |e| e.stop_propagation(),
-                            span { class: "text-[10px] text-[#4c0000] opacity-0 group-hover/controls:opacity-100 transition-opacity font-bold select-none mb-[1px]", "×" }
+                            span { class: "text-[10px] text-[#4c0000] opacity-0 group-hover/controls:opacity-100 transition-opacity font-bold select-none mb-[1px]", "x" }
                         }
                         div {
                             class: "w-3.5 h-3.5 rounded-full bg-[#ffbd2e] border border-[#dea123] cursor-pointer flex items-center justify-center transition-all",
@@ -128,7 +127,7 @@ pub fn Layout() -> Element {
                                 }
                             },
                             onmousedown: |e| e.stop_propagation(),
-                            span { class: "text-[12px] text-[#9a6a00] opacity-0 group-hover/controls:opacity-100 transition-opacity font-bold select-none mb-[2px]", "−" }
+                            span { class: "text-[12px] text-[#9a6a00] opacity-0 group-hover/controls:opacity-100 transition-opacity font-bold select-none mb-[2px]", "-" }
                         }
                         div {
                             class: "w-3.5 h-3.5 rounded-full bg-[#27c93f] border border-[#1aab29] cursor-pointer flex items-center justify-center transition-all",
@@ -160,7 +159,6 @@ pub fn Layout() -> Element {
                     }
                 }
             }
-            // Main Content Area
             div { class: "flex flex-1 overflow-hidden",
                 Sidebar {}
                 div { class: "flex-1 flex flex-col min-w-0 min-h-0 bg-background-light overflow-hidden",
