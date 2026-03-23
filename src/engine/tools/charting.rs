@@ -157,11 +157,16 @@ fn render_pie(title: &str, labels: &[String], data: &[f64]) -> Result<String, St
                 .data(pie_data)
                 .radius(vec!["35%", "65%"])
                 .center(vec!["50%", "50%"])
-                // .label(
-                //     Label::new()
-                //         .show(true)
-                //         .formatter("{b}: {d}%")
-                // )
+        //         .label(
+        //     Label::new()
+        //         .show(true)
+        //         .formatter("{b}: {c}")  // name: value
+        // )
+                .label(
+                    Label::new()
+                        .show(true)
+                        .formatter("{c}")  // name: value
+                )
                 .item_style(ItemStyle::new().border_radius(6.0_f64)),
         );
 
