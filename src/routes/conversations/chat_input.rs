@@ -46,6 +46,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         let mut visible_messages_inner = visible_messages;
         let mut conversations_inner = conversations_resource.clone();
         let conv_id = selected_conversation_id();
+        let mut selected_conversation_id_inner = selected_conversation_id.clone();
         let query = val.clone();
         let optimistic_id = -chrono::Utc::now().timestamp_micros();
 
@@ -63,39 +64,60 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         }
 
         spawn(async move {
-            if let Some(id) = conv_id {
-                if let Ok(msg_id) = backend::add_message(&db_inner, id, "user", &query).await {
-                    if is_first_msg {
-                        let new_title = agent_inner.generate_title(&db_inner, &query).await;
-                        let _ = backend::update_conversation_title(&db_inner, id, &new_title).await;
+            let mut created_new_conversation = false;
+            let conversation_id = if let Some(id) = conv_id {
+                id
+            } else {
+                match backend::add_conversation(&db_inner, "New Conversation").await {
+                    Ok(id) => {
+                        created_new_conversation = true;
+                        selected_conversation_id_inner.set(Some(id));
                         conversations_inner.restart();
+                        visible_messages_inner.set(vec![backend::Message {
+                            id: optimistic_id,
+                            conversation_id: id,
+                            role: "user".to_string(),
+                            content: query.clone(),
+                            created_at: chrono::Utc::now().naive_utc(),
+                            attachments: vec![],
+                        }]);
+                        id
                     }
-                    for (name, mime, data) in attachments {
-                        let folder = "overseer_files";
-                        let _ = std::fs::create_dir_all(folder);
-                        let path = format!("{folder}/{name}");
-                        let _ = std::fs::write(&path, &data);
-                        let _ = backend::add_attachment(
-                            &db_inner,
-                            msg_id,
-                            &name,
-                            &path,
-                            &mime,
-                            data.len() as i64,
-                        )
-                        .await;
-                    }
-                    messages_inner.restart();
-                    is_thinking.set(true);
-                    let response = agent_inner.orchestrate(&db_inner, id, &query).await;
-                    is_thinking.set(false);
-                    let _ = backend::add_message(&db_inner, id, "assistant", &response).await;
-                    messages_inner.restart();
-                } else {
-                    visible_messages_inner
-                        .write()
-                        .retain(|message| message.id != optimistic_id);
+                    Err(_) => return,
                 }
+            };
+
+            if let Ok(msg_id) = backend::add_message(&db_inner, conversation_id, "user", &query).await {
+                if is_first_msg || created_new_conversation {
+                    let new_title = agent_inner.generate_title(&db_inner, &query).await;
+                    let _ = backend::update_conversation_title(&db_inner, conversation_id, &new_title).await;
+                    conversations_inner.restart();
+                }
+                for (name, mime, data) in attachments {
+                    let folder = "overseer_files";
+                    let _ = std::fs::create_dir_all(folder);
+                    let path = format!("{folder}/{name}");
+                    let _ = std::fs::write(&path, &data);
+                    let _ = backend::add_attachment(
+                        &db_inner,
+                        msg_id,
+                        &name,
+                        &path,
+                        &mime,
+                        data.len() as i64,
+                    )
+                    .await;
+                }
+                messages_inner.restart();
+                is_thinking.set(true);
+                let response = agent_inner.orchestrate(&db_inner, conversation_id, &query).await;
+                is_thinking.set(false);
+                let _ = backend::add_message(&db_inner, conversation_id, "assistant", &response).await;
+                messages_inner.restart();
+            } else {
+                visible_messages_inner
+                    .write()
+                    .retain(|message| message.id != optimistic_id);
             }
         });
     });

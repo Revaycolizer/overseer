@@ -35,6 +35,30 @@ pub fn AgentsWorkshop() -> Element {
     });
 
     let selected_agent = agents.iter().find(|a| a.id == selected_agent_id()).cloned();
+    let mut local_name = use_signal(|| {
+        selected_agent
+            .as_ref()
+            .map(|a| a.name.clone())
+            .unwrap_or_default()
+    });
+    let mut local_description = use_signal(|| {
+        selected_agent
+            .as_ref()
+            .map(|a| a.description.clone())
+            .unwrap_or_default()
+    });
+    let mut local_domain = use_signal(|| {
+        selected_agent
+            .as_ref()
+            .map(|a| a.domain.clone())
+            .unwrap_or_default()
+    });
+    let mut local_model = use_signal(|| {
+        selected_agent
+            .as_ref()
+            .map(|a| a.model.clone())
+            .unwrap_or_default()
+    });
     let mut local_instructions = use_signal(|| {
         selected_agent
             .as_ref()
@@ -45,6 +69,7 @@ pub fn AgentsWorkshop() -> Element {
     let mut is_fullscreen = use_signal(|| false);
     let mut test_output = use_signal(|| "Run a test to verify agent preamble.".to_string());
     let mut is_testing = use_signal(|| false);
+    let mut workbench_status = use_signal(|| "Agent workbench ready.".to_string());
 
     // Sync instructions when selection changes and handle initial selection
     let agents_for_effect = agents.clone();
@@ -57,6 +82,10 @@ pub fn AgentsWorkshop() -> Element {
         }
 
         if let Some(agent) = current_agents.iter().find(|a| a.id == selected_agent_id()) {
+            local_name.set(agent.name.clone());
+            local_description.set(agent.description.clone());
+            local_domain.set(agent.domain.clone());
+            local_model.set(agent.model.clone());
             local_instructions.set(agent.instructions.clone());
         }
         selected_version_tag.set(String::new());
@@ -100,6 +129,23 @@ pub fn AgentsWorkshop() -> Element {
         let script = "setTimeout(() => { if (window.Prism) { Prism.highlightAll(); } }, 10);";
         document::eval(script);
     });
+
+    let agent_dirty = selected_agent
+        .as_ref()
+        .map(|agent| {
+            agent.name != local_name()
+                || agent.description != local_description()
+                || agent.domain != local_domain()
+                || agent.model != local_model()
+                || agent.instructions != local_instructions()
+        })
+        .unwrap_or(false);
+
+    let domain_label = if local_domain().is_empty() {
+        "unassigned".to_string()
+    } else {
+        local_domain()
+    };
 
     rsx! {
         main { class: "flex-1 overflow-y-auto custom-scrollbar p-8 bg-background-light",
@@ -173,44 +219,48 @@ pub fn AgentsWorkshop() -> Element {
                                             div { class: "w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 shadow-sm",
                                                 MaterialIcon { name: "face", color: MaterialIconColor::Custom("#1e293b".into()), size: 32 }
                                             }
-                                                    div {
-                                                        label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1", "Name" }
-                                                        input {
-                                                            class: "text-2xl font-extrabold text-slate-900 leading-tight bg-transparent border-none focus:ring-1 focus:ring-blue-100 rounded p-1 -ml-1 w-full",
-                                                            value: "{agent.name}",
-                                                            oninput: move |e| {
-                                                                // Local state update only to avoid resource restart
-                                                                if let Some(mut a) = selected_agent.clone() {
-                                                                    a.name = e.value();
-                                                                    // We would need a local signal for name/domain too if we want manual save only
-                                                                }
-                                                            }
+                                            div { class: "space-y-3",
+                                                div { class: "flex items-center gap-2 flex-wrap",
+                                                    span { class: format!(
+                                                        "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                                        if agent_dirty {
+                                                            "bg-amber-50 text-amber-700"
+                                                        } else {
+                                                            "bg-emerald-50 text-emerald-600"
                                                         }
-                                                        p { class: "text-slate-500 mt-1", "{agent.description}" }
+                                                    ),
+                                                        if agent_dirty { "Draft Configuration" } else { "Synced" }
+                                                    }
+                                                    span { class: "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full bg-slate-100 text-slate-600",
+                                                        "{domain_label}"
+                                                    }
+                                                    span { class: "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full bg-blue-50 text-blue-600",
+                                                        "{agent.tools.len()} tools"
                                                     }
                                                 }
+                                                div {
+                                                    label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1", "Name" }
+                                                    input {
+                                                        class: "text-2xl font-extrabold text-slate-900 leading-tight bg-transparent border-none focus:ring-1 focus:ring-blue-100 rounded p-1 -ml-1 w-full",
+                                                        value: "{local_name}",
+                                                        oninput: move |e| local_name.set(e.value())
+                                                    }
+                                                    textarea {
+                                                        class: "w-full text-sm text-slate-500 bg-transparent border border-slate-200 rounded-xl px-3 py-2 focus:ring-1 focus:ring-blue-100 focus:border-blue-200 resize-none",
+                                                        rows: "2",
+                                                        value: "{local_description}",
+                                                        oninput: move |e| local_description.set(e.value())
+                                                    }
+                                                }
+                                            }
+                                        }
                                             div { class: "flex items-center gap-2",
                                                 div { class: "flex flex-col items-end",
                                                     label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1", "Domain" }
                                                     input {
                                                         class: "text-[10px] font-bold text-slate-500 bg-slate-100 rounded px-2 py-0.5 border-none focus:ring-0 text-right w-24",
-                                                        value: "{agent.domain}",
-                                                        oninput: {
-                                                            let mut agents_resource = agents_resource.clone();
-                                                            let db = db.clone();
-                                                            let agent_for_domain = agent.clone();
-                                                            move |e| {
-                                                                let new_domain = e.value();
-                                                                let db = db.clone();
-                                                                let mut agents_resource = agents_resource.clone();
-                                                                let mut updated_agent = agent_for_domain.clone();
-                                                                updated_agent.domain = new_domain;
-                                                                spawn(async move {
-                                                                    let _ = backend::update_agent(&db, updated_agent).await;
-                                                                    agents_resource.restart();
-                                                                });
-                                                            }
-                                                        }
+                                                        value: "{local_domain}",
+                                                        oninput: move |e| local_domain.set(e.value())
                                                     }
                                                 }
                                                 span { class: "px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-bold tracking-widest self-end", "v{agent.version}" }
@@ -225,23 +275,8 @@ pub fn AgentsWorkshop() -> Element {
                                             div { class: "relative group",
                                                 select {
                                                     class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 appearance-none focus:ring-2 focus:ring-brand-blue/10 focus:border-brand-blue transition-all cursor-pointer",
-                                                    value: agent.model.clone(),
-                                                    onchange: {
-                                                        let mut agents_resource = agents_resource.clone();
-                                                        let db = db.clone();
-                                                        let agent_for_model = agent.clone();
-                                                        move |e| {
-                                                            let val = e.value();
-                                                            let db = db.clone();
-                                                            let mut agents_resource = agents_resource.clone();
-                                                            let mut updated_agent = agent_for_model.clone();
-                                                            updated_agent.model = val;
-                                                            spawn(async move {
-                                                                let _ = backend::update_agent(&db, updated_agent).await;
-                                                                agents_resource.restart();
-                                                            });
-                                                        }
-                                                    },
+                                                    value: "{local_model}",
+                                                    onchange: move |e| local_model.set(e.value()),
                                                     for model in models() {
                                                         option { value: "{model}", "{model}" }
                                                     }
@@ -278,6 +313,7 @@ pub fn AgentsWorkshop() -> Element {
                                                                             if let Some(tool) = tools.iter().find(|t| t.name == tool_name) {
                                                                                 let _ = backend::remove_tool_from_agent(&db, agent_id, tool.id).await;
                                                                                 agents_resource.restart();
+                                                                                workbench_status.set("Tool assignment removed.".to_string());
                                                                             }
                                                                         }
                                                                     });
@@ -311,6 +347,7 @@ pub fn AgentsWorkshop() -> Element {
                                                                             spawn(async move {
                                                                                 let _ = backend::add_tool_to_agent(&db, agent_id, tool_id).await;
                                                                                 agents_resource.restart();
+                                                                                workbench_status.set("Tool assignment added.".to_string());
                                                                             });
                                                                         }
                                                                     },
@@ -363,8 +400,54 @@ pub fn AgentsWorkshop() -> Element {
                                         }
                                         div { class: "mt-4 bg-[#141414] rounded-xl overflow-hidden shadow-lg border border-white/10",
                                             div { class: "flex items-center justify-between p-3 border-b border-white/5",
-                                                span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
-                                                    "Pre-Flight Check"
+                                                div {
+                                                    span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
+                                                        "Pre-Flight Check"
+                                                    }
+                                                    p { class: "text-[11px] text-slate-500 mt-1",
+                                                        "{workbench_status}"
+                                                    }
+                                                }
+                                                div { class: "flex items-center gap-2",
+                                                    span { class: format!(
+                                                        "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                                        if is_testing() {
+                                                            "bg-blue-50 text-blue-600"
+                                                        } else if agent_dirty {
+                                                            "bg-amber-50 text-amber-700"
+                                                        } else {
+                                                            "bg-emerald-50 text-emerald-600"
+                                                        }
+                                                    ),
+                                                        if is_testing() { "Running" } else if agent_dirty { "Draft" } else { "Ready" }
+                                                    }
+                                                    button {
+                                                        class: "bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-blue-700 transition-all shadow-sm active:scale-95 flex items-center gap-2",
+                                                        onclick: {
+                                                            let instructions = local_instructions.clone();
+                                                            move |_| {
+                                                                is_testing.set(true);
+                                                                test_output.set("Running pre-flight check...".to_string());
+                                                                workbench_status.set("Validating agent preamble...".to_string());
+                                                                let current_instructions = instructions();
+                                                                spawn(async move {
+                                                                    match backend::test_agent_preamble(&current_instructions).await {
+                                                                        Ok(result) => {
+                                                                            test_output.set(result);
+                                                                            workbench_status.set("Pre-flight check completed.".to_string());
+                                                                        }
+                                                                        Err(error) => {
+                                                                            test_output.set(format!("Pre-flight Error: {error}"));
+                                                                            workbench_status.set("Pre-flight check failed.".to_string());
+                                                                        }
+                                                                    }
+                                                                    is_testing.set(false);
+                                                                });
+                                                            }
+                                                        },
+                                                        MaterialIcon { name: "play_arrow", size: 14, color: MaterialIconColor::Light }
+                                                        if is_testing() { " Testing... " } else { " Run Test " }
+                                                    }
                                                 }
                                             }
                                             pre { class: "text-[11px] text-slate-300 font-mono whitespace-pre-wrap p-4 max-h-40 overflow-y-auto custom-scrollbar",
@@ -464,6 +547,7 @@ pub fn AgentsWorkshop() -> Element {
                                                         let _ = backend::publish_agent_version(&db, agent_id, &version_tag, "Marketplace release").await;
                                                         agents_resource.restart();
                                                         version_history_resource.restart();
+                                                        workbench_status.set("Snapshot published.".to_string());
                                                     });
                                                 }
                                             },
@@ -474,15 +558,25 @@ pub fn AgentsWorkshop() -> Element {
                                             class: "bg-slate-900 text-white px-6 py-2 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all shadow-md active:scale-95",
                                             onclick: {
                                                 let agent = agent.clone();
+                                                let local_name = local_name.clone();
+                                                let local_description = local_description.clone();
+                                                let local_domain = local_domain.clone();
+                                                let local_model = local_model.clone();
                                                 let local_instructions = local_instructions.clone();
                                                 let db = global_state.read().db.clone();
                                                 move |_| {
                                                     let db = db.clone();
                                                     let mut updated_agent = agent.clone();
+                                                    updated_agent.name = local_name();
+                                                    updated_agent.description = local_description();
+                                                    updated_agent.domain = local_domain();
+                                                    updated_agent.model = local_model();
                                                     updated_agent.instructions = local_instructions();
+                                                    workbench_status.set("Saving agent configuration...".to_string());
                                                     spawn(async move {
                                                         let _ = backend::update_agent(&db, updated_agent).await;
                                                         agents_resource.restart();
+                                                        workbench_status.set("Agent configuration saved.".to_string());
                                                     });
                                                 }
                                             },

@@ -5,17 +5,24 @@ use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 pub fn Settings() -> Element {
     let state = crate::state::use_global_state();
     let db = state.read().db.clone();
+    let settings_db = db.clone();
+    let health_db = db.clone();
 
     let mut settings = use_resource(move || {
-        let db = db.clone();
+        let db = settings_db.clone();
         async move { crate::backend::get_all_settings(&db).await }
     });
 
     let mut models =
         use_resource(move || async move { crate::backend::get_available_models().await });
+    let mut runtime_health = use_resource(move || {
+        let db = health_db.clone();
+        async move { crate::backend::get_runtime_health(&db).await }
+    });
 
     let current_settings = settings.read().cloned().unwrap_or_default();
     let available_models = models.read().cloned().unwrap_or_default();
+    let health = runtime_health.read().cloned();
     let first_available_model = available_models
         .first()
         .cloned()
@@ -56,15 +63,127 @@ pub fn Settings() -> Element {
             main { class: "flex-1 p-6 md:p-12 max-w-4xl mx-auto w-full",
                 // Header section
                 div { class: "mb-12 border-b border-slate-200 pb-8",
-                    h2 { class: "text-4xl font-extrabold tracking-tight text-slate-900 mb-3",
-                        "Settings"
-                    }
-                    p { class: "text-lg text-slate-600 max-w-2xl",
-                        "Tailor your AI experience. Manage local models, agent constraints, and application preferences."
+                    div { class: "flex flex-col gap-4 md:flex-row md:items-start md:justify-between",
+                        div {
+                            h2 { class: "text-4xl font-extrabold tracking-tight text-slate-900 mb-3",
+                                "Settings"
+                            }
+                            p { class: "text-lg text-slate-600 max-w-2xl",
+                                "Tailor your AI experience. Manage local models, agent constraints, and application preferences."
+                            }
+                        }
+                        button {
+                            class: "inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all",
+                            onclick: move |_| {
+                                settings.restart();
+                                models.restart();
+                                runtime_health.restart();
+                            },
+                            MaterialIcon { name: "refresh", size: 18 }
+                            "Refresh Health"
+                        }
                     }
                 }
 
                 div { class: "space-y-12",
+                    section {
+                        div { class: "flex items-center gap-3 mb-8",
+                            div { class: "p-2 bg-emerald-100 rounded-lg text-emerald-600",
+                                MaterialIcon { name: "monitor_heart", size: 24 }
+                            }
+                            div {
+                                h3 { class: "text-xl font-bold text-slate-900", "Runtime Health" }
+                                p { class: "text-sm text-slate-500", "Verify that Ollama, your selected model, and local dependencies are ready." }
+                            }
+                        }
+
+                        if let Some(health) = health {
+                            div { class: "grid gap-4 md:grid-cols-2",
+                                div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2",
+                                    div { class: "flex items-center justify-between gap-3",
+                                        p { class: "text-sm font-bold text-slate-900", "Ollama" }
+                                        span { class: format!(
+                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                            if health.ollama_reachable { "bg-emerald-50 text-emerald-600" } else { "bg-red-50 text-red-600" }
+                                        ),
+                                            if health.ollama_reachable { "reachable" } else { "offline" }
+                                        }
+                                    }
+                                    p { class: "text-xs text-slate-500", "Endpoint: {health.ollama_endpoint}" }
+                                    if health.ollama_reachable {
+                                        p { class: "text-xs text-slate-500", "{health.available_models.len()} model(s) discovered from Ollama." }
+                                    } else {
+                                        p { class: "text-xs text-red-600", "Start Ollama, then refresh this panel." }
+                                    }
+                                }
+
+                                div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2",
+                                    div { class: "flex items-center justify-between gap-3",
+                                        p { class: "text-sm font-bold text-slate-900", "Selected Runtime Model" }
+                                        span { class: format!(
+                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                            if health.runtime_model_available { "bg-emerald-50 text-emerald-600" } else { "bg-amber-50 text-amber-700" }
+                                        ),
+                                            if health.runtime_model_available { "ready" } else { "missing" }
+                                        }
+                                    }
+                                    code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm", "{health.selected_runtime_model}" }
+                                    if !health.runtime_model_available {
+                                        p { class: "text-xs text-amber-700", "Pick one of the installed Ollama models above or pull this model first." }
+                                    }
+                                }
+
+                                div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2",
+                                    div { class: "flex items-center justify-between gap-3",
+                                        p { class: "text-sm font-bold text-slate-900", "Python" }
+                                        span { class: format!(
+                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                            if health.python_command.is_some() { "bg-emerald-50 text-emerald-600" } else { "bg-red-50 text-red-600" }
+                                        ),
+                                            if health.python_command.is_some() { "found" } else { "missing" }
+                                        }
+                                    }
+                                    code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm",
+                                        "{health.python_command.clone().unwrap_or_else(|| \"python (not found)\".to_string())}"
+                                    }
+                                }
+
+                                div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2",
+                                    div { class: "flex items-center justify-between gap-3",
+                                        p { class: "text-sm font-bold text-slate-900", "protoc" }
+                                        span { class: format!(
+                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                            if health.protoc_path.is_some() { "bg-emerald-50 text-emerald-600" } else { "bg-red-50 text-red-600" }
+                                        ),
+                                            if health.protoc_path.is_some() { "found" } else { "missing" }
+                                        }
+                                    }
+                                    code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm",
+                                        "{health.protoc_path.clone().unwrap_or_else(|| \"protoc (not found)\".to_string())}"
+                                    }
+                                }
+                            }
+
+                            div { class: "mt-4 p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3",
+                                div { class: "flex items-center justify-between gap-3",
+                                    p { class: "text-sm font-bold text-slate-900", "Utility Model" }
+                                    span { class: format!(
+                                        "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                        if health.title_model_available { "bg-emerald-50 text-emerald-600" } else { "bg-amber-50 text-amber-700" }
+                                    ),
+                                        if health.title_model_available { "ready" } else { "missing" }
+                                    }
+                                }
+                                code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm", "{health.title_model}" }
+                            }
+                        } else {
+                            div { class: "p-6 bg-white rounded-2xl border border-slate-200 shadow-sm text-sm text-slate-500 flex items-center gap-3",
+                                div { class: "size-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" }
+                                "Checking local runtime health..."
+                            }
+                        }
+                    }
+
                     // AI Configuration Section
                     section {
                         div { class: "flex items-center gap-3 mb-8",

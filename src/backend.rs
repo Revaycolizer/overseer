@@ -3,6 +3,10 @@ use crate::engine::utils::discovery::{AgentInfo, ToolInfo};
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::process::Command;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OllamaModel {
@@ -13,6 +17,20 @@ pub struct OllamaModel {
 pub struct SystemLoad {
     pub label: String,
     pub usage: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeHealth {
+    pub ollama_reachable: bool,
+    pub ollama_endpoint: String,
+    pub available_models: Vec<String>,
+    pub selected_runtime_model: String,
+    pub runtime_model_available: bool,
+    pub title_model: String,
+    pub title_model_available: bool,
+    pub python_command: Option<String>,
+    pub protoc_path: Option<String>,
+    pub runtime_dir: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +59,118 @@ pub async fn get_available_models() -> Vec<String> {
             "llama3:latest".to_string(),
             "qwen2.5:7b-instruct".to_string(),
         ],
+    }
+}
+
+async fn try_get_available_models() -> Result<Vec<String>, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get("http://localhost:11434/api/tags")
+        .send()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    let json = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    Ok(json["models"]
+        .as_array()
+        .map(|models| {
+            models
+                .iter()
+                .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+fn locate_protoc() -> Option<String> {
+    let mut candidates = Vec::new();
+
+    if let Ok(explicit) = std::env::var("PROTOC") {
+        candidates.push(explicit);
+    }
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidates.push(
+            current_dir
+                .join("tools")
+                .join("bin")
+                .join(if cfg!(windows) { "protoc.exe" } else { "protoc" })
+                .display()
+                .to_string(),
+        );
+    }
+
+    if cfg!(windows) {
+        candidates.push(r"C:\tools\bin\protoc.exe".to_string());
+        candidates.push(r"C:\ProgramData\chocolatey\bin\protoc.exe".to_string());
+    } else {
+        candidates.push("/usr/local/bin/protoc".to_string());
+        candidates.push("/usr/bin/protoc".to_string());
+    }
+
+    for candidate in candidates {
+        if !candidate.trim().is_empty() && std::path::Path::new(candidate.trim()).exists() {
+            return Some(candidate);
+        }
+    }
+
+    #[cfg(windows)]
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let mut probe = if cfg!(windows) {
+        Command::new("where")
+    } else {
+        Command::new("which")
+    };
+    probe.arg("protoc");
+    #[cfg(windows)]
+    probe.creation_flags(CREATE_NO_WINDOW);
+
+    if let Ok(output) = probe.output() {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .map(str::to_string);
+            if path.is_some() {
+                return path;
+            }
+        }
+    }
+
+    None
+}
+
+pub async fn get_runtime_health(db: &Database) -> RuntimeHealth {
+    let strict_models = try_get_available_models().await.unwrap_or_default();
+    let ollama_reachable = !strict_models.is_empty() || try_get_available_models().await.is_ok();
+    let selected_runtime_model = get_setting_or(db, "default_chat_model", "qwen2.5:7b-instruct").await;
+    let title_model = get_setting_or(db, "title_generator_model", "qwen2.5:7b-instruct").await;
+    let python_command = crate::engine::utils::discovery::detect_python_command().map(|parts| parts.join(" "));
+    let protoc_path = locate_protoc();
+    let runtime_dir = crate::engine::utils::discovery::runtime_dir()
+        .display()
+        .to_string();
+
+    let runtime_model_available = strict_models.iter().any(|model| model == &selected_runtime_model);
+    let title_model_available = strict_models.iter().any(|model| model == &title_model);
+
+    RuntimeHealth {
+        ollama_reachable,
+        ollama_endpoint: "http://localhost:11434".to_string(),
+        available_models: strict_models,
+        selected_runtime_model,
+        runtime_model_available,
+        title_model,
+        title_model_available,
+        python_command,
+        protoc_path,
+        runtime_dir,
     }
 }
 
