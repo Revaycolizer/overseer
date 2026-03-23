@@ -18,11 +18,21 @@ pub struct ExecutionTracePanelProps {
 
 #[component]
 pub fn ExecutionTracePanel(mut props: ExecutionTracePanelProps) -> Element {
+    let mut selected_filter = use_signal(|| "all".to_string());
+    let mut expanded_event_ids = use_signal(Vec::<i64>::new);
+
     let selected_run = props
         .runs
         .iter()
         .find(|run| Some(run.id) == (props.selected_run_id)())
         .cloned();
+    let filtered_events: Vec<ExecutionEvent> = props
+        .events
+        .iter()
+        .filter(|event| matches_trace_filter(event, &selected_filter()))
+        .cloned()
+        .collect();
+    let filter_options = trace_filter_options(&props.events);
 
     rsx! {
         div { class: "h-full min-h-0 bg-white border-l border-slate-200 overflow-hidden flex flex-col",
@@ -115,56 +125,120 @@ pub fn ExecutionTracePanel(mut props: ExecutionTracePanelProps) -> Element {
                                     }
                                 }
 
+                                div { class: "flex flex-wrap gap-2",
+                                    for (filter_key, filter_label, filter_count) in filter_options {
+                                        button {
+                                            key: "{filter_key}",
+                                            class: format!(
+                                                "rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] transition-all {}",
+                                                if selected_filter() == filter_key {
+                                                    "border-blue-200 bg-blue-50 text-blue-700"
+                                                } else {
+                                                    "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+                                                }
+                                            ),
+                                            onclick: {
+                                                let filter_key = filter_key.clone();
+                                                move |_| selected_filter.set(filter_key.clone())
+                                            },
+                                            "{filter_label} ({filter_count})"
+                                        }
+                                    }
+                                }
+
                                 if props.events_loading && props.events.is_empty() {
                                     TraceLoader {}
-                                } else if props.events.is_empty() {
+                                } else if filtered_events.is_empty() {
                                     div { class: "rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-xs text-slate-400",
-                                        "No execution events were captured for this run yet."
+                                        "No execution events match the current filter."
                                     }
                                 } else {
                                     div { class: "space-y-3",
-                                        for event in props.events.iter().cloned() {
-                                            div {
-                                                key: "{event.id}",
-                                                class: "rounded-2xl border border-slate-200 bg-white p-4 space-y-2 shadow-sm",
-                                                div { class: "flex items-start justify-between gap-3",
+                                        for event in filtered_events {
+                                            {
+                                                let event_label = describe_event_type(&event.event_type);
+                                                let event_category = classify_event(&event);
+                                                let detail_label = detail_label_for_event(&event);
+                                                let is_expanded = expanded_event_ids().contains(&event.id);
+
+                                                rsx! {
                                                     div {
-                                                        p { class: "text-xs font-black text-slate-900 uppercase tracking-wide",
-                                                            "{event.event_type.replace('_', \" \")}"
+                                                        key: "{event.id}",
+                                                        class: "rounded-2xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm",
+                                                        div { class: "flex items-start justify-between gap-3",
+                                                            div {
+                                                                p { class: "text-xs font-black text-slate-900 uppercase tracking-wide",
+                                                                    "{event_label}"
+                                                                }
+                                                                p { class: "text-[11px] text-slate-400 mt-1",
+                                                                    {format!("Step {} • {}", event.sequence, event.created_at.format("%H:%M:%S"))}
+                                                                }
+                                                            }
+                                                            div { class: "flex items-center gap-2 shrink-0",
+                                                                TraceChip { value: event_category }
+                                                                StatusBadge { status: event.status.clone() }
+                                                            }
                                                         }
-                                                        p { class: "text-[11px] text-slate-400 mt-1",
-                                                            {format!("Step {} • {}", event.sequence, event.created_at.format("%H:%M:%S"))}
+
+                                                        div { class: "flex flex-wrap gap-2",
+                                                            if let Some(domain) = event.domain.clone().filter(|value| !value.trim().is_empty()) {
+                                                                TraceChip { value: prettify_token(&domain) }
+                                                            }
+                                                            if let Some(tool_name) = event.tool_name.clone().filter(|value| !value.trim().is_empty()) {
+                                                                TraceChip { value: format!("Tool: {}", tool_name) }
+                                                            }
+                                                            if let Some(model) = event.model.clone().filter(|value| !value.trim().is_empty()) {
+                                                                TraceChip { value: model }
+                                                            }
                                                         }
-                                                    }
-                                                    StatusBadge { status: event.status.clone() }
-                                                }
-                                                div { class: "flex flex-wrap gap-2",
-                                                    if let Some(domain) = event.domain.clone().filter(|value| !value.trim().is_empty()) {
-                                                        TraceChip { value: domain }
-                                                    }
-                                                    if let Some(tool_name) = event.tool_name.clone().filter(|value| !value.trim().is_empty()) {
-                                                        TraceChip { value: format!("tool: {}", tool_name) }
-                                                    }
-                                                    if let Some(model) = event.model.clone().filter(|value| !value.trim().is_empty()) {
-                                                        TraceChip { value: model }
-                                                    }
-                                                }
-                                                if let Some(step_text) = event.step_text.clone().filter(|value| !value.trim().is_empty()) {
-                                                    TraceTextBlock {
-                                                        label: "Step".to_string(),
-                                                        value: step_text,
-                                                    }
-                                                }
-                                                if let Some(message) = event.message.clone().filter(|value| !value.trim().is_empty()) {
-                                                    TraceTextBlock {
-                                                        label: "Message".to_string(),
-                                                        value: message,
-                                                    }
-                                                }
-                                                if let Some(details) = event.details.clone().filter(|value| !value.trim().is_empty()) {
-                                                    TraceTextBlock {
-                                                        label: "Details".to_string(),
-                                                        value: details,
+
+                                                        if let Some(step_text) = event.step_text.clone().filter(|value| !value.trim().is_empty()) {
+                                                            TraceTextBlock {
+                                                                label: "Step".to_string(),
+                                                                value: step_text,
+                                                            }
+                                                        }
+                                                        if let Some(message) = event.message.clone().filter(|value| !value.trim().is_empty()) {
+                                                            TraceTextBlock {
+                                                                label: "Message".to_string(),
+                                                                value: message,
+                                                            }
+                                                        }
+                                                        if let Some(details) = event.details.clone().filter(|value| !value.trim().is_empty()) {
+                                                            div { class: "space-y-2",
+                                                                button {
+                                                                    class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 hover:border-slate-300 hover:bg-white",
+                                                                    onclick: {
+                                                                        let event_id = event.id;
+                                                                        move |_| {
+                                                                            expanded_event_ids.with_mut(|ids| {
+                                                                                if let Some(index) = ids.iter().position(|id| *id == event_id) {
+                                                                                    ids.remove(index);
+                                                                                } else {
+                                                                                    ids.push(event_id);
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    },
+                                                                    MaterialIcon {
+                                                                        name: if is_expanded { "expand_less" } else { "expand_more" },
+                                                                        size: 16,
+                                                                        color: MaterialIconColor::Custom("#64748b".into())
+                                                                    }
+                                                                    if is_expanded {
+                                                                        "Hide Raw Details"
+                                                                    } else {
+                                                                        "Show Raw Details"
+                                                                    }
+                                                                }
+                                                                if is_expanded {
+                                                                    TraceTextBlock {
+                                                                        label: detail_label,
+                                                                        value: pretty_trace_details(&details),
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -180,6 +254,119 @@ pub fn ExecutionTracePanel(mut props: ExecutionTracePanelProps) -> Element {
     }
 }
 
+fn trace_filter_options(events: &[ExecutionEvent]) -> Vec<(String, String, usize)> {
+    let filters = [
+        ("all", "All"),
+        ("decision", "Decision"),
+        ("planning", "Planning"),
+        ("tool", "Tools"),
+        ("synthesis", "Synthesis"),
+        ("failure", "Failure"),
+    ];
+
+    filters
+        .into_iter()
+        .map(|(key, label)| {
+            let count = if key == "all" {
+                events.len()
+            } else {
+                events
+                    .iter()
+                    .filter(|event| matches_trace_filter(event, key))
+                    .count()
+            };
+            (key.to_string(), label.to_string(), count)
+        })
+        .collect()
+}
+
+fn matches_trace_filter(event: &ExecutionEvent, filter: &str) -> bool {
+    match filter {
+        "all" => true,
+        "decision" => event.event_type == "orchestration_decision",
+        "planning" => matches!(
+            event.event_type.as_str(),
+            "macro_plan" | "single_domain_route" | "micro_step" | "planning"
+        ),
+        "tool" => event.tool_name.is_some()
+            || matches!(
+                event.event_type.as_str(),
+                "tool_call" | "tool_execution" | "tool_result"
+            ),
+        "synthesis" => matches!(
+            event.event_type.as_str(),
+            "direct_chat" | "final_response" | "synthesis"
+        ),
+        "failure" => matches!(event.status.as_str(), "failed" | "error"),
+        _ => true,
+    }
+}
+
+fn classify_event(event: &ExecutionEvent) -> String {
+    if matches!(event.status.as_str(), "failed" | "error") {
+        return "Failure".to_string();
+    }
+
+    match event.event_type.as_str() {
+        "orchestration_decision" => "Decision".to_string(),
+        "macro_plan" | "single_domain_route" | "micro_step" | "planning" => {
+            "Planning".to_string()
+        }
+        "tool_call" | "tool_execution" | "tool_result" => "Tool".to_string(),
+        "direct_chat" | "final_response" | "synthesis" => "Synthesis".to_string(),
+        _ if event.tool_name.is_some() => "Tool".to_string(),
+        _ => "System".to_string(),
+    }
+}
+
+fn describe_event_type(event_type: &str) -> String {
+    match event_type {
+        "orchestration_decision" => "Orchestration Decision".to_string(),
+        "single_domain_route" => "Single-Domain Route".to_string(),
+        "macro_plan" => "Macro Plan".to_string(),
+        "micro_step" => "Micro Step".to_string(),
+        "tool_call" => "Tool Call".to_string(),
+        "tool_execution" => "Tool Execution".to_string(),
+        "tool_result" => "Tool Result".to_string(),
+        "direct_chat" => "Direct Chat Response".to_string(),
+        "final_response" => "Final Response".to_string(),
+        "synthesis" => "Synthesis".to_string(),
+        other => prettify_token(other),
+    }
+}
+
+fn pretty_trace_details(details: &str) -> String {
+    match serde_json::from_str::<serde_json::Value>(details) {
+        Ok(value) => serde_json::to_string_pretty(&value).unwrap_or_else(|_| details.to_string()),
+        Err(_) => details.to_string(),
+    }
+}
+
+fn detail_label_for_event(event: &ExecutionEvent) -> String {
+    if event.event_type == "orchestration_decision" {
+        "Decision Payload".to_string()
+    } else if event.tool_name.is_some() {
+        "Tool Payload".to_string()
+    } else {
+        "Event Details".to_string()
+    }
+}
+
+fn prettify_token(value: &str) -> String {
+    value
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[component]
 fn StatusBadge(status: String) -> Element {
     let style = match status.as_str() {
@@ -191,7 +378,7 @@ fn StatusBadge(status: String) -> Element {
 
     rsx! {
         span { class: format!("text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full border {}", style),
-            "{status.replace('_', \" \")}"
+            "{prettify_token(&status)}"
         }
     }
 }
