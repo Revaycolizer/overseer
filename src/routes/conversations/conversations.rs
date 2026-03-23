@@ -7,6 +7,7 @@ use crate::backend;
 use crate::routes::execution_trace::ExecutionTracePanel;
 use dioxus::prelude::document::eval;
 use dioxus::prelude::*;
+use serde_json::Value;
 
 #[component]
 pub fn Conversations() -> Element {
@@ -59,6 +60,7 @@ pub fn Conversations() -> Element {
         .cloned()
         .unwrap_or_else(|| visible_messages());
     let is_first_msg = messages.is_empty();
+    let mut starter_prompt = use_signal(|| None::<String>);
     let mut is_thinking: Signal<bool> = use_signal(|| false);
     let mut selected_execution_run_id = use_signal(|| None::<i64>);
 
@@ -113,6 +115,21 @@ pub fn Conversations() -> Element {
         .cloned()
         .unwrap_or_default();
     let events_loading = execution_events_resource.read().is_none();
+    let selected_conversation = conversations
+        .iter()
+        .find(|conversation| Some(conversation.id) == selected_conversation_id())
+        .cloned();
+    let conversation_title = selected_conversation
+        .as_ref()
+        .map(|conversation| conversation.title.clone())
+        .unwrap_or_else(|| "New Conversation".to_string());
+    let selected_run = execution_runs
+        .iter()
+        .find(|run| Some(run.id) == selected_execution_run_id())
+        .cloned();
+    let latest_run = execution_runs.first().cloned();
+    let (route_label, route_reason, personality_label) =
+        derive_execution_route_summary(&execution_events);
 
     let mut execution_runs_poll = execution_runs_resource.clone();
     let mut execution_events_poll = execution_events_resource.clone();
@@ -173,18 +190,85 @@ pub fn Conversations() -> Element {
                 main { class: "flex-1 relative bg-[var(--workspace-bg)] overflow-hidden min-h-0",
                     div { class: "h-full grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px]",
                         div { class: "flex flex-col min-w-0 min-h-0",
+                            div { class: "border-b border-slate-200 bg-white/90 backdrop-blur-sm px-6 py-4",
+                                div { class: "max-w-3xl mx-auto flex items-start justify-between gap-4",
+                                    div { class: "min-w-0",
+                                        p { class: "text-[10px] font-black uppercase tracking-[0.24em] text-slate-400",
+                                            if selected_conversation_id().is_some() {
+                                                "Conversation Workspace"
+                                            } else {
+                                                "Ready to Start"
+                                            }
+                                        }
+                                        h1 { class: "text-lg font-black text-slate-900 truncate mt-1",
+                                            "{conversation_title}"
+                                        }
+                                        p { class: "text-xs text-slate-500 mt-1 leading-relaxed",
+                                            if let Some(reason) = route_reason.clone() {
+                                                "{reason}"
+                                            } else if selected_conversation_id().is_some() {
+                                                "Send a message to route work through the orchestrator and capture the execution trace."
+                                            } else {
+                                                "Type anything below and Overseer will create a conversation automatically, route the request, and keep the run trace attached."
+                                            }
+                                        }
+                                    }
+                                    div { class: "flex flex-wrap items-center justify-end gap-2 shrink-0",
+                                        if let Some(label) = route_label.clone() {
+                                            ChatScreenChip {
+                                                tone: "blue".to_string(),
+                                                label: label,
+                                            }
+                                        }
+                                        if let Some(label) = personality_label.clone() {
+                                            ChatScreenChip {
+                                                tone: "violet".to_string(),
+                                                label: label,
+                                            }
+                                        }
+                                        if let Some(run) = latest_run.clone() {
+                                            ChatScreenChip {
+                                                tone: status_tone(&run.status).to_string(),
+                                                label: format!("Run {}", prettify_status(&run.status)),
+                                            }
+                                        } else {
+                                            ChatScreenChip {
+                                                tone: "slate".to_string(),
+                                                label: "Trace idle".to_string(),
+                                            }
+                                        }
+                                    }
+                                }
+                                if let Some(run) = selected_run.clone() {
+                                    if let Some(error_message) = run.error_message.clone().filter(|value| !value.trim().is_empty()) {
+                                        div { class: "max-w-3xl mx-auto mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-3",
+                                            div { class: "mt-0.5 size-6 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-xs font-black", "!" }
+                                            div { class: "min-w-0",
+                                                p { class: "text-xs font-black uppercase tracking-[0.2em] text-red-600", "Latest Run Failed" }
+                                                p { class: "text-xs text-red-700 mt-1 whitespace-pre-wrap break-words", "{error_message}" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             div {
                                 id: "chat-scroll-container",
                                 class: "flex-1 overflow-y-auto scroll-smooth custom-scrollbar",
                                 div { class: "max-w-3xl mx-auto py-10 px-6 space-y-8",
-                                    for msg in &messages {
-                                        MessageBubble {
-                                            msg: msg.clone(),
-                                            on_copy: move |content: String| copy_to_clipboard(content)
+                                    if messages.is_empty() && !is_thinking() {
+                                        EmptyConversationState {
+                                            on_prompt: move |prompt: String| starter_prompt.set(Some(prompt)),
                                         }
-                                    }
-                                    if is_thinking() {
-                                        ThinkingBubble {}
+                                    } else {
+                                        for msg in &messages {
+                                            MessageBubble {
+                                                msg: msg.clone(),
+                                                on_copy: move |content: String| copy_to_clipboard(content)
+                                            }
+                                        }
+                                        if is_thinking() {
+                                            ThinkingBubble {}
+                                        }
                                     }
                                 }
                             }
@@ -195,6 +279,7 @@ pub fn Conversations() -> Element {
                                 conversations_resource: conversations_resource.clone(),
                                 is_first_msg: is_first_msg,
                                 is_thinking: is_thinking,
+                                starter_prompt: starter_prompt,
                             }
                         }
                         ExecutionTracePanel {
@@ -210,6 +295,159 @@ pub fn Conversations() -> Element {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+fn derive_execution_route_summary(
+    events: &[backend::ExecutionEvent],
+) -> (Option<String>, Option<String>, Option<String>) {
+    let decision = events
+        .iter()
+        .find(|event| event.event_type == "orchestration_decision");
+
+    let Some(event) = decision else {
+        return (None, None, None);
+    };
+
+    let details = event
+        .details
+        .as_deref()
+        .and_then(|details| serde_json::from_str::<Value>(details).ok());
+
+    let route = details
+        .as_ref()
+        .and_then(|value| value.get("route"))
+        .and_then(|value| value.as_str())
+        .map(prettify_route);
+
+    let domain = details
+        .as_ref()
+        .and_then(|value| value.get("domain"))
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty() && *value != "null")
+        .map(prettify_token);
+
+    let personality = details
+        .as_ref()
+        .and_then(|value| value.get("personality_mode"))
+        .and_then(|value| value.as_str())
+        .map(prettify_token);
+
+    let reason = details
+        .as_ref()
+        .and_then(|value| value.get("reason"))
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string())
+        .or_else(|| event.message.clone());
+
+    let route_label = match (route, domain) {
+        (Some(route), Some(domain)) if !route.contains(&domain) => Some(format!("{route}: {domain}")),
+        (Some(route), _) => Some(route),
+        _ => None,
+    };
+
+    (route_label, reason, personality)
+}
+
+fn prettify_route(value: &str) -> String {
+    match value {
+        "direct_chat" => "Direct Chat".to_string(),
+        "single_domain" => "Single Domain".to_string(),
+        "multi_step" => "Multi-Step".to_string(),
+        other => prettify_token(other),
+    }
+}
+
+fn prettify_status(value: &str) -> String {
+    prettify_token(value)
+}
+
+fn prettify_token(value: &str) -> String {
+    value
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn status_tone(status: &str) -> &'static str {
+    match status {
+        "completed" | "success" => "green",
+        "failed" | "error" => "red",
+        "running" | "in_progress" => "blue",
+        _ => "slate",
+    }
+}
+
+#[component]
+fn ChatScreenChip(tone: String, label: String) -> Element {
+    let class = match tone.as_str() {
+        "blue" => "bg-blue-50 text-blue-700 border-blue-200",
+        "violet" => "bg-violet-50 text-violet-700 border-violet-200",
+        "green" => "bg-emerald-50 text-emerald-700 border-emerald-200",
+        "red" => "bg-red-50 text-red-700 border-red-200",
+        _ => "bg-slate-100 text-slate-600 border-slate-200",
+    };
+
+    rsx! {
+        span { class: format!("inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] {}", class),
+            "{label}"
+        }
+    }
+}
+
+#[component]
+fn EmptyConversationState(on_prompt: EventHandler<String>) -> Element {
+    let prompts = [
+        (
+            "Research something",
+            "Find the top three AI agent reliability practices and summarize them with evidence.",
+        ),
+        (
+            "Plan a workflow",
+            "Create a workflow plan for a daily website monitoring task with traceability.",
+        ),
+        (
+            "Use a tool",
+            "Generate a simple bar chart from the values 4, 8, and 12 with labels A, B, and C.",
+        ),
+    ];
+
+    rsx! {
+        div { class: "rounded-3xl border border-slate-200 bg-white shadow-sm p-8 space-y-6",
+            div { class: "space-y-3",
+                p { class: "text-[10px] font-black uppercase tracking-[0.24em] text-slate-400", "Mission Control" }
+                h2 { class: "text-2xl font-black text-slate-900", "Start a conversation and let Overseer route the work." }
+                p { class: "text-sm text-slate-500 leading-relaxed max-w-2xl",
+                    "Chat is the front door. The orchestrator decides whether your request should stay conversational, go to a single domain, or expand into a multi-step execution run with traceability."
+                }
+            }
+            div { class: "grid grid-cols-1 md:grid-cols-3 gap-3",
+                for (label, prompt) in prompts {
+                    button {
+                        class: "text-left rounded-2xl border border-slate-200 bg-slate-50 hover:bg-white hover:border-blue-200 transition-all p-4 space-y-2",
+                        onclick: {
+                            let prompt = prompt.to_string();
+                            move |_| on_prompt.call(prompt.clone())
+                        },
+                        p { class: "text-xs font-black uppercase tracking-[0.18em] text-slate-500", "{label}" }
+                        p { class: "text-sm text-slate-700 leading-relaxed", "{prompt}" }
+                    }
+                }
+            }
+            div { class: "flex flex-wrap gap-3 text-xs text-slate-500",
+                div { class: "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2", "Automatic conversation creation" }
+                div { class: "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2", "Execution trace attached to each run" }
+                div { class: "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2", "Direct chat, single-domain, or multi-step routing" }
             }
         }
     }
