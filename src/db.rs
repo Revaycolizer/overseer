@@ -127,6 +127,7 @@ impl Database {
         self.seed_supervisors().await?;
         self.seed_planners().await?;
         self.ensure_setting_defaults().await?;
+        self.ensure_native_core_tools().await?;
         self.ensure_system_agents().await?;
         self.ensure_system_agent_tools().await?;
         self.ensure_system_supervisors().await?;
@@ -224,6 +225,44 @@ impl Database {
             } else {
                 println!("✓ System agent '{}' already exists, skipping.", domain);
             }
+        }
+
+        Ok(())
+    }
+
+    async fn ensure_native_core_tools(&self) -> anyhow::Result<()> {
+        let native_tools = [
+            (
+                "stealth_search",
+                "Native search tool that returns result titles, URLs, and snippets.",
+            ),
+            (
+                "stealth_browse",
+                "Native browser fetch tool that returns cleaned page text and metadata.",
+            ),
+            (
+                "http_request",
+                "Native HTTP GET/POST request tool for direct endpoint checks.",
+            ),
+            (
+                "app_launcher",
+                "Native application launcher for local desktop tasks.",
+            ),
+        ];
+
+        for (name, description) in native_tools {
+            sqlx::query(
+                "UPDATE tools
+                 SET language = 'rust',
+                     script_path = NULL,
+                     description = COALESCE(NULLIF(description, ''), ?),
+                     code = '// Native implementation'
+                 WHERE name = ?",
+            )
+            .bind(description)
+            .bind(name)
+            .execute(&self.pool)
+            .await?;
         }
 
         Ok(())

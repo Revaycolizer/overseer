@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rig::agent::AgentBuilder;
 use rig::client::CompletionClient;
 use rig::completion::{Message, Prompt};
@@ -505,14 +507,17 @@ pub async fn dispatch_domain(
     let has_charting_tool = tools.iter().any(|t| t.name == "charting");
     let clean_context = sanitize_context(memory_context);
     let clean_plan = sanitize_context(plan_history);
+    let monitoring_hint = monitoring_strategy_hint(query, step, &tools)
+        .map(|hint| format!("\n{}\n", hint))
+        .unwrap_or_default();
 
     let initial_prompt = format!(
         "GOAL: {}\n\
          TASK: {}\n\n\
          {}CONTEXT:\n{}\n\n\
          PROGRESS:\n{}\n\n\
-         COMMAND: Execute the task using tools if necessary. Final answers must use the structured JSON result schema.",
-        query, step, tool_descriptions, clean_context, clean_plan
+         COMMAND: Execute the task using tools if necessary. Final answers must use the structured JSON result schema.{}",
+        query, step, tool_descriptions, clean_context, clean_plan, monitoring_hint
     );
 
     log_event(
@@ -533,9 +538,16 @@ pub async fn dispatch_domain(
     println!("Prompt text:\n{}", initial_prompt);
     println!("Supervisor preamble:\n{}", s.instructions.as_deref().unwrap_or(""));
 
-    let max_iterations = crate::backend::get_setting_i64(db, "max_iterations", 10)
+    let base_iterations = crate::backend::get_setting_i64(db, "max_iterations", 10)
         .await
         .max(1) as usize;
+    let hard_iteration_cap = crate::backend::get_setting_i64(
+        db,
+        "max_iterations_hard_cap",
+        (base_iterations as i64).max(10) * 3,
+    )
+    .await
+    .max(base_iterations as i64) as usize;
     let tool_timeout_ms = crate::backend::get_setting_i64(db, "tool_timeout_ms", 45_000)
         .await
         .max(1) as u64;
@@ -543,10 +555,22 @@ pub async fn dispatch_domain(
     let mut current_prompt = initial_prompt;
     let mut final_response: Option<SupervisorExecutionResult> = None;
     let mut manual_svg_retries = 0;
+    let mut last_tool_signature: Option<String> = None;
+    let mut repeated_tool_calls = 0usize;
+    let mut tool_progress_signatures = HashSet::new();
+    let mut iteration_budget = base_iterations;
     const MAX_SVG_RETRIES: usize = 2;
+    const MAX_IDENTICAL_TOOL_CALLS: usize = 3;
+    const ITERATION_EXTENSION_CHUNK: usize = 3;
 
-    for iteration in 0..max_iterations {
-        println!("Supervisor iteration {}/{}", iteration + 1, max_iterations);
+    let mut iteration = 0usize;
+    while iteration < iteration_budget && iteration < hard_iteration_cap {
+        println!(
+            "Supervisor iteration {}/{} (hard cap {})",
+            iteration + 1,
+            iteration_budget,
+            hard_iteration_cap
+        );
 
         let iteration_message = format!("Supervisor iteration {}", iteration + 1);
         log_event(
@@ -603,6 +627,140 @@ pub async fn dispatch_domain(
                 } else {
                     input_val.clone()
                 };
+                let tool_signature = format!(
+                    "{}::{}",
+                    tool_name,
+                    serde_json::to_string(&input_json)
+                        .unwrap_or_else(|_| input_json.to_string())
+                );
+
+                if last_tool_signature.as_ref() == Some(&tool_signature) {
+                    repeated_tool_calls += 1;
+                } else {
+                    last_tool_signature = Some(tool_signature.clone());
+                    repeated_tool_calls = 1;
+                }
+
+                let new_progress_signature = tool_progress_signatures.insert(tool_signature.clone());
+                if new_progress_signature
+                    && iteration_budget < hard_iteration_cap
+                    && iteration + 2 >= iteration_budget
+                {
+                    let previous_budget = iteration_budget;
+                    iteration_budget =
+                        (iteration_budget + ITERATION_EXTENSION_CHUNK).min(hard_iteration_cap);
+
+                    if iteration_budget > previous_budget {
+                        let details = format!(
+                            "Progress detected through a new tool path. Extending supervisor budget from {} to {} iterations.",
+                            previous_budget, iteration_budget
+                        );
+                        log_event(
+                            db,
+                            run_id,
+                            event_sequence,
+                            "supervisor_budget_extended",
+                            "running",
+                            Some(domain),
+                            Some(step),
+                            Some(tool_name),
+                            s.model.as_deref(),
+                            Some("Supervisor earned more runtime after making progress."),
+                            Some(&details),
+                        )
+                        .await;
+                    }
+                }
+
+                if repeated_tool_calls >= 2 {
+                    let alternate_tool = suggest_alternate_tool(tool_name, &tools);
+                    let monitoring_override = if is_monitoring_task(query, step) {
+                        if let Some(url) = extract_first_url(step).or_else(|| extract_first_url(query)) {
+                            Some(format!(
+                                "This is a monitoring task. Stop guessing alternate sites and verify the exact target URL '{}'. Prefer http_request with {{\"url\":\"{}\",\"method\":\"GET\"}} if available.",
+                                url, url
+                            ))
+                        } else {
+                            Some(
+                                "This is a monitoring task and no exact target URL is present. Do not guess unrelated sites. Either search once for the official status page or return a failed JSON result asking for the concrete website URL."
+                                    .to_string(),
+                            )
+                        }
+                    } else {
+                        None
+                    };
+
+                    let override_message = if let Some(message) = monitoring_override {
+                        message
+                    } else if let Some(alternate_tool) = alternate_tool {
+                        format!(
+                            "SYSTEM OVERRIDE: You have repeated the same tool call '{}' without making progress. Do NOT call '{}' again with the same input. Switch strategy now by using '{}' if it can advance the task, or return a final JSON result that explains the failure with evidence.",
+                            tool_name, tool_name, alternate_tool
+                        )
+                    } else {
+                        format!(
+                            "SYSTEM OVERRIDE: You have repeated the same tool call '{}' without making progress. Do NOT call it again with the same input. Either choose a different tool or return a final JSON result that explains the failure with evidence.",
+                            tool_name
+                        )
+                    };
+
+                    log_event(
+                        db,
+                        run_id,
+                        event_sequence,
+                        "tool_loop_warning",
+                        if repeated_tool_calls >= MAX_IDENTICAL_TOOL_CALLS {
+                            "error"
+                        } else {
+                            "warning"
+                        },
+                        Some(domain),
+                        Some(step),
+                        Some(tool_name),
+                        s.model.as_deref(),
+                        Some("Supervisor repeated the same tool call and was asked to change strategy."),
+                        Some(&tool_signature),
+                    )
+                    .await;
+
+                    if repeated_tool_calls < MAX_IDENTICAL_TOOL_CALLS {
+                        current_prompt = format!(
+                            "{}\n\n[{}]\n\nNext: either call a different tool with JSON or return your final structured JSON result.",
+                            current_prompt, override_message
+                        );
+                        iteration += 1;
+                        continue;
+                    }
+                }
+
+                if repeated_tool_calls >= MAX_IDENTICAL_TOOL_CALLS {
+                    let loop_error = format!(
+                        "Supervisor repeated the same tool call '{}' {} times without making progress.",
+                        tool_name, repeated_tool_calls
+                    );
+
+                    log_event(
+                        db,
+                        run_id,
+                        event_sequence,
+                        "tool_loop_detected",
+                        "error",
+                        Some(domain),
+                        Some(step),
+                        Some(tool_name),
+                        s.model.as_deref(),
+                        Some("Supervisor is stuck repeating the same tool call."),
+                        Some(&tool_signature),
+                    )
+                    .await;
+
+                    final_response = Some(SupervisorExecutionResult::failed(
+                        "Supervisor entered a repeated tool-call loop.".to_string(),
+                        loop_error,
+                        trimmed.to_string(),
+                    ));
+                    break;
+                }
 
                 let tool_info = tools.iter().find(|t| t.name == tool_name);
                 let computer_gate = match tool_info {
@@ -645,6 +803,7 @@ pub async fn dispatch_domain(
                                 "{}\n\n[SYSTEM OVERRIDE: {}]\n\nNext: Ask for approval or provide your answer using the structured JSON result schema.",
                                 current_prompt, reason
                             );
+                            iteration += 1;
                             continue;
                         }
                     }
@@ -702,6 +861,7 @@ pub async fn dispatch_domain(
                                 "{}\n\n[SYSTEM OVERRIDE: {}]\n\nNext: Provide your answer using the structured JSON result schema.",
                                 current_prompt, reason
                             );
+                            iteration += 1;
                             continue;
                         }
                     }
@@ -740,7 +900,8 @@ pub async fn dispatch_domain(
                 };
 
                 if let Some(gate) = computer_gate.as_ref() {
-                    if gate.allowed && gate.action_tool {
+                    let tool_succeeded = !tool_result.starts_with("Tool error:");
+                    if gate.allowed && gate.action_tool && tool_succeeded {
                         let action_summary = gate
                             .action_summary
                             .clone()
@@ -787,6 +948,7 @@ pub async fn dispatch_domain(
                     "{}\n\n[RESULT for '{}' ({}):\n{}]\n\nNext: Call another tool (JSON) or provide your final answer using the structured JSON result schema.",
                     current_prompt, tool_name, input_val, tool_result
                 );
+                iteration += 1;
                 continue;
             }
         }
@@ -810,6 +972,7 @@ pub async fn dispatch_domain(
                     Call the charting tool NOW with the correct data.",
                     current_prompt
                 );
+                iteration += 1;
                 continue;
             }
 
@@ -829,7 +992,11 @@ pub async fn dispatch_domain(
     Ok(final_response.unwrap_or_else(|| {
         SupervisorExecutionResult::failed(
             "Supervisor stopped without a final result.".to_string(),
-            "Max tool iterations reached without a final response.".to_string(),
+            format!(
+                "Supervisor exhausted its persistence budget after {} iterations without reaching a final response. Hard cap: {}.",
+                iteration,
+                hard_iteration_cap
+            ),
             String::new(),
         )
     }))
@@ -847,6 +1014,73 @@ fn contains_manual_visualization(response: &str) -> bool {
         return true;
     }
     false
+}
+
+fn suggest_alternate_tool<'a>(
+    current_tool: &str,
+    tools: &'a [crate::engine::utils::discovery::ToolInfo],
+) -> Option<&'a str> {
+    let has = |name: &str| tools.iter().any(|tool| tool.name == name);
+
+    match current_tool {
+        "stealth_browse" | "stealth_search" if has("http_request") => Some("http_request"),
+        "http_request" if has("stealth_browse") => Some("stealth_browse"),
+        _ => None,
+    }
+}
+
+fn extract_first_url(text: &str) -> Option<String> {
+    text.split_whitespace()
+        .map(|token| token.trim_matches(|c: char| matches!(c, '"' | '\'' | '(' | ')' | '[' | ']' | ',')))
+        .find(|token| token.starts_with("http://") || token.starts_with("https://"))
+        .map(|token| token.to_string())
+}
+
+fn is_monitoring_task(query: &str, step: &str) -> bool {
+    let combined = format!("{} {}", query, step).to_lowercase();
+    ["status", "uptime", "monitor", "monitoring", "healthcheck", "up/down", "availability"]
+        .iter()
+        .any(|keyword| combined.contains(keyword))
+}
+
+fn monitoring_strategy_hint(
+    query: &str,
+    step: &str,
+    tools: &[crate::engine::utils::discovery::ToolInfo],
+) -> Option<String> {
+    if !is_monitoring_task(query, step) {
+        return None;
+    }
+
+    let has_http_request = tools.iter().any(|tool| tool.name == "http_request");
+    let has_stealth_search = tools.iter().any(|tool| tool.name == "stealth_search");
+    let explicit_url = extract_first_url(step).or_else(|| extract_first_url(query));
+
+    if let Some(url) = explicit_url {
+        if has_http_request {
+            return Some(format!(
+                "MONITORING OVERRIDE: This is a website monitoring task and a concrete URL is already available. Prefer a direct HTTP check first with JSON like {{\"tool\":\"http_request\",\"input\":{{\"url\":\"{}\",\"method\":\"GET\"}}}}. Only use stealth browsing if the page is reachable and you still need cleaned text for evidence.",
+                url
+            ));
+        }
+
+        return Some(format!(
+            "MONITORING OVERRIDE: Use the provided URL '{}' as the primary target. Do not guess unrelated third-party sites. If you cannot verify the status of that exact URL, return a failed or unverified JSON result with the reason.",
+            url
+        ));
+    }
+
+    if has_stealth_search {
+        return Some(
+            "MONITORING OVERRIDE: No concrete URL is present. Do not guess random third-party status sites. Use stealth_search once to find the official site or status page for the target service. If the target URL remains unknown, return a failed JSON result asking for a concrete website or status-page URL."
+                .to_string(),
+        );
+    }
+
+    Some(
+        "MONITORING OVERRIDE: A concrete target URL is missing. Do not invent one. Return a failed JSON result asking for the exact website or status-page URL."
+            .to_string(),
+    )
 }
 
 fn parse_supervisor_result(response: String) -> SupervisorExecutionResult {

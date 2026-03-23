@@ -203,6 +203,7 @@ pub async fn prepare_runtime_env(db: &crate::db::Database) -> anyhow::Result<Str
     let runtime_dir = runtime_dir();
     std::fs::create_dir_all(&runtime_dir)?;
     stage_requests_compat_module(&runtime_dir)?;
+    stage_bs4_compat_module(&runtime_dir)?;
 
     let tools = get_tools(db).await;
     for tool in tools {
@@ -315,6 +316,145 @@ def post(url, data=None, headers=None, timeout=30):
     Ok(())
 }
 
+fn stage_bs4_compat_module(runtime_dir: &Path) -> anyhow::Result<()> {
+    let package_dir = runtime_dir.join("bs4");
+    std::fs::create_dir_all(&package_dir)?;
+    let shim_path = package_dir.join("__init__.py");
+    let shim = r#"from html.parser import HTMLParser
+
+
+class _Node:
+    def __init__(self, name=None, attrs=None, parent=None, is_text=False, text=""):
+        self.name = name
+        self.attrs = dict(attrs or [])
+        self.parent = parent
+        self.children = []
+        self.is_text = is_text
+        self.text = text
+        self.removed = False
+
+    def append(self, child):
+        self.children.append(child)
+
+    def get(self, key, default=None):
+        return self.attrs.get(key, default)
+
+    def _iter_descendants(self):
+        for child in self.children:
+            if child.removed:
+                continue
+            yield child
+            yield from child._iter_descendants()
+
+    def _class_list(self):
+        classes = self.attrs.get("class", "")
+        if isinstance(classes, str):
+            return [part for part in classes.split() if part]
+        return list(classes)
+
+    def matches(self, selector):
+        if self.removed or self.is_text:
+            return False
+        if selector.startswith("."):
+            return selector[1:] in self._class_list()
+        return self.name == selector
+
+    def find_all(self, selector):
+        selectors = selector if isinstance(selector, (list, tuple, set)) else [selector]
+        matches = []
+        for node in self._iter_descendants():
+            if any(node.matches(item) for item in selectors):
+                matches.append(Tag(node))
+        return matches
+
+    def select(self, selector):
+        return self.find_all(selector)
+
+    def select_one(self, selector):
+        found = self.select(selector)
+        return found[0] if found else None
+
+    def get_text(self, separator="", strip=False):
+        parts = []
+        for child in self.children:
+            if child.removed:
+                continue
+            if child.is_text:
+                parts.append(child.text)
+            else:
+                nested = child.get_text(separator=separator, strip=strip)
+                if nested:
+                    parts.append(nested)
+        text = separator.join(part for part in parts if part)
+        return text.strip() if strip else text
+
+    def decompose(self):
+        self.removed = True
+        self.children = []
+
+
+class Tag:
+    def __init__(self, node):
+        self._node = node
+
+    def __call__(self, selector):
+        return self._node.find_all(selector)
+
+    def select(self, selector):
+        return self._node.select(selector)
+
+    def select_one(self, selector):
+        return self._node.select_one(selector)
+
+    def get_text(self, separator="", strip=False):
+        return self._node.get_text(separator=separator, strip=strip)
+
+    def get(self, key, default=None):
+        return self._node.get(key, default)
+
+    def decompose(self):
+        self._node.decompose()
+
+
+class _SoupParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = _Node(name="[document]")
+        self.stack = [self.root]
+
+    def handle_starttag(self, tag, attrs):
+        node = _Node(name=tag, attrs=attrs, parent=self.stack[-1])
+        self.stack[-1].append(node)
+        self.stack.append(node)
+
+    def handle_endtag(self, tag):
+        while len(self.stack) > 1:
+            node = self.stack.pop()
+            if node.name == tag:
+                break
+
+    def handle_startendtag(self, tag, attrs):
+        node = _Node(name=tag, attrs=attrs, parent=self.stack[-1])
+        self.stack[-1].append(node)
+
+    def handle_data(self, data):
+        if not data:
+            return
+        self.stack[-1].append(_Node(parent=self.stack[-1], is_text=True, text=data))
+
+
+class BeautifulSoup(Tag):
+    def __init__(self, markup, parser="html.parser"):
+        parser_impl = _SoupParser()
+        parser_impl.feed(markup or "")
+        parser_impl.close()
+        super().__init__(parser_impl.root)
+"#;
+
+    std::fs::write(shim_path, shim)?;
+    Ok(())
+}
+
 fn tool_extension(tool_name: &str) -> &'static str {
     if tool_name.contains('.') {
         ""
@@ -353,7 +493,7 @@ pub async fn print_system_info(db: &crate::db::Database) {
     println!("Total Agents: {}", agents.len());
     println!("Total Tools:  {}", tools.len());
     println!("Runtime Dir:  {}", runtime_dir().display());
-    println!("Python Cmd:   {}", python_command_label());
+    println!("Runtime:      native core tools");
 
     println!("\n🤖 AVAILABLE AGENTS");
     println!("--------------------");

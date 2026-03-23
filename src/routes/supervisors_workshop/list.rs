@@ -96,7 +96,10 @@ pub fn SupervisorCard(
                         if supervisor.bypass_synthesizer {
                             span { class: "px-2 py-0.5 bg-amber-500/10 text-amber-600 text-[8px] font-black uppercase tracking-widest rounded", "Direct" }
                         }
-                        span { class: "px-2 py-0.5 bg-brand-blue/10 text-brand-blue text-[8px] font-black uppercase tracking-widest rounded", "v1.0.0" }
+                        span {
+                            class: "px-2 py-0.5 bg-brand-blue/10 text-brand-blue text-[8px] font-black uppercase tracking-widest rounded",
+                            "v{supervisor.version.clone().unwrap_or_else(|| \"1.0.0\".to_string())}"
+                        }
                     }
                 }
             }
@@ -111,7 +114,7 @@ pub fn SupervisorCard(
             div { class: "mt-auto pt-6 border-t border-slate-50 flex items-center justify-between",
                 div { class: "flex items-center gap-2",
                     span { class: "w-2 h-2 rounded-full bg-brand-blue group-hover:animate-ping" }
-                    span { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "{supervisor.model.as_deref().unwrap_or(\"llama3\")}" }
+                    span { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "{supervisor.model.as_deref().unwrap_or(\"default\")}" }
                 }
                 div { class: "flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0",
                     button {

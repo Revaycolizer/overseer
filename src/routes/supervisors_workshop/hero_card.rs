@@ -1,35 +1,36 @@
 use crate::db::Supervisor;
 use dioxus::prelude::*;
-use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+use dioxus_material_icons::MaterialIcon;
 
 #[component]
 pub fn SupervisorHeroCard(
     mut selected_supervisor: Signal<Option<Supervisor>>,
     models: Signal<Vec<String>>,
+    assigned_agents_count: usize,
+    tool_count: usize,
+    workbench_status: String,
+    save_state: String,
 ) -> Element {
     let Some(supervisor) = selected_supervisor() else {
         return rsx! {};
     };
 
+    let (state_class, state_label) = match save_state.as_str() {
+        "draft" => ("bg-amber-50 text-amber-700 border-amber-100", "Draft"),
+        "saving" => ("bg-blue-50 text-blue-700 border-blue-100", "Saving"),
+        "error" => ("bg-red-50 text-red-700 border-red-100", "Error"),
+        _ => ("bg-emerald-50 text-emerald-700 border-emerald-100", "Synced"),
+    };
+
     rsx! {
         div { class: "bg-white p-8 rounded-2xl border border-slate-200 shadow-soft space-y-6 animate-in fade-in slide-in-from-top-4 duration-500",
-
-            // ── Top row: icon + name/description + version/domain ──────
-            div { class: "flex items-start justify-between",
-
-                // Left: icon + editable name + description
-                div { class: "flex items-center gap-6",
-                    div { class: "w-16 h-16 bg-blue-50 text-brand-blue rounded-2xl flex items-center justify-center border border-blue-100 shadow-sm transition-all duration-300 hover:bg-brand-blue hover:text-white hover:shadow-blue-200 hover:shadow-xl group",
-                        MaterialIcon {
-                            name: "account_tree",
-                            size: 32
-                        }
+            div { class: "flex flex-col xl:flex-row xl:items-start xl:justify-between gap-6",
+                div { class: "flex items-start gap-6 min-w-0",
+                    div { class: "w-16 h-16 bg-blue-50 text-brand-blue rounded-2xl flex items-center justify-center border border-blue-100 shadow-sm",
+                        MaterialIcon { name: "account_tree", size: 30 }
                     }
-                    div { class: "space-y-1",
-                        label {
-                            class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest",
-                            "Supervisor Identity"
-                        }
+                    div { class: "space-y-2 min-w-0 flex-1",
+                        p { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "Supervisor Identity" }
                         input {
                             class: "text-2xl font-extrabold text-slate-900 leading-tight bg-transparent border-none focus:ring-2 focus:ring-brand-blue/10 rounded-lg p-1 -ml-1 w-full transition-all",
                             value: "{supervisor.name}",
@@ -56,42 +57,29 @@ pub fn SupervisorHeroCard(
                     }
                 }
 
-                // Right: version badge + domain input
-                div { class: "flex flex-col items-end gap-2",
-                    div { class: "flex items-center gap-2",
-                        span {
-                            class: "px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-bold tracking-widest",
-                            "v{supervisor.version.clone().unwrap_or_else(|| \"1.0.0\".into())}"
-                        }
-                        span {
-                            class: "px-3 py-1 bg-blue-50 text-brand-blue rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100",
-                            "Active"
-                        }
+                div { class: "flex flex-wrap items-center gap-2 xl:justify-end",
+                    span {
+                        class: format!("px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border {}", state_class),
+                        "{state_label}"
                     }
-                    div {
-                        label {
-                            class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right mb-1",
-                            "Domain"
-                        }
-                        input {
-                            class: "text-[10px] font-bold text-slate-500 bg-slate-100 rounded px-2 py-0.5 border-none focus:ring-0 text-right w-24",
-                            value: "{supervisor.domain}",
-                            oninput: {
-                                let mut sv = supervisor.clone();
-                                move |e| {
-                                    sv.domain = e.value();
-                                    selected_supervisor.set(Some(sv.clone()));
-                                }
-                            }
-                        }
+                    span { class: "px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200",
+                        "Domain: {supervisor.domain}"
+                    }
+                    span { class: "px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200",
+                        "Agents: {assigned_agents_count}"
+                    }
+                    span { class: "px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200",
+                        "Tools: {tool_count}"
                     }
                 }
             }
 
-            // ── Bottom row: model dropdown + version input + bypass toggle ──────
-            div { class: "grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 border-t border-slate-50",
+            div { class: "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3",
+                p { class: "text-[10px] font-black uppercase tracking-widest text-slate-400", "Workbench Status" }
+                p { class: "text-sm font-semibold text-slate-800 mt-2", "{workbench_status}" }
+            }
 
-                // Model Assignment
+            div { class: "grid grid-cols-1 md:grid-cols-3 gap-8 pt-2",
                 div { class: "space-y-3",
                     label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Model Assignment" }
                     div { class: "relative",
@@ -115,7 +103,6 @@ pub fn SupervisorHeroCard(
                     }
                 }
 
-                // Version
                 div { class: "space-y-3",
                     label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Version" }
                     input {
@@ -131,7 +118,6 @@ pub fn SupervisorHeroCard(
                     }
                 }
 
-                // Bypass Synthesizer
                 div { class: "space-y-3",
                     label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Output Routing" }
                     div { class: "flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl",
@@ -141,7 +127,7 @@ pub fn SupervisorHeroCard(
                             }
                             div {
                                 p { class: "text-[11px] font-bold text-slate-700", "Bypass Mode" }
-                                p { class: "text-[9px] text-slate-400 font-medium", "Direct Output" }
+                                p { class: "text-[9px] text-slate-400 font-medium", "Direct supervisor output" }
                             }
                         }
                         button {

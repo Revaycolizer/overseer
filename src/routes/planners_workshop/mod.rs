@@ -1,5 +1,5 @@
 use crate::backend::{add_planner, delete_planner, get_planners, update_planner};
-use crate::db::{Database, Planner};
+use crate::db::Planner;
 use crate::state::use_global_state;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};

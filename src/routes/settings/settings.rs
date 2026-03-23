@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+use dioxus_material_icons::MaterialIcon;
 
 #[component]
 pub fn Settings() -> Element {
@@ -56,7 +56,64 @@ pub fn Settings() -> Element {
     let runtime_dir = crate::engine::utils::discovery::runtime_dir()
         .display()
         .to_string();
-    let python_command = crate::engine::utils::discovery::python_command_label();
+    let release_version = env!("CARGO_PKG_VERSION");
+    let runtime_ready_count = health
+        .as_ref()
+        .map(|health| {
+            [
+                health.ollama_reachable,
+                health.runtime_model_available,
+                health.protoc_path.is_some(),
+                health.title_model_available,
+                health.native_runtime,
+            ]
+            .into_iter()
+            .filter(|item| *item)
+            .count()
+        })
+        .unwrap_or(0);
+    let runtime_health_summary = if let Some(health) = health.as_ref() {
+        if health.ollama_reachable
+            && health.runtime_model_available
+            && health.protoc_path.is_some()
+            && health.native_runtime
+        {
+            if health.python_command.is_some() {
+                "Local runtime is ready for chat, native tools, and optional Python extensions.".to_string()
+            } else {
+                "Local runtime is ready for chat and native tools. Python is optional for advanced extensions.".to_string()
+            }
+        } else if !health.ollama_reachable {
+            "Ollama is offline. Start it before expecting chat or orchestration to run.".to_string()
+        } else if !health.runtime_model_available {
+            "Your selected runtime model is not installed yet. Pick an installed model or pull the missing one.".to_string()
+        } else if health.protoc_path.is_none() {
+            "protoc is missing. Build and generation flows will stay blocked until it is available.".to_string()
+        } else if !health.native_runtime {
+            "The native tool runtime is not ready yet. Restart Overseer and refresh this panel.".to_string()
+        } else {
+            "Runtime health is partially ready. Review the checks below before running deeper workflows.".to_string()
+        }
+    } else {
+        "Checking local runtime health...".to_string()
+    };
+    let next_step_label = if let Some(health) = health.as_ref() {
+        if !health.ollama_reachable {
+            "Start Ollama".to_string()
+        } else if !health.runtime_model_available {
+            "Choose installed model".to_string()
+        } else if health.protoc_path.is_none() {
+            "Install protoc".to_string()
+        } else if !health.native_runtime {
+            "Restart native runtime".to_string()
+        } else if !health.title_model_available {
+            "Pick utility model".to_string()
+        } else {
+            "Runtime looks healthy".to_string()
+        }
+    } else {
+        "Checking runtime".to_string()
+    };
 
     rsx! {
         div { class: "flex-1 flex flex-col min-h-0 bg-slate-50 overflow-y-auto custom-scrollbar",
@@ -87,6 +144,97 @@ pub fn Settings() -> Element {
 
                 div { class: "space-y-12",
                     section {
+                        div { class: "grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]",
+                            div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm p-6 md:p-8 space-y-6",
+                                div { class: "flex items-start justify-between gap-4 flex-wrap",
+                                    div { class: "space-y-2 max-w-2xl",
+                                        p { class: "text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400",
+                                            "Runtime Command Center"
+                                        }
+                                        h3 { class: "text-2xl font-black tracking-tight text-slate-900",
+                                            "See if Overseer is actually ready before you run anything."
+                                        }
+                                        p { class: "text-sm leading-relaxed text-slate-500",
+                                            "{runtime_health_summary}"
+                                        }
+                                    }
+                                    div { class: "rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-right min-w-[120px]",
+                                        p { class: "text-[10px] font-bold uppercase tracking-widest text-slate-400",
+                                            "Checks Passing"
+                                        }
+                                        p { class: "text-3xl font-black text-slate-900 leading-none mt-2",
+                                            "{runtime_ready_count}/5"
+                                        }
+                                    }
+                                }
+
+                                div { class: "grid gap-4 sm:grid-cols-3",
+                                    SummaryTile {
+                                        title: "Runtime Model".to_string(),
+                                        value: default_chat_model.clone(),
+                                        hint: "Primary model for chat, planners, and supervisors".to_string(),
+                                        icon: "smart_toy".to_string()
+                                    }
+                                    SummaryTile {
+                                        title: "Utility Model".to_string(),
+                                        value: title_model.clone(),
+                                        hint: "Used for lighter naming and summary tasks".to_string(),
+                                        icon: "auto_awesome".to_string()
+                                    }
+                                    SummaryTile {
+                                        title: "Next Step".to_string(),
+                                        value: next_step_label.clone(),
+                                        hint: "Most important fix before relying on the system".to_string(),
+                                        icon: "flag".to_string()
+                                    }
+                                }
+                            }
+
+                            div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4",
+                                div {
+                                    p { class: "text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400",
+                                        "First-Run Checklist"
+                                    }
+                                    h3 { class: "text-lg font-black text-slate-900 mt-2",
+                                        "Before you trust a run"
+                                    }
+                                }
+                                if let Some(health) = health.as_ref() {
+                                    ChecklistItem {
+                                        label: "Ollama reachable".to_string(),
+                                        done: health.ollama_reachable,
+                                        help: "The local model endpoint must answer before chat can work.".to_string()
+                                    }
+                                    ChecklistItem {
+                                        label: "Runtime model installed".to_string(),
+                                        done: health.runtime_model_available,
+                                        help: "Your selected default model should exist in Ollama.".to_string()
+                                    }
+                                    ChecklistItem {
+                                        label: "Native tools active".to_string(),
+                                        done: health.native_runtime,
+                                        help: "Core web, HTTP, and monitoring tools run natively now.".to_string()
+                                    }
+                                    ChecklistItem {
+                                        label: "protoc detected".to_string(),
+                                        done: health.protoc_path.is_some(),
+                                        help: "Build and generation flows use this binary.".to_string()
+                                    }
+                                    ChecklistItem {
+                                        label: "Utility model ready".to_string(),
+                                        done: health.title_model_available,
+                                        help: "Use a lighter model for titles and summaries.".to_string()
+                                    }
+                                } else {
+                                    p { class: "text-sm text-slate-500",
+                                        "Waiting for runtime checks to finish..."
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    section {
                         div { class: "flex items-center gap-3 mb-8",
                             div { class: "p-2 bg-emerald-100 rounded-lg text-emerald-600",
                                 MaterialIcon { name: "monitor_heart", size: 24 }
@@ -99,82 +247,98 @@ pub fn Settings() -> Element {
 
                         if let Some(health) = health {
                             div { class: "grid gap-4 md:grid-cols-2",
-                                div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2",
-                                    div { class: "flex items-center justify-between gap-3",
-                                        p { class: "text-sm font-bold text-slate-900", "Ollama" }
-                                        span { class: format!(
-                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
-                                            if health.ollama_reachable { "bg-emerald-50 text-emerald-600" } else { "bg-red-50 text-red-600" }
-                                        ),
-                                            if health.ollama_reachable { "reachable" } else { "offline" }
-                                        }
-                                    }
-                                    p { class: "text-xs text-slate-500", "Endpoint: {health.ollama_endpoint}" }
-                                    if health.ollama_reachable {
-                                        p { class: "text-xs text-slate-500", "{health.available_models.len()} model(s) discovered from Ollama." }
+                                HealthCard {
+                                    title: "Ollama".to_string(),
+                                    status: if health.ollama_reachable { "reachable".to_string() } else { "offline".to_string() },
+                                    good: health.ollama_reachable,
+                                    body: if health.ollama_reachable {
+                                        format!(
+                                            "Endpoint: {}. {} model(s) discovered.",
+                                            health.ollama_endpoint,
+                                            health.available_models.len()
+                                        )
                                     } else {
-                                        p { class: "text-xs text-red-600", "Start Ollama, then refresh this panel." }
-                                    }
+                                        format!(
+                                            "Endpoint: {}. Start Ollama, then refresh this panel.",
+                                            health.ollama_endpoint
+                                        )
+                                    },
+                                    code: Some(health.ollama_endpoint.clone()),
+                                    icon: "hub".to_string()
                                 }
 
-                                div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2",
-                                    div { class: "flex items-center justify-between gap-3",
-                                        p { class: "text-sm font-bold text-slate-900", "Selected Runtime Model" }
-                                        span { class: format!(
-                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
-                                            if health.runtime_model_available { "bg-emerald-50 text-emerald-600" } else { "bg-amber-50 text-amber-700" }
-                                        ),
-                                            if health.runtime_model_available { "ready" } else { "missing" }
-                                        }
-                                    }
-                                    code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm", "{health.selected_runtime_model}" }
-                                    if !health.runtime_model_available {
-                                        p { class: "text-xs text-amber-700", "Pick one of the installed Ollama models above or pull this model first." }
-                                    }
+                                HealthCard {
+                                    title: "Selected Runtime Model".to_string(),
+                                    status: if health.runtime_model_available { "ready".to_string() } else { "missing".to_string() },
+                                    good: health.runtime_model_available,
+                                    body: if health.runtime_model_available {
+                                        "This is the default model used when Overseer routes chat and orchestration work.".to_string()
+                                    } else {
+                                        "Pick one of the installed Ollama models above or pull this model first.".to_string()
+                                    },
+                                    code: Some(health.selected_runtime_model.clone()),
+                                    icon: "smart_toy".to_string()
                                 }
 
-                                div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2",
-                                    div { class: "flex items-center justify-between gap-3",
-                                        p { class: "text-sm font-bold text-slate-900", "Python" }
-                                        span { class: format!(
-                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
-                                            if health.python_command.is_some() { "bg-emerald-50 text-emerald-600" } else { "bg-red-50 text-red-600" }
-                                        ),
-                                            if health.python_command.is_some() { "found" } else { "missing" }
-                                        }
-                                    }
-                                    code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm",
-                                        "{health.python_command.clone().unwrap_or_else(|| \"python (not found)\".to_string())}"
-                                    }
+                                HealthCard {
+                                    title: "Native Tool Runtime".to_string(),
+                                    status: if health.native_runtime { "active".to_string() } else { "offline".to_string() },
+                                    good: health.native_runtime,
+                                    body: "Core Overseer tools now execute in the native runtime instead of depending on Python.".to_string(),
+                                    code: Some("rust-native core tools".to_string()),
+                                    icon: "terminal".to_string()
                                 }
 
-                                div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2",
-                                    div { class: "flex items-center justify-between gap-3",
-                                        p { class: "text-sm font-bold text-slate-900", "protoc" }
-                                        span { class: format!(
-                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
-                                            if health.protoc_path.is_some() { "bg-emerald-50 text-emerald-600" } else { "bg-red-50 text-red-600" }
-                                        ),
-                                            if health.protoc_path.is_some() { "found" } else { "missing" }
-                                        }
-                                    }
-                                    code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm",
-                                        "{health.protoc_path.clone().unwrap_or_else(|| \"protoc (not found)\".to_string())}"
-                                    }
+                                HealthCard {
+                                    title: "Python Extensions".to_string(),
+                                    status: if health.python_command.is_some() { "available".to_string() } else { "optional".to_string() },
+                                    good: true,
+                                    body: if health.python_command.is_some() {
+                                        "Advanced and legacy extension tools can still run through Python when needed.".to_string()
+                                    } else {
+                                        "Python is not required for core use, but some advanced extension tools will stay unavailable until it is installed.".to_string()
+                                    },
+                                    code: Some(
+                                        health
+                                            .python_command
+                                            .clone()
+                                            .unwrap_or_else(|| "python (optional, not found)".to_string())
+                                    ),
+                                    icon: "integration_instructions".to_string()
+                                }
+
+                                HealthCard {
+                                    title: "protoc".to_string(),
+                                    status: if health.protoc_path.is_some() { "found".to_string() } else { "missing".to_string() },
+                                    good: health.protoc_path.is_some(),
+                                    body: "Build generation and protobuf-dependent flows look here first.".to_string(),
+                                    code: Some(
+                                        health
+                                            .protoc_path
+                                            .clone()
+                                            .unwrap_or_else(|| "protoc (not found)".to_string())
+                                    ),
+                                    icon: "deployed_code".to_string()
                                 }
                             }
 
-                            div { class: "mt-4 p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3",
-                                div { class: "flex items-center justify-between gap-3",
-                                    p { class: "text-sm font-bold text-slate-900", "Utility Model" }
-                                    span { class: format!(
-                                        "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
-                                        if health.title_model_available { "bg-emerald-50 text-emerald-600" } else { "bg-amber-50 text-amber-700" }
-                                    ),
-                                        if health.title_model_available { "ready" } else { "missing" }
-                                    }
+                            div { class: "mt-4 grid gap-4 lg:grid-cols-2",
+                                HealthCard {
+                                    title: "Utility Model".to_string(),
+                                    status: if health.title_model_available { "ready".to_string() } else { "missing".to_string() },
+                                    good: health.title_model_available,
+                                    body: "This lighter model handles conversation titles and small summary tasks.".to_string(),
+                                    code: Some(health.title_model.clone()),
+                                    icon: "auto_awesome".to_string()
                                 }
-                                code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm", "{health.title_model}" }
+                                HealthCard {
+                                    title: "Runtime Directory".to_string(),
+                                    status: "active".to_string(),
+                                    good: true,
+                                    body: "Overseer stages helper scripts and runtime files in this local directory.".to_string(),
+                                    code: Some(health.runtime_dir.clone()),
+                                    icon: "folder_managed".to_string()
+                                }
                             }
                         } else {
                             div { class: "p-6 bg-white rounded-2xl border border-slate-200 shadow-sm text-sm text-slate-500 flex items-center gap-3",
@@ -377,12 +541,12 @@ pub fn Settings() -> Element {
                             div { class: "p-6 bg-white rounded-2xl border border-slate-200 shadow-sm",
                                 div { class: "mb-4",
                                     p { class: "text-base font-bold text-slate-900 mb-1", "Runtime Diagnostics" }
-                                    p { class: "text-sm text-slate-500", "Current local runtime paths used for tool staging and Python execution." }
+                                    p { class: "text-sm text-slate-500", "Current local runtime paths used for native tool execution and staging." }
                                 }
                                 div { class: "space-y-3 text-sm",
                                     div {
-                                        span { class: "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1", "Python Command" }
-                                        code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all", "{python_command}" }
+                                        span { class: "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1", "Core Runtime" }
+                                        code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all", "rust-native tool execution" }
                                     }
                                     div {
                                         span { class: "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1", "Runtime Directory" }
@@ -397,9 +561,87 @@ pub fn Settings() -> Element {
                 // Footer Branding
                 div { class: "mt-20 pt-8 border-t border-slate-200 text-center",
                     p { class: "text-sm font-bold text-slate-400 uppercase tracking-widest",
-                        "Overseer v1.0.0 — Empowering Agents Locally"
+                        "Overseer v{release_version} - Local runtime command center"
                     }
                 }
+            }
+        }
+    }
+}
+
+#[component]
+fn SummaryTile(title: String, value: String, hint: String, icon: String) -> Element {
+    rsx! {
+        div { class: "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 space-y-2",
+            div { class: "flex items-center justify-between gap-3",
+                p { class: "text-[10px] font-bold uppercase tracking-widest text-slate-400", "{title}" }
+                MaterialIcon { name: "{icon}", size: 16 }
+            }
+            p { class: "text-base font-black text-slate-900 break-words", "{value}" }
+            p { class: "text-xs text-slate-500 leading-relaxed", "{hint}" }
+        }
+    }
+}
+
+#[component]
+fn ChecklistItem(label: String, done: bool, help: String) -> Element {
+    rsx! {
+        div { class: "flex items-start gap-3",
+            div {
+                class: format!(
+                    "mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border {}",
+                    if done {
+                        "border-emerald-200 bg-emerald-50 text-emerald-600"
+                    } else {
+                        "border-amber-200 bg-amber-50 text-amber-700"
+                    }
+                ),
+                MaterialIcon {
+                    name: if done { "check" } else { "priority_high" },
+                    size: 14
+                }
+            }
+            div { class: "space-y-1",
+                p { class: "text-sm font-semibold text-slate-900", "{label}" }
+                p { class: "text-xs leading-relaxed text-slate-500", "{help}" }
+            }
+        }
+    }
+}
+
+#[component]
+fn HealthCard(
+    title: String,
+    status: String,
+    good: bool,
+    body: String,
+    code: Option<String>,
+    icon: String,
+) -> Element {
+    rsx! {
+        div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3",
+            div { class: "flex items-center justify-between gap-3",
+                div { class: "flex items-center gap-2",
+                    MaterialIcon { name: "{icon}", size: 16 }
+                    p { class: "text-sm font-bold text-slate-900", "{title}" }
+                }
+                span {
+                    class: format!(
+                        "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                        if good {
+                            "bg-emerald-50 text-emerald-600"
+                        } else if status == "missing" {
+                            "bg-amber-50 text-amber-700"
+                        } else {
+                            "bg-red-50 text-red-600"
+                        }
+                    ),
+                    "{status}"
+                }
+            }
+            p { class: "text-xs leading-relaxed text-slate-500", "{body}" }
+            if let Some(code_value) = code {
+                code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm", "{code_value}" }
             }
         }
     }

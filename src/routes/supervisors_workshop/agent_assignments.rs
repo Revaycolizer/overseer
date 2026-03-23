@@ -26,6 +26,23 @@ pub fn AgentAssignments(
             // Agent grid
             match (agents.value()(), supervisor_agents.value()()) {
                 (Some(all), Some(assigned)) => rsx! {
+                    div { class: "grid grid-cols-1 md:grid-cols-3 gap-3",
+                        AssignmentMetric {
+                            label: "Assigned".to_string(),
+                            value: assigned.len().to_string(),
+                            tone: "blue".to_string(),
+                        }
+                        AssignmentMetric {
+                            label: "Available".to_string(),
+                            value: all.len().to_string(),
+                            tone: "slate".to_string(),
+                        }
+                        AssignmentMetric {
+                            label: "Unassigned".to_string(),
+                            value: (all.len().saturating_sub(assigned.len())).to_string(),
+                            tone: "emerald".to_string(),
+                        }
+                    }
                     div { class: "grid grid-cols-1 sm:grid-cols-2 gap-4",
                         for agent in all {
                             {
@@ -109,6 +126,22 @@ pub fn AgentAssignments(
                     div { class: "p-8 text-center text-slate-300 animate-pulse text-sm", "Synchronizing fleet data..." }
                 }
             }
+        }
+    }
+}
+
+#[component]
+fn AssignmentMetric(label: String, value: String, tone: String) -> Element {
+    let tone_class = match tone.as_str() {
+        "blue" => "bg-blue-50 border-blue-100 text-blue-700",
+        "emerald" => "bg-emerald-50 border-emerald-100 text-emerald-700",
+        _ => "bg-slate-50 border-slate-200 text-slate-700",
+    };
+
+    rsx! {
+        div { class: format!("rounded-2xl border p-4 {}", tone_class),
+            p { class: "text-[10px] font-black uppercase tracking-widest opacity-70", "{label}" }
+            p { class: "mt-2 text-lg font-black", "{value}" }
         }
     }
 }

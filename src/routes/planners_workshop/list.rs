@@ -1,6 +1,6 @@
 use crate::db::Planner;
 use dioxus::prelude::*;
-use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+use dioxus_material_icons::MaterialIcon;
 
 #[component]
 pub fn PlannerGrid(
@@ -106,7 +106,7 @@ pub fn PlannerCard(
             div { class: "mt-auto pt-6 border-t border-slate-50 flex items-center justify-between",
                 div { class: "flex items-center gap-2",
                     span { class: "w-2 h-2 rounded-full bg-brand-blue group-hover:animate-ping" }
-                    span { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "{planner.model.as_deref().unwrap_or(\"gpt-4o\")}" }
+                    span { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "{planner.model.as_deref().unwrap_or(\"default\")}" }
                 }
                 div { class: "flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0",
                     button {

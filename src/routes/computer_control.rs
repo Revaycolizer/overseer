@@ -72,6 +72,32 @@ pub fn ComputerControl() -> Element {
     } else {
         pending_tool.clone()
     };
+    let allowlist_count = allowlist
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count();
+    let session_profile = match supervision_mode.as_str() {
+        "observe_only" => "Observation only. Overseer can inspect and propose, but not execute desktop actions.",
+        "approval_required" => "Approval required. Every desktop action should stage a permission gate first.",
+        "session_trusted" => "Session trusted. Overseer can act inside the current guardrails for this session.",
+        "trusted_auto_run" => "Trusted auto-run. Overseer can proceed automatically inside the configured policy bounds.",
+        _ => "Unknown supervision posture. Review settings before continuing.",
+    };
+    let session_next_step = match session_state.as_str() {
+        "idle" => "Start an approval session before handing over any desktop task.",
+        "observing" => "Keep observing until Overseer can describe the next action clearly.",
+        "approval_session" if approval_state == "pending" => "Approve or reject the staged desktop action.",
+        "approval_session" => "Continue the task and review each staged action before approval.",
+        "trusted_session" => "Monitor the trace and keep the allowlist narrow while actions execute.",
+        "paused" => "Resume or end the session before asking Overseer to act again.",
+        "emergency_stopped" => "Reset the session after reviewing what triggered the stop.",
+        _ => "Review the current session state before continuing.",
+    };
+    let session_started_label = values
+        .get("computer_session_started_at")
+        .cloned()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "Not started".to_string());
 
     rsx! {
         div { class: "flex-1 flex flex-col min-h-0 bg-slate-50 overflow-y-auto custom-scrollbar",
@@ -91,6 +117,70 @@ pub fn ComputerControl() -> Element {
                             onclick: move |_| settings.restart(),
                             MaterialIcon { name: "refresh", size: 18 }
                             "Refresh"
+                        }
+                    }
+                }
+
+                div { class: "grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]",
+                    div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm p-6 md:p-8 space-y-6",
+                        div { class: "flex items-start justify-between gap-4 flex-wrap",
+                            div { class: "space-y-2 max-w-3xl",
+                                p { class: "text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400", "Desktop Supervision Console" }
+                                h2 { class: "text-2xl font-black tracking-tight text-slate-900", "Control whole-computer sessions with a clear operating posture." }
+                                p { class: "text-sm leading-relaxed text-slate-500", "{session_profile}" }
+                            }
+                            div { class: "rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-right min-w-[140px]",
+                                p { class: "text-[10px] font-bold uppercase tracking-widest text-slate-400", "Next Step" }
+                                p { class: "text-sm font-black text-slate-900 leading-snug mt-2", "{session_next_step}" }
+                            }
+                        }
+
+                        div { class: "grid gap-4 sm:grid-cols-3",
+                            ComputerMetricCard {
+                                title: "Session State".to_string(),
+                                value: session_state.replace('_', " "),
+                                hint: "Current control posture".to_string(),
+                                icon: "toggle_on".to_string()
+                            }
+                            ComputerMetricCard {
+                                title: "Pending Approval".to_string(),
+                                value: approval_label.clone(),
+                                hint: "Action gate status".to_string(),
+                                icon: "fact_check".to_string()
+                            }
+                            ComputerMetricCard {
+                                title: "Allowlist Entries".to_string(),
+                                value: allowlist_count.to_string(),
+                                hint: "Apps or window filters".to_string(),
+                                icon: "rule_folder".to_string()
+                            }
+                        }
+                    }
+
+                    div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4",
+                        div {
+                            p { class: "text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400", "Operator Checklist" }
+                            h3 { class: "text-lg font-black text-slate-900 mt-2", "Before trusting takeover" }
+                        }
+                        OperatorChecklistItem {
+                            label: "Use approval mode first".to_string(),
+                            done: supervision_mode == "approval_required",
+                            help: "Start with explicit approvals until the task pattern is predictable.".to_string()
+                        }
+                        OperatorChecklistItem {
+                            label: "Keep an allowlist".to_string(),
+                            done: allowlist_count > 0,
+                            help: "Restrict computer actions to specific apps or windows.".to_string()
+                        }
+                        OperatorChecklistItem {
+                            label: "Review pending action".to_string(),
+                            done: approval_state != "pending",
+                            help: "Never approve blindly; inspect the exact action summary first.".to_string()
+                        }
+                        OperatorChecklistItem {
+                            label: "Know the kill switch".to_string(),
+                            done: true,
+                            help: "Emergency Stop should always remain the fallback if behavior drifts.".to_string()
                         }
                     }
                 }
@@ -229,6 +319,16 @@ pub fn ComputerControl() -> Element {
                                     p { class: "text-sm font-bold text-slate-900 mt-2 break-all", "{pending_tool_label}" }
                                 }
                             }
+                            div { class: "grid gap-4 md:grid-cols-2",
+                                div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-4",
+                                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Session Started" }
+                                    p { class: "text-sm font-bold text-slate-900 mt-2 break-all", "{session_started_label}" }
+                                }
+                                div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-4",
+                                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Operating Posture" }
+                                    p { class: "text-sm text-slate-700 mt-2 leading-relaxed", "{session_profile}" }
+                                }
+                            }
 
                             if !pending_action.is_empty() {
                                 div { class: "rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-4",
@@ -272,6 +372,11 @@ pub fn ComputerControl() -> Element {
                                             "Reject Pending Action"
                                         }
                                     }
+                                }
+                            } else {
+                                div { class: "rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 space-y-2",
+                                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Pending Approval" }
+                                    p { class: "text-sm text-slate-600", "No action is currently waiting for approval. Keep this panel open while the computer supervisor plans the next move." }
                                 }
                             }
 
@@ -470,6 +575,46 @@ fn SessionStateBadge(state: String) -> Element {
     rsx! {
         span { class: format!("inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] {}", class),
             "{label}"
+        }
+    }
+}
+
+#[component]
+fn ComputerMetricCard(title: String, value: String, hint: String, icon: String) -> Element {
+    rsx! {
+        div { class: "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 space-y-2",
+            div { class: "flex items-center justify-between gap-3",
+                p { class: "text-[10px] font-bold uppercase tracking-widest text-slate-400", "{title}" }
+                MaterialIcon { name: "{icon}", size: 16 }
+            }
+            p { class: "text-base font-black text-slate-900 break-words capitalize", "{value}" }
+            p { class: "text-xs text-slate-500 leading-relaxed", "{hint}" }
+        }
+    }
+}
+
+#[component]
+fn OperatorChecklistItem(label: String, done: bool, help: String) -> Element {
+    rsx! {
+        div { class: "flex items-start gap-3",
+            div {
+                class: format!(
+                    "mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border {}",
+                    if done {
+                        "border-emerald-200 bg-emerald-50 text-emerald-600"
+                    } else {
+                        "border-amber-200 bg-amber-50 text-amber-700"
+                    }
+                ),
+                MaterialIcon {
+                    name: if done { "check" } else { "priority_high" },
+                    size: 14
+                }
+            }
+            div { class: "space-y-1",
+                p { class: "text-sm font-semibold text-slate-900", "{label}" }
+                p { class: "text-xs leading-relaxed text-slate-500", "{help}" }
+            }
         }
     }
 }

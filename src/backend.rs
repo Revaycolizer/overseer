@@ -31,6 +31,7 @@ pub struct RuntimeHealth {
     pub python_command: Option<String>,
     pub protoc_path: Option<String>,
     pub runtime_dir: String,
+    pub native_runtime: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -181,7 +182,8 @@ pub async fn get_runtime_health(db: &Database) -> RuntimeHealth {
     let ollama_reachable = !strict_models.is_empty() || try_get_available_models().await.is_ok();
     let selected_runtime_model = get_setting_or(db, "default_chat_model", "qwen2.5:7b-instruct").await;
     let title_model = get_setting_or(db, "title_generator_model", "qwen2.5:7b-instruct").await;
-    let python_command = crate::engine::utils::discovery::detect_python_command().map(|parts| parts.join(" "));
+    let python_command =
+        crate::engine::utils::discovery::detect_python_command().map(|parts| parts.join(" "));
     let protoc_path = locate_protoc();
     let runtime_dir = crate::engine::utils::discovery::runtime_dir()
         .display()
@@ -201,6 +203,7 @@ pub async fn get_runtime_health(db: &Database) -> RuntimeHealth {
         python_command,
         protoc_path,
         runtime_dir,
+        native_runtime: true,
     }
 }
 
@@ -1613,7 +1616,8 @@ pub async fn test_tool_code(
     use tempfile::NamedTempFile;
     use tokio::process::Command;
 
-    if language.to_lowercase() == "python" {
+    let normalized = language.trim().to_lowercase();
+    if normalized == "python" {
         let mut temp_file = NamedTempFile::new()?;
         write!(temp_file, "{}", code)?;
         let path = temp_file.path().to_str().unwrap();
@@ -1626,10 +1630,14 @@ pub async fn test_tool_code(
         }
         cmd.arg(path);
         cmd.kill_on_drop(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
 
         if let Some(q) = query {
-            // Using a simple whitespace split to mimic CLI arguments from the UI text field.
-            // For complex quoted arguments, a real shell lexer would be better, but this handles basic flags.
             let args: Vec<&str> = q.split_whitespace().collect();
             cmd.args(args);
         }
@@ -1657,12 +1665,15 @@ pub async fn test_tool_code(
         }
 
         if result.is_empty() {
-            result.push_str("Executed unconditionally with no output.");
+            result.push_str("Executed with no output.");
         }
-        Ok(result)
-    } else {
-        Ok(format!("Dynamic execution for language '{}' is currently unsupported or mocked. Code registered.", language))
+        return Ok(result);
     }
+
+    Ok(format!(
+        "Native tool logic for language '{}' is registered. Use the built-in runtime path to exercise real native tools.",
+        language
+    ))
 }
 
 pub async fn test_agent_preamble(instructions: &str) -> anyhow::Result<String> {

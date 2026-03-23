@@ -127,7 +127,7 @@ pub fn ToolsWorkshop() -> Element {
                             "Tools Workshop"
                         }
                         p { class: "text-base text-slate-500 max-w-2xl",
-                            " Create, test, and deploy functional tools for your AI to interact with the OS. "
+                            "Create, test, and deploy native tools for your AI to interact with the OS."
                         }
                     }
                     div { class: "flex items-center gap-3",
@@ -140,7 +140,7 @@ pub fn ToolsWorkshop() -> Element {
                                     let db_spawn = db_click.clone();
                                     let mut tools_resource_spawn = tools_resource_click.clone();
                                     spawn(async move {
-                                        let _ = backend::add_tool(&db_spawn, "New Tool", "A new functional tool", "python").await;
+                                        let _ = backend::add_tool(&db_spawn, "New Tool", "A new native tool", "rust").await;
                                         tools_resource_spawn.restart();
                                     });
                                 }
