@@ -1,16 +1,16 @@
 {
   "product": "Overseer",
-  "updated_at": "2026-03-22T00:00:00Z",
-  "latest": "v0.1.0",
+  "updated_at": "2026-03-23T00:00:00Z",
+  "latest": "v0.1.1",
   "channels": {
-    "latest": "v0.1.0",
-    "stable": "v0.1.0"
+    "latest": "v0.1.1",
+    "stable": "v0.1.1"
   },
   "badges": [
     {
       "key": "latest",
       "label": "Latest",
-      "value": "v0.1.0",
+      "value": "v0.1.1",
       "color": "2563eb"
     },
     {
@@ -28,12 +28,60 @@
   ],
   "releases": [
     {
-      "version": "0.1.0",
-      "tag": "v0.1.0",
+      "version": "0.1.1",
+      "tag": "v0.1.1",
       "channel": "stable",
       "is_latest": true,
       "is_stable": true,
       "labels": ["latest", "stable", "windows-x64"],
+      "published_at": "2026-03-23T00:00:00Z",
+      "summary": "Computer supervision, approval-backed desktop control, runtime health checks, and sharper chat, trace, and workflow surfaces.",
+      "notes_file": "releases/notes/v0.1.1.md",
+      "assets": [
+        {
+          "name": "Overseer-v0.1.1-windows-x64.zip",
+          "platform": "windows-x64",
+          "kind": "portable-zip",
+          "label": "Portable Zip",
+          "path": "dist/v0.1.1/Overseer-v0.1.1-windows-x64.zip"
+        },
+        {
+          "name": "install-overseer.ps1",
+          "platform": "windows-x64",
+          "kind": "installer-script",
+          "label": "Install Script",
+          "path": "dist/v0.1.1/install-overseer.ps1"
+        },
+        {
+          "name": "uninstall-overseer.ps1",
+          "platform": "windows-x64",
+          "kind": "uninstaller-script",
+          "label": "Uninstall Script",
+          "path": "dist/v0.1.1/uninstall-overseer.ps1"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "platform": "windows-x64",
+          "kind": "checksums",
+          "label": "SHA256 Checksums",
+          "path": "dist/v0.1.1/SHA256SUMS.txt"
+        },
+        {
+          "name": "release.json",
+          "platform": "windows-x64",
+          "kind": "release-manifest",
+          "label": "Release Manifest",
+          "path": "dist/v0.1.1/release.json"
+        }
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "tag": "v0.1.0",
+      "channel": "stable",
+      "is_latest": false,
+      "is_stable": false,
+      "labels": ["windows-x64"],
       "published_at": "2026-03-22T00:00:00Z",
       "summary": "First packaged desktop release with workflow runs, execution traces, and local installer support.",
       "notes_file": "releases/notes/v0.1.0.md",
