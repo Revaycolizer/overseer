@@ -260,6 +260,12 @@ fn WorkflowEditor(
     let trace_events = trace_events_resource.read().cloned().unwrap_or_default();
     let trace_runs_loading = trace_runs_resource.read().is_none();
     let trace_events_loading = trace_events_resource.read().is_none();
+    let enabled_step_count = steps.iter().filter(|step| step.enabled).count();
+    let latest_run = runs.first().cloned();
+    let selected_run = runs
+        .iter()
+        .find(|run| Some(run.id) == selected_workflow_run_id())
+        .cloned();
 
     let db_for_step_runs = db.clone();
     let step_runs_resource = use_resource(move || {
@@ -370,7 +376,15 @@ fn WorkflowEditor(
                             option { value: "paused", "Paused" }
                         }
                         button {
-                            class: "bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-sm",
+                            disabled: is_running(),
+                            class: format!(
+                                "px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm {}",
+                                if is_running() {
+                                    "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                                } else {
+                                    "bg-blue-600 text-white hover:bg-blue-700"
+                                }
+                            ),
                             onclick: {
                                 let db = db.clone();
                                 let agent_system = agent_system.clone();
@@ -396,7 +410,7 @@ fn WorkflowEditor(
                                 }
                             },
                             MaterialIcon { name: "play_arrow", size: 18, color: MaterialIconColor::Light }
-                            if is_running() { "Running..." } else { "Run Workflow" }
+                            if is_running() { "Running..." } else if runs.is_empty() { "Run Workflow" } else { "Run Again" }
                         }
                         button {
                             class: "bg-slate-900 text-white px-4 py-3 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-sm",
@@ -418,8 +432,44 @@ fn WorkflowEditor(
                     }
                 }
 
+                div { class: "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3",
+                    WorkflowMetricCard {
+                        label: "Enabled Steps".to_string(),
+                        value: enabled_step_count.to_string(),
+                        tone: "slate".to_string(),
+                    }
+                    WorkflowMetricCard {
+                        label: "Trigger".to_string(),
+                        value: prettify_workflow_token(&workflow.trigger_type),
+                        tone: "blue".to_string(),
+                    }
+                    WorkflowMetricCard {
+                        label: "Workflow State".to_string(),
+                        value: prettify_workflow_token(&workflow.status),
+                        tone: workflow_status_tone(&workflow.status).to_string(),
+                    }
+                    WorkflowMetricCard {
+                        label: "Latest Run".to_string(),
+                        value: latest_run
+                            .as_ref()
+                            .map(|run| prettify_workflow_token(&run.status))
+                            .unwrap_or_else(|| "No Runs".to_string()),
+                        tone: latest_run
+                            .as_ref()
+                            .map(|run| workflow_status_tone(&run.status).to_string())
+                            .unwrap_or_else(|| "slate".to_string()),
+                    }
+                }
+
                 if !run_feedback().is_empty() {
-                    div { class: "rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 font-medium",
+                    div { class: format!(
+                        "rounded-2xl px-4 py-3 text-sm font-medium border {}",
+                        if run_feedback().to_lowercase().contains("failed") {
+                            "border-red-200 bg-red-50 text-red-700"
+                        } else {
+                            "border-blue-200 bg-blue-50 text-blue-700"
+                        }
+                    ),
                         "{run_feedback}"
                     }
                 }
@@ -468,21 +518,71 @@ fn WorkflowEditor(
                                     div { class: "flex items-center justify-between gap-3",
                                         span { class: format!(
                                             "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
-                                            match run.status.as_str() {
-                                                "completed" => "bg-emerald-50 text-emerald-600",
-                                                "failed" => "bg-red-50 text-red-600",
-                                                _ => "bg-blue-50 text-blue-600",
-                                            }
+                                            workflow_status_badge_class(&run.status)
                                         ),
-                                            "{run.status}"
+                                            "{prettify_workflow_token(&run.status)}"
                                         }
                                         span { class: "text-[11px] text-slate-400",
                                             {run.created_at.format("%Y-%m-%d %H:%M").to_string()}
                                         }
                                     }
-                                    p { class: "text-xs font-semibold text-slate-700", "Run #{run.id}" }
+                                    div { class: "flex items-center gap-2",
+                                        p { class: "text-xs font-semibold text-slate-700", "Run #{run.id}" }
+                                        if Some(run.id) == latest_run.as_ref().map(|latest| latest.id) {
+                                            span { class: "text-[10px] font-black uppercase tracking-[0.18em] px-2 py-1 rounded-full bg-slate-100 text-slate-500",
+                                                "Latest"
+                                            }
+                                        }
+                                    }
                                     p { class: "text-xs text-slate-500 whitespace-pre-wrap line-clamp-4",
                                         "{run.summary.clone().or(run.error_message.clone()).unwrap_or_else(|| \"No summary yet.\".to_string())}"
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(run) = selected_run.clone() {
+                        div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden",
+                            div { class: "px-4 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3",
+                                div {
+                                    h4 { class: "text-xs font-black uppercase tracking-[0.24em] text-slate-500", "Selected Run" }
+                                    p { class: "text-[11px] text-slate-400 mt-1", "Operational summary for workflow run #{run.id}." }
+                                }
+                                span { class: format!(
+                                    "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                    workflow_status_badge_class(&run.status)
+                                ),
+                                    "{prettify_workflow_token(&run.status)}"
+                                }
+                            }
+                            div { class: "p-4 space-y-3",
+                                WorkflowRunMetaRow {
+                                    label: "Started".to_string(),
+                                    value: run.created_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+                                }
+                                WorkflowRunMetaRow {
+                                    label: "Finished".to_string(),
+                                    value: run.finished_at
+                                        .map(|value| value.format("%Y-%m-%d %H:%M:%S").to_string())
+                                        .unwrap_or_else(|| "In progress".to_string()),
+                                }
+                                WorkflowRunMetaRow {
+                                    label: "Conversation".to_string(),
+                                    value: run
+                                        .conversation_id
+                                        .map(|value| value.to_string())
+                                        .unwrap_or_else(|| "Not linked".to_string()),
+                                }
+                                if let Some(summary) = run.summary.clone().filter(|value| !value.trim().is_empty()) {
+                                    WorkflowRunSummaryBlock {
+                                        label: "Summary".to_string(),
+                                        value: summary,
+                                    }
+                                } else if let Some(error_message) = run.error_message.clone().filter(|value| !value.trim().is_empty()) {
+                                    WorkflowRunSummaryBlock {
+                                        label: "Failure".to_string(),
+                                        value: error_message,
                                     }
                                 }
                             }
@@ -509,13 +609,9 @@ fn WorkflowEditor(
                                                 p { class: "text-xs font-bold text-slate-700", "Step {step_run.step_order}" }
                                                 span { class: format!(
                                                     "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
-                                                    match step_run.status.as_str() {
-                                                        "completed" => "bg-emerald-50 text-emerald-600",
-                                                        "failed" => "bg-red-50 text-red-600",
-                                                        _ => "bg-blue-50 text-blue-600",
-                                                    }
+                                                    workflow_status_badge_class(&step_run.status)
                                                 ),
-                                                    "{step_run.status}"
+                                                    "{prettify_workflow_token(&step_run.status)}"
                                                 }
                                             }
                                             if let Some(output) = step_run.output.clone().filter(|value| !value.trim().is_empty()) {
@@ -548,6 +644,77 @@ fn WorkflowEditor(
                         events_loading: trace_events_loading,
                     }
                 }
+            }
+        }
+    }
+}
+
+fn workflow_status_badge_class(status: &str) -> &'static str {
+    match status {
+        "completed" | "success" => "bg-emerald-50 text-emerald-600",
+        "failed" | "error" => "bg-red-50 text-red-600",
+        _ => "bg-blue-50 text-blue-600",
+    }
+}
+
+fn workflow_status_tone(status: &str) -> &'static str {
+    match status {
+        "completed" | "success" | "active" => "green",
+        "failed" | "error" | "paused" => "red",
+        "draft" => "blue",
+        _ => "slate",
+    }
+}
+
+fn prettify_workflow_token(value: &str) -> String {
+    value
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[component]
+fn WorkflowMetricCard(label: String, value: String, tone: String) -> Element {
+    let class = match tone.as_str() {
+        "blue" => "border-blue-200 bg-blue-50 text-blue-700",
+        "green" => "border-emerald-200 bg-emerald-50 text-emerald-700",
+        "red" => "border-red-200 bg-red-50 text-red-700",
+        _ => "border-slate-200 bg-slate-50 text-slate-700",
+    };
+
+    rsx! {
+        div { class: format!("rounded-2xl border p-4 {}", class),
+            p { class: "text-[10px] font-black uppercase tracking-[0.22em] opacity-70", "{label}" }
+            p { class: "text-lg font-black mt-2", "{value}" }
+        }
+    }
+}
+
+#[component]
+fn WorkflowRunMetaRow(label: String, value: String) -> Element {
+    rsx! {
+        div { class: "rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2",
+            p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "{label}" }
+            p { class: "text-xs font-semibold text-slate-700 mt-1 break-all", "{value}" }
+        }
+    }
+}
+
+#[component]
+fn WorkflowRunSummaryBlock(label: String, value: String) -> Element {
+    rsx! {
+        div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2",
+            p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "{label}" }
+            pre { class: "text-[11px] text-slate-700 whitespace-pre-wrap break-words font-mono leading-relaxed overflow-x-auto",
+                "{value}"
             }
         }
     }
