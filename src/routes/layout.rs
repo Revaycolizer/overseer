@@ -39,6 +39,12 @@ pub fn Sidebar() -> Element {
                     MaterialIcon { name: "build", size: 22 }
                 }
                 Link {
+                    class: if route == (Route::ComputerControl {}) { "nav-link active" } else { "nav-link" },
+                    to: Route::ComputerControl {},
+                    title: "Computer Control",
+                    MaterialIcon { name: "computer", size: 22 }
+                }
+                Link {
                     class: if route == (Route::SupervisorsWorkshop {}) { "nav-link active" } else { "nav-link" },
                     to: Route::SupervisorsWorkshop {},
                     title: "Supervisors",
@@ -80,6 +86,7 @@ pub fn Layout() -> Element {
         Route::Conversations {} => ("Overseer", "forum"),
         Route::AgentsWorkshop {} => ("Agents Workshop", "smart_toy"),
         Route::ToolsWorkshop {} => ("Tools Workshop", "build"),
+        Route::ComputerControl {} => ("Computer Control", "computer"),
         Route::WorkflowAutomation {} => ("Workflow Automation", "terminal"),
         Route::SupervisorsWorkshop {} => ("Supervisors Workshop", "supervised_user_circle"),
         Route::PlannersWorkshop {} => ("Planners Workshop", "architecture"),
