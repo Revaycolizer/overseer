@@ -30,6 +30,7 @@ pub fn ToolsWorkshop() -> Element {
     let mut test_output = use_signal(|| "Run a test to see output here.".to_string());
     let mut is_testing = use_signal(|| false);
     let mut test_query = use_signal(|| String::new());
+    let mut workbench_status = use_signal(|| "Tool workbench ready.".to_string());
 
     // Sync code and handle initial selection
     let tools_for_effect = tools.clone();
@@ -85,6 +86,15 @@ pub fn ToolsWorkshop() -> Element {
         let script = "setTimeout(() => { if (window.Prism) { Prism.highlightAll(); } }, 10);";
         document::eval(script);
     });
+
+    let code_dirty = selected_tool
+        .as_ref()
+        .map(|tool| tool.code != local_code())
+        .unwrap_or(false);
+    let intent_summary = selected_tool
+        .as_ref()
+        .and_then(|tool| tool.required_intent.clone())
+        .unwrap_or_else(|| "No intent guardrails configured.".to_string());
 
     rsx! {
         div { class: "flex-1 flex flex-col min-h-0 bg-background-light overflow-y-auto custom-scrollbar p-8",
@@ -167,7 +177,33 @@ pub fn ToolsWorkshop() -> Element {
                             div { class: "bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-[600px] max-h-[600px]",
                                 div { class: "border-b border-slate-200 p-4 flex items-center justify-between",
                                     div { class: "flex items-center gap-4",
-                                        div {
+                                        div { class: "space-y-3",
+                                            div { class: "flex items-center gap-2 flex-wrap",
+                                                span { class: "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full bg-slate-100 text-slate-600",
+                                                    "{tool.language}"
+                                                }
+                                                span { class: format!(
+                                                    "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                                    if code_dirty {
+                                                        "bg-amber-50 text-amber-700"
+                                                    } else {
+                                                        "bg-emerald-50 text-emerald-600"
+                                                    }
+                                                ),
+                                                    if code_dirty { "Draft Logic" } else { "Synced" }
+                                                }
+                                                span { class: format!(
+                                                    "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                                    match tool.safety_level.as_str() {
+                                                        "dangerous" => "bg-red-50 text-red-600",
+                                                        "high" => "bg-amber-50 text-amber-700",
+                                                        _ => "bg-blue-50 text-blue-600",
+                                                    }
+                                                ),
+                                                    "{tool.safety_level}"
+                                                }
+                                            }
+                                            div {
                                             label { class: "block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1", "Tool Name" }
                                                 input {
                                                     class: "font-bold text-slate-900 border-none focus:ring-0 p-0",
@@ -189,14 +225,10 @@ pub fn ToolsWorkshop() -> Element {
                                                         }
                                                     }
                                                 }
-                                        }
-                                        div { class: "flex items-center gap-1",
-                                            span { class: "text-[10px] font-bold text-emerald-600 uppercase bg-emerald-50 px-2 py-0.5 rounded",
-                                                "Active"
                                             }
                                         }
                                     }
-                                    div { class: "flex items-center gap-2",
+                                    div { class: "flex items-center gap-2 shrink-0",
                                         button { class: "text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-50",
                                             onclick: move |_| is_fullscreen.set(!is_fullscreen()),
                                             MaterialIcon { name: if is_fullscreen() { "fullscreen_exit" } else { "fullscreen" }, size: 20 }
@@ -213,11 +245,18 @@ pub fn ToolsWorkshop() -> Element {
                                                     let q = query();
                                                     is_testing.set(true);
                                                     test_output.set("Running test...".to_string());
+                                                    workbench_status.set("Executing tool test...".to_string());
                                                     spawn(async move {
                                                         let query_opt = if q.is_empty() { None } else { Some(q.as_str()) };
                                                         match backend::test_tool_code(&lang, &code, query_opt).await {
-                                                            Ok(res) => test_output.set(res),
-                                                            Err(e) => test_output.set(format!("Test Error: {}", e)),
+                                                            Ok(res) => {
+                                                                test_output.set(res);
+                                                                workbench_status.set("Tool test completed.".to_string());
+                                                            }
+                                                            Err(e) => {
+                                                                test_output.set(format!("Test Error: {}", e));
+                                                                workbench_status.set("Tool test failed.".to_string());
+                                                            }
                                                         }
                                                         is_testing.set(false);
                                                     });
@@ -240,12 +279,14 @@ pub fn ToolsWorkshop() -> Element {
                                                     let mut tools_resource_spawn = tools_resource_click.clone();
                                                     let tool_id = t.id;
                                                     let mut version_history_resource = version_history_resource.clone();
+                                                    workbench_status.set("Publishing snapshot...".to_string());
                                                     spawn(async move {
                                                         let version_tag = format!("snapshot-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
                                                         let _ = backend::update_tool(&db_spawn, updated_tool).await;
                                                         let _ = backend::publish_tool_version(&db_spawn, tool_id, &version_tag, "Version snapshot").await;
                                                         tools_resource_spawn.restart();
                                                         version_history_resource.restart();
+                                                        workbench_status.set("Snapshot published and logic synced.".to_string());
                                                     });
                                                 }
                                             },
@@ -264,9 +305,11 @@ pub fn ToolsWorkshop() -> Element {
                                                     updated_tool.code = local_code();
                                                     let db_spawn = db_click.clone();
                                                     let mut tools_resource_spawn = tools_resource_click.clone();
+                                                    workbench_status.set("Saving tool logic...".to_string());
                                                     spawn(async move {
                                                         let _ = backend::update_tool(&db_spawn, updated_tool).await;
                                                         tools_resource_spawn.restart();
+                                                        workbench_status.set("Tool logic saved.".to_string());
                                                     });
                                                 }
                                             },
@@ -277,6 +320,12 @@ pub fn ToolsWorkshop() -> Element {
                                         button { class: "text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-50",
                                             MaterialIcon { name: "settings", size: 20 }
                                         }
+                                    }
+                                }
+                                div { class: "border-b border-slate-100 px-4 py-3 bg-slate-50/70 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between",
+                                    p { class: "text-xs text-slate-600", "{workbench_status}" }
+                                    p { class: "text-[11px] text-slate-500",
+                                        "Intent guardrail: {intent_summary}"
                                     }
                                 }
                                 div {
@@ -304,11 +353,18 @@ pub fn ToolsWorkshop() -> Element {
                                                             let q = query();
                                                             is_testing.set(true);
                                                             test_output.set("Running test...".to_string());
+                                                            workbench_status.set("Executing tool test...".to_string());
                                                             spawn(async move {
                                                                 let query_opt = if q.is_empty() { None } else { Some(q.as_str()) };
                                                                 match backend::test_tool_code(&lang, &code, query_opt).await {
-                                                                    Ok(res) => test_output.set(res),
-                                                                    Err(e) => test_output.set(format!("Test Error: {}", e)),
+                                                                    Ok(res) => {
+                                                                        test_output.set(res);
+                                                                        workbench_status.set("Tool test completed.".to_string());
+                                                                    }
+                                                                    Err(e) => {
+                                                                        test_output.set(format!("Test Error: {}", e));
+                                                                        workbench_status.set("Tool test failed.".to_string());
+                                                                    }
                                                                 }
                                                                 is_testing.set(false);
                                                             });
@@ -450,8 +506,7 @@ pub fn ToolsWorkshop() -> Element {
                                         {
                                             let agents = backend::get_agents(&db);
                                             rsx! {
-                                                // This is a bit heavy for a loop, but for now it's fine for simple workshops
-                                                span { class: "text-[10px] text-slate-400 italic", "Equipped on some system agents" }
+                                                span { class: "text-[10px] text-slate-400 italic", "Agent relationship surfacing is still lightweight here. Use this area as the assignment checkpoint before publishing." }
                                             }
                                         }
                                     }
@@ -524,21 +579,45 @@ pub fn ToolsWorkshop() -> Element {
                                     }
                                 }
 
-                                div { class: "border-t border-slate-200 p-4 bg-white rounded-b-xl",
+                                div { class: "border-t border-slate-200 p-4 bg-white rounded-b-xl space-y-3",
                                     div { class: "flex items-center justify-between mb-2",
-                                        div { class: "flex items-center gap-4",
-                                            span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
-                                                "Console Output"
-                                            }
+                                        div {
+                                            span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Test Harness" }
+                                            p { class: "text-[11px] text-slate-500 mt-1", "Run the current draft against a sample query before saving or publishing." }
                                         }
-                                        MaterialIcon { name: "keyboard_arrow_up", size: 18, color: MaterialIconColor::Custom("text-slate-300".into()) }
+                                        span { class: format!(
+                                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full {}",
+                                            if is_testing() {
+                                                "bg-blue-50 text-blue-600"
+                                            } else if code_dirty {
+                                                "bg-amber-50 text-amber-700"
+                                            } else {
+                                                "bg-emerald-50 text-emerald-600"
+                                            }
+                                        ),
+                                            if is_testing() { "Running" } else if code_dirty { "Draft" } else { "Ready" }
+                                        }
                                     }
                                     div { class: "mb-3 flex items-center gap-2",
                                         input {
                                             class: "flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-mono text-slate-600 focus:ring-1 focus:ring-brand-blue/20",
-                                            placeholder: "e.g., --action search --query 'Dioxus'",
+                                            placeholder: "Type a sample query or tool input to simulate a real run",
                                             value: "{test_query}",
                                             oninput: move |e| test_query.set(e.value()),
+                                        }
+                                    }
+                                    div { class: "grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px]",
+                                        div { class: "rounded-lg border border-slate-200 bg-slate-50 px-3 py-2",
+                                            span { class: "block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1", "Language" }
+                                            "{tool.language}"
+                                        }
+                                        div { class: "rounded-lg border border-slate-200 bg-slate-50 px-3 py-2",
+                                            span { class: "block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1", "Safety" }
+                                            "{tool.safety_level}"
+                                        }
+                                        div { class: "rounded-lg border border-slate-200 bg-slate-50 px-3 py-2",
+                                            span { class: "block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1", "Guardrail" }
+                                            "{intent_summary}"
                                         }
                                     }
                                     pre { class: "text-[10px] text-slate-600 font-mono whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-100 max-h-40 overflow-y-auto custom-scrollbar",

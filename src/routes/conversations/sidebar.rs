@@ -53,22 +53,51 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                     }
                     div { class: "space-y-1",
                         for conv in &props.conversations {
-                            button {
+                            div {
                                 class: format!(
-                                    "w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-all {}",
+                                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {}",
                                     if selected_conversation_id() == Some(conv.id) {
                                         "bg-blue-50 text-blue-700 border-blue-100"
                                     } else {
                                         "hover:bg-slate-50 text-slate-600 border-transparent"
                                     }
                                 ),
-                                onclick: {
-                                    let id = conv.id;
-                                    move |_| selected_conversation_id.set(Some(id))
-                                },
-                                MaterialIcon { name: "chat_bubble", size: 20 }
-                                span { class: "text-xs font-semibold truncate text-left flex-1",
-                                    "{conv.title}"
+                                button {
+                                    class: "flex flex-1 min-w-0 items-center gap-3 text-left",
+                                    onclick: {
+                                        let id = conv.id;
+                                        move |_| selected_conversation_id.set(Some(id))
+                                    },
+                                    MaterialIcon { name: "chat_bubble", size: 20 }
+                                    span { class: "text-xs font-semibold truncate text-left flex-1",
+                                        "{conv.title}"
+                                    }
+                                }
+                                button {
+                                    class: "shrink-0 p-1 text-slate-400 hover:text-red-500 transition-colors",
+                                    title: "Delete conversation",
+                                    onclick: {
+                                        let db = db.clone();
+                                        let id = conv.id;
+                                        let current_selected = selected_conversation_id();
+                                        let fallback_selected = props
+                                            .conversations
+                                            .iter()
+                                            .find(|candidate| candidate.id != id)
+                                            .map(|candidate| candidate.id);
+                                        move |_| {
+                                            let db = db.clone();
+                                            spawn(async move {
+                                                if backend::delete_conversation(&db, id).await.is_ok() {
+                                                    conversations_resource.restart();
+                                                    if current_selected == Some(id) {
+                                                        selected_conversation_id.set(fallback_selected);
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    },
+                                    MaterialIcon { name: "delete", size: 18 }
                                 }
                             }
                         }
