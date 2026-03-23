@@ -68,6 +68,256 @@ async fn log_event(
     }
 }
 
+#[derive(Debug, Clone)]
+struct ToolGateDecision {
+    allowed: bool,
+    reason: Option<String>,
+    action_summary: Option<String>,
+    action_tool: bool,
+}
+
+fn is_computer_observation_tool(tool_name: &str) -> bool {
+    matches!(tool_name, "vision_analysis")
+}
+
+fn is_computer_action_tool(domain: &str, tool_name: &str, safety_level: &str) -> bool {
+    if tool_name == "os_tool" {
+        return true;
+    }
+
+    if matches!(safety_level, "high" | "dangerous") && matches!(domain, "computer" | "desktop") {
+        return true;
+    }
+
+    matches!(domain, "computer" | "desktop") && !is_computer_observation_tool(tool_name)
+}
+
+fn summarize_computer_action(tool_name: &str, input_json: &serde_json::Value) -> String {
+    if let Some(input) = input_json.get("input").and_then(|value| value.as_str()) {
+        return format!("{} -> {}", tool_name, input.trim());
+    }
+
+    if let Some(action) = input_json.get("action").and_then(|value| value.as_str()) {
+        if let Some(app) = input_json.get("app").and_then(|value| value.as_str()) {
+            return format!("{} -> {} ({})", tool_name, action.trim(), app.trim());
+        }
+        return format!("{} -> {}", tool_name, action.trim());
+    }
+
+    if let Some(target) = input_json
+        .get("target")
+        .and_then(|value| value.as_str())
+        .or_else(|| input_json.get("window").and_then(|value| value.as_str()))
+        .or_else(|| input_json.get("title").and_then(|value| value.as_str()))
+    {
+        return format!("{} -> {}", tool_name, target.trim());
+    }
+
+    format!("{} -> {}", tool_name, input_json)
+}
+
+fn extract_allowlist_target(input_json: &serde_json::Value) -> Option<String> {
+    [
+        "app",
+        "application",
+        "window",
+        "title",
+        "process",
+        "target",
+        "url",
+    ]
+    .into_iter()
+    .find_map(|key| {
+        input_json
+            .get(key)
+            .and_then(|value| value.as_str())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+fn session_elapsed_timed_out(started_at: Option<&str>, timeout_ms: i64) -> bool {
+    let Some(started_at) = started_at else {
+        return false;
+    };
+
+    if timeout_ms <= 0 {
+        return false;
+    }
+
+    chrono::DateTime::parse_from_rfc3339(started_at)
+        .ok()
+        .map(|started| {
+            let elapsed = chrono::Utc::now().signed_duration_since(started.with_timezone(&chrono::Utc));
+            elapsed.num_milliseconds() >= timeout_ms
+        })
+        .unwrap_or(false)
+}
+
+async fn evaluate_computer_tool_gate(
+    db: &crate::db::Database,
+    domain: &str,
+    tool_name: &str,
+    safety_level: &str,
+    input_json: &serde_json::Value,
+) -> ToolGateDecision {
+    let action_tool = is_computer_action_tool(domain, tool_name, safety_level);
+    let touches_computer = matches!(domain, "computer" | "desktop")
+        || action_tool
+        || is_computer_observation_tool(tool_name);
+
+    if !touches_computer {
+        return ToolGateDecision {
+            allowed: true,
+            reason: None,
+            action_summary: None,
+            action_tool: false,
+        };
+    }
+
+    let state = crate::backend::get_computer_supervision_state(db).await;
+    let action_summary = summarize_computer_action(tool_name, input_json);
+
+    if state.session_state == "emergency_stopped" {
+        return ToolGateDecision {
+            allowed: false,
+            reason: Some(
+                "Computer supervision is in emergency stop. Reset the session in Computer Control before any desktop action can continue."
+                    .to_string(),
+            ),
+            action_summary: Some(action_summary),
+            action_tool,
+        };
+    }
+
+    if state.session_state == "paused" {
+        return ToolGateDecision {
+            allowed: false,
+            reason: Some(
+                "Computer supervision is paused. Resume the session in Computer Control before continuing."
+                    .to_string(),
+            ),
+            action_summary: Some(action_summary),
+            action_tool,
+        };
+    }
+
+    if action_tool && state.session_state == "idle" {
+        return ToolGateDecision {
+            allowed: false,
+            reason: Some(
+                "No supervised computer session is active. Start an approval or trusted session from Computer Control before running desktop actions."
+                    .to_string(),
+            ),
+            action_summary: Some(action_summary),
+            action_tool,
+        };
+    }
+
+    if action_tool
+        && (state.supervision_mode == "observe_only" || state.session_state == "observing")
+    {
+        return ToolGateDecision {
+            allowed: false,
+            reason: Some(
+                "Computer supervision is currently observe-only. Propose the next action, but do not execute it."
+                    .to_string(),
+            ),
+            action_summary: Some(action_summary),
+            action_tool,
+        };
+    }
+
+    if action_tool && state.max_actions > 0 && state.action_count >= state.max_actions {
+        return ToolGateDecision {
+            allowed: false,
+            reason: Some(format!(
+                "Computer supervision hit the per-session action limit ({}). Start a fresh session or raise the limit before continuing.",
+                state.max_actions
+            )),
+            action_summary: Some(action_summary),
+            action_tool,
+        };
+    }
+
+    if action_tool
+        && session_elapsed_timed_out(state.session_started_at.as_deref(), state.timeout_ms)
+    {
+        return ToolGateDecision {
+            allowed: false,
+            reason: Some(format!(
+                "Computer supervision timed out after {} ms. Start a fresh session before continuing.",
+                state.timeout_ms
+            )),
+            action_summary: Some(action_summary),
+            action_tool,
+        };
+    }
+
+    if action_tool && !state.allowlist.is_empty() {
+        if let Some(target) = extract_allowlist_target(input_json) {
+            let target_lower = target.to_lowercase();
+            let allowed = state
+                .allowlist
+                .iter()
+                .any(|entry| target_lower.contains(&entry.to_lowercase()));
+            if !allowed {
+                return ToolGateDecision {
+                    allowed: false,
+                    reason: Some(format!(
+                        "The requested target '{}' does not match the current computer allowlist. Narrow the action or update the allowlist in Computer Control.",
+                        target
+                    )),
+                    action_summary: Some(action_summary),
+                    action_tool,
+                };
+            }
+        }
+    }
+
+    let requires_approval = action_tool
+        && (state.supervision_mode == "approval_required"
+            || state.session_state == "approval_session");
+
+    if requires_approval {
+        let pending_matches = state.pending_tool.trim().is_empty() || state.pending_tool == tool_name;
+
+        if state.approval_state == "approved_once" && pending_matches {
+            return ToolGateDecision {
+                allowed: true,
+                reason: None,
+                action_summary: Some(action_summary),
+                action_tool,
+            };
+        }
+
+        let _ = crate::backend::stage_computer_approval_request(
+            db,
+            domain,
+            tool_name,
+            &action_summary,
+        )
+        .await;
+
+        return ToolGateDecision {
+            allowed: false,
+            reason: Some(format!(
+                "Approval required before '{}' can run. Review the pending action in Computer Control, approve it, then continue.",
+                tool_name
+            )),
+            action_summary: Some(action_summary),
+            action_tool,
+        };
+    }
+
+    ToolGateDecision {
+        allowed: true,
+        reason: None,
+        action_summary: Some(action_summary),
+        action_tool,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupervisorExecutionResult {
     pub status: String,
@@ -355,8 +605,50 @@ pub async fn dispatch_domain(
                 };
 
                 let tool_info = tools.iter().find(|t| t.name == tool_name);
+                let computer_gate = match tool_info {
+                    Some(info) => {
+                        Some(
+                            evaluate_computer_tool_gate(
+                                db,
+                                domain,
+                                tool_name,
+                                &info.safety_level,
+                                &input_json,
+                            )
+                            .await,
+                        )
+                    }
+                    None => None,
+                };
 
                 if let Some(info) = tool_info {
+                    if let Some(gate) = computer_gate.as_ref() {
+                        if !gate.allowed {
+                            let reason = gate.reason.clone().unwrap_or_else(|| {
+                                "Computer supervision blocked this action.".to_string()
+                            });
+                            log_event(
+                                db,
+                                run_id,
+                                event_sequence,
+                                "tool_blocked",
+                                "blocked",
+                                Some(domain),
+                                Some(step),
+                                Some(tool_name),
+                                s.model.as_deref(),
+                                Some(&reason),
+                                Some(&input_json.to_string()),
+                            )
+                            .await;
+                            current_prompt = format!(
+                                "{}\n\n[SYSTEM OVERRIDE: {}]\n\nNext: Ask for approval or provide your answer using the structured JSON result schema.",
+                                current_prompt, reason
+                            );
+                            continue;
+                        }
+                    }
+
                     let requires_intent = info
                         .required_intent
                         .as_ref()
@@ -431,23 +723,36 @@ pub async fn dispatch_domain(
                 }
 
                 let tool_result = match tool_info {
-                    Some(info) => {
-                        match tokio::time::timeout(
-                            std::time::Duration::from_millis(tool_timeout_ms),
-                            crate::engine::tools::call_dynamic_tool(info, input_json.clone()),
-                        )
-                        .await
-                        {
-                            Ok(Ok(result)) => result,
-                            Ok(Err(e)) => format!("Tool error: {}", e),
-                            Err(_) => format!(
-                                "Tool error: '{}' timed out after {} ms.",
-                                tool_name, tool_timeout_ms
-                            ),
-                        }
-                    }
+                    Some(info) => match tokio::time::timeout(
+                        std::time::Duration::from_millis(tool_timeout_ms),
+                        crate::engine::tools::call_dynamic_tool(info, input_json.clone()),
+                    )
+                    .await
+                    {
+                        Ok(Ok(result)) => result,
+                        Ok(Err(e)) => format!("Tool error: {}", e),
+                        Err(_) => format!(
+                            "Tool error: '{}' timed out after {} ms.",
+                            tool_name, tool_timeout_ms
+                        ),
+                    },
                     None => format!("Tool '{}' not found.", tool_name),
                 };
+
+                if let Some(gate) = computer_gate.as_ref() {
+                    if gate.allowed && gate.action_tool {
+                        let action_summary = gate
+                            .action_summary
+                            .clone()
+                            .unwrap_or_else(|| tool_name.to_string());
+                        let _ = crate::backend::register_computer_action_execution(
+                            db,
+                            tool_name,
+                            &action_summary,
+                        )
+                        .await;
+                    }
+                }
 
                 log_event(
                     db,
