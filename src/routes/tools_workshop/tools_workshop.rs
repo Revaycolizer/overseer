@@ -30,6 +30,9 @@ pub fn ToolsWorkshop() -> Element {
     let mut test_output = use_signal(|| "Run a test to see output here.".to_string());
     let mut is_testing = use_signal(|| false);
     let mut test_query = use_signal(|| String::new());
+    let mut test_case_name = use_signal(|| "Default Case".to_string());
+    let mut expected_substring = use_signal(String::new);
+    let mut selected_test_case_id = use_signal(|| 0i64);
     let mut workbench_status = use_signal(|| "Tool workbench ready.".to_string());
 
     // Sync code and handle initial selection
@@ -45,6 +48,10 @@ pub fn ToolsWorkshop() -> Element {
         if let Some(tool) = current_tools.iter().find(|t| t.id == selected_tool_id()) {
             local_code.set(tool.code.clone());
         }
+        test_case_name.set("Default Case".to_string());
+        test_query.set(String::new());
+        expected_substring.set(String::new());
+        selected_test_case_id.set(0);
         selected_version_tag.set(String::new());
     });
 
@@ -75,6 +82,21 @@ pub fn ToolsWorkshop() -> Element {
                     .unwrap_or_default()
             } else {
                 None
+            }
+        }
+    });
+
+    let db_for_test_cases = db.clone();
+    let mut test_cases_resource = use_resource(move || {
+        let db = db_for_test_cases.clone();
+        let tool_id = selected_tool_id();
+        async move {
+            if tool_id != 0 {
+                backend::get_tool_test_cases(&db, tool_id)
+                    .await
+                    .unwrap_or_default()
+            } else {
+                vec![]
             }
         }
     });
@@ -138,43 +160,45 @@ pub fn ToolsWorkshop() -> Element {
                                 "{tools.len()} Total"
                             }
                         }
-                        for tool in tools.clone().into_iter() {
-                            div {
-                                class: format!("bg-white border-2 rounded-xl p-4 shadow-sm cursor-pointer transition-all {}", if selected_tool_id() == tool.id { "border-brand-blue shadow-md" } else { "border-slate-100 hover:border-slate-200" }),
-                                onclick: {
-                                    let tool_id = tool.id;
-                                    move |_| selected_tool_id.set(tool_id)
-                                },
-                                div { class: "flex items-center justify-between mb-3",
-                                    div { class: "flex items-center gap-3",
-                                        div { class: "w-8 h-8 bg-blue-50 text-brand-blue rounded flex items-center justify-center",
-                                            MaterialIcon {
-                                                name: "build",
-                                                size: 20,
-                                                color: MaterialIconColor::Custom("text-brand-blue".into())
+                        div { class: "max-h-[600px] overflow-y-auto custom-scrollbar pr-1 space-y-4",
+                            for tool in tools.clone().into_iter() {
+                                div {
+                                    class: format!("bg-white border-2 rounded-xl p-4 shadow-sm cursor-pointer transition-all {}", if selected_tool_id() == tool.id { "border-brand-blue shadow-md" } else { "border-slate-100 hover:border-slate-200" }),
+                                    onclick: {
+                                        let tool_id = tool.id;
+                                        move |_| selected_tool_id.set(tool_id)
+                                    },
+                                    div { class: "flex items-center justify-between mb-3",
+                                        div { class: "flex items-center gap-3",
+                                            div { class: "w-8 h-8 bg-blue-50 text-brand-blue rounded flex items-center justify-center",
+                                                MaterialIcon {
+                                                    name: "build",
+                                                    size: 20,
+                                                    color: MaterialIconColor::Custom("text-brand-blue".into())
+                                                }
+                                            }
+                                            span { class: "font-bold text-slate-900 text-sm",
+                                                "{tool.name}"
                                             }
                                         }
-                                        span { class: "font-bold text-slate-900 text-sm",
-                                            "{tool.name}"
+                                        span { class: "w-2 h-2 rounded-full bg-emerald-500" }
+                                    }
+                                    p { class: "text-xs text-slate-500 line-clamp-1 mb-3",
+                                        "{tool.description}"
+                                    }
+                                    div { class: "flex items-center gap-2",
+                                        span { class: "text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded",
+                                            "{tool.language}"
                                         }
+                                        span { class: "text-[10px] text-slate-400", "Local System" }
                                     }
-                                    span { class: "w-2 h-2 rounded-full bg-emerald-500" }
-                                }
-                                p { class: "text-xs text-slate-500 line-clamp-1 mb-3",
-                                    "{tool.description}"
-                                }
-                                div { class: "flex items-center gap-2",
-                                    span { class: "text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded",
-                                        "{tool.language}"
-                                    }
-                                    span { class: "text-[10px] text-slate-400", "Local System" }
                                 }
                             }
                         }
                     }
-                    div { class: "lg:col-span-2 space-y-6",
+                    div { class: "lg:col-span-2",
                         if let Some(tool) = selected_tool {
-                            div { class: "bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-[600px] max-h-[600px]",
+                            div { class: "bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-[600px] max-h-[600px] overflow-hidden",
                                 div { class: "border-b border-slate-200 p-4 flex items-center justify-between",
                                     div { class: "flex items-center gap-4",
                                         div { class: "space-y-3",
@@ -239,10 +263,18 @@ pub fn ToolsWorkshop() -> Element {
                                                 let t = tool.clone();
                                                 let local_code = local_code.clone();
                                                 let query = test_query.clone();
+                                                let expected_substring = expected_substring.clone();
+                                                let selected_test_case_id = selected_test_case_id;
+                                                let db = db.clone();
+                                                let mut test_cases_resource = test_cases_resource.clone();
                                                 move |_| {
                                                     let lang = t.language.clone();
                                                     let code = local_code();
                                                     let q = query();
+                                                    let expected = expected_substring();
+                                                    let case_id = selected_test_case_id();
+                                                    let db = db.clone();
+                                                    let mut test_cases_resource = test_cases_resource.clone();
                                                     is_testing.set(true);
                                                     test_output.set("Running test...".to_string());
                                                     workbench_status.set("Executing tool test...".to_string());
@@ -250,12 +282,52 @@ pub fn ToolsWorkshop() -> Element {
                                                         let query_opt = if q.is_empty() { None } else { Some(q.as_str()) };
                                                         match backend::test_tool_code(&lang, &code, query_opt).await {
                                                             Ok(res) => {
-                                                                test_output.set(res);
-                                                                workbench_status.set("Tool test completed.".to_string());
+                                                                let (status, display_output, status_message) = if expected.trim().is_empty() {
+                                                                    (
+                                                                        "pass".to_string(),
+                                                                        res.clone(),
+                                                                        "Tool test completed.".to_string(),
+                                                                    )
+                                                                } else if res.contains(expected.trim()) {
+                                                                    (
+                                                                        "pass".to_string(),
+                                                                        format!("Expectation: PASS\nExpected substring found: {}\n\n{}", expected.trim(), res),
+                                                                        "Tool test passed expected match.".to_string(),
+                                                                    )
+                                                                } else {
+                                                                    (
+                                                                        "fail".to_string(),
+                                                                        format!("Expectation: FAIL\nMissing expected substring: {}\n\n{}", expected.trim(), res),
+                                                                        "Tool test failed expected match.".to_string(),
+                                                                    )
+                                                                };
+                                                                test_output.set(display_output.clone());
+                                                                workbench_status.set(status_message);
+                                                                if case_id != 0 {
+                                                                    let _ = backend::record_tool_test_case_result(
+                                                                        &db,
+                                                                        case_id,
+                                                                        &status,
+                                                                        &display_output,
+                                                                    )
+                                                                    .await;
+                                                                    test_cases_resource.restart();
+                                                                }
                                                             }
                                                             Err(e) => {
-                                                                test_output.set(format!("Test Error: {}", e));
+                                                                let error_output = format!("Test Error: {}", e);
+                                                                test_output.set(error_output.clone());
                                                                 workbench_status.set("Tool test failed.".to_string());
+                                                                if case_id != 0 {
+                                                                    let _ = backend::record_tool_test_case_result(
+                                                                        &db,
+                                                                        case_id,
+                                                                        "fail",
+                                                                        &error_output,
+                                                                    )
+                                                                    .await;
+                                                                    test_cases_resource.restart();
+                                                                }
                                                             }
                                                         }
                                                         is_testing.set(false);
@@ -332,7 +404,7 @@ pub fn ToolsWorkshop() -> Element {
                                     class: if is_fullscreen() {
                                         "fixed inset-0 z-50 bg-[#1e1e1e] flex flex-col p-6 animate-fade-in"
                                     } else {
-                                        "flex-1 overflow-hidden relative code-editor-container min-h-[300px]"
+                                        "shrink-0 h-[320px] overflow-hidden relative code-editor-container"
                                     },
                                     if is_fullscreen() {
                                         div { class: "flex justify-between items-center mb-6",
@@ -347,10 +419,18 @@ pub fn ToolsWorkshop() -> Element {
                                                         let t = tool.clone();
                                                         let local_code = local_code.clone();
                                                         let query = test_query.clone();
+                                                        let expected_substring = expected_substring.clone();
+                                                        let selected_test_case_id = selected_test_case_id;
+                                                        let db = db.clone();
+                                                        let mut test_cases_resource = test_cases_resource.clone();
                                                         move |_| {
                                                             let lang = t.language.clone();
                                                             let code = local_code();
                                                             let q = query();
+                                                            let expected = expected_substring();
+                                                            let case_id = selected_test_case_id();
+                                                            let db = db.clone();
+                                                            let mut test_cases_resource = test_cases_resource.clone();
                                                             is_testing.set(true);
                                                             test_output.set("Running test...".to_string());
                                                             workbench_status.set("Executing tool test...".to_string());
@@ -358,12 +438,52 @@ pub fn ToolsWorkshop() -> Element {
                                                                 let query_opt = if q.is_empty() { None } else { Some(q.as_str()) };
                                                                 match backend::test_tool_code(&lang, &code, query_opt).await {
                                                                     Ok(res) => {
-                                                                        test_output.set(res);
-                                                                        workbench_status.set("Tool test completed.".to_string());
+                                                                        let (status, display_output, status_message) = if expected.trim().is_empty() {
+                                                                            (
+                                                                                "pass".to_string(),
+                                                                                res.clone(),
+                                                                                "Tool test completed.".to_string(),
+                                                                            )
+                                                                        } else if res.contains(expected.trim()) {
+                                                                            (
+                                                                                "pass".to_string(),
+                                                                                format!("Expectation: PASS\nExpected substring found: {}\n\n{}", expected.trim(), res),
+                                                                                "Tool test passed expected match.".to_string(),
+                                                                            )
+                                                                        } else {
+                                                                            (
+                                                                                "fail".to_string(),
+                                                                                format!("Expectation: FAIL\nMissing expected substring: {}\n\n{}", expected.trim(), res),
+                                                                                "Tool test failed expected match.".to_string(),
+                                                                            )
+                                                                        };
+                                                                        test_output.set(display_output.clone());
+                                                                        workbench_status.set(status_message);
+                                                                        if case_id != 0 {
+                                                                            let _ = backend::record_tool_test_case_result(
+                                                                                &db,
+                                                                                case_id,
+                                                                                &status,
+                                                                                &display_output,
+                                                                            )
+                                                                            .await;
+                                                                            test_cases_resource.restart();
+                                                                        }
                                                                     }
                                                                     Err(e) => {
-                                                                        test_output.set(format!("Test Error: {}", e));
+                                                                        let error_output = format!("Test Error: {}", e);
+                                                                        test_output.set(error_output.clone());
                                                                         workbench_status.set("Tool test failed.".to_string());
+                                                                        if case_id != 0 {
+                                                                            let _ = backend::record_tool_test_case_result(
+                                                                                &db,
+                                                                                case_id,
+                                                                                "fail",
+                                                                                &error_output,
+                                                                            )
+                                                                            .await;
+                                                                            test_cases_resource.restart();
+                                                                        }
                                                                     }
                                                                 }
                                                                 is_testing.set(false);
@@ -394,6 +514,7 @@ pub fn ToolsWorkshop() -> Element {
                                     }
                                 }
 
+                                div { class: "flex-1 min-h-0 overflow-y-auto custom-scrollbar",
                                 // Tool Metadata Section
                                 div { class: "border-t border-slate-200 p-6 bg-white",
                                     div { class: "grid grid-cols-2 gap-6",
@@ -598,12 +719,173 @@ pub fn ToolsWorkshop() -> Element {
                                             if is_testing() { "Running" } else if code_dirty { "Draft" } else { "Ready" }
                                         }
                                     }
+                                    div { class: "grid gap-3 md:grid-cols-2",
+                                        input {
+                                            class: "bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-700 focus:ring-1 focus:ring-brand-blue/20",
+                                            placeholder: "Case name",
+                                            value: "{test_case_name}",
+                                            oninput: move |e| test_case_name.set(e.value()),
+                                        }
+                                        input {
+                                            class: "bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-mono text-slate-600 focus:ring-1 focus:ring-brand-blue/20",
+                                            placeholder: "Expected output contains...",
+                                            value: "{expected_substring}",
+                                            oninput: move |e| expected_substring.set(e.value()),
+                                        }
+                                    }
                                     div { class: "mb-3 flex items-center gap-2",
                                         input {
                                             class: "flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-mono text-slate-600 focus:ring-1 focus:ring-brand-blue/20",
                                             placeholder: "Type a sample query or tool input to simulate a real run",
                                             value: "{test_query}",
                                             oninput: move |e| test_query.set(e.value()),
+                                        }
+                                        button {
+                                            class: "px-3 py-2 rounded-lg bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all",
+                                            onclick: {
+                                                let db = db.clone();
+                                                let mut test_cases_resource = test_cases_resource.clone();
+                                                let tool_id = tool.id;
+                                                let mut selected_test_case_id = selected_test_case_id;
+                                                let test_case_name = test_case_name.clone();
+                                                let test_query = test_query.clone();
+                                                let expected_substring = expected_substring.clone();
+                                                move |_| {
+                                                    let db = db.clone();
+                                                    let mut test_cases_resource = test_cases_resource.clone();
+                                                    let case_id = selected_test_case_id();
+                                                    let name = test_case_name();
+                                                    let input = test_query();
+                                                    let expected = expected_substring();
+                                                    if name.trim().is_empty() {
+                                                        workbench_status.set("Give the test case a name before saving.".to_string());
+                                                        return;
+                                                    }
+                                                    workbench_status.set("Saving test case...".to_string());
+                                                    spawn(async move {
+                                                        let result = if case_id == 0 {
+                                                            backend::add_tool_test_case(
+                                                                &db,
+                                                                tool_id,
+                                                                &name,
+                                                                &input,
+                                                                if expected.trim().is_empty() { None } else { Some(expected.as_str()) },
+                                                            )
+                                                            .await
+                                                        } else {
+                                                            backend::update_tool_test_case(
+                                                                &db,
+                                                                backend::ToolTestCase {
+                                                                    id: case_id,
+                                                                    tool_id,
+                                                                    name,
+                                                                    input,
+                                                                    expected_substring: if expected.trim().is_empty() { None } else { Some(expected) },
+                                                                    last_status: None,
+                                                                    last_output: None,
+                                                                    last_run_at: None,
+                                                                    created_at: String::new(),
+                                                                    updated_at: String::new(),
+                                                                },
+                                                            )
+                                                            .await
+                                                        };
+
+                                                        match result {
+                                                            Ok(_) => {
+                                                                test_cases_resource.restart();
+                                                                workbench_status.set("Test case saved.".to_string());
+                                                            }
+                                                            Err(error) => {
+                                                                workbench_status.set(format!("Failed to save test case: {error}"));
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                            },
+                                            if selected_test_case_id() == 0 { "Save Case" } else { "Update Case" }
+                                        }
+                                    }
+                                    if !test_cases_resource.read().cloned().unwrap_or_default().is_empty() {
+                                        div { class: "rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2 max-h-44 overflow-y-auto custom-scrollbar",
+                                            div { class: "flex items-center justify-between",
+                                                span { class: "text-[10px] font-bold uppercase tracking-widest text-slate-400", "Saved Cases" }
+                                                if selected_test_case_id() != 0 {
+                                                    button {
+                                                        class: "text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-800",
+                                                        onclick: move |_| {
+                                                            selected_test_case_id.set(0);
+                                                            test_case_name.set("Default Case".to_string());
+                                                            test_query.set(String::new());
+                                                            expected_substring.set(String::new());
+                                                        },
+                                                        "Clear"
+                                                    }
+                                                }
+                                            }
+                                            for case in test_cases_resource.read().cloned().unwrap_or_default() {
+                                                div {
+                                                    class: format!(
+                                                        "rounded-lg border px-3 py-2 transition-all {}",
+                                                        if selected_test_case_id() == case.id {
+                                                            "border-blue-300 bg-blue-50"
+                                                        } else {
+                                                            "border-slate-200 bg-white"
+                                                        }
+                                                    ),
+                                                    div { class: "flex items-start justify-between gap-3",
+                                                        button {
+                                                            class: "flex-1 text-left",
+                                                            onclick: {
+                                                                let case_clone = case.clone();
+                                                                move |_| {
+                                                                    selected_test_case_id.set(case_clone.id);
+                                                                    test_case_name.set(case_clone.name.clone());
+                                                                    test_query.set(case_clone.input.clone());
+                                                                    expected_substring.set(case_clone.expected_substring.clone().unwrap_or_default());
+                                                                    if let Some(status) = &case_clone.last_status {
+                                                                        workbench_status.set(format!("Loaded test case: {} ({status})", case_clone.name));
+                                                                    } else {
+                                                                        workbench_status.set(format!("Loaded test case: {}", case_clone.name));
+                                                                    }
+                                                                }
+                                                            },
+                                                            div { class: "text-[11px] font-bold text-slate-700", "{case.name}" }
+                                                            div { class: "text-[10px] text-slate-500 mt-1 line-clamp-1", "{case.input}" }
+                                                            if let Some(expected) = case.expected_substring.clone() {
+                                                                div { class: "text-[10px] text-slate-400 mt-1", "Expect: {expected}" }
+                                                            }
+                                                            if let Some(status) = case.last_status.clone() {
+                                                                div { class: format!(
+                                                                    "text-[10px] font-bold uppercase tracking-widest mt-2 {}",
+                                                                    if status == "pass" { "text-emerald-600" } else { "text-red-600" }
+                                                                ), "{status}" }
+                                                            }
+                                                        }
+                                                        button {
+                                                            class: "text-slate-300 hover:text-red-500 transition-colors",
+                                                            onclick: {
+                                                                let db = db.clone();
+                                                                let mut test_cases_resource = test_cases_resource.clone();
+                                                                let case_id = case.id;
+                                                                move |_| {
+                                                                    let db = db.clone();
+                                                                    let mut test_cases_resource = test_cases_resource.clone();
+                                                                    spawn(async move {
+                                                                        let _ = backend::delete_tool_test_case(&db, case_id).await;
+                                                                        test_cases_resource.restart();
+                                                                        if selected_test_case_id() == case_id {
+                                                                            selected_test_case_id.set(0);
+                                                                        }
+                                                                        workbench_status.set("Test case deleted.".to_string());
+                                                                    });
+                                                                }
+                                                            },
+                                                            MaterialIcon { name: "delete", size: 14 }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                     div { class: "grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px]",
@@ -623,6 +905,7 @@ pub fn ToolsWorkshop() -> Element {
                                     pre { class: "text-[10px] text-slate-600 font-mono whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-100 max-h-40 overflow-y-auto custom-scrollbar",
                                         "{test_output}"
                                     }
+                                }
                                 }
                             }
                         } else {
