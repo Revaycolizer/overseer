@@ -33,6 +33,22 @@ pub struct RuntimeHealth {
     pub runtime_dir: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ComputerSupervisionState {
+    pub supervision_mode: String,
+    pub session_state: String,
+    pub session_note: String,
+    pub allowlist: Vec<String>,
+    pub max_actions: i64,
+    pub action_count: i64,
+    pub timeout_ms: i64,
+    pub approval_state: String,
+    pub pending_tool: String,
+    pub pending_action: String,
+    pub pending_domain: String,
+    pub session_started_at: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
 pub struct ToolTestCase {
     pub id: i64,
@@ -1730,6 +1746,56 @@ pub async fn get_setting_i64(db: &Database, key: &str, default: i64) -> i64 {
     get_setting(db, key).await.parse::<i64>().unwrap_or(default)
 }
 
+fn parse_allowlist(raw: &str) -> Vec<String> {
+    raw.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| line.to_string())
+        .collect()
+}
+
+pub async fn get_computer_supervision_state(db: &Database) -> ComputerSupervisionState {
+    let supervision_mode =
+        get_setting_or(db, "computer_supervision_mode", "approval_required").await;
+    let session_state = get_setting_or(db, "computer_session_state", "idle").await;
+    let session_note = get_setting_or(
+        db,
+        "computer_session_note",
+        "No supervised computer session is active.",
+    )
+    .await;
+    let allowlist = parse_allowlist(
+        &get_setting_or(db, "computer_supervision_allowlist", "").await,
+    );
+    let max_actions = get_setting_i64(db, "computer_supervision_max_actions", 25).await;
+    let action_count = get_setting_i64(db, "computer_session_action_count", 0).await;
+    let timeout_ms = get_setting_i64(db, "computer_supervision_session_timeout_ms", 600_000).await;
+    let approval_state = get_setting_or(db, "computer_approval_state", "idle").await;
+    let pending_tool = get_setting_or(db, "computer_pending_tool", "").await;
+    let pending_action = get_setting_or(db, "computer_pending_action", "").await;
+    let pending_domain = get_setting_or(db, "computer_pending_domain", "").await;
+    let session_started_at = get_setting(db, "computer_session_started_at").await;
+
+    ComputerSupervisionState {
+        supervision_mode,
+        session_state,
+        session_note,
+        allowlist,
+        max_actions,
+        action_count,
+        timeout_ms,
+        approval_state,
+        pending_tool,
+        pending_action,
+        pending_domain,
+        session_started_at: if session_started_at.trim().is_empty() {
+            None
+        } else {
+            Some(session_started_at)
+        },
+    }
+}
+
 pub async fn set_setting(db: &Database, key: &str, value: &str) -> anyhow::Result<()> {
     let id = db.next_id().await;
     sqlx::query("INSERT INTO settings (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
@@ -1748,6 +1814,112 @@ pub async fn get_all_settings(db: &Database) -> HashMap<String, String> {
         .unwrap_or_default();
 
     rows.into_iter().collect()
+}
+
+pub async fn activate_computer_session(
+    db: &Database,
+    session_state: &str,
+    note: &str,
+) -> anyhow::Result<()> {
+    set_setting(db, "computer_session_state", session_state).await?;
+    set_setting(db, "computer_session_note", note).await?;
+    if session_state == "idle" {
+        set_setting(db, "computer_session_started_at", "").await?;
+        set_setting(db, "computer_session_action_count", "0").await?;
+    } else {
+        let started_at = chrono::Utc::now().to_rfc3339();
+        set_setting(db, "computer_session_started_at", &started_at).await?;
+        set_setting(db, "computer_session_action_count", "0").await?;
+    }
+    clear_computer_pending_action(db).await?;
+    Ok(())
+}
+
+pub async fn clear_computer_pending_action(db: &Database) -> anyhow::Result<()> {
+    set_setting(db, "computer_approval_state", "idle").await?;
+    set_setting(db, "computer_pending_tool", "").await?;
+    set_setting(db, "computer_pending_action", "").await?;
+    set_setting(db, "computer_pending_domain", "").await?;
+    Ok(())
+}
+
+pub async fn stage_computer_approval_request(
+    db: &Database,
+    domain: &str,
+    tool_name: &str,
+    action_summary: &str,
+) -> anyhow::Result<()> {
+    set_setting(db, "computer_approval_state", "pending").await?;
+    set_setting(db, "computer_pending_tool", tool_name).await?;
+    set_setting(db, "computer_pending_action", action_summary).await?;
+    set_setting(db, "computer_pending_domain", domain).await?;
+    set_setting(
+        db,
+        "computer_session_note",
+        &format!(
+            "Approval requested for the next computer action.\nDomain: {}\nTool: {}\nAction: {}",
+            domain, tool_name, action_summary
+        ),
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn approve_pending_computer_action(db: &Database) -> anyhow::Result<()> {
+    let pending_tool = get_setting_or(db, "computer_pending_tool", "").await;
+    let pending_action = get_setting_or(db, "computer_pending_action", "").await;
+    set_setting(db, "computer_approval_state", "approved_once").await?;
+    set_setting(
+        db,
+        "computer_session_note",
+        &format!(
+            "Next approved computer action is armed.\nTool: {}\nAction: {}",
+            if pending_tool.trim().is_empty() {
+                "(not provided)"
+            } else {
+                pending_tool.trim()
+            },
+            if pending_action.trim().is_empty() {
+                "(not provided)"
+            } else {
+                pending_action.trim()
+            }
+        ),
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn reject_pending_computer_action(db: &Database) -> anyhow::Result<()> {
+    clear_computer_pending_action(db).await?;
+    set_setting(
+        db,
+        "computer_session_note",
+        "Pending computer action was rejected. Overseer should propose a new action before trying again.",
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn register_computer_action_execution(
+    db: &Database,
+    tool_name: &str,
+    action_summary: &str,
+) -> anyhow::Result<i64> {
+    let current = get_setting_i64(db, "computer_session_action_count", 0).await;
+    let next = current + 1;
+    set_setting(db, "computer_session_action_count", &next.to_string()).await?;
+    clear_computer_pending_action(db).await?;
+    set_setting(
+        db,
+        "computer_session_note",
+        &format!(
+            "Executed computer action {}.\nTool: {}\nAction: {}",
+            next, tool_name, action_summary
+        ),
+    )
+    .await?;
+    Ok(next)
 }
 
 pub async fn get_attachments(db: &Database, message_id: i64) -> anyhow::Result<Vec<Attachment>> {
