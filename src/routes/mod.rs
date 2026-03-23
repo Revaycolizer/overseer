@@ -1,4 +1,5 @@
 mod agents_workshop;
+mod computer_control;
 mod conversations;
 mod execution_trace;
 mod layout;
@@ -9,6 +10,7 @@ mod tools_workshop;
 mod workflow_automation;
 
 pub use agents_workshop::AgentsWorkshop;
+pub use computer_control::ComputerControl;
 pub use conversations::Conversations;
 pub use layout::Layout;
 pub use planners_workshop::PlannersWorkshop;
