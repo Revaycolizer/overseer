@@ -118,6 +118,47 @@ fn summarize_computer_action(tool_name: &str, input_json: &serde_json::Value) ->
     format!("{} -> {}", tool_name, input_json)
 }
 
+fn computer_strategy_hint(query: &str, step: &str, tools: &[crate::engine::utils::discovery::ToolInfo]) -> Option<String> {
+    let lower = format!("{} {}", query.to_lowercase(), step.to_lowercase());
+    if !(lower.contains("computer")
+        || lower.contains("desktop")
+        || lower.contains("window")
+        || lower.contains("screen"))
+    {
+        return None;
+    }
+
+    let has_os_tool = tools.iter().any(|tool| tool.name == "os_tool");
+    let has_vision_tool = tools.iter().any(|tool| tool.name == "vision_analysis");
+    if !has_os_tool && !has_vision_tool {
+        return None;
+    }
+
+    let mut guidance = Vec::new();
+    if lower.contains("active window")
+        || lower.contains("which window")
+        || lower.contains("what window")
+        || lower.contains("current window")
+        || lower.contains("foreground window")
+        || lower.contains("observe")
+        || lower.contains("inspect")
+    {
+        if has_vision_tool {
+            guidance.push("For desktop observation, call `vision_analysis` first to inspect the live desktop session.");
+        }
+        if has_os_tool {
+            guidance.push("Use `os_tool` with action `get_state` or `list_windows` to gather evidence about the active window and visible windows.");
+        }
+        guidance.push("Do not answer from memory. Observation tasks require tool evidence before you summarize anything.");
+    }
+
+    if guidance.is_empty() {
+        None
+    } else {
+        Some(guidance.join(" "))
+    }
+}
+
 fn extract_allowlist_target(input_json: &serde_json::Value) -> Option<String> {
     [
         "app",
@@ -510,14 +551,17 @@ pub async fn dispatch_domain(
     let monitoring_hint = monitoring_strategy_hint(query, step, &tools)
         .map(|hint| format!("\n{}\n", hint))
         .unwrap_or_default();
+    let computer_hint = computer_strategy_hint(query, step, &tools)
+        .map(|hint| format!("\n{}\n", hint))
+        .unwrap_or_default();
 
     let initial_prompt = format!(
         "GOAL: {}\n\
          TASK: {}\n\n\
          {}CONTEXT:\n{}\n\n\
          PROGRESS:\n{}\n\n\
-         COMMAND: Execute the task using tools if necessary. Final answers must use the structured JSON result schema.{}",
-        query, step, tool_descriptions, clean_context, clean_plan, monitoring_hint
+         COMMAND: Execute the task using tools if necessary. Final answers must use the structured JSON result schema.{}{}",
+        query, step, tool_descriptions, clean_context, clean_plan, monitoring_hint, computer_hint
     );
 
     log_event(

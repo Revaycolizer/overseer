@@ -68,8 +68,31 @@ struct OrchestrationDecision {
 
 fn infer_domain_from_query(query: &str) -> Option<String> {
     let lower = query.to_lowercase();
+    let computer_observation = (lower.contains("desktop") || lower.contains("screen"))
+        && (lower.contains("observe")
+            || lower.contains("inspect")
+            || lower.contains("watch")
+            || lower.contains("active window")
+            || lower.contains("which window")
+            || lower.contains("what window")
+            || lower.contains("current window")
+            || lower.contains("foreground window"));
 
-    if lower.contains("research")
+    if computer_observation
+        || lower.contains("control my computer")
+        || lower.contains("take over my computer")
+        || lower.contains("use my computer")
+        || lower.contains("operate my pc")
+        || lower.contains("computer session")
+        || lower.contains("fully supervise")
+        || lower.contains("observe my desktop")
+        || lower.contains("observe the desktop")
+        || lower.contains("which window is active")
+        || lower.contains("what window is active")
+        || lower.contains("tell me which window")
+    {
+        Some("computer".to_string())
+    } else if lower.contains("research")
         || lower.contains("search")
         || lower.contains("browse")
         || lower.contains("website")
@@ -82,14 +105,6 @@ fn infer_domain_from_query(query: &str) -> Option<String> {
         || lower.contains("click")
     {
         Some("web".to_string())
-    } else if lower.contains("control my computer")
-        || lower.contains("take over my computer")
-        || lower.contains("use my computer")
-        || lower.contains("operate my pc")
-        || lower.contains("computer session")
-        || lower.contains("fully supervise")
-    {
-        Some("computer".to_string())
     } else if lower.contains("desktop")
         || lower.contains("app")
         || lower.contains("window")
@@ -121,6 +136,7 @@ fn infer_domain_from_query(query: &str) -> Option<String> {
 
 fn heuristic_decision(query: &str) -> OrchestrationDecision {
     let lower = query.to_lowercase();
+    let inferred_domain = infer_domain_from_query(query);
     let direct_chat_markers = [
         "what",
         "who",
@@ -148,9 +164,15 @@ fn heuristic_decision(query: &str) -> OrchestrationDecision {
         "workflow",
         "step by step",
         "automation",
+        "observe",
+        "inspect",
+        "watch",
+        "active window",
+        "current window",
     ];
 
     let looks_like_direct_chat = query.len() < 220
+        && inferred_domain.is_none()
         && direct_chat_markers.iter().any(|marker| lower.contains(marker))
         && !delegation_markers
             .iter()
@@ -165,7 +187,7 @@ fn heuristic_decision(query: &str) -> OrchestrationDecision {
         };
     }
 
-    if let Some(domain) = infer_domain_from_query(query) {
+    if let Some(domain) = inferred_domain {
         return OrchestrationDecision {
             route: OrchestrationRoute::SingleDomain,
             domain: Some(domain.clone()),
