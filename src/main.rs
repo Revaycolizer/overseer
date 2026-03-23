@@ -8,8 +8,8 @@ mod state;
 
 use crate::db::Database;
 use routes::{
-    AgentsWorkshop, Conversations, Layout, PlannersWorkshop, Settings, SupervisorsWorkshop,
-    ToolsWorkshop, WorkflowAutomation,
+    AgentsWorkshop, ComputerControl, Conversations, Layout, PlannersWorkshop, Settings,
+    SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation,
 };
 use state::StateProvider;
 use std::sync::Arc;
@@ -26,6 +26,8 @@ enum Route {
         WorkflowAutomation {},
         #[route("/tools")]
         ToolsWorkshop {},
+        #[route("/computer")]
+        ComputerControl {},
         #[route("/supervisors")]
         SupervisorsWorkshop {},
         #[route("/planners")]
