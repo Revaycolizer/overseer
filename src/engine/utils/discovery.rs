@@ -202,6 +202,7 @@ pub fn build_python_command() -> Result<Vec<String>, String> {
 pub async fn prepare_runtime_env(db: &crate::db::Database) -> anyhow::Result<String> {
     let runtime_dir = runtime_dir();
     std::fs::create_dir_all(&runtime_dir)?;
+    stage_requests_compat_module(&runtime_dir)?;
 
     let tools = get_tools(db).await;
     for tool in tools {
@@ -238,6 +239,80 @@ pub async fn prepare_runtime_env(db: &crate::db::Database) -> anyhow::Result<Str
     }
 
     Ok(runtime_dir.to_string_lossy().to_string())
+}
+
+fn stage_requests_compat_module(runtime_dir: &Path) -> anyhow::Result<()> {
+    let shim_path = runtime_dir.join("requests.py");
+    let shim = r#"import json
+import urllib.parse
+import urllib.request
+from urllib.error import HTTPError, URLError
+
+
+class RequestException(Exception):
+    pass
+
+
+class HTTPStatusError(RequestException):
+    pass
+
+
+class Response:
+    def __init__(self, body, status_code, headers, url):
+        self._body = body
+        self.status_code = status_code
+        self.headers = headers
+        self.url = url
+        self.text = body.decode("utf-8", errors="replace")
+        self.content = body
+
+    def json(self):
+        return json.loads(self.text)
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise HTTPStatusError(f"HTTP {self.status_code} for {self.url}")
+
+
+def _encode_data(data):
+    if data is None:
+        return None
+    if isinstance(data, (bytes, bytearray)):
+        return data
+    if isinstance(data, str):
+        return data.encode("utf-8")
+    if isinstance(data, dict):
+        return urllib.parse.urlencode(data).encode("utf-8")
+    return str(data).encode("utf-8")
+
+
+def request(method, url, data=None, headers=None, timeout=30):
+    req = urllib.request.Request(
+        url,
+        data=_encode_data(data),
+        headers=headers or {},
+        method=method.upper(),
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return Response(resp.read(), getattr(resp, "status", resp.getcode()), dict(resp.headers), resp.geturl())
+    except HTTPError as exc:
+        body = exc.read()
+        return Response(body, exc.code, dict(exc.headers or {}), exc.geturl())
+    except URLError as exc:
+        raise RequestException(str(exc)) from exc
+
+
+def get(url, headers=None, timeout=30):
+    return request("GET", url, headers=headers, timeout=timeout)
+
+
+def post(url, data=None, headers=None, timeout=30):
+    return request("POST", url, data=data, headers=headers, timeout=timeout)
+"#;
+
+    std::fs::write(shim_path, shim)?;
+    Ok(())
 }
 
 fn tool_extension(tool_name: &str) -> &'static str {
