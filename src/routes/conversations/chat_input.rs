@@ -11,6 +11,7 @@ pub struct ChatInputProps {
     pub conversations_resource: Resource<Vec<backend::Conversation>>,
     pub is_first_msg: bool,
     pub is_thinking: Signal<bool>,
+    pub starter_prompt: Signal<Option<String>>,
 }
 
 #[component]
@@ -30,10 +31,18 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let mut conversations_resource = props.conversations_resource.clone();
     let selected_conversation_id = props.selected_conversation_id.clone();
     let is_first_msg = props.is_first_msg;
+    let mut starter_prompt = props.starter_prompt;
+
+    use_effect(move || {
+        if let Some(prompt) = starter_prompt() {
+            input_text.set(prompt);
+            starter_prompt.set(None);
+        }
+    });
 
     let mut send = use_callback(move |()| {
         let val = input_text();
-        if val.trim().is_empty() {
+        if val.trim().is_empty() || is_thinking() {
             return;
         }
         input_text.set(String::new());
@@ -172,7 +181,11 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         }
                         textarea {
                             class: "flex-1 bg-transparent border-none focus:ring-0 text-[var(--text-main)] placeholder:text-slate-400 text-sm py-3 px-2 resize-none max-h-48 overflow-y-auto",
-                            placeholder: "Command assistant...",
+                            placeholder: if selected_conversation_id().is_some() {
+                                "Ask Overseer to analyze, automate, or explain..."
+                            } else {
+                                "Type anything to start a new conversation..."
+                            },
                             rows: format!("{}", (input_text().split('\n').count() as u32).min(8)),
                             value: "{input_text}",
                             oninput: move |e| input_text.set(e.value()),
@@ -184,11 +197,38 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                             }
                         }
                         button {
-                            class: "size-11 flex items-center justify-center bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20",
+                            disabled: input_text().trim().is_empty() || is_thinking(),
+                            class: format!(
+                                "size-11 flex items-center justify-center rounded-lg transition-all shadow-lg {}",
+                                if input_text().trim().is_empty() || is_thinking() {
+                                    "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                                } else {
+                                    "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
+                                }
+                            ),
                             onclick: move |_| send.call(()),
-                            MaterialIcon { name: "arrow_upward", color: MaterialIconColor::Light, size: 24 }
+                            if is_thinking() {
+                                div { class: "size-5 border-2 border-current border-t-transparent rounded-full animate-spin" }
+                            } else {
+                                MaterialIcon { name: "arrow_upward", color: MaterialIconColor::Light, size: 24 }
+                            }
                         }
                     }
+                }
+                div { class: "mt-3 flex items-center justify-between gap-3 px-1 text-[11px] text-slate-400",
+                    div { class: "flex items-center gap-2 min-w-0",
+                        MaterialIcon { name: "radar", size: 14 }
+                        span {
+                            if is_thinking() {
+                                "Overseer is processing the current request."
+                            } else if selected_conversation_id().is_some() {
+                                "Conversation is active. Trace events will appear automatically."
+                            } else {
+                                "A new conversation will be created automatically when you send."
+                            }
+                        }
+                    }
+                    span { class: "shrink-0", "Enter to send • Shift+Enter for newline" }
                 }
             }
         }
