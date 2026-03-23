@@ -1,0 +1,4 @@
+7438818720128045056|Web Supervisor|web
+7438818720132239360|Office Supervisor|office
+7438818720132239361|Desktop Supervisor|desktop
+7438818720144822272|Stealth Supervisor|stealth

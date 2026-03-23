@@ -1,0 +1,330 @@
+    Checking overseer v0.1.0 (/home/revaycolizer/projects/overseer)
+error[E0433]: failed to resolve: could not find `ssr` in `charming`
+  --> src/engine/tools/charting.rs:46:30
+   |
+46 | ...g::ssr::Ss...
+   |       ^^^ could not find `ssr` in `charming`
+
+warning: unused import: `MaterialIconColor`
+ --> src/routes/settings/settings.rs:2:43
+  |
+2 | ...n, MaterialIconColor};
+  |       ^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::engine::utils::discovery::AgentInfo`
+ --> src/routes/supervisors_workshop/supervisors_workshop.rs:7:5
+  |
+7 | use c...AgentInfo;
+  |     ^...^^^^^^^^^
+
+warning: unused import: `MaterialIconColor`
+ --> src/routes/supervisors_workshop/agent_assignments.rs:2:43
+  |
+2 | ...n, MaterialIconColor};
+  |       ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Database`
+ --> src/routes/planners_workshop/mod.rs:2:26
+  |
+2 | ...r, Database};
+  |       ^^^^^^^^
+
+warning: unused import: `Database`
+ --> src/routes/planners_workshop/details.rs:4:26
+  |
+4 | ...r, Database};
+  |       ^^^^^^^^
+
+warning: unused imports: `Deserialize` and `Serialize`
+ --> src/state.rs:3:13
+  |
+3 | ...::{Deserialize, Serialize};
+  |       ^^^^^^^^^^^  ^^^^^^^^^
+
+warning: unused import: `rig::tool::Tool`
+ --> src/engine/utils/mod.rs:4:5
+  |
+4 | use rig::tool::Tool;
+  |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `rig::providers::ollama`
+ --> src/engine/shell.rs:1:5
+  |
+1 | use rig::providers::ollama;
+  |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `rig::client::Nothing`
+ --> src/engine/shell.rs:2:5
+  |
+2 | use rig::client::Nothing;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::engine::orchestrator::MasterPlanner`
+ --> src/engine/shell.rs:5:5
+  |
+5 | use c...erPlanner;
+  |     ^...^^^^^^^^^
+
+warning: unused imports: `retrieve_memories`, `setup_memory_table`, and `store_memory`
+ --> src/engine/shell.rs:6:29
+  |
+6 | ...::{setup_memory_table, retrieve_memories, store_memory};
+  |       ^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^
+
+warning: unused import: `std::sync::Arc`
+ --> src/engine/system.rs:4:5
+  |
+4 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src/engine/system.rs:5:5
+  |
+5 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tool::Tool`
+  --> src/engine/orchestrator/mod.rs:12:5
+   |
+12 |     tool::Tool,
+   |     ^^^^^^^^^^
+
+warning: unused variable: `script_path`
+   --> src/engine/orchestrator/mod.rs:143:29
+    |
+143 | ...et script_path = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_script_path`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:233:69
+    |
+233 | ...et mut agents_resource = ...
+    |       ----^^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:270:77
+    |
+270 | ...et mut agents_resource = ...
+    |       ----^^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+ --> src/routes/agents_workshop/agents_workshop.rs:7:9
+  |
+7 | ...et mut global_state = ...
+  |       ----^^^^^^^^^^^^
+  |       |
+  |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/agents_workshop/agents_workshop.rs:41:9
+   |
+41 | ...et mut test_output = ...
+   |       ----^^^^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/agents_workshop/agents_workshop.rs:42:9
+   |
+42 | ...et mut is_testing = ...
+   |       ----^^^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:162:65
+    |
+162 | ...et mut agents_resource = ...
+    |       ----^^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:193:61
+    |
+193 | ...et mut agents_resource = ...
+    |       ----^^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:351:53
+    |
+351 | ...et mut agents_resource = ...
+    |       ----^^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: unused variable: `is_testing`
+  --> src/routes/agents_workshop/agents_workshop.rs:42:9
+   |
+42 | ...et mut is_testing = ...
+   |       ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_is_testing`
+
+warning: variable does not need to be mutable
+ --> src/routes/settings/settings.rs:9:9
+  |
+9 | ...et mut settings = ...
+  |       ----^^^^^^^^
+  |       |
+  |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/settings/settings.rs:16:9
+   |
+16 | ...et mut models = ...
+   |       ----^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: unused variable: `default_chat_model`
+  --> src/routes/settings/settings.rs:27:9
+   |
+27 | ...et default_chat_model = ...
+   |       ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_default_chat_model`
+
+warning: variable does not need to be mutable
+ --> src/routes/tools_workshop/tools_workshop.rs:7:9
+  |
+7 | ...et mut global_state = ...
+  |       ----^^^^^^^^^^^^
+  |       |
+  |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/tools_workshop/tools_workshop.rs:11:9
+   |
+11 | ...et mut tools_resource = ...
+   |       ----^^^^^^^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:139:61
+    |
+139 | ...et mut tools_resource = ...
+    |       ----^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:198:53
+    |
+198 | ...et mut tools_resource_click = ...
+    |       ----^^^^^^^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:221:53
+    |
+221 | ...et mut tools_resource_click = ...
+    |       ----^^^^^^^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:310:57
+    |
+310 | ...et mut tools_resource = ...
+    |       ----^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:334:57
+    |
+334 | ...et mut tools_resource = ...
+    |       ----^^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/tools_workshop/tools_workshop.rs:69:37
+   |
+69 | ...et mut tools_resource_click = ...
+   |       ----^^^^^^^^^^^^^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: unused variable: `agents`
+   --> src/routes/tools_workshop/tools_workshop.rs:359:49
+    |
+359 | ...et agents = ...
+    |       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_agents`
+
+warning: variable does not need to be mutable
+  --> src/routes/supervisors_workshop/supervisors_workshop.rs:51:9
+   |
+51 | ...et mut supervisor_agents   ...
+   |       ----^^^^^^^^^^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/supervisors_workshop/supervisors_workshop.rs:73:9
+   |
+73 | ...et mut handle_save = ...
+   |       ----^^^^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/supervisors_workshop/supervisors_workshop.rs:112:9
+    |
+112 | ...et mut handle_delete = ...
+    |       ----^^^^^^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/planners_workshop/details.rs:25:9
+   |
+25 | ...et mut is_fullscreen = ...
+   |       ----^^^^^^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/planners_workshop/details.rs:36:25
+   |
+36 | ...me(mut planner) =...
+   |       ----^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: unused variable: `is_fullscreen`
+  --> src/routes/planners_workshop/details.rs:25:9
+   |
+25 | ...et mut is_fullscreen = ...
+   |       ^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_is_fullscreen`
+
+warning: variable does not need to be mutable
+  --> src/routes/planners_workshop/mod.rs:18:9
+   |
+18 | ...et mut planners: R...
+   |       ----^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/planners_workshop/mod.rs:25:9
+   |
+25 | ...et mut selected_planner = ...
+   |       ----^^^^^^^^^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+For more information about this error, try `rustc --explain E0433`.
+warning: `overseer` (bin "overseer") generated 44 warnings
+error: could not compile `overseer` (bin "overseer") due to 1 previous error; 44 warnings emitted
