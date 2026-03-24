@@ -132,16 +132,16 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     });
 
     rsx! {
-        div { class: "p-6 bg-gradient-to-t from-[var(--workspace-bg)] via-[var(--workspace-bg)] to-transparent",
+        div { class: "p-6 bg-gradient-to-t from-[var(--workspace-bg)] via-[var(--workspace-bg)]/95 to-transparent",
             div { class: "max-w-3xl mx-auto",
                 if !pending_attachments().is_empty() {
                     div { class: "mb-3 flex flex-wrap gap-2",
                         for (i, (name, _, _)) in pending_attachments().iter().enumerate() {
-                            div { class: "flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 text-[10px] font-bold text-blue-600",
+                            div { class: "flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/80 px-3 py-2 text-[10px] font-black tracking-[0.08em] text-blue-700 shadow-sm",
                                 MaterialIcon { name: "insert_drive_file", size: 16 }
                                 "{name}"
                                 button {
-                                    class: "ml-1 text-blue-400 hover:text-blue-600",
+                                    class: "ml-1 rounded-md p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-700 transition-colors",
                                     onclick: move |_| {
                                         let mut current = pending_attachments.write();
                                         current.remove(i);
@@ -152,9 +152,10 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         }
                     }
                 }
-                div { class: "relative bg-white border border-slate-200 rounded-xl p-2 shadow-xl focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/5 transition-all",
+                div { class: "relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-all focus-within:border-blue-400 focus-within:shadow-[0_12px_32px_rgba(59,130,246,0.15)]",
+                    div { class: "pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" }
                     div { class: "flex items-end gap-2",
-                        label { class: "p-2.5 text-slate-400 hover:text-slate-600 transition-colors bg-slate-50 rounded-lg border border-slate-100 group flex items-center cursor-pointer",
+                        label { class: "group flex cursor-pointer items-center rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-slate-400 transition-colors hover:border-slate-300 hover:bg-slate-100 hover:text-slate-600",
                             MaterialIcon { name: "attach_file", size: 24 }
                             input {
                                 r#type: "file",
@@ -180,7 +181,8 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                             }
                         }
                         textarea {
-                            class: "flex-1 bg-transparent border-none focus:ring-0 text-[var(--text-main)] placeholder:text-slate-400 text-sm py-3 px-2 resize-none max-h-48 overflow-y-auto",
+                            class: "custom-scrollbar flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-3 text-sm leading-relaxed text-[var(--text-main)] placeholder:text-slate-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 max-h-48",
+                            style: "border: none; outline: none; box-shadow: none;",
                             placeholder: if selected_conversation_id().is_some() {
                                 "Ask Overseer to analyze, automate, or explain..."
                             } else {
@@ -199,11 +201,11 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         button {
                             disabled: input_text().trim().is_empty() || is_thinking(),
                             class: format!(
-                                "size-11 flex items-center justify-center rounded-lg transition-all shadow-lg {}",
+                                "size-11 flex shrink-0 items-center justify-center rounded-xl transition-all duration-150 {}",
                                 if input_text().trim().is_empty() || is_thinking() {
-                                    "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                                    "cursor-not-allowed bg-slate-200 text-slate-400 shadow-none"
                                 } else {
-                                    "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20"
+                                    "bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:-translate-y-0.5 hover:bg-blue-700"
                                 }
                             ),
                             onclick: move |_| send.call(()),
@@ -215,7 +217,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         }
                     }
                 }
-                div { class: "mt-3 flex items-center justify-between gap-3 px-1 text-[11px] text-slate-400",
+                div { class: "mt-3 flex items-center justify-between gap-3 px-1 text-[11px] text-slate-500",
                     div { class: "flex items-center gap-2 min-w-0",
                         MaterialIcon { name: "radar", size: 14 }
                         span {
