@@ -444,11 +444,6 @@ fn EmptyConversationState(on_prompt: EventHandler<String>) -> Element {
                     }
                 }
             }
-            div { class: "flex flex-wrap gap-3 text-xs text-slate-500",
-                div { class: "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2", "Automatic conversation creation" }
-                div { class: "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2", "Execution trace attached to each run" }
-                div { class: "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2", "Direct chat, single-domain, or multi-step routing" }
-            }
         }
     }
 }
