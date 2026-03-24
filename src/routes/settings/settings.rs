@@ -117,9 +117,9 @@ pub fn Settings() -> Element {
 
     rsx! {
         div { class: "flex-1 flex flex-col min-h-0 bg-slate-50 overflow-y-auto custom-scrollbar",
-            main { class: "flex-1 p-6 md:p-12 max-w-4xl mx-auto w-full",
+            main { class: "flex-1 w-full max-w-6xl mx-auto p-6 md:p-10 xl:p-12",
                 // Header section
-                div { class: "mb-12 border-b border-slate-200 pb-8",
+                div { class: "mb-10 border-b border-slate-200 pb-7",
                     div { class: "flex flex-col gap-4 md:flex-row md:items-start md:justify-between",
                         div {
                             h2 { class: "text-4xl font-extrabold tracking-tight text-slate-900 mb-3",
@@ -142,10 +142,10 @@ pub fn Settings() -> Element {
                     }
                 }
 
-                div { class: "space-y-12",
+                div { class: "space-y-9",
                     section {
                         div { class: "grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]",
-                            div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm p-6 md:p-8 space-y-6",
+                            div { class: "rounded-3xl bg-white/80 p-6 md:p-8 space-y-6",
                                 div { class: "flex items-start justify-between gap-4 flex-wrap",
                                     div { class: "space-y-2 max-w-2xl",
                                         p { class: "text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400",
@@ -158,7 +158,7 @@ pub fn Settings() -> Element {
                                             "{runtime_health_summary}"
                                         }
                                     }
-                                    div { class: "rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-right min-w-[120px]",
+                                    div { class: "rounded-2xl bg-slate-50/80 px-4 py-3 text-right min-w-[120px]",
                                         p { class: "text-[10px] font-bold uppercase tracking-widest text-slate-400",
                                             "Checks Passing"
                                         }
@@ -190,7 +190,7 @@ pub fn Settings() -> Element {
                                 }
                             }
 
-                            div { class: "bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4",
+                            div { class: "rounded-3xl bg-white/75 p-6 space-y-4",
                                 div {
                                     p { class: "text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400",
                                         "First-Run Checklist"
@@ -341,7 +341,7 @@ pub fn Settings() -> Element {
                                 }
                             }
                         } else {
-                            div { class: "p-6 bg-white rounded-2xl border border-slate-200 shadow-sm text-sm text-slate-500 flex items-center gap-3",
+                            div { class: "p-6 rounded-2xl bg-white/80 text-sm text-slate-500 flex items-center gap-3",
                                 div { class: "size-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" }
                                 "Checking local runtime health..."
                             }
@@ -360,146 +360,160 @@ pub fn Settings() -> Element {
                             }
                         }
 
-                        div { class: "grid gap-6",
-                            div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
-                                div { class: "mb-4 md:mb-0",
-                                    label { class: "text-base font-bold text-slate-900 block mb-1",
-                                        "Default Runtime Model"
-                                    }
-                                    p { class: "text-sm text-slate-500",
-                                        "Fallback model for chat, planners, supervisors, and new records when a saved model is unavailable."
-                                    }
+                        div { class: "grid gap-6 xl:grid-cols-2",
+                            div { class: "rounded-2xl bg-white/75 p-6 space-y-5",
+                                div {
+                                    p { class: "text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400", "Model Selection" }
+                                    h4 { class: "text-lg font-black text-slate-900 mt-2", "Choose runtime and utility models" }
                                 }
-                                select {
-                                    class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full md:w-72 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm cursor-pointer font-medium text-slate-700 transition-all",
-                                    value: "{default_chat_model}",
-                                    onchange: move |evt| {
-                                        let db = state.read().db.clone();
-                                        let mut settings = settings.clone();
-                                        spawn(async move {
-                                            let _ = crate::backend::set_setting(&db, "default_chat_model", &evt.value()).await;
-                                            settings.restart();
-                                        });
-                                    },
-                                    for model in &available_models {
-                                        option { value: "{model}", selected: *model == default_chat_model, "{model}" }
-                                    }
-                                }
-                            }
-
-                            // Max Iterations
-                            div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
-                                div { class: "mb-4 md:mb-0",
-                                    label { class: "text-base font-bold text-slate-900 block mb-1",
-                                        "Maximum Tool Iterations"
-                                    }
-                                    p { class: "text-sm text-slate-500",
-                                        "Limit how many times an agent can call tools per step."
-                                    }
-                                }
-                                div { class: "flex items-center gap-3 w-full md:w-72",
-                                    input {
-                                        r#type: "number",
-                                        class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm font-medium text-slate-700",
-                                        value: "{max_iterations}",
-                                        min: "1",
-                                        max: "50",
-                                        onchange: move |evt| {
-                                            let db = state.read().db.clone();
-                                            let mut settings = settings.clone();
-                                            spawn(async move {
-                                                let _ = crate::backend::set_setting(&db, "max_iterations", &evt.value()).await;
-                                                settings.restart();
-                                            });
+                                div { class: "space-y-4",
+                                    div { class: "group flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl bg-slate-50/70 p-4",
+                                        div { class: "md:pr-4",
+                                            label { class: "text-base font-bold text-slate-900 block mb-1",
+                                                "Default Runtime Model"
+                                            }
+                                            p { class: "text-sm text-slate-500",
+                                                "Fallback model for chat, planners, supervisors, and new records when a saved model is unavailable."
+                                            }
+                                        }
+                                        select {
+                                            class: "bg-white border-slate-200 rounded-xl text-sm w-full md:w-72 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 cursor-pointer font-medium text-slate-700 transition-all",
+                                            value: "{default_chat_model}",
+                                            onchange: move |evt| {
+                                                let db = state.read().db.clone();
+                                                let mut settings = settings.clone();
+                                                spawn(async move {
+                                                    let _ = crate::backend::set_setting(&db, "default_chat_model", &evt.value()).await;
+                                                    settings.restart();
+                                                });
+                                            },
+                                            for model in &available_models {
+                                                option { value: "{model}", selected: *model == default_chat_model, "{model}" }
+                                            }
                                         }
                                     }
-                                    span { class: "text-xs font-bold text-slate-400 uppercase tracking-widest", "Turns" }
-                                }
-                            }
 
-                            div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
-                                div { class: "mb-4 md:mb-0",
-                                    label { class: "text-base font-bold text-slate-900 block mb-1",
-                                        "Tool Timeout"
-                                    }
-                                    p { class: "text-sm text-slate-500",
-                                        "Maximum runtime allowed for each tool invocation."
-                                    }
-                                }
-                                div { class: "flex items-center gap-3 w-full md:w-72",
-                                    input {
-                                        r#type: "number",
-                                        class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm font-medium text-slate-700",
-                                        value: "{tool_timeout_ms}",
-                                        min: "1000",
-                                        max: "300000",
-                                        step: "1000",
-                                        onchange: move |evt| {
-                                            let db = state.read().db.clone();
-                                            let mut settings = settings.clone();
-                                            spawn(async move {
-                                                let _ = crate::backend::set_setting(&db, "tool_timeout_ms", &evt.value()).await;
-                                                settings.restart();
-                                            });
+                                    div { class: "group flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl bg-slate-50/70 p-4",
+                                        div { class: "md:pr-4",
+                                            label { class: "text-base font-bold text-slate-900 block mb-1",
+                                                "Utility Model"
+                                            }
+                                            p { class: "text-sm text-slate-500",
+                                                "Lightweight model for titles and summaries."
+                                            }
+                                        }
+                                        select {
+                                            class: "bg-white border-slate-200 rounded-xl text-sm w-full md:w-72 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 cursor-pointer font-medium text-slate-700 transition-all",
+                                            value: "{title_model}",
+                                            onchange: move |evt| {
+                                                let db = state.read().db.clone();
+                                                let mut settings = settings.clone();
+                                                spawn(async move {
+                                                    let _ = crate::backend::set_setting(&db, "title_generator_model", &evt.value()).await;
+                                                    settings.restart();
+                                                });
+                                            },
+                                            for model in &available_models {
+                                                option { value: "{model}", selected: *model == title_model, "{model}" }
+                                            }
                                         }
                                     }
-                                    span { class: "text-xs font-bold text-slate-400 uppercase tracking-widest", "ms" }
                                 }
                             }
 
-                            div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
-                                div { class: "mb-4 md:mb-0",
-                                    label { class: "text-base font-bold text-slate-900 block mb-1",
-                                        "Model Timeout"
-                                    }
-                                    p { class: "text-sm text-slate-500",
-                                        "Maximum time allowed for planner, supervisor, and synthesis model calls."
-                                    }
+                            div { class: "rounded-2xl bg-white/75 p-6 space-y-5",
+                                div {
+                                    p { class: "text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400", "Execution Limits" }
+                                    h4 { class: "text-lg font-black text-slate-900 mt-2", "Control runtime boundaries" }
                                 }
-                                div { class: "flex items-center gap-3 w-full md:w-72",
-                                    input {
-                                        r#type: "number",
-                                        class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm font-medium text-slate-700",
-                                        value: "{model_timeout_ms}",
-                                        min: "1000",
-                                        max: "600000",
-                                        step: "1000",
-                                        onchange: move |evt| {
-                                            let db = state.read().db.clone();
-                                            let mut settings = settings.clone();
-                                            spawn(async move {
-                                                let _ = crate::backend::set_setting(&db, "model_timeout_ms", &evt.value()).await;
-                                                settings.restart();
-                                            });
+                                div { class: "space-y-4",
+                                    div { class: "group flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl bg-slate-50/70 p-4",
+                                        div { class: "md:pr-4",
+                                            label { class: "text-base font-bold text-slate-900 block mb-1",
+                                                "Maximum Tool Iterations"
+                                            }
+                                            p { class: "text-sm text-slate-500",
+                                                "Limit how many times an agent can call tools per step."
+                                            }
+                                        }
+                                        div { class: "flex items-center gap-3 w-full md:w-72",
+                                            input {
+                                                r#type: "number",
+                                                class: "bg-white border-slate-200 rounded-xl text-sm w-full focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 font-medium text-slate-700",
+                                                value: "{max_iterations}",
+                                                min: "1",
+                                                max: "50",
+                                                onchange: move |evt| {
+                                                    let db = state.read().db.clone();
+                                                    let mut settings = settings.clone();
+                                                    spawn(async move {
+                                                        let _ = crate::backend::set_setting(&db, "max_iterations", &evt.value()).await;
+                                                        settings.restart();
+                                                    });
+                                                }
+                                            }
+                                            span { class: "text-xs font-bold text-slate-400 uppercase tracking-widest", "Turns" }
                                         }
                                     }
-                                    span { class: "text-xs font-bold text-slate-400 uppercase tracking-widest", "ms" }
-                                }
-                            }
 
-                            // Title Model
-                            div { class: "group flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 opacity-80",
-                                div { class: "mb-4 md:mb-0",
-                                    label { class: "text-base font-bold text-slate-900 block mb-1",
-                                        "Utility Model"
+                                    div { class: "group flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl bg-slate-50/70 p-4",
+                                        div { class: "md:pr-4",
+                                            label { class: "text-base font-bold text-slate-900 block mb-1",
+                                                "Tool Timeout"
+                                            }
+                                            p { class: "text-sm text-slate-500",
+                                                "Maximum runtime allowed for each tool invocation."
+                                            }
+                                        }
+                                        div { class: "flex items-center gap-3 w-full md:w-72",
+                                            input {
+                                                r#type: "number",
+                                                class: "bg-white border-slate-200 rounded-xl text-sm w-full focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 font-medium text-slate-700",
+                                                value: "{tool_timeout_ms}",
+                                                min: "1000",
+                                                max: "300000",
+                                                step: "1000",
+                                                onchange: move |evt| {
+                                                    let db = state.read().db.clone();
+                                                    let mut settings = settings.clone();
+                                                    spawn(async move {
+                                                        let _ = crate::backend::set_setting(&db, "tool_timeout_ms", &evt.value()).await;
+                                                        settings.restart();
+                                                    });
+                                                }
+                                            }
+                                            span { class: "text-xs font-bold text-slate-400 uppercase tracking-widest", "ms" }
+                                        }
                                     }
-                                    p { class: "text-sm text-slate-500",
-                                        "Lightweight model for titles and summaries."
-                                    }
-                                }
-                                select {
-                                    class: "bg-slate-50 border-slate-200 rounded-xl text-sm w-full md:w-72 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 shadow-sm cursor-pointer font-medium text-slate-700 transition-all",
-                                    value: "{title_model}",
-                                    onchange: move |evt| {
-                                        let db = state.read().db.clone();
-                                        let mut settings = settings.clone();
-                                        spawn(async move {
-                                            let _ = crate::backend::set_setting(&db, "title_generator_model", &evt.value()).await;
-                                            settings.restart();
-                                        });
-                                    },
-                                    for model in &available_models {
-                                        option { value: "{model}", selected: *model == title_model, "{model}" }
+
+                                    div { class: "group flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl bg-slate-50/70 p-4",
+                                        div { class: "md:pr-4",
+                                            label { class: "text-base font-bold text-slate-900 block mb-1",
+                                                "Model Timeout"
+                                            }
+                                            p { class: "text-sm text-slate-500",
+                                                "Maximum time allowed for planner, supervisor, and synthesis model calls."
+                                            }
+                                        }
+                                        div { class: "flex items-center gap-3 w-full md:w-72",
+                                            input {
+                                                r#type: "number",
+                                                class: "bg-white border-slate-200 rounded-xl text-sm w-full focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 py-3 px-4 font-medium text-slate-700",
+                                                value: "{model_timeout_ms}",
+                                                min: "1000",
+                                                max: "600000",
+                                                step: "1000",
+                                                onchange: move |evt| {
+                                                    let db = state.read().db.clone();
+                                                    let mut settings = settings.clone();
+                                                    spawn(async move {
+                                                        let _ = crate::backend::set_setting(&db, "model_timeout_ms", &evt.value()).await;
+                                                        settings.restart();
+                                                    });
+                                                }
+                                            }
+                                            span { class: "text-xs font-bold text-slate-400 uppercase tracking-widest", "ms" }
+                                        }
                                     }
                                 }
                             }
@@ -518,8 +532,8 @@ pub fn Settings() -> Element {
                             }
                         }
 
-                        div { class: "grid gap-6",
-                            div { class: "group flex items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
+                        div { class: "grid gap-6 xl:grid-cols-2",
+                            div { class: "group flex items-center justify-between p-6 rounded-2xl bg-white/75 transition-all duration-200",
                                 div {
                                     p { class: "text-base font-bold text-slate-900 block mb-1",
                                         "Strict Offline Mode"
@@ -538,19 +552,19 @@ pub fn Settings() -> Element {
                                 }
                             }
 
-                            div { class: "p-6 bg-white rounded-2xl border border-slate-200 shadow-sm",
+                            div { class: "p-6 rounded-2xl bg-white/75",
                                 div { class: "mb-4",
                                     p { class: "text-base font-bold text-slate-900 mb-1", "Runtime Diagnostics" }
                                     p { class: "text-sm text-slate-500", "Current local runtime paths used for native tool execution and staging." }
                                 }
-                                div { class: "space-y-3 text-sm",
+                                div { class: "grid gap-3 text-sm sm:grid-cols-2",
                                     div {
                                         span { class: "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1", "Core Runtime" }
-                                        code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all", "rust-native tool execution" }
+                                        code { class: "block rounded-xl bg-slate-900/[0.035] px-3.5 py-2.5 text-xs font-medium tracking-[0.01em] text-slate-700 break-all font-mono", "rust-native tool execution" }
                                     }
                                     div {
                                         span { class: "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1", "Runtime Directory" }
-                                        code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all", "{runtime_dir}" }
+                                        code { class: "block rounded-xl bg-slate-900/[0.035] px-3.5 py-2.5 text-xs font-medium tracking-[0.01em] text-slate-700 break-all font-mono", "{runtime_dir}" }
                                     }
                                 }
                             }
@@ -572,7 +586,7 @@ pub fn Settings() -> Element {
 #[component]
 fn SummaryTile(title: String, value: String, hint: String, icon: String) -> Element {
     rsx! {
-        div { class: "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 space-y-2",
+        div { class: "rounded-2xl bg-slate-50/70 px-4 py-4 space-y-2",
             div { class: "flex items-center justify-between gap-3",
                 p { class: "text-[10px] font-bold uppercase tracking-widest text-slate-400", "{title}" }
                 MaterialIcon { name: "{icon}", size: 16 }
@@ -619,7 +633,7 @@ fn HealthCard(
     icon: String,
 ) -> Element {
     rsx! {
-        div { class: "p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3",
+        div { class: "p-5 rounded-2xl bg-white/80 space-y-3",
             div { class: "flex items-center justify-between gap-3",
                 div { class: "flex items-center gap-2",
                     MaterialIcon { name: "{icon}", size: 16 }
@@ -641,7 +655,7 @@ fn HealthCard(
             }
             p { class: "text-xs leading-relaxed text-slate-500", "{body}" }
             if let Some(code_value) = code {
-                code { class: "block bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 break-all text-sm", "{code_value}" }
+                code { class: "block rounded-xl bg-slate-900/[0.035] px-3.5 py-2.5 text-xs font-medium tracking-[0.01em] text-slate-700 break-all font-mono", "{code_value}" }
             }
         }
     }
