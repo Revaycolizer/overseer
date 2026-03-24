@@ -2,6 +2,7 @@ use super::helpers::{clean_content, copy_to_clipboard};
 use crate::backend;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+use serde::Deserialize;
 
 // ── A single visualization block extracted from message content ───────────────
 #[derive(Clone, Debug, PartialEq)]
@@ -15,6 +16,15 @@ enum VizKind {
     Svg,
     Html,
     Asset,
+    Search,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct SearchResult {
+    title: String,
+    url: String,
+    snippet: String,
+    image_url: Option<String>,
 }
 
 /// Parse the cleaned content into an optional leading text block
@@ -24,6 +34,7 @@ fn parse_content(content: &str) -> (Option<String>, Vec<VizBlock>) {
         ("---CHART_SVG---", VizKind::Svg),
         ("---CHART_HTML---", VizKind::Html),
         ("---CHART_ASSET---", VizKind::Asset),
+        ("---SEARCH_RESULTS---", VizKind::Search),
     ];
 
     let mut text_part: Option<String> = None;
@@ -108,9 +119,91 @@ fn parse_content(content: &str) -> (Option<String>, Vec<VizBlock>) {
     (text_part, viz_blocks)
 }
 
+#[component]
+fn SearchBlock(payload: String) -> Element {
+    let results = serde_json::from_str::<Vec<SearchResult>>(&payload).unwrap_or_default();
+
+    if results.is_empty() {
+        return rsx! {
+            div { class: "p-4 text-slate-400 text-xs italic bg-slate-50 rounded-xl border border-slate-100",
+                "No structured results found."
+            }
+        };
+    }
+
+    rsx! {
+        div { class: "w-full space-y-3",
+            // Header
+            div { class: "flex items-center gap-2 px-1",
+                MaterialIcon {
+                    name: "travel_explore",
+                    size: 16,
+                    color: MaterialIconColor::Custom("text-blue-500".to_string())
+                }
+                span { class: "text-[10px] font-bold text-slate-500 uppercase tracking-widest",
+                    "Intelligence Report"
+                }
+            }
+
+            // Results Grid/List
+            div { class: "grid grid-cols-1 md:grid-cols-2 gap-3",
+                for res in results {
+                    a {
+                        href: "{res.url}",
+                        target: "_blank",
+                        class: "group flex flex-col bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all overflow-hidden",
+                        
+                        // Image/Icon Area
+                        div { class: "relative h-32 bg-slate-50 flex items-center justify-center overflow-hidden border-b border-slate-50",
+                            if let Some(img) = res.image_url {
+                                img {
+                                    src: "{img}",
+                                    class: "w-full h-full object-cover transition-transform group-hover:scale-105",
+                                    onerror: move |e| {
+                                        // Silent fail - will show placeholder if icon fails
+                                    }
+                                }
+                            } else {
+                                MaterialIcon {
+                                    name: "public",
+                                    size: 48,
+                                    color: MaterialIconColor::Custom("text-slate-200".to_string())
+                                }
+                            }
+                            
+                            // Domain badge
+                            div { class: "absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded text-[9px] text-white font-medium",
+                                {res.url.split('/').nth(2).unwrap_or("Link")}
+                            }
+                        }
+
+                        // Content
+                        div { class: "p-3 space-y-1.5",
+                            h3 { class: "text-xs font-bold text-slate-800 line-clamp-2 group-hover:text-blue-600 transition-colors",
+                                "{res.title}"
+                            }
+                            p { class: "text-[10px] text-slate-500 line-clamp-3 leading-relaxed",
+                                "{res.snippet}"
+                            }
+                        }
+                    }
+                }
+            }
+
+            div { class: "text-[9px] text-slate-300 font-medium text-right px-1",
+                "Aggregated via Stealth Research"
+            }
+        }
+    }
+}
+
 // ── Single chart block renderer ───────────────────────────────────────────────
 #[component]
 fn ChartBlock(block: VizBlock) -> Element {
+    if block.kind == VizKind::Search {
+        return rsx! { SearchBlock { payload: block.payload } };
+    }
+    
     let is_asset = block.kind == VizKind::Asset;
     let payload = block.payload.clone();
 
@@ -141,7 +234,7 @@ fn ChartBlock(block: VizBlock) -> Element {
             _ => None,
         },
         VizKind::Html => Some(block.payload.clone()),
-        VizKind::Svg => None,
+        VizKind::Svg | VizKind::Search => None,
     };
 
     let still_loading = is_asset && matches!(html_from_file(), None);

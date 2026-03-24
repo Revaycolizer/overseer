@@ -1,6 +1,7 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::process::Command;
 
@@ -328,7 +329,11 @@ async fn native_http_request(args: &serde_json::Value) -> Result<String, Dynamic
 }
 
 async fn native_stealth_browse(args: &serde_json::Value) -> Result<String, DynamicToolError> {
-    let url = stringify_tool_input(args);
+    let mut url = stringify_tool_input(args);
+    if url.starts_with("//") {
+        url = format!("https:{}", url);
+    }
+
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err(DynamicToolError::ExecutionFailed {
             tool: "stealth_browse".to_string(),
@@ -411,7 +416,7 @@ async fn native_stealth_search(args: &serde_json::Value) -> Result<String, Dynam
             details: err.to_string(),
         })?;
 
-    let results = parse_duckduckgo_results(&html);
+    let mut results = parse_duckduckgo_results(&html);
     if results.is_empty() {
         return Ok(format!(
             "No search results found for '{}'.",
@@ -419,21 +424,32 @@ async fn native_stealth_search(args: &serde_json::Value) -> Result<String, Dynam
         ));
     }
 
-    Ok(results
-        .into_iter()
-        .take(5)
-        .enumerate()
-        .map(|(index, result)| {
-            format!(
-                "{}. {}\nURL: {}\nSnippet: {}",
-                index + 1,
-                result.title,
-                result.url,
-                result.snippet
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n"))
+    // --- RE-RANKING ---
+    // Simple heuristic: count keyword matches in title
+    let keywords: Vec<String> = query
+        .to_lowercase()
+        .split_whitespace()
+        .filter(|w| w.len() > 2)
+        .map(|w| w.to_string())
+        .collect();
+
+    results.sort_by_cached_key(|r| {
+        let title_lower = r.title.to_lowercase();
+        let mut score = 0i32;
+        for kw in &keywords {
+            if title_lower.contains(kw) {
+                score -= 10; // Lower is better for sort
+            }
+        }
+        score
+    });
+
+    let top_results: Vec<SearchResult> = results.into_iter().take(8).collect();
+    
+    Ok(format!(
+        "---SEARCH_RESULTS---\n{}",
+        serde_json::to_string(&top_results).unwrap_or_else(|_| "[]".to_string())
+    ))
 }
 
 async fn native_app_launcher(args: &serde_json::Value) -> Result<String, DynamicToolError> {
@@ -806,30 +822,60 @@ async fn native_vision_analysis(args: &serde_json::Value) -> Result<String, Dyna
     .to_string())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct SearchResult {
     title: String,
     url: String,
     snippet: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    image_url: Option<String>,
 }
 
 fn parse_duckduckgo_results(html: &str) -> Vec<SearchResult> {
     let item_re = Regex::new(
-        r#"(?s)<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="(?P<url>[^"]+)"[^>]*>(?P<title>.*?)</a>.*?(?:<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>|<div[^>]*class="[^"]*result__snippet[^"]*"[^>]*>)(?P<snippet>.*?)</(?:a|div)>"#,
+        r#"(?s)<div[^>]*class="[^"]*result[^"]*"[^>]*>.*?<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="(?P<url>[^"]+)"[^>]*>(?P<title>.*?)</a>.*?(?:<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>|<div[^>]*class="[^"]*result__snippet[^"]*"[^>]*>)(?P<snippet>.*?)</(?:a|div)>"#,
     )
     .expect("valid search result regex");
 
     item_re
         .captures_iter(html)
-        .map(|capture| SearchResult {
-            title: clean_text_content(capture.name("title").map(|value| value.as_str()).unwrap_or_default()),
-            url: decode_html_entities(capture.name("url").map(|value| value.as_str()).unwrap_or_default()),
-            snippet: clean_text_content(
-                capture
-                    .name("snippet")
-                    .map(|value| value.as_str())
-                    .unwrap_or_default(),
-            ),
+        .map(|capture| {
+            let mut url = decode_html_entities(capture.name("url").map(|value| value.as_str()).unwrap_or_default());
+            if url.starts_with("//") {
+                url = format!("https:{}", url);
+            }
+
+            // Extract the actual URL from DuckDuckGo redirect if present
+            if url.contains("duckduckgo.com/l/?uddg=") {
+                if let Some(pos) = url.find("uddg=") {
+                    let encoded = &url[pos + 5..];
+                    let end = encoded.find('&').unwrap_or(encoded.len());
+                    let part = &encoded[..end];
+                    if let Ok(decoded) = urlencoding::decode(part) {
+                        url = decoded.to_string();
+                    }
+                }
+            }
+            
+            // Heuristic for image: use favicon if we can't find a better one
+            let domain = url.split('/').nth(2).unwrap_or("");
+            let image_url = if !domain.is_empty() {
+                Some(format!("https://icons.duckduckgo.com/ip3/{}.ico", domain))
+            } else {
+                None
+            };
+
+            SearchResult {
+                title: clean_text_content(capture.name("title").map(|value| value.as_str()).unwrap_or_default()),
+                url,
+                snippet: clean_text_content(
+                    capture
+                        .name("snippet")
+                        .map(|value| value.as_str())
+                        .unwrap_or_default(),
+                ),
+                image_url,
+            }
         })
         .filter(|result| !result.title.is_empty() && !result.url.is_empty())
         .collect()

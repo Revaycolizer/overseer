@@ -157,6 +157,12 @@ fn heuristic_decision(query: &str) -> OrchestrationDecision {
         "generate",
         "research",
         "search",
+        "find",
+        "get",
+        "retrieve",
+        "list",
+        "check",
+        "report",
         "browse",
         "download",
         "analyze",
@@ -252,8 +258,9 @@ async fn decide_orchestration(
     }
 
     let heuristic = heuristic_decision(query);
+    let is_greeting = ["hi", "hello", "hey", "how are you", "who are you"].iter().any(|&g| query.to_lowercase().starts_with(g));
 
-    if matches!(heuristic.route, OrchestrationRoute::DirectChat) {
+    if matches!(heuristic.route, OrchestrationRoute::DirectChat) && (query.len() < 40 || is_greeting) {
         return Ok(heuristic);
     }
 
@@ -1258,22 +1265,21 @@ pub async fn orchestrate_request<'a>(
         return bypass;
     }
 
-    let chart_markers = ["---CHART_SVG---", "---CHART_HTML---", "---CHART_ASSET---"];
+    let chart_markers = ["---CHART_SVG---", "---CHART_HTML---", "---CHART_ASSET---", "---SEARCH_RESULTS---"];
     for marker in &chart_markers {
-        if let Some(pos) = final_report.find(marker) {
+        if final_report.contains(marker) {
             println!("📊 CHART MARKER found in final_report — bypassing synthesizer.");
-            let chart_result = final_report[pos..].trim().to_string();
             if let Some(run_id) = run_id {
                 let _ = crate::backend::finish_execution_run(
                     db,
                     run_id,
                     "completed",
-                    Some(&chart_result),
+                    Some(&final_report),
                     None,
                 )
                 .await;
             }
-            return chart_result;
+            return final_report;
         }
     }
 
