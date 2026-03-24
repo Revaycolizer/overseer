@@ -200,61 +200,67 @@ fn SearchBlock(payload: String) -> Element {
 // ── Single chart block renderer ───────────────────────────────────────────────
 #[component]
 fn MarkdownText(text: String) -> Element {
-    // A simple Markdown-lite parser that handles [title](url) and **bold**
     let segments = use_memo(move || {
         let mut result = Vec::new();
         let mut remaining = &text[..];
         
         while !remaining.is_empty() {
-            // Find next bold or link
+            let next_code = remaining.find("```");
             let next_bold = remaining.find("**");
             let next_link = remaining.find("[");
             
-            match (next_bold, next_link) {
-                (Some(b), Some(l)) if b < l => {
-                    // Bold comes first
-                    if b > 0 { result.push(MarkdownSegment::Plain(remaining[..b].to_string())); }
-                    let after_b = &remaining[b+2..];
-                    if let Some(end_b) = after_b.find("**") {
-                        result.push(MarkdownSegment::Bold(after_b[..end_b].to_string()));
-                        remaining = &after_b[end_b+2..];
-                    } else {
-                        result.push(MarkdownSegment::Plain(remaining[b..b+2].to_string()));
-                        remaining = &remaining[b+2..];
-                    }
-                }
-                (Some(b), None) => {
-                    if b > 0 { result.push(MarkdownSegment::Plain(remaining[..b].to_string())); }
-                    let after_b = &remaining[b+2..];
-                    if let Some(end_b) = after_b.find("**") {
-                        result.push(MarkdownSegment::Bold(after_b[..end_b].to_string()));
-                        remaining = &after_b[end_b+2..];
-                    } else {
-                        result.push(MarkdownSegment::Plain(remaining[b..b+2].to_string()));
-                        remaining = &remaining[b+2..];
-                    }
-                }
-                (_, Some(l)) => {
-                    // Link comes first (or bold is after link)
-                    if l > 0 { result.push(MarkdownSegment::Plain(remaining[..l].to_string())); }
-                    let after_l = &remaining[l+1..];
-                    if let Some(end_title) = after_l.find("](") {
-                        let title = &after_l[..end_title];
-                        let after_title = &after_l[end_title+2..];
-                        if let Some(end_url) = after_title.find(")") {
-                            let url = &after_title[..end_url];
-                            result.push(MarkdownSegment::Link { title: title.to_string(), url: url.to_string() });
-                            remaining = &after_title[end_url+1..];
-                            continue;
+            // Priority: Code > Bold > Link
+            let mut positions = vec![];
+            if let Some(p) = next_code { positions.push((p, 0)); }
+            if let Some(p) = next_bold { positions.push((p, 1)); }
+            if let Some(p) = next_link { positions.push((p, 2)); }
+            positions.sort_by_key(|&(p, _)| p);
+
+            if let Some(&(pos, kind)) = positions.first() {
+                if pos > 0 { result.push(MarkdownSegment::Plain(remaining[..pos].to_string())); }
+                let after = &remaining[pos..];
+                
+                match kind {
+                    0 => { // Code block
+                        let content = &after[3..];
+                        if let Some(end) = content.find("```") {
+                            result.push(MarkdownSegment::Code(content[..end].to_string()));
+                            remaining = &content[end+3..];
+                        } else {
+                            result.push(MarkdownSegment::Plain(after.to_string()));
+                            remaining = "";
                         }
                     }
-                    result.push(MarkdownSegment::Plain(remaining[l..l+1].to_string()));
-                    remaining = &remaining[l+1..];
+                    1 => { // Bold
+                        let content = &after[2..];
+                        if let Some(end) = content.find("**") {
+                            result.push(MarkdownSegment::Bold(content[..end].to_string()));
+                            remaining = &content[end+2..];
+                        } else {
+                            result.push(MarkdownSegment::Plain(after[..2].to_string()));
+                            remaining = &after[2..];
+                        }
+                    }
+                    2 => { // Link
+                        let after_l = &after[1..];
+                        if let Some(end_title) = after_l.find("](") {
+                            let title = &after_l[..end_title];
+                            let after_title = &after_l[end_title+2..];
+                            if let Some(end_url) = after_title.find(")") {
+                                let url = &after_title[..end_url];
+                                result.push(MarkdownSegment::Link { title: title.to_string(), url: url.to_string() });
+                                remaining = &after_title[end_url+1..];
+                                continue;
+                            }
+                        }
+                        result.push(MarkdownSegment::Plain(after[..1].to_string()));
+                        remaining = &after[1..];
+                    }
+                    _ => unreachable!()
                 }
-                (None, None) => {
-                    result.push(MarkdownSegment::Plain(remaining.to_string()));
-                    break;
-                }
+            } else {
+                result.push(MarkdownSegment::Plain(remaining.to_string()));
+                break;
             }
         }
         result
@@ -266,6 +272,11 @@ fn MarkdownText(text: String) -> Element {
                 match seg {
                     MarkdownSegment::Plain(t) => rsx! { "{t}" },
                     MarkdownSegment::Bold(t) => rsx! { b { class: "font-bold", "{t}" } },
+                    MarkdownSegment::Code(t) => rsx! {
+                        pre { class: "my-2 p-3 bg-slate-950 text-slate-100 text-[11px] font-mono rounded-lg overflow-x-auto border border-slate-800 shadow-inner",
+                            code { "{t}" }
+                        }
+                    },
                     MarkdownSegment::Link { title, url } => rsx! {
                         a {
                             href: "{url}",
@@ -284,6 +295,7 @@ fn MarkdownText(text: String) -> Element {
 enum MarkdownSegment {
     Plain(String),
     Bold(String),
+    Code(String),
     Link { title: String, url: String },
 }
 

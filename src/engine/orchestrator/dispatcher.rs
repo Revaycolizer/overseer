@@ -624,7 +624,8 @@ pub async fn dispatch_domain(
             - You MUST preserve all URLs, original Titles, and Snippets from previous research steps in your own 'evidence' list.\n\
             - Do NOT summarize research links into plain text bullet points.\n\
             - EVERY evidence item should be a complete JSON-like object: {\"title\": \"...\", \"url\": \"...\", \"snippet\": \"...\"}\n\
-            - Ensure findings are reported as 'verified: true' if they are backed by sources in the PROGRESS section.");
+            - Ensure findings are reported as 'verified: true' if they are backed by sources in the PROGRESS section.\n\
+            - NEVER provide examples of HTML, SVG, or code unless explicitly asked for 'code' or 'markup'.");
     }
 
     if domain == "stealth" {
