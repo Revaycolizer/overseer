@@ -120,7 +120,10 @@ fn parse_content(content: &str) -> (Option<String>, Vec<VizBlock>) {
 }
 
 #[component]
-fn SearchBlock(payload: String) -> Element {
+fn SearchBlock(payload: String, hide_evidence: bool) -> Element {
+    if hide_evidence {
+        return rsx! {};
+    }
     let results = serde_json::from_str::<Vec<SearchResult>>(&payload).unwrap_or_default();
 
     if results.is_empty() {
@@ -300,9 +303,9 @@ enum MarkdownSegment {
 }
 
 #[component]
-fn ChartBlock(block: VizBlock) -> Element {
+fn ChartBlock(block: VizBlock, hide_evidence: bool) -> Element {
     if block.kind == VizKind::Search {
-        return rsx! { SearchBlock { payload: block.payload } };
+        return rsx! { SearchBlock { payload: block.payload, hide_evidence: hide_evidence } };
     }
     
     let is_asset = block.kind == VizKind::Asset;
@@ -470,7 +473,7 @@ pub fn MessageBubble(msg: backend::Message, on_copy: EventHandler<String>) -> El
 
                 // Render each chart block — supports multiple charts in one message
                 for block in viz_blocks {
-                    ChartBlock { block }
+                    ChartBlock { block, hide_evidence: msg.hide_evidence }
                 }
             }
         }

@@ -68,6 +68,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                     content: query.clone(),
                     created_at: chrono::Utc::now().naive_utc(),
                     attachments: vec![],
+                    hide_evidence: false,
                 });
             });
         }
@@ -89,6 +90,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                             content: query.clone(),
                             created_at: chrono::Utc::now().naive_utc(),
                             attachments: vec![],
+                            hide_evidence: false,
                         }]);
                         id
                     }
@@ -96,7 +98,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                 }
             };
 
-            if let Ok(msg_id) = backend::add_message(&db_inner, conversation_id, "user", &query).await {
+            if let Ok(msg_id) = backend::add_message(&db_inner, conversation_id, "user", &query, false).await {
                 if is_first_msg || created_new_conversation {
                     let new_title = agent_inner.generate_title(&db_inner, &query).await;
                     let _ = backend::update_conversation_title(&db_inner, conversation_id, &new_title).await;
@@ -121,7 +123,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                 is_thinking.set(true);
                 let response = agent_inner.orchestrate(&db_inner, conversation_id, &query).await;
                 is_thinking.set(false);
-                let _ = backend::add_message(&db_inner, conversation_id, "assistant", &response).await;
+                let _ = backend::add_message(&db_inner, conversation_id, "assistant", &response, false).await;
                 messages_inner.restart();
             } else {
                 visible_messages_inner

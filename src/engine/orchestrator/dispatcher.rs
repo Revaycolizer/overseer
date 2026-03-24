@@ -6,6 +6,7 @@ use rig::completion::{Message, Prompt};
 use rig::providers::ollama;
 use serde::{Deserialize, Serialize};
 
+use super::record_event;
 use crate::engine::orchestrator::OverseerAgent;
 use crate::engine::tools::StructuredPerceptionTool;
 use crate::engine::utils::discovery::AgentInfo;
@@ -371,6 +372,8 @@ pub struct SupervisorExecutionResult {
     pub artifacts: Vec<String>,
     #[serde(default)]
     pub verified: bool,
+    #[serde(default)]
+    pub hide_evidence: bool,
     pub error: Option<String>,
     pub raw_response: String,
 }
@@ -381,6 +384,7 @@ impl SupervisorExecutionResult {
         evidence: Vec<String>,
         artifacts: Vec<String>,
         verified: bool,
+        hide_evidence: bool,
         raw_response: String,
     ) -> Self {
         Self {
@@ -389,6 +393,7 @@ impl SupervisorExecutionResult {
             evidence,
             artifacts,
             verified,
+            hide_evidence,
             error: None,
             raw_response,
         }
@@ -401,6 +406,7 @@ impl SupervisorExecutionResult {
             evidence: Vec::new(),
             artifacts: Vec::new(),
             verified: false,
+            hide_evidence: false,
             error: Some(error),
             raw_response,
         }
@@ -506,7 +512,7 @@ pub async fn dispatch_domain(
     _browser_pid: &mut Option<i32>,
 ) -> Result<SupervisorExecutionResult, String> {
     let supervisor = sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT id, name, description, instructions, model, domain, version, code, bypass_synthesizer FROM supervisors WHERE domain = ?"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style FROM supervisors WHERE domain = ?"
     )
     .bind(domain)
     .fetch_optional(&db.pool)
@@ -634,17 +640,33 @@ pub async fn dispatch_domain(
             - NEVER return an empty summary if evidence was found.");
     }
 
-    log_event(
+    let s = match sqlx::query_as::<_, crate::db::Supervisor>(
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style FROM supervisors WHERE domain = ?"
+    )
+    .bind(domain)
+    .fetch_optional(&db.pool)
+    .await {
+        Ok(Some(s)) => s,
+        _ => {
+            return Ok(SupervisorExecutionResult::failed(
+                "Execution failed.".to_string(),
+                format!("Domain supervisor '{}' not found in database.", domain),
+                String::new(),
+            ));
+        }
+    };
+
+    record_event(
         db,
         run_id,
         event_sequence,
-        "supervisor_selected",
+        "supervisor_started",
         "running",
         Some(domain),
         Some(step),
         None,
-        Some(&supervisor_model),
-        Some("Supervisor selected for micro-step."),
+        s.model.as_deref(),
+        Some(&format!("Supervisor '{}' starting for domain '{}'.", s.name, domain)),
         None,
     )
     .await;
@@ -921,63 +943,36 @@ pub async fn dispatch_domain(
                             continue;
                         }
                     }
-
-                    let requires_intent = info
-                        .required_intent
-                        .as_ref()
-                        .map(|v| !v.trim().is_empty())
-                        .unwrap_or(false);
-                    let is_high_risk = matches!(info.safety_level.as_str(), "high" | "dangerous");
-                    if requires_intent || is_high_risk {
-                        let keywords: Vec<&str> = info
-                            .required_intent
-                            .as_deref()
-                            .unwrap_or("")
-                            .split(',')
-                            .map(|s| s.trim())
-                            .filter(|s| !s.is_empty())
-                            .collect();
-                        let user_query_lower = query.to_lowercase();
-                        let explicitly_requested = if keywords.is_empty() {
-                            !is_high_risk
-                        } else {
-                            keywords.iter().any(|&k| user_query_lower.contains(k))
-                        };
-
-                        if !explicitly_requested {
-                            let reason = if keywords.is_empty() {
-                                format!(
-                                    "Tool '{}' is marked '{}' and requires explicit user intent.",
-                                    tool_name, info.safety_level
-                                )
-                            } else {
-                                format!(
-                                    "Tool '{}' requires intent keywords [{}] before it can run.",
-                                    tool_name,
-                                    info.required_intent.as_deref().unwrap_or("")
-                                )
-                            };
-                            log_event(
-                                db,
-                                run_id,
-                                event_sequence,
-                                "tool_blocked",
-                                "blocked",
-                                Some(domain),
-                                Some(step),
-                                Some(tool_name),
-                                s.model.as_deref(),
-                                Some(&reason),
-                                Some(&input_json.to_string()),
-                            )
-                            .await;
-                            current_prompt = format!(
-                                "{}\n\n[SYSTEM OVERRIDE: {}]\n\nNext: Provide your answer using the structured JSON result schema.",
-                                current_prompt, reason
-                            );
-                            iteration += 1;
-                            continue;
-                        }
+                    let guardrail = super::guardrails::check_tool_guardrails(
+                        query,
+                        step,
+                        info,
+                        &input_json,
+                    );
+ 
+                    if !guardrail.allowed {
+                        let reason = guardrail.reason.unwrap_or_else(|| "Tool execution blocked by safety guardrails.".to_string());
+                        log_event(
+                            db,
+                            run_id,
+                            event_sequence,
+                            "guardrail_intercept",
+                            "blocked",
+                            Some(domain),
+                            Some(step),
+                            Some(tool_name),
+                            s.model.as_deref(),
+                            Some(&reason),
+                            Some(&input_json.to_string()),
+                        )
+                        .await;
+ 
+                        current_prompt = format!(
+                            "{}\n\n[GUARDRAIL INTERCEPT: {}]\n\nNext: Explain to the user why this specific tool/intent is needed, or choose an alternate strategy.",
+                            current_prompt, reason
+                        );
+                        iteration += 1;
+                        continue;
                     }
 
                     log_event(
@@ -1053,6 +1048,7 @@ pub async fn dispatch_domain(
                         vec!["Charting tool completed successfully.".to_string()],
                         vec!["chart".to_string()],
                         true,
+                        s.hide_evidence,
                         tool_result,
                     ));
                     break;
@@ -1099,7 +1095,7 @@ pub async fn dispatch_domain(
         }
 
         let processed = post_process_for_domain(domain, response);
-        final_response = Some(parse_supervisor_result(processed));
+        final_response = Some(parse_supervisor_result(processed, s.hide_evidence));
         break;
     }
 
@@ -1197,15 +1193,22 @@ fn monitoring_strategy_hint(
     )
 }
 
-fn parse_supervisor_result(response: String) -> SupervisorExecutionResult {
-    let cleaned = crate::engine::utils::clean_response(response.clone());
+pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> SupervisorExecutionResult {
+    if cleaned.trim().is_empty() {
+        return SupervisorExecutionResult::failed(
+            "Empty response from supervisor.".to_string(),
+            "Empty response.".to_string(),
+            cleaned,
+        );
+    }
 
-    if cleaned.starts_with("---CHART_SVG---") || cleaned.starts_with("---CHART_HTML---") {
+    if cleaned.contains("---chart_svg---") {
         return SupervisorExecutionResult::completed(
             "Generated a chart artifact.".to_string(),
             vec!["Charting tool returned a chart artifact.".to_string()],
             vec!["chart".to_string()],
             true,
+            hide_evidence,
             cleaned,
         );
     }
@@ -1279,6 +1282,7 @@ fn parse_supervisor_result(response: String) -> SupervisorExecutionResult {
                 evidence,
                 artifacts,
                 verified,
+                hide_evidence,
                 error,
                 raw_response: cleaned,
             };
@@ -1307,18 +1311,20 @@ fn parse_supervisor_result(response: String) -> SupervisorExecutionResult {
         let after = &current[start + 7..];
         if let Some(end) = after.find("\"") {
             evidence.push(after[..end].to_string());
+            current = &after[end..];
+        } else {
+            break;
         }
-        current = after;
     }
 
-    let verified = !evidence.is_empty();
     SupervisorExecutionResult {
-        status: status.into(),
+        status: status.to_string(),
         summary,
         evidence,
         artifacts: Vec::new(),
-        verified,
-        error: Some("Technical formatting error in model response".into()),
+        verified: false,
+        hide_evidence,
+        error: None,
         raw_response: cleaned,
     }
 }

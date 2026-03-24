@@ -61,12 +61,12 @@ pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
-        let _ = crate::backend::add_message(&sqlite_db, conversation_id, "user", trimmed).await;
+        let _ = crate::backend::add_message(&sqlite_db, conversation_id, "user", trimmed, false).await;
         let response = system
             .orchestrate(&sqlite_db, conversation_id, trimmed)
             .await;
         let _ =
-            crate::backend::add_message(&sqlite_db, conversation_id, "assistant", &response).await;
+            crate::backend::add_message(&sqlite_db, conversation_id, "assistant", &response, false).await;
 
         println!("\n🤖 Assistant: {}", response);
     }
@@ -77,7 +77,7 @@ async fn run_smoke_test(sqlite_db: &crate::db::Database) -> Result<(), Box<dyn s
     println!("🧪 Running deterministic smoke test...");
     let conversation_id = crate::backend::add_conversation(sqlite_db, "Smoke Test").await?;
     let query = "Create a simple smoke test chart.";
-    let _ = crate::backend::add_message(sqlite_db, conversation_id, "user", query).await?;
+    let _ = crate::backend::add_message(sqlite_db, conversation_id, "user", query, false).await?;
 
     let tools = crate::backend::get_tools(sqlite_db).await?;
     let chart_tool = tools.iter().find(|t| t.name == "charting").ok_or_else(|| {
@@ -100,7 +100,7 @@ async fn run_smoke_test(sqlite_db: &crate::db::Database) -> Result<(), Box<dyn s
     )
     .await?;
 
-    let _ = crate::backend::add_message(sqlite_db, conversation_id, "assistant", &chart).await?;
+    let _ = crate::backend::add_message(sqlite_db, conversation_id, "assistant", &chart, false).await?;
     println!(
         "✅ Smoke test stored a user message and chart response in conversation {}.",
         conversation_id

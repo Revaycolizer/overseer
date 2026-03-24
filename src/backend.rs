@@ -433,7 +433,7 @@ pub async fn update_tool(db: &Database, tool: ToolInfo) -> anyhow::Result<()> {
 
 pub async fn get_supervisors(db: &Database) -> anyhow::Result<Vec<crate::db::Supervisor>> {
     let rows = sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer FROM supervisors"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style FROM supervisors"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -487,9 +487,10 @@ pub async fn add_supervisor(
     let id = db.next_id().await;
     let model = resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
     sqlx::query(
-        "INSERT INTO supervisors (id, name, description, domain, model, version, instructions, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO supervisors (id, name, description, domain, model, version, instructions, code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(id).bind(name).bind(description).bind(domain).bind(model).bind("1.0.0").bind("").bind("")
+    .bind(false).bind(None::<String>).bind(None::<i64>).bind(0).bind(false).bind("detailed")
     .execute(&db.pool)
     .await?;
     Ok(id)
@@ -500,11 +501,15 @@ pub async fn update_supervisor(
     supervisor: crate::db::Supervisor,
 ) -> anyhow::Result<()> {
     sqlx::query(
-        "UPDATE supervisors SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ?, bypass_synthesizer = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        "UPDATE supervisors SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ?, bypass_synthesizer = ?, fast_path_keywords = ?, verification_agent_id = ?, routing_priority = ?, hide_evidence = ?, report_style = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     )
     .bind(supervisor.name).bind(supervisor.description).bind(supervisor.instructions).bind(supervisor.model)
     .bind(supervisor.domain).bind(supervisor.version).bind(supervisor.code)
-    .bind(supervisor.bypass_synthesizer).bind(supervisor.id)
+    .bind(supervisor.bypass_synthesizer)
+    .bind(supervisor.fast_path_keywords).bind(supervisor.verification_agent_id)
+    .bind(supervisor.routing_priority).bind(supervisor.hide_evidence)
+    .bind(supervisor.report_style)
+    .bind(supervisor.id)
     .execute(&db.pool)
     .await?;
     Ok(())
@@ -724,7 +729,7 @@ pub async fn delete_conversation(db: &Database, id: i64) -> anyhow::Result<()> {
 pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result<Vec<Message>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT id, conversation_id, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC"
+        "SELECT id, conversation_id, role, content, created_at, hide_evidence FROM messages WHERE conversation_id = ? ORDER BY created_at ASC"
     )
     .bind(conversation_id)
     .fetch_all(&db.pool)
@@ -746,6 +751,7 @@ pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result
             role: r.get("role"),
             content: r.get("content"),
             created_at: r.get("created_at"),
+            hide_evidence: r.get::<Option<bool>, _>("hide_evidence").unwrap_or(false),
             attachments,
         });
     }
@@ -776,13 +782,15 @@ pub async fn add_message(
     conversation_id: i64,
     role: &str,
     content: &str,
+    hide_evidence: bool,
 ) -> anyhow::Result<i64> {
     let id = db.next_id().await;
-    sqlx::query("INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)")
+    sqlx::query("INSERT INTO messages (id, conversation_id, role, content, hide_evidence) VALUES (?, ?, ?, ?, ?)")
         .bind(id)
         .bind(conversation_id)
         .bind(role)
         .bind(content)
+        .bind(hide_evidence)
         .execute(&db.pool)
         .await?;
 
@@ -1008,6 +1016,7 @@ pub struct Message {
     pub role: String,
     pub content: String,
     pub created_at: chrono::NaiveDateTime,
+    pub hide_evidence: bool,
     #[serde(default)]
     pub attachments: Vec<Attachment>,
 }
@@ -1505,7 +1514,7 @@ pub async fn run_workflow(
             "Workflow: {}\nStep {} - {}\n\n{}",
             workflow.name, step.step_order, step.name, step.prompt
         );
-        if let Err(err) = add_message(db, conversation_id, "user", &user_prompt).await {
+        if let Err(err) = add_message(db, conversation_id, "user", &user_prompt, false).await {
             let message = format!(
                 "Failed to persist workflow step {} input: {}",
                 step.step_order, err
@@ -1526,7 +1535,7 @@ pub async fn run_workflow(
         let output = agent_system
             .orchestrate(db, conversation_id, &user_prompt)
             .await;
-        if let Err(err) = add_message(db, conversation_id, "assistant", &output).await {
+        if let Err(err) = add_message(db, conversation_id, "assistant", &output, false).await {
             let message = format!(
                 "Failed to persist workflow step {} output: {}",
                 step.step_order, err

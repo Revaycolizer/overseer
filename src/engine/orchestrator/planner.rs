@@ -23,67 +23,20 @@ pub fn sanitize_plan(plan_text: &str, query: &str) -> Vec<MacroTask> {
         clean_text.clone()
     };
 
-    let mut macro_tasks: Vec<MacroTask> = match serde_json::from_str(&json_candidate) {
+    let macro_tasks: Vec<MacroTask> = match serde_json::from_str(&json_candidate) {
         Ok(tasks) => tasks,
         Err(e) => {
-            let domain = if query.to_lowercase().contains("neontune") {
-                "neontune"
-            } else if query.to_lowercase().contains("stealth")
-                || query.to_lowercase().contains("research")
-            {
-                "stealth"
-            } else {
-                "desktop"
-            };
+            // Default fallback if JSON fails
             println!(
-                "⚠️ Failed to parse master planner JSON: {}. Routing raw query to {} domain.",
-                e, domain
+                "⚠️ Failed to parse master planner JSON: {}. Routing raw query to 'chat' as fallback.",
+                e
             );
             vec![MacroTask {
-                domain: domain.to_string(),
+                domain: "chat".to_string(),
                 task: query.to_string(),
             }]
         }
     };
-
-    // Post-processing: ensure neontune mention goes to neontune domain
-    for task in &mut macro_tasks {
-        let task_lower = task.task.to_lowercase();
-        let query_lower = query.to_lowercase();
-
-        if task_lower.contains("neontune") && task.domain != "neontune" {
-            println!("🔄 RE-ROUTING: Detected 'neontune' in task description. Forcing domain to neontune.");
-            task.domain = "neontune".to_string();
-        }
-
-        // Stealth Safety: If user explicitly said "stealth mode" and planner chose "web", force "stealth".
-        if (query_lower.contains("stealth mode") || query_lower.contains("background"))
-            && task.domain == "web"
-        {
-            println!("🔄 RE-ROUTING: User requested stealth/background mode but planner chose 'web'. Forcing to 'stealth'.");
-            task.domain = "stealth".to_string();
-        }
-
-        // Implicit Safety: If domain is "web" but task/query lacks interactive keywords, default to "stealth".
-        let interactive_keywords = [
-            "open ",
-            "launch ",
-            "click",
-            "show me",
-            "chrome",
-            "browser",
-            "youtube",
-            "github.com",
-        ];
-        if task.domain == "web"
-            && !interactive_keywords
-                .iter()
-                .any(|k| query_lower.contains(k) || task_lower.contains(k))
-        {
-            println!("🛡️ STEALTH SAFETY: Task marked as 'web' but lacks interactive keywords. Re-routing to 'stealth' for safety.");
-            task.domain = "stealth".to_string();
-        }
-    }
 
     macro_tasks
 }

@@ -1,5 +1,8 @@
 mod dispatcher;
+pub mod discovery;
 pub mod dynamic;
+pub mod grounding;
+pub mod guardrails;
 pub mod master;
 mod planner;
 
@@ -66,77 +69,10 @@ struct OrchestrationDecision {
     reason: String,
 }
 
-fn infer_domain_from_query(query: &str) -> Option<String> {
+async fn heuristic_decision(db: &crate::db::Database, query: &str) -> OrchestrationDecision {
     let lower = query.to_lowercase();
-    let computer_observation = (lower.contains("desktop") || lower.contains("screen"))
-        && (lower.contains("observe")
-            || lower.contains("inspect")
-            || lower.contains("watch")
-            || lower.contains("active window")
-            || lower.contains("which window")
-            || lower.contains("what window")
-            || lower.contains("current window")
-            || lower.contains("foreground window"));
-
-    if computer_observation
-        || lower.contains("control my computer")
-        || lower.contains("take over my computer")
-        || lower.contains("use my computer")
-        || lower.contains("operate my pc")
-        || lower.contains("computer session")
-        || lower.contains("fully supervise")
-        || lower.contains("observe my desktop")
-        || lower.contains("observe the desktop")
-        || lower.contains("which window is active")
-        || lower.contains("what window is active")
-        || lower.contains("tell me which window")
-    {
-        Some("computer".to_string())
-    } else if lower.contains("research")
-        || lower.contains("search")
-        || lower.contains("browse")
-        || lower.contains("website")
-        || lower.contains("web")
-    {
-        Some("stealth".to_string())
-    } else if lower.contains("browser")
-        || lower.contains("open site")
-        || lower.contains("open website")
-        || lower.contains("click")
-    {
-        Some("web".to_string())
-    } else if lower.contains("desktop")
-        || lower.contains("app")
-        || lower.contains("window")
-        || lower.contains("ui")
-        || lower.contains("folder")
-        || lower.contains("file")
-    {
-        Some("desktop".to_string())
-    } else if lower.contains("document")
-        || lower.contains("pdf")
-        || lower.contains("spreadsheet")
-        || lower.contains("writer")
-        || lower.contains("calc")
-        || lower.contains("office")
-    {
-        Some("office".to_string())
-    } else if lower.contains("image")
-        || lower.contains("vision")
-        || lower.contains("screenshot")
-        || lower.contains("photo")
-    {
-        Some("vision".to_string())
-    } else if lower.contains("music") || lower.contains("audio") || lower.contains("neontune") {
-        Some("neontune".to_string())
-    } else {
-        None
-    }
-}
-
-fn heuristic_decision(query: &str) -> OrchestrationDecision {
-    let lower = query.to_lowercase();
-    let inferred_domain = infer_domain_from_query(query);
+    // Phase 2: Orchestration Generalization
+    let inferred_domain = discovery::discover_fast_path_domain(db, query).await;
     let direct_chat_markers = [
         "what",
         "who",
@@ -175,6 +111,7 @@ fn heuristic_decision(query: &str) -> OrchestrationDecision {
         "watch",
         "active window",
         "current window",
+        "foreground window",
     ];
 
     let looks_like_direct_chat = query.len() < 220
@@ -229,9 +166,14 @@ fn is_affirmative_follow_up(query: &str) -> bool {
             | "yes."
             | "okay continue"
             | "ok continue"
+            | "ok"
+            | "okay"
+            | "do it"
+            | "yes please"
     ) || normalized.starts_with("continue ")
         || normalized.starts_with("go ahead")
         || normalized.starts_with("yes,")
+        || normalized.starts_with("proceed ")
 }
 
 async fn decide_orchestration(
@@ -257,7 +199,7 @@ async fn decide_orchestration(
         });
     }
 
-    let heuristic = heuristic_decision(query);
+    let heuristic = heuristic_decision(db, query).await;
     let is_greeting = ["hi", "hello", "hey", "how are you", "who are you"].iter().any(|&g| query.to_lowercase().starts_with(g));
 
     if matches!(heuristic.route, OrchestrationRoute::DirectChat) && (query.len() < 40 || is_greeting) {
@@ -312,42 +254,11 @@ async fn decide_orchestration(
     let cleaned = crate::engine::utils::clean_response(raw);
 
     serde_json::from_str::<OrchestrationDecision>(&cleaned)
-        .or_else(|_| {
-            serde_json::from_str::<serde_json::Value>(&cleaned).map(|value| {
-                let route = match value
-                    .get("route")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("multi_step")
-                {
-                    "direct_chat" => OrchestrationRoute::DirectChat,
-                    "single_domain" => OrchestrationRoute::SingleDomain,
-                    _ => OrchestrationRoute::MultiStep,
-                };
-
-                OrchestrationDecision {
-                    route,
-                    domain: value
-                        .get("domain")
-                        .and_then(|v| v.as_str())
-                        .filter(|value| !value.trim().is_empty() && *value != "null")
-                        .map(|value| value.to_string()),
-                    personality_mode: value
-                        .get("personality_mode")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("orchestrator")
-                        .to_string(),
-                    reason: value
-                        .get("reason")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Decision returned by orchestrator classifier.")
-                        .to_string(),
-                }
-            })
-        })
+        .map_err(|e| format!("Routing decision failed to parse: {} for input: {}", e, cleaned))
         .or_else(|_| Ok(heuristic))
 }
 
-async fn record_event(
+pub(crate) async fn record_event(
     db: &crate::db::Database,
     run_id: Option<i64>,
     sequence: &mut i64,
@@ -447,7 +358,7 @@ pub async fn orchestrate_request<'a>(
                 }
                 return friendly_error;
             }
-            heuristic_decision(query)
+            heuristic_decision(db, query).await
         }
     };
 
@@ -1074,72 +985,26 @@ pub async fn orchestrate_request<'a>(
                         supervisor_result.display_text()
                     };
 
-                    let interactive_domains = ["web", "desktop", "computer", "neontune", "app"];
-                    if supervisor_result.status == "completed"
-                        && interactive_domains.contains(&macro_task.domain.as_str())
+                    // Code Splitting: Extracted Grounding Logic
+                    supervisor_result = grounding::verify_execution_grounding(
+                        db,
+                        all_agents,
+                        ollama_client,
+                        query,
+                        step,
+                        &macro_task.domain,
+                        supervisor_result.clone(),
+                        model_timeout_ms,
+                    ).await.unwrap_or(supervisor_result);
+
+                    final_result = if supervisor_result.raw_response.starts_with("---CHART_SVG---")
+                        || supervisor_result.raw_response.starts_with("---CHART_HTML---")
+                        || supervisor_result.raw_response.starts_with("---CHART_ASSET---")
                     {
-                        println!(
-                            "🔍 GROUNDING: Verifying success state for domain '{}'...",
-                            macro_task.domain
-                        );
-
-                        let tools_list = crate::backend::get_tools(db).await.unwrap_or_default();
-                        if let Some(paddle_tool) =
-                            tools_list.iter().find(|t| t.name == "paddle_ui_automation")
-                        {
-                            if let Ok(state_json) = crate::engine::tools::call_dynamic_tool(
-                                paddle_tool,
-                                serde_json::json!({"input": "get_state"}),
-                            )
-                            .await
-                            {
-                                let grounding_agent =
-                                    all_agents.iter().find(|a| a.name == "Grounding Agent");
-                                if let Some(ga) = grounding_agent {
-                                    let grounding_model = crate::backend::resolve_model_name(
-                                        db,
-                                        Some(&ga.model),
-                                        "default_chat_model",
-                                        "qwen2.5:7b-instruct",
-                                    )
-                                    .await;
-                                    let ga_client = rig::agent::AgentBuilder::new(
-                                        ollama_client.completion_model(&grounding_model),
-                                    )
-                                    .preamble(&ga.instructions)
-                                    .build();
-
-                                    let ga_prompt = format!(
-                                        "GOAL: {}\nTASK: {}\n\nVISIBLE UI TEXT:\n{}\n\nHas the task been successfully completed? Respond with STATE_VERIFIED or STATE_MISMATCH: [reason]",
-                                        query, step, state_json
-                                    );
-
-                                    if let Ok(Ok(ga_response)) = timeout(
-                                        Duration::from_millis(model_timeout_ms),
-                                        ga_client.prompt(&ga_prompt),
-                                    )
-                                    .await
-                                    {
-                                        println!("👁️ GROUNDING EYE: {}", ga_response);
-                                        if ga_response.contains("STATE_MISMATCH") {
-                                            supervisor_result =
-                                                dispatcher::SupervisorExecutionResult {
-                                                    status: "failed".to_string(),
-                                                    summary: "Grounding verification failed."
-                                                        .to_string(),
-                                                    evidence: Vec::new(),
-                                                    artifacts: Vec::new(),
-                                                    verified: false,
-                                                    error: Some(ga_response.clone()),
-                                                    raw_response: ga_response.clone(),
-                                                };
-                                            final_result = supervisor_result.display_text();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                        supervisor_result.raw_response.clone()
+                    } else {
+                        supervisor_result.display_text()
+                    };
 
                     let event_status = match supervisor_result.status.as_str() {
                         "failed" => "error",

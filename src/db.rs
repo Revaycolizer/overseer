@@ -27,6 +27,11 @@ pub struct Supervisor {
     pub code: Option<String>,
     #[sqlx(default)]
     pub bypass_synthesizer: bool,
+    pub fast_path_keywords: Option<String>,
+    pub verification_agent_id: Option<i64>,
+    pub routing_priority: i32,
+    pub hide_evidence: bool,
+    pub report_style: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]

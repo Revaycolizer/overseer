@@ -25,6 +25,11 @@ pub fn SupervisorModal(
     model_input: Signal<String>,
     code_input: Signal<String>,
     bypass_synthesizer: Signal<bool>,
+    fast_path_keywords: Signal<String>,
+    verification_agent_id: Signal<Option<i64>>,
+    routing_priority: Signal<i32>,
+    hide_evidence: Signal<bool>,
+    report_style: Signal<String>,
     available_models: Signal<Vec<String>>,
     handle_save: EventHandler<()>,
 ) -> Element {
@@ -186,6 +191,97 @@ pub fn SupervisorModal(
                                         }
                                         div { class: "absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400",
                                             MaterialIcon { name: "unfold_more", size: 16 }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Fast-Path Keywords
+                            div { class: "space-y-2",
+                                label { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "Fast-Path Routing Keywords" }
+                                input {
+                                    class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-600 focus:outline-none focus:ring-4 focus:ring-brand-blue/5 focus:border-brand-blue transition-all placeholder-slate-300 shadow-soft",
+                                    placeholder: "e.g. music, play, volume, pause (comma separated)",
+                                    value: "{fast_path_keywords}",
+                                    oninput: move |e| fast_path_keywords.set(e.value()),
+                                }
+                            }
+
+                            // Verification Agent + Priority
+                            div { class: "grid grid-cols-2 gap-6",
+                                div { class: "space-y-2",
+                                    label { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "Grounding / Verification Agent" }
+                                    div { class: "relative",
+                                        select {
+                                            class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-600 appearance-none focus:outline-none focus:ring-4 focus:ring-brand-blue/5 focus:border-brand-blue transition-all cursor-pointer shadow-soft",
+                                            value: if let Some(id) = verification_agent_id() { id.to_string() } else { "0".to_string() },
+                                            onchange: move |e| {
+                                                let id = e.value().parse::<i64>().unwrap_or(0);
+                                                verification_agent_id.set(if id > 0 { Some(id) } else { None });
+                                            },
+                                            option { value: "0", "None (Auto-Grounding)" }
+                                            if let Some(agent_list) = agents() {
+                                                for agent in agent_list {
+                                                    option { value: "{agent.id}", "{agent.name}" }
+                                                }
+                                            }
+                                        }
+                                        div { class: "absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400",
+                                            MaterialIcon { name: "verified_user", size: 16 }
+                                        }
+                                    }
+                                }
+                                div { class: "space-y-2",
+                                    label { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "Routing Priority" }
+                                    input {
+                                        r#type: "number",
+                                        class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-600 focus:outline-none focus:ring-4 focus:ring-brand-blue/5 focus:border-brand-blue transition-all shadow-soft",
+                                        value: "{routing_priority}",
+                                        oninput: move |e| routing_priority.set(e.value().parse().unwrap_or(0)),
+                                    }
+                                }
+                            }
+
+                            // Display Controls (Evidence & Style)
+                            div { class: "grid grid-cols-2 gap-6",
+                                div { class: "flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-2xl shadow-soft",
+                                    div { class: "flex items-center gap-4",
+                                        div { class: "w-9 h-9 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-500",
+                                            MaterialIcon { name: "visibility_off", size: 16, color: MaterialIconColor::Custom("inherit".into()) }
+                                        }
+                                        div {
+                                            p { class: "text-xs font-black text-slate-900 tracking-tight", "Hide Evidence" }
+                                            p { class: "text-[10px] text-slate-400 font-bold leading-tight", "Clean UI output." }
+                                        }
+                                    }
+                                    button {
+                                        r#type: "button",
+                                        class: format!(
+                                            "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none {}",
+                                            if hide_evidence() { "bg-brand-blue" } else { "bg-slate-200" }
+                                        ),
+                                        onclick: move |_| hide_evidence.set(!hide_evidence()),
+                                        span {
+                                            class: format!(
+                                                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {}",
+                                                if hide_evidence() { "translate-x-4" } else { "translate-x-0" }
+                                            )
+                                        }
+                                    }
+                                }
+                                div { class: "space-y-2",
+                                    label { class: "text-[10px] font-black text-slate-400 uppercase tracking-widest", "Report Style" }
+                                    div { class: "relative",
+                                        select {
+                                            class: "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-600 appearance-none focus:outline-none focus:ring-4 focus:ring-brand-blue/5 focus:border-brand-blue transition-all cursor-pointer shadow-soft",
+                                            value: "{report_style}",
+                                            onchange: move |e| report_style.set(e.value()),
+                                            option { value: "detailed", "Detailed" }
+                                            option { value: "concise", "Concise" }
+                                            option { value: "narrative", "Narrative" }
+                                        }
+                                        div { class: "absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400",
+                                            MaterialIcon { name: "description", size: 16 }
                                         }
                                     }
                                 }

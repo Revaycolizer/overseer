@@ -44,6 +44,11 @@ pub fn SupervisorsWorkshop() -> Element {
     let mut code_input = use_signal(|| String::new());
     let mut bypass_synthesizer_input = use_signal(|| false);
     let mut search_query = use_signal(|| String::new());
+    let mut fast_path_keywords_input = use_signal(|| String::new());
+    let mut verification_agent_id_input = use_signal(|| None::<i64>);
+    let mut routing_priority_input = use_signal(|| 0i32);
+    let mut hide_evidence_input = use_signal(|| false);
+    let mut report_style_input = use_signal(|| "detailed".to_string());
 
     // ── Pre-fetch models ─────────────────────────────────────────────────
     let mut available_models = use_signal(|| vec!["loading...".to_string()]);
@@ -67,6 +72,11 @@ pub fn SupervisorsWorkshop() -> Element {
                 s.model = Some(model_input());
                 s.code = Some(code_input());
                 s.bypass_synthesizer = bypass_synthesizer_input();
+                s.fast_path_keywords = Some(fast_path_keywords_input());
+                s.verification_agent_id = verification_agent_id_input();
+                s.routing_priority = routing_priority_input();
+                s.hide_evidence = hide_evidence_input();
+                s.report_style = Some(report_style_input());
                 let _ = update_supervisor(&db, s).await;
             } else {
                 let _ =
@@ -96,6 +106,11 @@ pub fn SupervisorsWorkshop() -> Element {
         model_input.set(s.model.clone().unwrap_or_else(|| "gpt-4o".into()));
         code_input.set(s.code.clone().unwrap_or_default());
         bypass_synthesizer_input.set(s.bypass_synthesizer);
+        fast_path_keywords_input.set(s.fast_path_keywords.clone().unwrap_or_default());
+        verification_agent_id_input.set(s.verification_agent_id);
+        routing_priority_input.set(s.routing_priority);
+        hide_evidence_input.set(s.hide_evidence);
+        report_style_input.set(s.report_style.clone().unwrap_or_else(|| "detailed".to_string()));
         show_modal.set(true);
     };
 
@@ -144,6 +159,11 @@ pub fn SupervisorsWorkshop() -> Element {
                                 model_input.set("gpt-4o".into());
                                 code_input.set(String::new());
                                 bypass_synthesizer_input.set(false);
+                                fast_path_keywords_input.set(String::new());
+                                verification_agent_id_input.set(None);
+                                routing_priority_input.set(0);
+                                hide_evidence_input.set(false);
+                                report_style_input.set("detailed".to_string());
                                 show_modal.set(true);
                             },
                             MaterialIcon { name: "add", size: 16 }
@@ -185,6 +205,11 @@ pub fn SupervisorsWorkshop() -> Element {
                     model_input,
                     code_input,
                     bypass_synthesizer: bypass_synthesizer_input,
+                    fast_path_keywords: fast_path_keywords_input,
+                    verification_agent_id: verification_agent_id_input,
+                    routing_priority: routing_priority_input,
+                    hide_evidence: hide_evidence_input,
+                    report_style: report_style_input,
                     available_models,
                     handle_save
                 }
