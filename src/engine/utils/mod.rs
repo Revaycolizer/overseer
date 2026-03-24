@@ -67,51 +67,102 @@ pub fn clean_response(response: String) -> String {
     }
 
     // Extract JSON from Markdown code blocks if present
-    if let Some(start) = s.find("```json") {
+    let json_content = if let Some(start) = s.find("```json") {
         let after_json = &s[start + 7..];
         if let Some(end) = after_json.find("```") {
-            return after_json[..end].trim().to_string();
+            after_json[..end].trim().to_string()
+        } else {
+            after_json.trim().to_string() // Truncated but started with ```json
         }
     } else if let Some(start) = s.find("```") {
         let after_block = &s[start + 3..];
         if let Some(end) = after_block.find("```") {
             let block = after_block[..end].trim();
             if block.starts_with('{') || block.starts_with('[') {
-                return block.to_string();
+                block.to_string()
+            } else {
+                s.trim().to_string()
+            }
+        } else {
+            let block = after_block.trim();
+            if block.starts_with('{') || block.starts_with('[') {
+                block.to_string()
+            } else {
+                s.trim().to_string()
             }
         }
+    } else {
+        s.trim().to_string()
+    };
+
+    // If it's a raw JSON object (or truncated one), find the start and attempt to repair
+    if let Some(start_idx) = json_content.find('{') {
+        let candidate = &json_content[start_idx..];
+        
+        // If it parses directly, return it
+        if serde_json::from_str::<serde_json::Value>(candidate).is_ok() {
+            return candidate.to_string();
+        }
+
+        // Attempt repair for truncation
+        return repair_json_truncation(candidate);
     }
 
-    // Fallback: If it's a raw JSON object but has trailing text, find the matching brace
-    let trimmed = s.trim();
-    if trimmed.starts_with('{') {
-        let mut brace_count = 0;
-        let mut end_index = 0;
-        let mut in_string = false;
-        let mut escaped = false;
+    json_content
+}
 
-        for (i, c) in trimmed.chars().enumerate() {
-            if c == '"' && !escaped {
-                in_string = !in_string;
-            }
-            if !in_string {
-                if c == '{' {
-                    brace_count += 1;
-                } else if c == '}' {
-                    brace_count -= 1;
-                    if brace_count == 0 {
-                        end_index = i + 1;
-                        break;
+fn repair_json_truncation(input: &str) -> String {
+    let mut repaired = input.to_string();
+    let mut brace_stack = Vec::new();
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for c in input.chars() {
+        if c == '"' && !escaped {
+            in_string = !in_string;
+        }
+        if !in_string {
+            if c == '{' {
+                brace_stack.push('}');
+            } else if c == '[' {
+                brace_stack.push(']');
+            } else if c == '}' || c == ']' {
+                if let Some(&expected) = brace_stack.last() {
+                    if expected == c {
+                        brace_stack.pop();
                     }
                 }
             }
-            escaped = !escaped && c == '\\';
         }
-
-        if end_index > 0 {
-            return trimmed[..end_index].to_string();
-        }
+        escaped = !escaped && c == '\\';
     }
 
-    s.trim().to_string()
+    // If we are left inside a string, close it
+    if in_string {
+        // If it looks like it was cut off in the middle of a word or bool
+        // e.g. "verified":tru -> close the quote first
+        repaired.push('"');
+    }
+
+    // Close any dangling braces/brackets in reverse order
+    while let Some(closing) = brace_stack.pop() {
+        repaired.push(closing);
+    }
+
+    // Final check: Is it valid now?
+    if serde_json::from_str::<serde_json::Value>(&repaired).is_ok() {
+        return repaired;
+    }
+
+    // One more try: If the last char is a comma, it's definitely truncated mid-field
+    let trimmed = repaired.trim();
+    if trimmed.ends_with(',') {
+        let mut final_repaired = trimmed[..trimmed.len()-1].to_string();
+        // Recalculate braces for the shorter version
+        // (Simplified: just re-run the same logic)
+        return repair_json_truncation(&final_repaired);
+    }
+
+    // Fallback to original input if repair failed to produce valid JSON
+    input.to_string()
 }

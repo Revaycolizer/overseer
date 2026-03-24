@@ -199,6 +199,95 @@ fn SearchBlock(payload: String) -> Element {
 
 // ── Single chart block renderer ───────────────────────────────────────────────
 #[component]
+fn MarkdownText(text: String) -> Element {
+    // A simple Markdown-lite parser that handles [title](url) and **bold**
+    let segments = use_memo(move || {
+        let mut result = Vec::new();
+        let mut remaining = &text[..];
+        
+        while !remaining.is_empty() {
+            // Find next bold or link
+            let next_bold = remaining.find("**");
+            let next_link = remaining.find("[");
+            
+            match (next_bold, next_link) {
+                (Some(b), Some(l)) if b < l => {
+                    // Bold comes first
+                    if b > 0 { result.push(MarkdownSegment::Plain(remaining[..b].to_string())); }
+                    let after_b = &remaining[b+2..];
+                    if let Some(end_b) = after_b.find("**") {
+                        result.push(MarkdownSegment::Bold(after_b[..end_b].to_string()));
+                        remaining = &after_b[end_b+2..];
+                    } else {
+                        result.push(MarkdownSegment::Plain(remaining[b..b+2].to_string()));
+                        remaining = &remaining[b+2..];
+                    }
+                }
+                (Some(b), None) => {
+                    if b > 0 { result.push(MarkdownSegment::Plain(remaining[..b].to_string())); }
+                    let after_b = &remaining[b+2..];
+                    if let Some(end_b) = after_b.find("**") {
+                        result.push(MarkdownSegment::Bold(after_b[..end_b].to_string()));
+                        remaining = &after_b[end_b+2..];
+                    } else {
+                        result.push(MarkdownSegment::Plain(remaining[b..b+2].to_string()));
+                        remaining = &remaining[b+2..];
+                    }
+                }
+                (_, Some(l)) => {
+                    // Link comes first (or bold is after link)
+                    if l > 0 { result.push(MarkdownSegment::Plain(remaining[..l].to_string())); }
+                    let after_l = &remaining[l+1..];
+                    if let Some(end_title) = after_l.find("](") {
+                        let title = &after_l[..end_title];
+                        let after_title = &after_l[end_title+2..];
+                        if let Some(end_url) = after_title.find(")") {
+                            let url = &after_title[..end_url];
+                            result.push(MarkdownSegment::Link { title: title.to_string(), url: url.to_string() });
+                            remaining = &after_title[end_url+1..];
+                            continue;
+                        }
+                    }
+                    result.push(MarkdownSegment::Plain(remaining[l..l+1].to_string()));
+                    remaining = &remaining[l+1..];
+                }
+                (None, None) => {
+                    result.push(MarkdownSegment::Plain(remaining.to_string()));
+                    break;
+                }
+            }
+        }
+        result
+    });
+
+    rsx! {
+        span { class: "select-text whitespace-pre-wrap",
+            for seg in segments() {
+                match seg {
+                    MarkdownSegment::Plain(t) => rsx! { "{t}" },
+                    MarkdownSegment::Bold(t) => rsx! { b { class: "font-bold", "{t}" } },
+                    MarkdownSegment::Link { title, url } => rsx! {
+                        a {
+                            href: "{url}",
+                            target: "_blank",
+                            class: "text-blue-500 hover:text-blue-700 underline font-medium break-all transition-colors",
+                            "{title}"
+                        }
+                    },
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+enum MarkdownSegment {
+    Plain(String),
+    Bold(String),
+    Link { title: String, url: String },
+}
+
+#[component]
 fn ChartBlock(block: VizBlock) -> Element {
     if block.kind == VizKind::Search {
         return rsx! { SearchBlock { payload: block.payload } };
@@ -356,7 +445,7 @@ pub fn MessageBubble(msg: backend::Message, on_copy: EventHandler<String>) -> El
                 if let Some(text) = display_text {
                     div { class: "group relative inline-block max-w-[95%] w-fit",
                         div { class: "bg-[var(--assistant-bubble)] p-4 rounded-2xl rounded-tl-none border border-blue-50/50 text-[var(--text-main)] text-sm leading-relaxed shadow-bubble",
-                            p { class: "select-text whitespace-pre-wrap", "{text}" }
+                            MarkdownText { text }
                         }
                         button {
                             class: "absolute -right-10 top-2 p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all shadow-sm",
