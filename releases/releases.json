@@ -1,6 +1,6 @@
 {
   "product": "Overseer",
-  "updated_at": "2026-03-23T00:00:00Z",
+  "updated_at": "2026-03-24T00:00:00Z",
   "latest": "v0.1.1",
   "channels": {
     "latest": "v0.1.1",
@@ -39,6 +39,13 @@
       "notes_file": "releases/notes/v0.1.1.md",
       "assets": [
         {
+          "name": "Overseer-v0.1.1-windows-x64-setup.exe",
+          "platform": "windows-x64",
+          "kind": "setup-exe",
+          "label": "Windows Installer",
+          "path": "dist/v0.1.1/Overseer-v0.1.1-windows-x64-setup.exe"
+        },
+        {
           "name": "Overseer-v0.1.1-windows-x64.zip",
           "platform": "windows-x64",
           "kind": "portable-zip",
@@ -60,18 +67,18 @@
           "path": "dist/v0.1.1/uninstall-overseer.ps1"
         },
         {
-          "name": "SHA256SUMS.txt",
+          "name": "SHA256SUMS-windows-x64.txt",
           "platform": "windows-x64",
           "kind": "checksums",
           "label": "SHA256 Checksums",
-          "path": "dist/v0.1.1/SHA256SUMS.txt"
+          "path": "dist/v0.1.1/SHA256SUMS-windows-x64.txt"
         },
         {
-          "name": "release.json",
+          "name": "release-windows-x64.json",
           "platform": "windows-x64",
           "kind": "release-manifest",
           "label": "Release Manifest",
-          "path": "dist/v0.1.1/release.json"
+          "path": "dist/v0.1.1/release-windows-x64.json"
         }
       ]
     },
