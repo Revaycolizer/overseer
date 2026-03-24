@@ -61,8 +61,8 @@ $releaseRoot = Join-Path $distRoot $Tag
 $portableRoot = Join-Path $releaseRoot "portable"
 $zipName = "Overseer-$Tag-windows-x64.zip"
 $zipPath = Join-Path $releaseRoot $zipName
-$manifestPath = Join-Path $releaseRoot "release.json"
-$checksumsPath = Join-Path $releaseRoot "SHA256SUMS.txt"
+$manifestPath = Join-Path $releaseRoot "release-windows-x64.json"
+$checksumsPath = Join-Path $releaseRoot "SHA256SUMS-windows-x64.txt"
 $exeSource = Join-Path $repoRoot "target\release\overseer.exe"
 $toolScriptsSource = Resolve-FirstExistingPath -Candidates @(
     (Join-Path $repoRoot "tool_scripts"),
