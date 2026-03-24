@@ -43,6 +43,9 @@
     --color-blue-600: oklch(54.6% 0.245 262.881);
     --color-blue-700: oklch(48.8% 0.243 264.376);
     --color-blue-900: oklch(37.9% 0.146 265.522);
+    --color-indigo-50: oklch(96.2% 0.018 272.314);
+    --color-indigo-100: oklch(93% 0.034 272.788);
+    --color-indigo-500: oklch(58.5% 0.233 277.117);
     --color-violet-50: oklch(96.9% 0.016 293.756);
     --color-violet-200: oklch(89.4% 0.057 293.283);
     --color-violet-700: oklch(49.1% 0.27 292.581);
@@ -1145,6 +1148,12 @@
   .border-brand-blue {
     border-color: var(--color-brand-blue);
   }
+  .border-brand-blue\/10 {
+    border-color: color-mix(in srgb, #3b82f6 10%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-brand-blue) 10%, transparent);
+    }
+  }
   .border-current {
     border-color: currentcolor;
   }
@@ -1153,6 +1162,9 @@
   }
   .border-emerald-200 {
     border-color: var(--color-emerald-200);
+  }
+  .border-indigo-100 {
+    border-color: var(--color-indigo-100);
   }
   .border-orange-100 {
     border-color: var(--color-orange-100);
@@ -1366,6 +1378,12 @@
   }
   .bg-emerald-600 {
     background-color: var(--color-emerald-600);
+  }
+  .bg-indigo-50 {
+    background-color: var(--color-indigo-50);
+  }
+  .bg-indigo-500 {
+    background-color: var(--color-indigo-500);
   }
   .bg-orange-50 {
     background-color: var(--color-orange-50);
@@ -1879,9 +1897,6 @@
   .text-\[var\(--text-main\)\] {
     color: var(--text-main);
   }
-  .text-amber-500 {
-    color: var(--color-amber-500);
-  }
   .text-amber-600 {
     color: var(--color-amber-600);
   }
@@ -1920,6 +1935,9 @@
   }
   .text-gray-300 {
     color: var(--color-gray-300);
+  }
+  .text-indigo-500 {
+    color: var(--color-indigo-500);
   }
   .text-orange-300 {
     color: var(--color-orange-300);
@@ -2358,6 +2376,11 @@
     &:is(:where(.peer):focus ~ *) {
       --tw-outline-style: none;
       outline-style: none;
+    }
+  }
+  .placeholder\:text-slate-300 {
+    &::placeholder {
+      color: var(--color-slate-300);
     }
   }
   .placeholder\:text-slate-400 {

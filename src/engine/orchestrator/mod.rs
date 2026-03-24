@@ -1170,12 +1170,33 @@ pub async fn orchestrate_request<'a>(
             .preamble(synthesis_instructions)
             .build();
 
+    let style = decision.domain.as_ref().and_then(|d| {
+        // Simple heuristic: fetch style for the first domain in the decision
+        // In a real multi-step, we might want a more complex aggregation, but for now this works.
+        Some(d.clone())
+    }).unwrap_or_else(|| "chat".to_string());
+
+    let report_style = sqlx::query_scalar::<_, String>(
+        "SELECT report_style FROM supervisors WHERE domain = ? LIMIT 1"
+    )
+    .bind(&style)
+    .fetch_optional(&db.pool)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| "detailed".to_string());
+
+    let style_instructions = match report_style.as_str() {
+        "concise" => "Provide an extremely brief, one-sentence summary of the findings. Ignore minor details.",
+        "narrative" => "Provide a conversational, narrative-driven response. Explain the context and findings as a story.",
+        _ => "Provide a clear, detailed response to the user. Include all relevant evidence and research findings clearly.",
+    };
+
     let synthesis_prompt = format!(
         "USER_QUERY: {}\n\nRESEARCH FINDINGS:\n{}\n\n\
-         Instructions: Provide a clear response to the user. \
-         If the findings show a simple success, keep it extremely brief (one sentence). \
-         Only be detailed if the research findings are complex.",
-        query, final_report
+         Instructions: {}\n\
+         If the findings show a simple success, keep it brief unless the style dictates otherwise.",
+        query, final_report, style_instructions
     );
 
     record_event(

@@ -3,6 +3,7 @@ use crate::backend::{
     update_supervisor,
 };
 use crate::db::Supervisor;
+use crate::engine::utils::discovery::AgentInfo;
 use crate::state::use_global_state;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
@@ -123,6 +124,7 @@ pub fn SupervisorDetails(
                             SupervisorHeroCard {
                                 selected_supervisor,
                                 models,
+                                agents: Signal::new(agents.read().as_ref().cloned().unwrap_or_default()),
                                 assigned_agents_count,
                                 tool_count,
                                 workbench_status: display_feedback.clone(),

@@ -250,8 +250,8 @@ pub fn SupervisorModal(
                                             MaterialIcon { name: "visibility_off", size: 16, color: MaterialIconColor::Custom("inherit".into()) }
                                         }
                                         div {
-                                            p { class: "text-xs font-black text-slate-900 tracking-tight", "Hide Evidence" }
-                                            p { class: "text-[10px] text-slate-400 font-bold leading-tight", "Clean UI output." }
+                                             p { class: "text-xs font-black text-slate-900 tracking-tight", "Evidence Visualization" }
+                                             p { class: "text-[10px] text-slate-400 font-bold leading-tight", "Toggle research data (charts/search/assets) in chat." }
                                         }
                                     }
                                     button {
@@ -290,17 +290,17 @@ pub fn SupervisorModal(
                             // Bypass Synthesizer toggle
                             div { class: "flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-2xl shadow-soft",
                                 div { class: "flex items-center gap-4",
-                                    div { class: "w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center",
+                                    div { class: "w-9 h-9 rounded-xl bg-brand-blue/5 border border-brand-blue/10 flex items-center justify-center",
                                         MaterialIcon {
-                                            name: "bolt",
+                                            name: "speed",
                                             size: 16,
-                                            color: MaterialIconColor::Custom("var(--color-amber-500)".into())
+                                            color: MaterialIconColor::Custom("var(--color-brand-blue)".into())
                                         }
                                     }
                                     div {
-                                        p { class: "text-xs font-black text-slate-900 tracking-tight", "Bypass Mode" }
+                                        p { class: "text-xs font-black text-slate-900 tracking-tight", "Direct Pipeline" }
                                         p { class: "text-[10px] text-slate-400 font-bold leading-relaxed",
-                                            "Return node output without synthesizer refinement."
+                                            "Return raw agent output instantly without LLM synthesis."
                                         }
                                     }
                                 }
