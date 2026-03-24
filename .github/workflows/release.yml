@@ -72,8 +72,64 @@ jobs:
           tag_name: ${{ steps.tag.outputs.value }}
           body: ${{ steps.notes.outputs.body }}
           files: |
+            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-windows-x64-setup.exe
             dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-windows-x64.zip
             dist/${{ steps.tag.outputs.value }}/install-overseer.ps1
             dist/${{ steps.tag.outputs.value }}/uninstall-overseer.ps1
-            dist/${{ steps.tag.outputs.value }}/SHA256SUMS.txt
-            dist/${{ steps.tag.outputs.value }}/release.json
+            dist/${{ steps.tag.outputs.value }}/SHA256SUMS-windows-x64.txt
+            dist/${{ steps.tag.outputs.value }}/release-windows-x64.json
+
+  build-linux:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+          echo "value=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Linux release package
+        shell: bash
+        run: |
+          chmod +x ./scripts/build-release-linux.sh
+          ./scripts/build-release-linux.sh --tag "${{ steps.tag.outputs.value }}"
+
+      - name: Publish Linux assets to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.value }}
+          files: |
+            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-linux-x64.tar.gz
+            dist/${{ steps.tag.outputs.value }}/SHA256SUMS-linux-x64.txt
+            dist/${{ steps.tag.outputs.value }}/release-linux-x64.json
