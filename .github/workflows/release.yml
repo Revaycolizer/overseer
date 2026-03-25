@@ -40,6 +40,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Install Dioxus CLI
+        shell: powershell
+        run: |
+          cargo install dioxus-cli --locked
+
       - name: Install protoc
         shell: powershell
         run: |
@@ -65,6 +70,12 @@ jobs:
           "body<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           $content | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload Windows manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-windows-x64
+          path: dist/${{ steps.tag.outputs.value }}/release-windows-x64.json
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -101,6 +112,10 @@ jobs:
           fi
           echo "value=$tag" >> "$GITHUB_OUTPUT"
 
+      - name: Install Dioxus CLI
+        run: |
+          cargo install dioxus-cli --locked
+
       - name: Install Linux desktop dependencies
         run: |
           sudo apt-get update
@@ -125,6 +140,12 @@ jobs:
           chmod +x ./scripts/build-release-linux.sh
           ./scripts/build-release-linux.sh --tag "${{ steps.tag.outputs.value }}"
 
+      - name: Upload Linux manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-linux-x64
+          path: dist/${{ steps.tag.outputs.value }}/release-linux-x64.json
+
       - name: Publish Linux assets to GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -133,3 +154,40 @@ jobs:
             dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-linux-x64.tar.gz
             dist/${{ steps.tag.outputs.value }}/SHA256SUMS-linux-x64.txt
             dist/${{ steps.tag.outputs.value }}/release-linux-x64.json
+
+  update-registry:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all manifests
+        uses: actions/download-artifact@v4
+        with:
+          path: manifests
+          pattern: manifest-*
+          merge-multiple: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Update registry
+        run: |
+          chmod +x ./scripts/update-registry.py
+          find manifests -name "*.json" -exec python3 ./scripts/update-registry.py {} \;
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add releases/releases.json
+          git commit -m "chore: auto-update release registry [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:main
