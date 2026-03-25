@@ -88,35 +88,31 @@ release_notes_source="$repo_root/releases/notes/$TAG.md"
 
 if [[ "$SKIP_BUILD" != "true" ]]; then
   echo "[INFO] Building Overseer $TAG for Linux..."
-  cargo build --release --features desktop
+  # Use dx bundle to create an AppImage
+  dx bundle --release --platform desktop --package-types "appimage"
 fi
 
-if [[ ! -f "$binary_source" ]]; then
-  echo "Compiled executable not found at $binary_source" >&2
+# Dioxus 0.7 puts the AppImage in a specific location
+appimage_source="$(resolve_first_existing_path \
+  "$repo_root/target/dx/overseer/release/linux/bundle/appimage/Overseer.AppImage" \
+  "$repo_root/target/dx/overseer/release/linux/app/Overseer.AppImage" || true)"
+
+if [[ -z "$appimage_source" || ! -f "$appimage_source" ]]; then
+  echo "Bundled AppImage not found. Expected it in target/dx/..." >&2
   exit 1
 fi
 
 rm -rf "$release_root"
-mkdir -p "$portable_root/src/engine"
+mkdir -p "$portable_root"
 
-echo "[INFO] Staging Linux portable package..."
-copy_required_item "$binary_source" "$portable_root/Overseer"
-chmod +x "$portable_root/Overseer"
+echo "[INFO] Staging Linux release assets..."
+copy_required_item "$appimage_source" "$portable_root/Overseer.AppImage"
+chmod +x "$portable_root/Overseer.AppImage"
+
+# We still copy assets and config for reference or if the AppImage needs them externally (though it shouldn't)
+# But we skip tool_scripts and agents because they are in the DB.
 copy_required_item "$repo_root/assets" "$portable_root/assets"
 copy_required_item "$repo_root/config" "$portable_root/config"
-
-if [[ -n "$tool_scripts_source" ]]; then
-  copy_required_item "$tool_scripts_source" "$portable_root/tool_scripts"
-else
-  echo "[WARN] No tool scripts directory found. Continuing without packaged Python tool sources."
-fi
-
-if [[ -n "$agent_seeds_source" ]]; then
-  copy_required_item "$agent_seeds_source" "$portable_root/src/engine/agents"
-else
-  echo "[WARN] No code-based agent seed directory found. Continuing with packaged config agents only."
-fi
-
 copy_required_item "$repo_root/CHANGELOG.md" "$portable_root/CHANGELOG.md"
 copy_required_item "$repo_root/README.md" "$portable_root/README.md"
 
@@ -124,12 +120,17 @@ if [[ -f "$release_notes_source" ]]; then
   copy_required_item "$release_notes_source" "$portable_root/$TAG.md"
 fi
 
+# Create a simple tarball of the AppImage and its reference assets
 tar -C "$portable_root" -czf "$archive_path" .
 
 archive_hash="$(sha256sum "$archive_path" | awk '{print $1}')"
+appimage_hash="$(sha256sum "$appimage_source" | awk '{print $1}')"
+
 printf '%s  %s\n' "$archive_hash" "$archive_name" > "$checksums_path"
+printf '%s  %s\n' "$appimage_hash" "Overseer.AppImage" >> "$checksums_path"
 
 archive_size="$(stat -c%s "$archive_path")"
+appimage_size="$(stat -c%s "$appimage_source")"
 
 cat > "$manifest_path" <<EOF
 {
@@ -145,6 +146,12 @@ cat > "$manifest_path" <<EOF
       "kind": "portable-tarball",
       "sha256": "$archive_hash",
       "size": $archive_size
+    },
+    {
+      "name": "Overseer.AppImage",
+      "kind": "appimage",
+      "sha256": "$appimage_hash",
+      "size": $appimage_size
     }
   ]
 }

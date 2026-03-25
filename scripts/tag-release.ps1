@@ -1,6 +1,7 @@
 param(
     [string]$Version,
-    [switch]$Push
+    [switch]$Push,
+    [switch]$Commit
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,12 +30,34 @@ if ($existing -eq $tag) {
     throw "Git tag $tag already exists."
 }
 
+if ($Commit) {
+    Write-Host "[INFO] Staging release metadata..."
+    git add (Join-Path $repoRoot "Cargo.toml")
+    $notesDir = Join-Path $repoRoot "releases\notes"
+    if (Test-Path $notesDir) {
+        git add "$notesDir\"
+    }
+
+    $diff = git diff --cached --quiet
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[INFO] Committing release metadata for $tag..."
+        git commit -m "chore: release $tag"
+    } else {
+        Write-Host "[INFO] No metadata changes to commit."
+    }
+}
+
+Write-Host "[INFO] Creating git tag $tag..."
 git tag -a $tag -m "Overseer $tag"
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to create git tag $tag"
 }
 
 if ($Push) {
+    Write-Host "[INFO] Pushing changes and tag $tag to origin..."
+    if ($Commit) {
+        git push origin main
+    }
     git push origin $tag
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to push git tag $tag"
