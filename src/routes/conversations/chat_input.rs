@@ -25,13 +25,62 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let mut input_text = use_signal(|| String::new());
     let mut pending_attachments = use_signal(|| Vec::<(String, String, Vec<u8>)>::new());
     let mut is_thinking = props.is_thinking;
+    let mut animated_placeholder =
+        use_signal(|| "Type anything to start a new conversation...".to_string());
 
     let mut messages_resource = props.messages_resource.clone();
     let mut visible_messages = props.visible_messages;
     let mut conversations_resource = props.conversations_resource.clone();
     let selected_conversation_id = props.selected_conversation_id.clone();
+    let selected_conversation_for_placeholder = selected_conversation_id.clone();
     let is_first_msg = props.is_first_msg;
     let mut starter_prompt = props.starter_prompt;
+
+    use_future(move || {
+        let mut animated_placeholder = animated_placeholder;
+        let selected_conversation_id = selected_conversation_for_placeholder;
+        async move {
+            let new_conversation_prompts = [
+                "Type anything to start a new conversation...",
+                "Ask a question, plan a task, or explore an idea...",
+                "Drop a request and Overseer will route it...",
+            ];
+            let active_conversation_prompts = [
+                "Ask Overseer to analyze, automate, or explain...",
+                "Request a follow-up, summary, or next step...",
+                "Refine this conversation with more context...",
+            ];
+
+            let mut phrase_index = 0usize;
+
+            loop {
+                let prompts = if selected_conversation_id().is_some() {
+                    &active_conversation_prompts
+                } else {
+                    &new_conversation_prompts
+                };
+                let phrase = prompts[phrase_index % prompts.len()];
+                let chars: Vec<char> = phrase.chars().collect();
+
+                for i in 1..=chars.len() {
+                    let current: String = chars.iter().take(i).collect();
+                    animated_placeholder.set(current);
+                    tokio::time::sleep(std::time::Duration::from_millis(38)).await;
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(1250)).await;
+
+                for i in (0..chars.len()).rev() {
+                    let current: String = chars.iter().take(i).collect();
+                    animated_placeholder.set(current);
+                    tokio::time::sleep(std::time::Duration::from_millis(24)).await;
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(220)).await;
+                phrase_index = phrase_index.wrapping_add(1);
+            }
+        }
+    });
 
     use_effect(move || {
         if let Some(prompt) = starter_prompt() {
@@ -185,11 +234,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         textarea {
                             class: "custom-scrollbar flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-3 text-sm leading-relaxed text-[var(--text-main)] placeholder:text-slate-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 max-h-48",
                             style: "border: none; outline: none; box-shadow: none;",
-                            placeholder: if selected_conversation_id().is_some() {
-                                "Ask Overseer to analyze, automate, or explain..."
-                            } else {
-                                "Type anything to start a new conversation..."
-                            },
+                            placeholder: "{animated_placeholder}",
                             rows: format!("{}", (input_text().split('\n').count() as u32).min(8)),
                             value: "{input_text}",
                             oninput: move |e| input_text.set(e.value()),
