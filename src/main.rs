@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use dioxus::prelude::*;
 use dioxus_material_icons::MaterialIconStylesheet;
 mod backend;
@@ -40,25 +42,10 @@ enum Route {
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
-const MAIN_CSS: Asset = asset!(
-    "/assets/main.css",
-    AssetOptions::css().with_static_head(true)
-);
+const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
-const TAILWIND_CSS: Asset = asset!(
-    "/assets/tailwind.css",
-    AssetOptions::css().with_static_head(true)
-);
+const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
-pub fn common_head_content() -> String {
-    format!(
-        r#" 
-					<link rel="icon" href="{FAVICON}">
-					<link rel="stylesheet" href="{MAIN_CSS}" blocking="render">
-					<link rel="stylesheet" href="{TAILWIND_CSS}" blocking="render">
-				"#
-    )
-}
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     println!("📍 Overseer launched with args: {:?}", args);
@@ -77,7 +64,6 @@ fn main() {
     {
         use dioxus::desktop::{Config, WindowBuilder};
         let config = Config::new()
-            .with_custom_head(common_head_content())
             .with_window(
                 WindowBuilder::new()
                     .with_title("Overseer")
@@ -106,8 +92,8 @@ fn App() -> Element {
 
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
-        document::Link { rel: "stylesheet", href: MAIN_CSS }
-        document::Link { rel: "stylesheet", href: TAILWIND_CSS }
+        document::Stylesheet { href: MAIN_CSS }
+        document::Stylesheet { href: TAILWIND_CSS }
 
         // PrismJS for Syntax Highlighting
         document::Link { rel: "stylesheet", href: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" }
