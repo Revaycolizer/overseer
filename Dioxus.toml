@@ -2,6 +2,10 @@
 name = "overseer"
 asset_dir = "assets"
 
+[bundle]
+identifier = "com.revaycolizer.overseer"
+publisher = "Revaycolizer"
+
 [assets]
 # List of assets to bundle
 # By default, everything in assets_dir is bundled
