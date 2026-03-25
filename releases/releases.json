@@ -1,6 +1,6 @@
 {
   "product": "Overseer",
-  "updated_at": "2026-03-25T00:00:00Z",
+  "updated_at": "2026-03-25T19:00:22Z",
   "latest": "v0.1.2",
   "channels": {
     "latest": "v0.1.2",
@@ -33,7 +33,11 @@
       "channel": "stable",
       "is_latest": true,
       "is_stable": true,
-      "labels": ["latest", "stable", "windows-x64"],
+      "labels": [
+        "linux-x64",
+        "windows-x64",
+        "stable"
+      ],
       "published_at": "2026-03-25T00:00:00Z",
       "summary": "Native computer fast paths, reliable screenshot-to-chat rendering, and stronger machine-state inspection across the desktop operator flow.",
       "notes_file": "releases/notes/v0.1.2.md",
@@ -49,36 +53,29 @@
           "name": "Overseer-v0.1.2-windows-x64.zip",
           "platform": "windows-x64",
           "kind": "portable-zip",
-          "label": "Portable Zip",
+          "label": "Windows Portable Zip",
           "path": "dist/v0.1.2/Overseer-v0.1.2-windows-x64.zip"
         },
         {
           "name": "install-overseer.ps1",
           "platform": "windows-x64",
           "kind": "installer-script",
-          "label": "Install Script",
+          "label": "install-overseer.ps1",
           "path": "dist/v0.1.2/install-overseer.ps1"
         },
         {
           "name": "uninstall-overseer.ps1",
           "platform": "windows-x64",
           "kind": "uninstaller-script",
-          "label": "Uninstall Script",
+          "label": "uninstall-overseer.ps1",
           "path": "dist/v0.1.2/uninstall-overseer.ps1"
         },
         {
-          "name": "SHA256SUMS-windows-x64.txt",
-          "platform": "windows-x64",
-          "kind": "checksums",
-          "label": "SHA256 Checksums",
-          "path": "dist/v0.1.2/SHA256SUMS-windows-x64.txt"
-        },
-        {
-          "name": "release-windows-x64.json",
-          "platform": "windows-x64",
-          "kind": "release-manifest",
-          "label": "Release Manifest",
-          "path": "dist/v0.1.2/release-windows-x64.json"
+          "name": "Overseer-v0.1.2-amd64.deb",
+          "platform": "linux-x64",
+          "kind": "deb",
+          "label": "Overseer-v0.1.2-amd64.deb",
+          "path": "dist/v0.1.2/Overseer-v0.1.2-amd64.deb"
         }
       ]
     },
@@ -88,7 +85,9 @@
       "channel": "stable",
       "is_latest": false,
       "is_stable": false,
-      "labels": ["windows-x64"],
+      "labels": [
+        "windows-x64"
+      ],
       "published_at": "2026-03-23T00:00:00Z",
       "summary": "Computer supervision, approval-backed desktop control, runtime health checks, and sharper chat, trace, and workflow surfaces.",
       "notes_file": "releases/notes/v0.1.1.md",
@@ -143,7 +142,9 @@
       "channel": "stable",
       "is_latest": false,
       "is_stable": false,
-      "labels": ["windows-x64"],
+      "labels": [
+        "windows-x64"
+      ],
       "published_at": "2026-03-22T00:00:00Z",
       "summary": "First packaged desktop release with workflow runs, execution traces, and local installer support.",
       "notes_file": "releases/notes/v0.1.0.md",
