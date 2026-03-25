@@ -180,23 +180,59 @@ async fn decide_orchestration(
     db: &crate::db::Database,
     all_agents: &[AgentInfo],
     query: &str,
+    history: &[Message],
     memory_context: &str,
     ollama_client: &ollama::Client,
 ) -> Result<OrchestrationDecision, String> {
-    let computer_session_state =
-        crate::backend::get_setting_or(db, "computer_session_state", "idle").await;
-    let computer_session_active = matches!(
-        computer_session_state.as_str(),
-        "observing" | "approval_session" | "trusted_session"
-    );
-
-    if computer_session_active && is_affirmative_follow_up(query) {
+    // 1. Check for Fast-Path keyword matches from the database (fully dynamic)
+    if let Some(domain) = crate::engine::orchestrator::discovery::discover_fast_path_domain(db, query).await {
         return Ok(OrchestrationDecision {
             route: OrchestrationRoute::SingleDomain,
-            domain: Some("computer".to_string()),
+            domain: Some(domain.clone()),
             personality_mode: "operator".to_string(),
-            reason: "Active computer supervision session detected, so the follow-up stays inside the computer domain.".to_string(),
+            reason: format!("Fast-path routing match found for domain: {}", domain),
         });
+    }
+
+    // 2. Handle affirmative follow-ups (e.g., "yes", "ok", "continue")
+    if is_affirmative_follow_up(query) {
+        // Look for the original intent in history to understand the goal
+        let original_intent = history.iter()
+            .find(|m| matches!(m, Message::User { .. }))
+            .map(|m| match m {
+                Message::User { content, .. } => serde_json::to_string(content).unwrap_or_default(),
+                _ => String::new(),
+            })
+            .unwrap_or_else(|| query.to_string());
+
+        // Dynamic Supervisor Discovery: Iterate all supervisors and check their tool guardrails
+        let all_supervisors = crate::backend::get_supervisors(db).await.unwrap_or_default();
+        
+        // Priority-ordered check for an authorized domain
+        let mut potential_domains = Vec::new();
+
+        for s in all_supervisors {
+            let tools = crate::backend::get_supervisor_tools(db, s.id).await.unwrap_or_default();
+            // If any tool in this domain allows the intent, this domain is a candidate
+            if tools.iter().any(|t| {
+                let g = crate::engine::orchestrator::guardrails::check_tool_guardrails(&original_intent, "", t, &serde_json::json!({}));
+                g.allowed
+            }) {
+                potential_domains.push(s);
+            }
+        }
+
+        // Sort by priority or most recent activity (heuristic: if history has it, prefer it)
+        if !potential_domains.is_empty() {
+             potential_domains.sort_by(|a, b| b.routing_priority.cmp(&a.routing_priority));
+             let winner = potential_domains.remove(0);
+             return Ok(OrchestrationDecision {
+                route: OrchestrationRoute::SingleDomain,
+                domain: Some(winner.domain.clone()),
+                personality_mode: "operator".to_string(),
+                reason: format!("Domain '{}' authorized by tool guardrails for this intent.", winner.domain),
+            });
+        }
     }
 
     let heuristic = heuristic_decision(db, query).await;
@@ -327,7 +363,7 @@ pub async fn orchestrate_request<'a>(
     )
     .await;
 
-    let decision = match decide_orchestration(db, all_agents, query, memory_context, ollama_client).await
+    let decision = match decide_orchestration(db, all_agents, query, &history, memory_context, ollama_client).await
     {
         Ok(decision) => decision,
         Err(err) => {

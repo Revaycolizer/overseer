@@ -162,7 +162,7 @@ fn SearchBlock(payload: String, hide_evidence: bool) -> Element {
                                 img {
                                     src: "{img}",
                                     class: "w-full h-full object-cover transition-transform group-hover:scale-105",
-                                    onerror: move |e| {
+                                    onerror: move |_| {
                                         // Silent fail - will show placeholder if icon fails
                                     }
                                 }
@@ -203,71 +203,7 @@ fn SearchBlock(payload: String, hide_evidence: bool) -> Element {
 // ── Single chart block renderer ───────────────────────────────────────────────
 #[component]
 fn MarkdownText(text: String) -> Element {
-    let segments = use_memo(move || {
-        let mut result = Vec::new();
-        let mut remaining = &text[..];
-        
-        while !remaining.is_empty() {
-            let next_code = remaining.find("```");
-            let next_bold = remaining.find("**");
-            let next_link = remaining.find("[");
-            
-            // Priority: Code > Bold > Link
-            let mut positions = vec![];
-            if let Some(p) = next_code { positions.push((p, 0)); }
-            if let Some(p) = next_bold { positions.push((p, 1)); }
-            if let Some(p) = next_link { positions.push((p, 2)); }
-            positions.sort_by_key(|&(p, _)| p);
-
-            if let Some(&(pos, kind)) = positions.first() {
-                if pos > 0 { result.push(MarkdownSegment::Plain(remaining[..pos].to_string())); }
-                let after = &remaining[pos..];
-                
-                match kind {
-                    0 => { // Code block
-                        let content = &after[3..];
-                        if let Some(end) = content.find("```") {
-                            result.push(MarkdownSegment::Code(content[..end].to_string()));
-                            remaining = &content[end+3..];
-                        } else {
-                            result.push(MarkdownSegment::Plain(after.to_string()));
-                            remaining = "";
-                        }
-                    }
-                    1 => { // Bold
-                        let content = &after[2..];
-                        if let Some(end) = content.find("**") {
-                            result.push(MarkdownSegment::Bold(content[..end].to_string()));
-                            remaining = &content[end+2..];
-                        } else {
-                            result.push(MarkdownSegment::Plain(after[..2].to_string()));
-                            remaining = &after[2..];
-                        }
-                    }
-                    2 => { // Link
-                        let after_l = &after[1..];
-                        if let Some(end_title) = after_l.find("](") {
-                            let title = &after_l[..end_title];
-                            let after_title = &after_l[end_title+2..];
-                            if let Some(end_url) = after_title.find(")") {
-                                let url = &after_title[..end_url];
-                                result.push(MarkdownSegment::Link { title: title.to_string(), url: url.to_string() });
-                                remaining = &after_title[end_url+1..];
-                                continue;
-                            }
-                        }
-                        result.push(MarkdownSegment::Plain(after[..1].to_string()));
-                        remaining = &after[1..];
-                    }
-                    _ => unreachable!()
-                }
-            } else {
-                result.push(MarkdownSegment::Plain(remaining.to_string()));
-                break;
-            }
-        }
-        result
-    });
+    let segments = use_memo(move || parse_markdown_text(&text));
 
     rsx! {
         span { class: "select-text whitespace-pre-wrap",
@@ -288,6 +224,16 @@ fn MarkdownText(text: String) -> Element {
                             "{title}"
                         }
                     },
+                    MarkdownSegment::Image { alt, url } => rsx! {
+                        img {
+                            src: "{url}",
+                            alt: "{alt}",
+                            class: "my-4 rounded-xl border border-slate-200 shadow-sm max-w-full h-auto block mx-auto",
+                            onerror: move |_| {
+                                // Silent fail - could add a fallback icon later if needed
+                            }
+                        }
+                    },
                 }
             }
         }
@@ -300,6 +246,107 @@ enum MarkdownSegment {
     Bold(String),
     Code(String),
     Link { title: String, url: String },
+    Image { alt: String, url: String },
+}
+
+fn parse_markdown_text(text: &str) -> Vec<MarkdownSegment> {
+    let mut result = Vec::new();
+    let mut remaining = text;
+
+    while !remaining.is_empty() {
+        let next_code = remaining.find("```");
+        let next_bold = remaining.find("**");
+        let next_link = remaining.find("[");
+
+        // Priority: Code > Bold > Link/Image
+        let mut positions = vec![];
+        if let Some(p) = next_code {
+            positions.push((p, 0));
+        }
+        if let Some(p) = next_bold {
+            positions.push((p, 1));
+        }
+        if let Some(p) = next_link {
+            positions.push((p, 2));
+        }
+        positions.sort_by_key(|&(p, _)| p);
+
+        if let Some(&(pos, kind)) = positions.first() {
+            if pos > 0 {
+                result.push(MarkdownSegment::Plain(remaining[..pos].to_string()));
+            }
+            let after = &remaining[pos..];
+
+            match kind {
+                0 => {
+                    // Code block
+                    let content = &after[3..];
+                    if let Some(end) = content.find("```") {
+                        result.push(MarkdownSegment::Code(content[..end].to_string()));
+                        remaining = &content[end + 3..];
+                    } else {
+                        result.push(MarkdownSegment::Plain(after.to_string()));
+                        remaining = "";
+                    }
+                }
+                1 => {
+                    // Bold
+                    let content = &after[2..];
+                    if let Some(end) = content.find("**") {
+                        result.push(MarkdownSegment::Bold(content[..end].to_string()));
+                        remaining = &content[end + 2..];
+                    } else {
+                        result.push(MarkdownSegment::Plain(after[..2].to_string()));
+                        remaining = &after[2..];
+                    }
+                }
+                2 => {
+                    // Link or Image
+                    let is_image = pos > 0 && remaining.as_bytes()[pos - 1] == b'!';
+                    if is_image {
+                        // Correct the preceding plain text if it was pushed with the '!'
+                        if let Some(MarkdownSegment::Plain(ref mut last)) = result.last_mut() {
+                            if last.ends_with('!') {
+                                last.pop();
+                                if last.is_empty() {
+                                    result.pop();
+                                }
+                            }
+                        }
+                    }
+
+                    let after_l = &after[1..];
+                    if let Some(end_title) = after_l.find("](") {
+                        let title = &after_l[..end_title];
+                        let after_title = &after_l[end_title + 2..];
+                        if let Some(end_url) = after_title.find(")") {
+                            let url = &after_title[..end_url];
+                            if is_image {
+                                result.push(MarkdownSegment::Image {
+                                    alt: title.to_string(),
+                                    url: url.to_string(),
+                                });
+                            } else {
+                                result.push(MarkdownSegment::Link {
+                                    title: title.to_string(),
+                                    url: url.to_string(),
+                                });
+                            }
+                            remaining = &after_title[end_url + 1..];
+                            continue;
+                        }
+                    }
+                    result.push(MarkdownSegment::Plain(after[..1].to_string()));
+                    remaining = &after[1..];
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            result.push(MarkdownSegment::Plain(remaining.to_string()));
+            break;
+        }
+    }
+    result
 }
 
 #[component]
@@ -510,5 +557,41 @@ pub fn ThinkingBubble() -> Element {
                 }
             }
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_markdown_parsing_link() {
+        let text = "Check [this](https://google.com) link.";
+        let segments = parse_markdown_text(text);
+        assert_eq!(segments.len(), 3);
+        assert!(matches!(segments[0], MarkdownSegment::Plain(ref t) if t == "Check "));
+        assert!(matches!(segments[1], MarkdownSegment::Link { ref title, ref url } if title == "this" && url == "https://google.com"));
+        assert!(matches!(segments[2], MarkdownSegment::Plain(ref t) if t == " link."));
+    }
+
+    #[test]
+    fn test_markdown_parsing_image() {
+        let text = "Look at ![this](https://example.com/img.png) image.";
+        let segments = parse_markdown_text(text);
+        assert_eq!(segments.len(), 3);
+        assert!(matches!(segments[0], MarkdownSegment::Plain(ref t) if t == "Look at "));
+        assert!(matches!(segments[1], MarkdownSegment::Image { ref alt, ref url } if alt == "this" && url == "https://example.com/img.png"));
+        assert!(matches!(segments[2], MarkdownSegment::Plain(ref t) if t == " image."));
+    }
+
+    #[test]
+    fn test_markdown_parsing_mixed() {
+        let text = "![img](url) and [link](url)";
+        let segments = parse_markdown_text(text);
+        assert_eq!(segments.len(), 3);
+        assert!(matches!(segments[0], MarkdownSegment::Image { .. }));
+        assert!(matches!(segments[1], MarkdownSegment::Plain(ref t) if t == " and "));
+        assert!(matches!(segments[2], MarkdownSegment::Link { .. }));
     }
 }

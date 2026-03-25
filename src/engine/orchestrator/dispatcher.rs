@@ -413,7 +413,33 @@ impl SupervisorExecutionResult {
     }
 
     pub fn display_text(&self) -> String {
-        let mut parts = vec![self.summary.clone()];
+        let mut final_summary = self.summary.clone();
+
+        // 1. Try to find a primary image from evidence to show inline (ChatGPT-style)
+        if !self.evidence.is_empty() {
+            for e in &self.evidence {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(e) {
+                    if let Some(img_url) = value.get("image_url").and_then(|v| v.as_str()) {
+                        if !img_url.is_empty() && !final_summary.contains(img_url) {
+                             // STRIP common model refusals before adding the image
+                             let lower = final_summary.to_lowercase();
+                             if lower.contains("cannot directly show images") || lower.contains("cannot display images") {
+                                 final_summary = final_summary.replace("While I cannot directly show images, ", "");
+                                 final_summary = final_summary.replace("Since I cannot display images directly, ", "");
+                                 final_summary = final_summary.replace("I cannot show images directly. ", "");
+                                 final_summary = final_summary.replace("While I cannot display images directly, ", "");
+                                 final_summary = final_summary.replace("I cannot provide an image directly, ", "");
+                             }
+                             
+                             final_summary = format!("{}\n\n![Source Image]({})", final_summary, img_url);
+                             break; // Just one primary image is enough for the text bubble
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut parts = vec![final_summary];
 
         fn format_json_if_possible(item: &str) -> String {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(item) {
@@ -434,15 +460,22 @@ impl SupervisorExecutionResult {
                             }
                         });
                     let snippet = obj.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
+                    let image_url = obj.get("image_url").and_then(|i| i.as_str()).unwrap_or("");
                     
-                    if !url.is_empty() {
+                    let mut result = if !url.is_empty() {
                         if snippet.is_empty() {
-                            return format!("[{}]({})", title, url);
+                            format!("[{}]({})", title, url)
+                        } else {
+                            format!("[{}]({}): {}", title, url, snippet)
                         }
-                        return format!("[{}]({}): {}", title, url, snippet);
                     } else {
-                        return format!("{}: {}", title, snippet);
+                        format!("{}: {}", title, snippet)
+                    };
+
+                    if !image_url.is_empty() {
+                        result = format!("{}\n\n![{}]({})", result, title, image_url);
                     }
+                    return result;
                 }
             } else if item.contains("http://") || item.contains("https://") {
                 // Heuristic: If it's not JSON but has a URL, ensure the URL is clickable
@@ -462,11 +495,26 @@ impl SupervisorExecutionResult {
         }
 
         if !self.evidence.is_empty() {
-            let formatted_evidence: Vec<String> = self.evidence
-                .iter()
-                .map(|e| format_json_if_possible(e))
-                .collect();
-            parts.push(format!("**Sources**:\n- {}", formatted_evidence.join("\n- ")));
+            let mut search_results = Vec::new();
+            let mut other_evidence = Vec::new();
+
+            for e in &self.evidence {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(e) {
+                    if value.is_object() && value.get("url").is_some() && value.get("title").is_some() {
+                        search_results.push(value);
+                        continue;
+                    }
+                }
+                other_evidence.push(format_json_if_possible(e));
+            }
+
+            if !search_results.is_empty() {
+                 parts.push(format!("---SEARCH_RESULTS---\n{}", serde_json::to_string(&search_results).unwrap_or_default()));
+            }
+
+            if !other_evidence.is_empty() {
+                parts.push(format!("**Sources**:\n- {}", other_evidence.join("\n- ")));
+            }
         }
 
         if !self.artifacts.is_empty() {

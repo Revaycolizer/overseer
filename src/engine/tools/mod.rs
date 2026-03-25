@@ -710,11 +710,61 @@ $windows = Get-Process |
 }
 
 #[cfg(not(windows))]
-async fn windows_desktop_state_json(_tool_name: &str) -> Result<String, DynamicToolError> {
-    Err(DynamicToolError::ExecutionFailed {
-        tool: "os_tool".to_string(),
-        details: "Desktop state inspection is currently implemented for Windows only.".to_string(),
-    })
+async fn windows_desktop_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    // Get active window title using xprop
+    let active_window_id = run_command_simple("xprop -root _NET_ACTIVE_WINDOW", tool_name).await?;
+    let mut active_title = String::new();
+    if let Some(id) = active_window_id.split_whitespace().last() {
+        let title_out = run_command_simple(&format!("xprop -id {} _NET_WM_NAME", id), tool_name).await?;
+        if let Some(pos) = title_out.find(" = \"") {
+            active_title = title_out[pos + 4..].trim_end_matches('"').to_string();
+        } else {
+            // Fallback to WM_NAME if _NET_WM_NAME is missing
+            let title_out_fallback = run_command_simple(&format!("xprop -id {} WM_NAME", id), tool_name).await?;
+            if let Some(pos) = title_out_fallback.find(" = \"") {
+                active_title = title_out_fallback[pos + 4..].trim_end_matches('"').to_string();
+            }
+        }
+    }
+
+    // List windows using wmctrl
+    let windows_raw = run_command_simple("wmctrl -l", tool_name).await.unwrap_or_default();
+    let visible_windows: Vec<serde_json::Value> = windows_raw.lines().take(12).map(|line| {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        let name = if parts.len() >= 4 {
+            parts[3..].join(" ")
+        } else {
+            "Unknown Window".to_string()
+        };
+        json!({
+            "ProcessName": "unknown",
+            "Id": parts.get(0).copied().unwrap_or("0"),
+            "MainWindowTitle": name
+        })
+    }).collect();
+
+    Ok(json!({
+        "active_window_title": active_title,
+        "active_pid": 0,
+        "visible_windows": visible_windows
+    }).to_string())
+}
+
+#[cfg(not(windows))]
+async fn run_command_simple(cmd: &str, tool_name: &str) -> Result<String, DynamicToolError> {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if parts.is_empty() { return Ok(String::new()); }
+    
+    let output = Command::new(parts[0])
+        .args(&parts[1..])
+        .output()
+        .await
+        .map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: e.to_string(),
+        })?;
+    
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolError> {
@@ -857,10 +907,9 @@ fn parse_duckduckgo_results(html: &str) -> Vec<SearchResult> {
                 }
             }
             
-            // Heuristic for image: use favicon if we can't find a better one
             let domain = url.split('/').nth(2).unwrap_or("");
             let image_url = if !domain.is_empty() {
-                Some(format!("https://icons.duckduckgo.com/ip3/{}.ico", domain))
+                Some(format!("https://www.google.com/s2/favicons?sz=128&domain={}", domain))
             } else {
                 None
             };

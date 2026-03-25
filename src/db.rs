@@ -125,17 +125,13 @@ impl Database {
     }
 
     async fn seed_all(&self) -> anyhow::Result<()> {
-        println!("🌱 Checking database seeding state...");
-        self.seed_agents().await?;
-        self.seed_tools().await?;
-        self.seed_agent_tools().await?;
-        self.seed_supervisors().await?;
-        self.seed_planners().await?;
+        println!("🌱 Initializing v10 Database Environment...");
+     //   self.seed_agents().await?;
+     //   self.seed_tools().await?;
+     //   self.seed_agent_tools().await?;
+     //   self.seed_supervisors().await?; // This now handles system supervisors too
+     //   self.seed_planners().await?;
         self.ensure_setting_defaults().await?;
-        self.ensure_native_core_tools().await?;
-        self.ensure_system_agents().await?;
-        self.ensure_system_agent_tools().await?;
-        self.ensure_system_supervisors().await?;
         self.backfill_ids().await?;
         Ok(())
     }
@@ -178,190 +174,7 @@ impl Database {
             .execute(&self.pool)
             .await?;
         }
-
-        Ok(())
-    }
-
-    async fn ensure_system_agents(&self) -> anyhow::Result<()> {
-        // Upserts agents that must always exist regardless of seeding state.
-        // Safe to run every startup — uses INSERT OR IGNORE so no duplicates.
-        let system_agents: Vec<(&str, &str, &str, &str, &str)> = vec![
-            (
-                "Synthesizer",
-                "Synthesizes research findings into clean user-friendly responses",
-                "synthesizer",
-                "qwen2.5:7b-instruct",
-                "You are a helpful assistant. Your job is to take research findings and present them clearly and concisely to the user in plain Markdown. Structure your response with headers and bullet points where appropriate. Never output raw JSON arrays or technical plan data. Always write as if speaking directly to the user.",
-            ),
-            (
-                "Computer Operator",
-                "Operates a supervised computer session with explicit safety boundaries, approvals, and evidence gathering.",
-                "computer",
-                "qwen2.5:7b-instruct",
-                "You are the Computer Operator for Overseer. You may observe, plan, and act on the user's computer only within approved safety policies. Prefer describing the next safe action before acting. Record evidence, mention the target window or app, and stop when confidence is low or a blocked action is encountered.",
-            ),
-        ];
-
-        for (name, desc, domain, model, inst) in system_agents {
-            let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agents WHERE domain = ?")
-                .bind(domain)
-                .fetch_one(&self.pool)
-                .await?;
-
-            if exists.0 == 0 {
-                let id = self.next_id().await;
-                sqlx::query(
-                "INSERT OR IGNORE INTO agents (id, name, description, domain, model, instructions, version, code, creator_id) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            )
-            .bind(id)
-            .bind(name)
-            .bind(desc)
-            .bind(domain)
-            .bind(model)
-            .bind(inst)
-            .bind("1.0.0")
-            .bind(None::<String>)
-            .bind(None::<i64>)  // creator_id is null
-            .execute(&self.pool)
-            .await?;
-
-                println!("✅ Inserted missing system agent: {} ({})", name, domain);
-            } else {
-                println!("✓ System agent '{}' already exists, skipping.", domain);
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn ensure_native_core_tools(&self) -> anyhow::Result<()> {
-        let native_tools = [
-            (
-                "stealth_search",
-                "Native search tool that returns result titles, URLs, and snippets.",
-            ),
-            (
-                "stealth_browse",
-                "Native browser fetch tool that returns cleaned page text and metadata.",
-            ),
-            (
-                "http_request",
-                "Native HTTP GET/POST request tool for direct endpoint checks.",
-            ),
-            (
-                "app_launcher",
-                "Native application launcher for local desktop tasks.",
-            ),
-        ];
-
-        for (name, description) in native_tools {
-            sqlx::query(
-                "UPDATE tools
-                 SET language = 'rust',
-                     script_path = NULL,
-                     description = COALESCE(NULLIF(description, ''), ?),
-                     code = '// Native implementation'
-                 WHERE name = ?",
-            )
-            .bind(description)
-            .bind(name)
-            .execute(&self.pool)
-            .await?;
-        }
-
-        Ok(())
-    }
-
-    async fn ensure_system_supervisors(&self) -> anyhow::Result<()> {
-        let system_supervisors: Vec<(&str, &str, &str, &str, &str)> = vec![(
-            "Computer Supervisor",
-            "Supervises broader computer-operation sessions with approvals, safety checkpoints, and evidence capture",
-            "computer",
-            "qwen2.5:7b-instruct",
-            "You are the Computer Supervisor for Overseer. You control broad computer-operation requests only through supervised execution. Respect the configured supervision mode, ask for approval when required, keep actions bounded, and never claim success without evidence from the desktop state or tool results.",
-        )];
-
-        for (name, desc, domain, model, instructions) in system_supervisors {
-            let existing: Option<(i64,)> =
-                sqlx::query_as("SELECT id FROM supervisors WHERE domain = ? LIMIT 1")
-                    .bind(domain)
-                    .fetch_optional(&self.pool)
-                    .await?;
-
-            let supervisor_id = if let Some((id,)) = existing {
-                id
-            } else {
-                let id = self.next_id().await;
-                sqlx::query(
-                    "INSERT INTO supervisors (id, name, description, instructions, model, domain, version, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(id)
-                .bind(name)
-                .bind(desc)
-                .bind(instructions)
-                .bind(model)
-                .bind(domain)
-                .bind("1.0.0")
-                .bind(None::<String>)
-                .execute(&self.pool)
-                .await?;
-                println!("✅ Inserted missing system supervisor: {} ({})", name, domain);
-                id
-            };
-
-            if let Some((agent_id,)) = sqlx::query_as::<_, (i64,)>(
-                "SELECT id FROM agents WHERE domain = ? LIMIT 1",
-            )
-            .bind(domain)
-            .fetch_optional(&self.pool)
-            .await?
-            {
-                let relation_id = self.next_id().await;
-                sqlx::query(
-                    "INSERT OR IGNORE INTO supervisor_agents (id, supervisor_id, agent_id) VALUES (?, ?, ?)",
-                )
-                .bind(relation_id)
-                .bind(supervisor_id)
-                .bind(agent_id)
-                .execute(&self.pool)
-                .await?;
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn ensure_system_agent_tools(&self) -> anyhow::Result<()> {
-        let mappings = [
-            ("computer", "os_tool"),
-            ("computer", "vision_analysis"),
-            ("computer", "charting"),
-        ];
-
-        for (agent_domain, tool_name) in mappings {
-            let agent = sqlx::query_as::<_, (i64,)>("SELECT id FROM agents WHERE domain = ? LIMIT 1")
-                .bind(agent_domain)
-                .fetch_optional(&self.pool)
-                .await?;
-            let tool = sqlx::query_as::<_, (i64,)>("SELECT id FROM tools WHERE name = ? LIMIT 1")
-                .bind(tool_name)
-                .fetch_optional(&self.pool)
-                .await?;
-
-            if let (Some((agent_id,)), Some((tool_id,))) = (agent, tool) {
-                let relation_id = self.next_id().await;
-                sqlx::query(
-                    "INSERT OR IGNORE INTO agent_tools (id, agent_id, tool_id) VALUES (?, ?, ?)",
-                )
-                .bind(relation_id)
-                .bind(agent_id)
-                .bind(tool_id)
-                .execute(&self.pool)
-                .await?;
-            }
-        }
-
+        // Note: ensure_ system functions have been consolidated into main seed_ functions for v10.
         Ok(())
     }
 
@@ -371,7 +184,7 @@ impl Database {
             .await?;
 
         if count.0 > 0 {
-            return Ok(());
+            // return Ok(()); // Allow updates to existing agents
         }
 
         println!("🌱 Seeding authentic agents from configs and codebase...");
@@ -462,6 +275,13 @@ impl Database {
                 "llava",
                 "",
             ),
+            (
+                "Computer Operator",
+                "Operates a supervised computer session",
+                "computer",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
         ];
 
         for (name, desc, domain, model, path) in codebase_agents {
@@ -470,7 +290,12 @@ impl Database {
                     "You are a vision-capable agent. Describe the current screen state accurately. ALWAYS use the vision_analysis tool for images.".to_string()
                 } else if path.is_empty() && domain == "overseer" {
                     "You are the Overseer. Your job is to verify if the user's request has been fully completed based on the grounding and plan history. Respond with YES or NO: [reason].".to_string()
-                } else if !path.is_empty() {
+                } else if path.is_empty() && domain == "computer" {
+                    "You are the Computer Operator for Overseer. You may observe, plan, and act on the user's computer only within approved safety policies.\
+                      Prefer describing the next safe action before acting. Record evidence, mention the target window or app, and stop when confidence is low or a blocked action is encountered.\n\n\
+                      IMAGE RULE: You CAN display images directly in your summary to provide a premium, modern experience.".to_string()
+                }
+                else if !path.is_empty() {
                     std::fs::read_to_string(path).unwrap_or_else(|_| "Default preamble".to_string())
                 } else {
                     "Default preamble".to_string()
@@ -488,8 +313,26 @@ impl Database {
         }
 
         let mut tx = self.pool.begin().await?;
+        agents_data.push((
+            "Synthesizer".to_string(),
+            "Synthesizes research findings into clean user-friendly responses".to_string(),
+            "synthesizer".to_string(),
+            "qwen2.5:7b-instruct".to_string(),
+            "You are a helpful assistant. Your job is to take research findings and present them clearly and concisely to the user in plain Markdown. \
+             Structure your response with headers and bullet points where appropriate. Never output raw JSON arrays or technical plan data. \
+             IMAGE RULE: If image URLs are present, you ARE authorized to show them via markdown ![alt text](url).".to_string(),
+            "1.0.0".to_string(),
+            None,
+        ));
+
         for (name, desc, domain, model, inst, version, code) in agents_data {
             let id = self.next_id().await;
+            
+            // Clean purge by domain
+            sqlx::query("DELETE FROM agents WHERE domain = ?")
+                .bind(domain.clone())
+                .execute(&mut *tx).await?;
+
             sqlx::query("INSERT INTO agents (id, name, description, domain, model, instructions, version, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
                 .bind(id).bind(name).bind(desc).bind(domain).bind(model).bind(inst).bind(version).bind(code)
                 .execute(&mut *tx).await?;
@@ -577,6 +420,12 @@ impl Database {
         for (name, desc, lang, path, code) in tools_data {
             let id = self.next_id().await;
             let script_path = if path.is_empty() { None } else { Some(path) };
+            
+            // Clean purge to avoid constraint conflicts with migrations
+            sqlx::query("DELETE FROM tools WHERE name = ?")
+                .bind(name.clone())
+                .execute(&mut *tx).await?;
+
             sqlx::query("INSERT INTO tools (id, name, description, language, script_path, code, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
                 .bind(id).bind(name).bind(desc).bind(lang).bind(script_path).bind(code).bind("1.0.0")
                 .execute(&mut *tx).await?;
@@ -598,21 +447,26 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         let mappings = vec![
-            ("Web Planner", "browser_automation"),
-            ("Web Supervisor", "browser_automation"),
-            ("Stealth Supervisor", "stealth_search"),
-            ("Desktop Supervisor", "ui_automation"),
-            ("Master Orchestrator", "os_tool"),
-            ("Master Orchestrator", "ui_automation"),
-            ("Master Orchestrator", "browser_automation"),
-            ("Chat Supervisor", "charting"),
+            ("stealth", "stealth_search"),
+            ("stealth", "stealth_browse"),
+            ("stealth", "http_request"),
+            ("web_supervisor", "browser_automation"),
+            ("web_supervisor", "ui_automation"),
+            ("orchestrator", "os_tool"),
+            ("orchestrator", "ui_automation"),
+            ("orchestrator", "browser_automation"),
+            ("chat", "charting"),
+            ("computer", "os_tool"),
+            ("computer", "vision_analysis"),
+            ("computer", "charting"),
         ];
 
-        for (agent_name, tool_name) in mappings {
-            let agent: Option<(i64,)> =
-                sqlx::query_as("SELECT id FROM agents WHERE name = ? LIMIT 1")
-                    .bind(agent_name)
-                    .fetch_optional(&mut *tx)
+        for (domain, tool_name) in mappings {
+            let agents: Vec<(i64,)> =
+                sqlx::query_as("SELECT id FROM agents WHERE domain = ? OR domain LIKE ?")
+                    .bind(domain)
+                    .bind(format!("{}%", domain))
+                    .fetch_all(&mut *tx)
                     .await?;
             let tool: Option<(i64,)> =
                 sqlx::query_as("SELECT id FROM tools WHERE name = ? LIMIT 1")
@@ -620,16 +474,18 @@ impl Database {
                     .fetch_optional(&mut *tx)
                     .await?;
 
-            if let (Some(a), Some(t)) = (agent, tool) {
-                let id = self.next_id().await;
-                sqlx::query(
-                    "INSERT OR IGNORE INTO agent_tools (id, agent_id, tool_id) VALUES (?, ?, ?)",
-                )
-                .bind(id)
-                .bind(a.0)
-                .bind(t.0)
-                .execute(&mut *tx)
-                .await?;
+            if let (agents, Some(t)) = (agents, tool) {
+                for a in agents {
+                    let id = self.next_id().await;
+                    sqlx::query(
+                        "INSERT OR IGNORE INTO agent_tools (id, agent_id, tool_id) VALUES (?, ?, ?)",
+                    )
+                    .bind(id)
+                    .bind(a.0)
+                    .bind(t.0)
+                    .execute(&mut *tx)
+                    .await?;
+                }
             }
         }
 
@@ -642,86 +498,68 @@ impl Database {
             .fetch_one(&self.pool)
             .await?;
 
-        if count.0 > 0 {
-            return Ok(());
-        }
-
         println!("🛸 Seeding dynamic supervisors...");
         let supervisors = vec![
             (
                 "Web Supervisor",
-                "Orchestrates web research and automation",
+                "Automates UI-based web interaction, form filling, and Chrome-specific automation",
                 "web",
-                "llama3",
-                "src/engine/agents/web/planner_preamble.md",
-            ),
-            (
-                "Office Supervisor",
-                "Manages document and productivity tasks",
-                "office",
                 "qwen2.5:7b-instruct",
-                "",
-            ),
-            (
-                "Desktop Supervisor",
-                "Controls native desktop applications",
-                "desktop",
-                "qwen2.5:7b-instruct",
-                "",
+                "chrome, browser, automate, website automation, click, type",
+                10,
             ),
             (
                 "Stealth Supervisor",
-                "Executes sensitive background research",
+                "Orchestrates all web research, search queries, and factual data retrieval",
                 "stealth",
                 "qwen2.5:7b-instruct",
-                "",
+                "research, search, browse, internet, query, latest, which is, who is",
+                20,
             ),
             (
-                "Neontune Supervisor",
-                "Specialized music and media metadata manager",
-                "neontune",
+                "Desktop Supervisor",
+                "Controls native desktop applications and standard OS tasks",
+                "desktop",
                 "qwen2.5:7b-instruct",
-                "",
-            ),
-            (
-                "Text Writer Supervisor",
-                "High-quality content generation and editing",
-                "text_writer",
-                "qwen2.5:7b-instruct",
-                "",
+                "app, application, desktop, window, file, directory",
+                15,
             ),
             (
                 "Chat Supervisor",
-                "General conversation manager",
+                "General conversation manager and summary assistant",
                 "chat",
-                "llama3",
-                "",
+                "qwen2.5:7b-instruct",
+                "hello, hi, help, explain, what if",
+                5,
             ),
             (
-                "Vision Supervisor",
-                "Visual perception manager",
-                "vision",
+                "Computer Supervisor",
+                "Broad computer operation with safety boundaries",
+                "computer",
                 "qwen2.5:7b-instruct",
-                "",
+                "screen, desktop, computer, operate pc",
+                25,
             ),
         ];
 
         let mut tx = self.pool.begin().await?;
-        for (name, desc, domain, model, path) in supervisors {
+        for (name, desc, domain, model, keywords, priority) in supervisors {
             let id = self.next_id().await;
-            let inst = if !path.is_empty() {
-                std::fs::read_to_string(path).unwrap_or_else(|_| format!("You are the {} supervisor. Your mission is to complete the user request using the available tools via the `execute_tool` router. Provide a comprehensive final answer after tool usage.", name))
-            } else {
-                format!("You are the {} supervisor. Your mission is to complete the user request using the available tools via the `execute_tool` router. Provide a comprehensive final answer after tool usage.", name)
-            };
+            let inst = format!("You are the {} supervisor. Your mission is to complete the user request using the available tools. IMAGE RULE: If search results contain images, you ARE authorized to show them directly in your summary via markdown ![](). Never say \"I cannot show images\" to the user.", name);
 
-            sqlx::query("INSERT INTO supervisors (id, name, description, instructions, model, domain, version, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-                .bind(id).bind(name).bind(desc).bind(inst).bind(model).bind(domain).bind("1.0.0").bind(None::<String>)
+            // Clean purge to avoid ID/constraint conflicts with migrations
+            sqlx::query("DELETE FROM supervisors WHERE domain = ?")
+                .bind(domain)
+                .execute(&mut *tx).await?;
+
+            // Fresh insert with v10 metadata
+            sqlx::query("INSERT INTO supervisors (id, name, description, instructions, model, domain, version, fast_path_keywords, routing_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(id).bind(name).bind(desc).bind(inst).bind(model).bind(domain).bind("1.0.0").bind(keywords).bind(priority)
                 .execute(&mut *tx).await?;
 
             // Auto-link agents based on domain
             let agent_domain = match domain {
-                "web" => Some("web"),
+                "web" => Some("web_supervisor"),
                 "stealth" => Some("stealth"),
                 "desktop" => Some("desktop"),
                 "office" => Some("office"),
@@ -729,6 +567,7 @@ impl Database {
                 "text_writer" => Some("text_writer"),
                 "chat" => Some("chat"),
                 "vision" => Some("vision"),
+                "computer" => Some("computer"),
                 _ => None,
             };
 
@@ -742,7 +581,7 @@ impl Database {
 
                 for (a_id,) in agents {
                     let rel_id = self.next_id().await;
-                    sqlx::query("INSERT INTO supervisor_agents (id, supervisor_id, agent_id) VALUES (?, ?, ?)")
+                    sqlx::query("INSERT OR IGNORE INTO supervisor_agents (id, supervisor_id, agent_id) VALUES (?, ?, ?)")
                         .bind(rel_id).bind(id).bind(a_id).execute(&mut *tx).await?;
                 }
             }
