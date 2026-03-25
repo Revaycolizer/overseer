@@ -2,7 +2,7 @@ use crate::db::Database;
 use crate::engine::utils::discovery::{AgentInfo, ToolInfo};
 use reqwest;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Command;
 
 #[cfg(windows)]
@@ -777,6 +777,116 @@ pub async fn add_attachment(
     Ok(id)
 }
 
+fn is_image_file_path(path: &std::path::Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_ascii_lowercase())
+            .as_deref(),
+        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp")
+    )
+}
+
+fn extract_local_image_paths_from_content(content: &str) -> Vec<std::path::PathBuf> {
+    fn normalize_candidate(line: &str) -> Option<&str> {
+        let trimmed = line
+            .trim()
+            .trim_start_matches("- ")
+            .trim_start_matches("* ")
+            .trim_matches('`')
+            .trim_matches('"')
+            .trim_end_matches(['.', ',', ';']);
+
+        if trimmed.is_empty() || trimmed.ends_with(':') {
+            return None;
+        }
+
+        Some(trimmed)
+    }
+
+    fn extract_markdown_image_target(line: &str) -> Option<String> {
+        let start = line.find("](")?;
+        let end = line[start + 2..].find(')')?;
+        Some(line[start + 2..start + 2 + end].trim().to_string())
+    }
+
+    let mut paths = Vec::new();
+    let mut seen = HashSet::new();
+
+    for line in content.lines() {
+        let markdown_target = if line.contains("![") && line.contains("](") {
+            extract_markdown_image_target(line)
+        } else {
+            None
+        };
+
+        let Some(candidate) = markdown_target.or_else(|| normalize_candidate(line).map(str::to_string)) else {
+            continue;
+        };
+
+        let candidate = candidate
+            .strip_prefix("file:///")
+            .or_else(|| candidate.strip_prefix("file://"))
+            .unwrap_or(&candidate);
+        let candidate = candidate.replace('/', std::path::MAIN_SEPARATOR_STR);
+        let path = std::path::PathBuf::from(candidate);
+
+        if path.is_absolute()
+            && is_image_file_path(&path)
+            && path.exists()
+            && seen.insert(path.clone())
+        {
+            paths.push(path);
+        }
+    }
+
+    paths
+}
+
+async fn attach_assistant_images_from_content(
+    db: &Database,
+    message_id: i64,
+    content: &str,
+) -> anyhow::Result<()> {
+    let image_paths = extract_local_image_paths_from_content(content);
+    if image_paths.is_empty() {
+        return Ok(());
+    }
+
+    std::fs::create_dir_all("overseer_files")?;
+
+    for path in image_paths {
+        let original_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("assistant-image.png");
+        let stored_name = format!("assistant-{}-{}", message_id, original_name);
+        let stored_path = std::path::Path::new("overseer_files").join(&stored_name);
+
+        if stored_path != path {
+            let _ = std::fs::copy(&path, &stored_path)?;
+        }
+
+        let metadata = std::fs::metadata(&stored_path)?;
+        let content_type = mime_guess::from_path(&stored_path)
+            .first_or_octet_stream()
+            .essence_str()
+            .to_string();
+
+        add_attachment(
+            db,
+            message_id,
+            &stored_name,
+            &stored_path.display().to_string(),
+            &content_type,
+            metadata.len() as i64,
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
 pub async fn add_message(
     db: &Database,
     conversation_id: i64,
@@ -799,6 +909,10 @@ pub async fn add_message(
         .bind(conversation_id)
         .execute(&db.pool)
         .await?;
+
+    if role == "assistant" {
+        let _ = attach_assistant_images_from_content(db, id, content).await;
+    }
 
     Ok(id)
 }
