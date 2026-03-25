@@ -1,5 +1,6 @@
 use super::helpers::{clean_content, copy_to_clipboard};
 use crate::backend;
+use base64::{engine::general_purpose, Engine as _};
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 use serde::Deserialize;
@@ -350,6 +351,66 @@ fn parse_markdown_text(text: &str) -> Vec<MarkdownSegment> {
 }
 
 #[component]
+fn AttachmentPreview(att: backend::Attachment) -> Element {
+    if !att.content_type.starts_with("image/") {
+        return rsx! {
+            div { class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 shadow-sm",
+                MaterialIcon { name: "insert_drive_file", size: 16 }
+                "{att.filename}"
+            }
+        };
+    }
+
+    let file_path = att.file_path.clone();
+    let content_type = att.content_type.clone();
+    let filename = att.filename.clone();
+    let image_data = use_resource(move || {
+        let file_path = file_path.clone();
+        let content_type = content_type.clone();
+        async move {
+            match std::fs::read(&file_path) {
+                Ok(bytes) if !bytes.is_empty() => Some(format!(
+                    "data:{};base64,{}",
+                    content_type,
+                    general_purpose::STANDARD.encode(bytes)
+                )),
+                _ => None,
+            }
+        }
+    });
+
+    match image_data().flatten() {
+        Some(src) => rsx! {
+            div { class: "space-y-2",
+                a {
+                    href: "{src}",
+                    target: "_blank",
+                    class: "block group w-fit",
+                    img {
+                        src: "{src}",
+                        alt: "{filename}",
+                        class: "rounded-2xl border border-slate-200 shadow-sm max-w-full h-auto block bg-white"
+                    }
+                }
+                div { class: "text-[10px] font-semibold text-slate-500 px-1 break-all",
+                    "{filename}"
+                }
+            }
+        },
+        None => rsx! {
+            div { class: "space-y-2",
+                div { class: "rounded-2xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-sm",
+                    "Image preview unavailable."
+                }
+                div { class: "text-[10px] font-semibold text-slate-500 px-1 break-all",
+                    "{filename}"
+                }
+            }
+        },
+    }
+}
+
+#[component]
 fn ChartBlock(block: VizBlock, hide_evidence: bool) -> Element {
     if block.kind == VizKind::Search {
         return rsx! { SearchBlock { payload: block.payload, hide_evidence: hide_evidence } };
@@ -519,6 +580,13 @@ pub fn MessageBubble(msg: backend::Message, on_copy: EventHandler<String>) -> El
                 }
 
                 // Render each chart block — supports multiple charts in one message
+                if !msg.attachments.is_empty() {
+                    div { class: "max-w-[95%] space-y-3",
+                        for att in &msg.attachments {
+                            AttachmentPreview { att: att.clone() }
+                        }
+                    }
+                }
                 for block in viz_blocks {
                     ChartBlock { block, hide_evidence: msg.hide_evidence }
                 }
