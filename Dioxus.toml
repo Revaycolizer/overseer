@@ -3,9 +3,11 @@ name = "overseer"
 asset_dir = "assets"
 
 [bundle]
-identifier = "com.revaycolizer.overseer"
+identifier = "ai.overseer.desktop"
 publisher = "Revaycolizer"
-icon = ["assets/icon.png"]
+icon = ["assets/favicon.ico"]
+description = "Local-first AI orchestration mission mission control."
+category = "DeveloperTool"
 
 [assets]
 # List of assets to bundle

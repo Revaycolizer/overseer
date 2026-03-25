@@ -3,6 +3,9 @@ name = "overseer"
 version = "0.1.2"
 authors = ["Revaycolizer <albinuslucas@gmail.com>"]
 edition = "2021"
+license = "MIT"
+homepage = "https://github.com/revaycolizer/overseer"
+repository = "https://github.com/revaycolizer/overseer"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

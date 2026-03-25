@@ -88,49 +88,28 @@ release_notes_source="$repo_root/releases/notes/$TAG.md"
 
 if [[ "$SKIP_BUILD" != "true" ]]; then
   echo "[INFO] Building Overseer $TAG for Linux..."
-  # Use dx bundle to create an AppImage
-  dx bundle --release --platform desktop --package-types "appimage"
+  # Use dx bundle to create ONLY a .deb package
+  dx bundle --release --platform desktop --package-types "deb"
 fi
 
-# Dioxus 0.7 puts the AppImage in a specific location
-appimage_source="$(resolve_first_existing_path \
-  "$repo_root/target/dx/overseer/release/linux/bundle/appimage/Overseer.AppImage" \
-  "$repo_root/target/dx/overseer/release/linux/app/Overseer.AppImage" || true)"
+# Dioxus 0.7 puts the assets in target/dx/overseer/bundle/linux/bundle/[type]/
+# Filenames often include version and arch, e.g., Overseer_0.1.2_amd64.deb
+echo "[INFO] Searching for bundled .deb..."
+deb_source=$(find "$repo_root/target/dx" -type f -name "*.deb" | grep -v "latest" | head -n 1 || true)
 
-if [[ -z "$appimage_source" || ! -f "$appimage_source" ]]; then
-  echo "Bundled AppImage not found. Expected it in target/dx/..." >&2
+if [[ -z "$deb_source" || ! -f "$deb_source" ]]; then
+  echo "[ERROR] Bundled .deb not found in target/dx/" >&2
   exit 1
 fi
 
 rm -rf "$release_root"
-mkdir -p "$portable_root"
+mkdir -p "$release_root"
 
-echo "[INFO] Staging Linux release assets..."
-copy_required_item "$appimage_source" "$portable_root/Overseer.AppImage"
-chmod +x "$portable_root/Overseer.AppImage"
+echo "[INFO] Staging Linux .deb package..."
+copy_required_item "$deb_source" "$release_root/Overseer-$TAG-amd64.deb"
 
-# We still copy assets and config for reference or if the AppImage needs them externally (though it shouldn't)
-# But we skip tool_scripts and agents because they are in the DB.
-copy_required_item "$repo_root/assets" "$portable_root/assets"
-copy_required_item "$repo_root/config" "$portable_root/config"
-copy_required_item "$repo_root/CHANGELOG.md" "$portable_root/CHANGELOG.md"
-copy_required_item "$repo_root/README.md" "$portable_root/README.md"
-
-if [[ -f "$release_notes_source" ]]; then
-  copy_required_item "$release_notes_source" "$portable_root/$TAG.md"
-fi
-
-# Create a simple tarball of the AppImage and its reference assets
-tar -C "$portable_root" -czf "$archive_path" .
-
-archive_hash="$(sha256sum "$archive_path" | awk '{print $1}')"
-appimage_hash="$(sha256sum "$appimage_source" | awk '{print $1}')"
-
-printf '%s  %s\n' "$archive_hash" "$archive_name" > "$checksums_path"
-printf '%s  %s\n' "$appimage_hash" "Overseer.AppImage" >> "$checksums_path"
-
-archive_size="$(stat -c%s "$archive_path")"
-appimage_size="$(stat -c%s "$appimage_source")"
+deb_hash="$(sha256sum "$deb_source" | awk '{print $1}')"
+deb_size="$(stat -c%s "$deb_source")"
 
 cat > "$manifest_path" <<EOF
 {
@@ -142,19 +121,16 @@ cat > "$manifest_path" <<EOF
   "platform": "linux-x64",
   "assets": [
     {
-      "name": "$archive_name",
-      "kind": "portable-tarball",
-      "sha256": "$archive_hash",
-      "size": $archive_size
-    },
-    {
-      "name": "Overseer.AppImage",
-      "kind": "appimage",
-      "sha256": "$appimage_hash",
-      "size": $appimage_size
+      "name": "Overseer-$TAG-amd64.deb",
+      "kind": "deb",
+      "sha256": "$deb_hash",
+      "size": $deb_size
     }
   ]
 }
 EOF
+
+# Update checksums
+printf '%s  %s\n' "$deb_hash" "Overseer-$TAG-amd64.deb" > "$checksums_path"
 
 echo "[INFO] Linux release ready at $release_root"

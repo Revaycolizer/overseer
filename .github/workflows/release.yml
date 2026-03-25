@@ -151,7 +151,7 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.value }}
           files: |
-            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-linux-x64.tar.gz
+            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-amd64.deb
             dist/${{ steps.tag.outputs.value }}/SHA256SUMS-linux-x64.txt
             dist/${{ steps.tag.outputs.value }}/release-linux-x64.json
 
