@@ -364,11 +364,25 @@ async fn native_stealth_browse(args: &serde_json::Value) -> Result<String, Dynam
     })?;
 
     let title = extract_html_title(&body).unwrap_or_else(|| "Untitled page".to_string());
+    
+    // Extract images before cleaning tags
+    let mut image_markers = String::new();
+    let img_re = Regex::new(r#"(?i)<img[^>]+src="(?P<src>https?://[^"]+)"[^>]*>"#).unwrap();
+    let mut count = 0;
+    for cap in img_re.captures_iter(&body) {
+        if count >= 10 { break; }
+        let src = &cap["src"];
+        if !src.contains("favicon") && !src.contains("pixel") && !src.contains("logo") && !src.contains("icon") {
+            image_markers.push_str(&format!("[IMAGE: {}]\n", src));
+            count += 1;
+        }
+    }
+
     let text = truncate_for_tool(clean_text_content(&body), 8000);
 
     Ok(format!(
-        "URL: {}\nStatus: {}\nTitle: {}\n\n{}",
-        final_url, status, title, text
+        "URL: {}\nStatus: {}\nTitle: {}\n\n--- VISUAL ASSETS ---\n{}\n\n--- PAGE CONTENT ---\n{}",
+        final_url, status, title, image_markers, text
     ))
 }
 
@@ -907,13 +921,6 @@ fn parse_duckduckgo_results(html: &str) -> Vec<SearchResult> {
                 }
             }
             
-            let domain = url.split('/').nth(2).unwrap_or("");
-            let image_url = if !domain.is_empty() {
-                Some(format!("https://www.google.com/s2/favicons?sz=128&domain={}", domain))
-            } else {
-                None
-            };
-
             SearchResult {
                 title: clean_text_content(capture.name("title").map(|value| value.as_str()).unwrap_or_default()),
                 url,
@@ -923,7 +930,7 @@ fn parse_duckduckgo_results(html: &str) -> Vec<SearchResult> {
                         .map(|value| value.as_str())
                         .unwrap_or_default(),
                 ),
-                image_url,
+                image_url: None,
             }
         })
         .filter(|result| !result.title.is_empty() && !result.url.is_empty())

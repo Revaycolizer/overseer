@@ -495,32 +495,73 @@ impl SupervisorExecutionResult {
         }
 
         if !self.evidence.is_empty() {
-            let mut search_results = Vec::new();
-            let mut other_evidence = Vec::new();
+            let mut link_lines: Vec<String> = Vec::new();
 
             for e in &self.evidence {
+                // Try to parse as JSON object with url/title/snippet
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(e) {
-                    if value.is_object() && value.get("url").is_some() && value.get("title").is_some() {
-                        search_results.push(value);
+                    if let Some(obj) = value.as_object() {
+                        let url = obj.get("url").and_then(|u| u.as_str()).unwrap_or("");
+                        let title = obj.get("title").and_then(|t| t.as_str()).unwrap_or("Source");
+                        let snippet = obj.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
+                        if !url.is_empty() {
+                            if snippet.is_empty() {
+                                link_lines.push(format!("- [{}]({})", title, url));
+                            } else {
+                                link_lines.push(format!("- [{}]({}): {}", title, url, snippet));
+                            }
+                        }
+                        continue;
+                    }
+                    // Could be an array of results
+                    if let Some(arr) = value.as_array() {
+                        for item in arr {
+                            if let Some(obj) = item.as_object() {
+                                let url = obj.get("url").and_then(|u| u.as_str()).unwrap_or("");
+                                let title = obj.get("title").and_then(|t| t.as_str()).unwrap_or("Source");
+                                let snippet = obj.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
+                                if !url.is_empty() {
+                                    if snippet.is_empty() {
+                                        link_lines.push(format!("- [{}]({})", title, url));
+                                    } else {
+                                        link_lines.push(format!("- [{}]({}): {}", title, url, snippet));
+                                    }
+                                }
+                            }
+                        }
                         continue;
                     }
                 }
-                other_evidence.push(format_json_if_possible(e));
+                // Plain text with URL
+                let text = e.trim();
+                if text.starts_with("http") && text.len() < 512 {
+                    let domain = text.split('/').nth(2).unwrap_or("Source").trim_start_matches("www.");
+                    link_lines.push(format!("- [{}]({})", domain, text));
+                } else if !text.starts_with("---SEARCH_RESULTS---") && !text.is_empty() {
+                    link_lines.push(format!("- {}", text));
+                }
             }
 
-            if !search_results.is_empty() {
-                 parts.push(format!("---SEARCH_RESULTS---\n{}", serde_json::to_string(&search_results).unwrap_or_default()));
-            }
-
-            if !other_evidence.is_empty() {
-                parts.push(format!("**Sources**:\n- {}", other_evidence.join("\n- ")));
+            if !link_lines.is_empty() {
+                parts.push(format!("**Sources**:\n{}", link_lines.join("\n")));
             }
         }
 
         if !self.artifacts.is_empty() {
             let formatted_artifacts: Vec<String> = self.artifacts
                 .iter()
-                .map(|a| format_json_if_possible(a))
+                .map(|a| {
+                    let item = a.to_string();
+                    let formatted = format_json_if_possible(&item);
+                    // If it looks like a direct image URL, render it
+                    let lower = item.to_lowercase();
+                    if (item.starts_with("http://") || item.starts_with("https://")) 
+                        && (lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".webp") || lower.ends_with(".svg")) {
+                        format!("![Artifact]({})", item)
+                    } else {
+                        formatted
+                    }
+                })
                 .collect();
             parts.push(format!("**Artifacts**:\n- {}", formatted_artifacts.join("\n- ")));
         }
@@ -534,7 +575,9 @@ impl SupervisorExecutionResult {
         }
 
         if let Some(error) = &self.error {
-            parts.push(format!("Error: {}", error));
+            if !error.trim().is_empty() {
+                parts.push(format!("Error: {}", error));
+            }
         }
 
         parts.join("\n\n")
@@ -643,13 +686,12 @@ pub async fn dispatch_domain(
         format!(
             "AVAILABLE TOOLS:\n{}\n\n\
              To use a tool, respond ONLY with JSON: {{\"tool\": \"tool_name\", \"input\": {{...}}}}\n\
-             If you are returning a FINAL answer instead of a tool call, respond ONLY with JSON in this shape:\n\
-             {{\"status\":\"completed|unverified|failed\",\"summary\":\"CRITICAL: Very short result (max 100 chars)\",\"evidence\":[\"Include ALL detailed findings, bullets, and URLs here\"],\"artifacts\":[\"file/path/or/chart\"],\"verified\":true|false,\"error\":\"optional error\"}}\n\
-             OPTIONAL CHARTING: Use the charting tool ONLY if a visualization is explicitly requested or if you are comparing 3 or more data points.\n\
-             SAFETY: Prefer lower-risk tools first. Treat tools marked 'dangerous' or 'high' as explicit-intent-only.\n\
+             If you are returning a FINAL answer, respond ONLY with JSON:\n\
+              {{\"status\":\"completed|unverified|failed\",\"summary\":\"concise overview\",\"evidence\":[...results...],\"artifacts\":[],\"verified\":true|false}}\n\
+             EVIDENCE RULE: If stealth_search returned results, copy each result object as-is into the 'evidence' array as JSON objects with 'title', 'url', and 'snippet' fields.\n\
+             SAFETY: Prefer lower-risk tools first.\n\
              When you call charting, its result (starting with ---CHART_SVG---) MUST be your COMPLETE final response.\n\
-             Never claim completion without evidence. If you are uncertain, use status 'unverified'. If something failed, use status 'failed'.\n\
-             Do NOT add any text, markdown, or summary before or after a chart marker.\n\n",
+             Never claim completion without evidence.\n\n",
             list
         )
     };
@@ -674,18 +716,11 @@ pub async fn dispatch_domain(
     );
 
     if domain == "chat" {
-        initial_prompt.push_str("\n\n═══ SOURCE PRESERVATION — CRITICAL ═══\n\
-            - You MUST preserve all URLs, original Titles, and Snippets from previous research steps in your own 'evidence' list.\n\
-            - Do NOT summarize research links into plain text bullet points.\n\
-            - EVERY evidence item should be a complete JSON-like object: {\"title\": \"...\", \"url\": \"...\", \"snippet\": \"...\"}\n\
-            - Ensure findings are reported as 'verified: true' if they are backed by sources in the PROGRESS section.\n\
-            - NEVER provide examples of HTML, SVG, or code unless explicitly asked for 'code' or 'markup'.");
+        // No hard-coded logic needed, instructions are in DB
     }
 
     if domain == "stealth" {
-        initial_prompt.push_str("\n\n═══ RESEARCH SUMMARY RULE ═══\n\
-            - If you find evidence, you MUST provide a concise overview in the 'summary' field.\n\
-            - NEVER return an empty summary if evidence was found.");
+        // No hard-coded logic needed, instructions are in DB
     }
 
     let s = match sqlx::query_as::<_, crate::db::Supervisor>(

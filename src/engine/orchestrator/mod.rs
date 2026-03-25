@@ -74,16 +74,13 @@ async fn heuristic_decision(db: &crate::db::Database, query: &str) -> Orchestrat
     // Phase 2: Orchestration Generalization
     let inferred_domain = discovery::discover_fast_path_domain(db, query).await;
     let direct_chat_markers = [
-        "what",
-        "who",
-        "when",
-        "where",
-        "why",
-        "how",
-        "explain",
-        "tell me",
-        "help me understand",
-        "summarize",
+        "hello",
+        "hi",
+        "hey",
+        "help",
+        "tell me a joke",
+        "who are you",
+        "what can you do",
     ];
     let delegation_markers = [
         "open ",
@@ -901,7 +898,7 @@ pub async fn orchestrate_request<'a>(
                     step,
                     result
                 ));
-                final_report.push_str(&format!("\n\n### Step {}: {}\n{}", i + 1, step, result));
+                final_report.push_str(&format!("\n\n{}", result));
                 record_event(
                     db,
                     run_id,
@@ -966,9 +963,7 @@ pub async fn orchestrate_request<'a>(
                             result
                         ));
                         final_report.push_str(&format!(
-                            "\n\n### Step {}: {}\n{}",
-                            i + 1,
-                            step,
+                            "\n\n{}",
                             result
                         ));
                         record_event(
@@ -1102,9 +1097,7 @@ pub async fn orchestrate_request<'a>(
                         final_result
                     ));
                     final_report.push_str(&format!(
-                        "\n\n### Step {}: {}\n{}",
-                        i + 1,
-                        step,
+                        "\n\n{}",
                         final_result
                     ));
                     record_event(
@@ -1166,7 +1159,7 @@ pub async fn orchestrate_request<'a>(
         return bypass;
     }
 
-    let chart_markers = ["---CHART_SVG---", "---CHART_HTML---", "---CHART_ASSET---", "---SEARCH_RESULTS---"];
+    let chart_markers = ["---CHART_SVG---", "---CHART_HTML---", "---CHART_ASSET---"];
     for marker in &chart_markers {
         if final_report.contains(marker) {
             println!("📊 CHART MARKER found in final_report — bypassing synthesizer.");
@@ -1199,7 +1192,7 @@ pub async fn orchestrate_request<'a>(
 
     let synthesis_instructions = synthesizer_agent
         .map(|a| a.instructions.as_str())
-        .unwrap_or("You are a helpful assistant. Present research findings clearly in plain Markdown. Never output JSON.");
+        .unwrap_or("You are a research synthesizer. Produce clean, detailed Markdown from research findings.");
 
     let synthesis_agent =
         rig::agent::AgentBuilder::new(ollama_client.completion_model(&synthesis_model))
@@ -1230,8 +1223,7 @@ pub async fn orchestrate_request<'a>(
 
     let synthesis_prompt = format!(
         "USER_QUERY: {}\n\nRESEARCH FINDINGS:\n{}\n\n\
-         Instructions: {}\n\
-         If the findings show a simple success, keep it brief unless the style dictates otherwise.",
+         Instructions: {}",
         query, final_report, style_instructions
     );
 
