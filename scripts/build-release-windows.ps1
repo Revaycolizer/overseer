@@ -65,7 +65,10 @@ $setupExeName = "Overseer-$Tag-windows-x64-setup.exe"
 $setupExePath = Join-Path $releaseRoot $setupExeName
 $manifestPath = Join-Path $releaseRoot "release-windows-x64.json"
 $checksumsPath = Join-Path $releaseRoot "SHA256SUMS-windows-x64.txt"
-$exeSource = Join-Path $repoRoot "target\release\overseer.exe"
+$dxAppRoot = Join-Path $repoRoot "target\dx\overseer\release\windows\app"
+$dxExeSource = Join-Path $dxAppRoot "overseer.exe"
+$dxAssetsSource = Join-Path $dxAppRoot "assets"
+$exeSource = $dxExeSource
 $toolScriptsSource = Resolve-FirstExistingPath -Candidates @(
     (Join-Path $repoRoot "tool_scripts"),
     (Join-Path $repoRoot "src\engine\scripts"),
@@ -79,14 +82,17 @@ $releaseNotesSource = Join-Path $repoRoot "releases\notes\$Tag.md"
 
 if (-not $SkipBuild) {
     Write-Host "[INFO] Building Overseer $Tag..."
-    cargo build --release --features desktop
+    dx build --platform desktop --release
     if ($LASTEXITCODE -ne 0) {
-        throw "cargo build failed with exit code $LASTEXITCODE"
+        throw "dx build failed with exit code $LASTEXITCODE"
     }
 }
 
 if (-not (Test-Path $exeSource)) {
     throw "Compiled executable not found at $exeSource"
+}
+if (-not (Test-Path $dxAssetsSource)) {
+    throw "Bundled desktop assets not found at $dxAssetsSource"
 }
 
 if (Test-Path $releaseRoot) {
@@ -98,7 +104,7 @@ New-Item -ItemType Directory -Path (Join-Path $portableRoot "src\engine") -Force
 
 Write-Host "[INFO] Staging portable package..."
 Copy-RequiredItem -Source $exeSource -Destination (Join-Path $portableRoot "Overseer.exe")
-Copy-RequiredItem -Source (Join-Path $repoRoot "assets") -Destination (Join-Path $portableRoot "assets")
+Copy-RequiredItem -Source $dxAssetsSource -Destination (Join-Path $portableRoot "assets")
 Copy-RequiredItem -Source (Join-Path $repoRoot "config") -Destination (Join-Path $portableRoot "config")
 if ($toolScriptsSource) {
     Copy-RequiredItem -Source $toolScriptsSource -Destination (Join-Path $portableRoot "tool_scripts")
