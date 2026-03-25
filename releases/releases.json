@@ -1,16 +1,16 @@
 {
   "product": "Overseer",
-  "updated_at": "2026-03-24T00:00:00Z",
-  "latest": "v0.1.1",
+  "updated_at": "2026-03-25T00:00:00Z",
+  "latest": "v0.1.2",
   "channels": {
-    "latest": "v0.1.1",
-    "stable": "v0.1.1"
+    "latest": "v0.1.2",
+    "stable": "v0.1.2"
   },
   "badges": [
     {
       "key": "latest",
       "label": "Latest",
-      "value": "v0.1.1",
+      "value": "v0.1.2",
       "color": "2563eb"
     },
     {
@@ -28,12 +28,67 @@
   ],
   "releases": [
     {
-      "version": "0.1.1",
-      "tag": "v0.1.1",
+      "version": "0.1.2",
+      "tag": "v0.1.2",
       "channel": "stable",
       "is_latest": true,
       "is_stable": true,
       "labels": ["latest", "stable", "windows-x64"],
+      "published_at": "2026-03-25T00:00:00Z",
+      "summary": "Native computer fast paths, reliable screenshot-to-chat rendering, and stronger machine-state inspection across the desktop operator flow.",
+      "notes_file": "releases/notes/v0.1.2.md",
+      "assets": [
+        {
+          "name": "Overseer-v0.1.2-windows-x64-setup.exe",
+          "platform": "windows-x64",
+          "kind": "setup-exe",
+          "label": "Windows Installer",
+          "path": "dist/v0.1.2/Overseer-v0.1.2-windows-x64-setup.exe"
+        },
+        {
+          "name": "Overseer-v0.1.2-windows-x64.zip",
+          "platform": "windows-x64",
+          "kind": "portable-zip",
+          "label": "Portable Zip",
+          "path": "dist/v0.1.2/Overseer-v0.1.2-windows-x64.zip"
+        },
+        {
+          "name": "install-overseer.ps1",
+          "platform": "windows-x64",
+          "kind": "installer-script",
+          "label": "Install Script",
+          "path": "dist/v0.1.2/install-overseer.ps1"
+        },
+        {
+          "name": "uninstall-overseer.ps1",
+          "platform": "windows-x64",
+          "kind": "uninstaller-script",
+          "label": "Uninstall Script",
+          "path": "dist/v0.1.2/uninstall-overseer.ps1"
+        },
+        {
+          "name": "SHA256SUMS-windows-x64.txt",
+          "platform": "windows-x64",
+          "kind": "checksums",
+          "label": "SHA256 Checksums",
+          "path": "dist/v0.1.2/SHA256SUMS-windows-x64.txt"
+        },
+        {
+          "name": "release-windows-x64.json",
+          "platform": "windows-x64",
+          "kind": "release-manifest",
+          "label": "Release Manifest",
+          "path": "dist/v0.1.2/release-windows-x64.json"
+        }
+      ]
+    },
+    {
+      "version": "0.1.1",
+      "tag": "v0.1.1",
+      "channel": "stable",
+      "is_latest": false,
+      "is_stable": false,
+      "labels": ["windows-x64"],
       "published_at": "2026-03-23T00:00:00Z",
       "summary": "Computer supervision, approval-backed desktop control, runtime health checks, and sharper chat, trace, and workflow surfaces.",
       "notes_file": "releases/notes/v0.1.1.md",

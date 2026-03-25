@@ -136,6 +136,19 @@ fn computer_strategy_hint(query: &str, step: &str, tools: &[crate::engine::utils
     }
 
     let mut guidance = Vec::new();
+    if lower.contains("screenshot")
+        || lower.contains("screen capture")
+        || lower.contains("capture screen")
+    {
+        if has_os_tool {
+            guidance.push("For screenshot tasks, call `os_tool` with JSON like {\"action\":\"screenshot\"}. Do not open Snipping Tool or any other UI unless the user explicitly asked for that app.");
+        }
+        if has_vision_tool {
+            guidance.push("After taking a screenshot, use `vision_analysis` only if you need to confirm the live desktop state or reference the screenshot artifact.");
+        }
+        guidance.push("A native screenshot artifact counts as completion for a screenshot request.");
+    }
+
     if lower.contains("active window")
         || lower.contains("which window")
         || lower.contains("what window")
@@ -151,6 +164,43 @@ fn computer_strategy_hint(query: &str, step: &str, tools: &[crate::engine::utils
             guidance.push("Use `os_tool` with action `get_state` or `list_windows` to gather evidence about the active window and visible windows.");
         }
         guidance.push("Do not answer from memory. Observation tasks require tool evidence before you summarize anything.");
+    }
+
+    if lower.contains("background task")
+        || lower.contains("background tasks")
+        || lower.contains("running process")
+        || lower.contains("running processes")
+        || lower.contains("what's running")
+        || lower.contains("whats running")
+    {
+        if has_os_tool {
+            guidance.push("Use `os_tool` with action `list_processes` to inspect the machine's currently running processes and background tasks.");
+        }
+        guidance.push("Do not explain Windows settings. Report the actual currently running processes from tool output.");
+    }
+
+    if lower.contains("resume")
+        || lower.contains("file path")
+        || lower.contains("find file")
+        || lower.contains("locate file")
+        || ((lower.contains("find") || lower.contains("locate") || lower.contains("where is"))
+            && (lower.contains("file") || lower.contains("path")))
+    {
+        if has_os_tool {
+            guidance.push("Use `os_tool` with action `find_files` to search the local machine and return exact matching file paths. If the user wants the file contents, follow up with `read_file`. If they want it opened, follow up with `open_file`.");
+        }
+        guidance.push("Do not open File Explorer unless the user explicitly asked you to. Return the real file path from native search results.");
+    }
+
+    if lower.contains("browser")
+        || lower.contains("current tab")
+        || lower.contains("current page")
+        || lower.contains("which browser")
+    {
+        if has_os_tool {
+            guidance.push("Use `os_tool` with action `browser_state` to inspect open browser windows and titles on the local machine.");
+        }
+        guidance.push("Do not guess the user's browser state. Report the actual open browser windows from tool output.");
     }
 
     if guidance.is_empty() {
@@ -413,7 +463,86 @@ impl SupervisorExecutionResult {
     }
 
     pub fn display_text(&self) -> String {
-        let mut final_summary = self.summary.clone();
+        fn normalize_summary(summary: &str) -> String {
+            summary
+                .lines()
+                .map(|line| {
+                    let trimmed = line.trim_start();
+                    if trimmed.starts_with('#') {
+                        trimmed.trim_start_matches('#').trim().to_string()
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_string()
+        }
+
+        fn extract_artifact_path(item: &str) -> Option<String> {
+            if item.to_lowercase().contains(".png")
+                || item.to_lowercase().contains(".jpg")
+                || item.to_lowercase().contains(".jpeg")
+                || item.to_lowercase().contains(".webp")
+            {
+                return Some(item.trim().to_string());
+            }
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(item) {
+                if let Some(path) = value.get("path").and_then(|v| v.as_str()) {
+                    return Some(path.to_string());
+                }
+            }
+            None
+        }
+
+        fn screenshot_dimensions(evidence: &[String], raw_response: &str) -> Option<String> {
+            for item in evidence {
+                let lower = item.to_lowercase();
+                if lower.contains("screenshot dimensions:") {
+                    return Some(item.trim().to_string());
+                }
+            }
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw_response) {
+                if let Some(width) = value.get("width").and_then(|v| v.as_i64()) {
+                    if let Some(height) = value.get("height").and_then(|v| v.as_i64()) {
+                        return Some(format!("Dimensions: {}x{}.", width, height));
+                    }
+                }
+            }
+            None
+        }
+
+        fn is_html_noise(value: &str) -> bool {
+            let lower = value.to_lowercase();
+            lower.contains("<img ") || lower.contains("```html") || lower.contains("<html")
+        }
+
+        let mut final_summary = normalize_summary(&self.summary);
+
+        let screenshot_artifact = self
+            .artifacts
+            .iter()
+            .find_map(|item| extract_artifact_path(item))
+            .or_else(|| self.evidence.iter().find_map(|item| extract_artifact_path(item)));
+
+        if let Some(path) = screenshot_artifact {
+            let mut parts = vec![if final_summary.is_empty() {
+                "Desktop screenshot captured successfully.".to_string()
+            } else {
+                final_summary
+            }];
+            if let Some(dimensions) = screenshot_dimensions(&self.evidence, &self.raw_response) {
+                parts.push(dimensions);
+            }
+            if std::path::Path::new(&path).exists() {
+                parts.push("Screenshot attached below.".to_string());
+            }
+            if let Some(error) = &self.error {
+                parts.push(format!("Error: {}", error));
+            }
+            return parts.join("\n\n");
+        }
 
         // 1. Try to find a primary image from evidence to show inline (ChatGPT-style)
         if !self.evidence.is_empty() {
@@ -498,6 +627,9 @@ impl SupervisorExecutionResult {
             let mut link_lines: Vec<String> = Vec::new();
 
             for e in &self.evidence {
+                if is_html_noise(e) {
+                    continue;
+                }
                 // Try to parse as JSON object with url/title/snippet
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(e) {
                     if let Some(obj) = value.as_object() {
@@ -582,6 +714,211 @@ impl SupervisorExecutionResult {
 
         parts.join("\n\n")
     }
+}
+
+fn is_native_screenshot_request(query: &str, step: &str, domain: &str) -> bool {
+    if !matches!(domain, "computer" | "desktop") {
+        return false;
+    }
+    let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
+    (combined.contains("desktop") || combined.contains("screen"))
+        && (combined.contains("screenshot")
+            || combined.contains("screen capture")
+            || combined.contains("capture screen")
+            || combined.contains("capture my desktop")
+            || combined.contains("take a screenshot"))
+}
+
+fn is_native_process_list_request(query: &str, step: &str, domain: &str) -> bool {
+    if !matches!(domain, "computer" | "desktop") {
+        return false;
+    }
+    let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
+    (combined.contains("background task")
+        || combined.contains("background tasks")
+        || combined.contains("running process")
+        || combined.contains("running processes")
+        || combined.contains("what's running")
+        || combined.contains("whats running"))
+        && !(combined.contains("how to") || combined.contains("manage background tasks"))
+}
+
+fn is_native_file_search_request(query: &str, step: &str, domain: &str) -> bool {
+    if !matches!(domain, "computer" | "desktop") {
+        return false;
+    }
+    let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
+    (combined.contains("resume")
+        || combined.contains("file path")
+        || combined.contains("find file")
+        || combined.contains("locate file")
+        || combined.contains(".pdf")
+        || combined.contains(".doc")
+        || combined.contains(".docx")
+        || ((combined.contains("find") || combined.contains("locate") || combined.contains("where is"))
+            && (combined.contains("file") || combined.contains("path"))))
+        && !combined.contains("open file explorer")
+}
+
+fn is_native_browser_state_request(query: &str, step: &str, domain: &str) -> bool {
+    if !matches!(domain, "computer" | "desktop") {
+        return false;
+    }
+    let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
+    combined.contains("current tab")
+        || combined.contains("current page")
+        || combined.contains("browser state")
+        || combined.contains("which browser")
+        || (combined.contains("browser") && combined.contains("open"))
+}
+
+fn parse_browser_state_payload(payload: &str) -> (Vec<String>, String) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+        let mut evidence = Vec::new();
+        if let Some(windows) = value.get("browser_windows").and_then(|item| item.as_array()) {
+            for window in windows.iter().take(12) {
+                let name = window
+                    .get("ProcessName")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("browser");
+                let title = window
+                    .get("MainWindowTitle")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("Untitled");
+                evidence.push(format!("{name}: {title}"));
+            }
+        }
+        let summary = if evidence.is_empty() {
+            "No open browser windows were detected.".to_string()
+        } else {
+            "Observed the current open browser windows on this machine.".to_string()
+        };
+        return (evidence, summary);
+    }
+
+    (
+        vec!["Browser windows were inspected natively.".to_string()],
+        "Observed the current browser state.".to_string(),
+    )
+}
+
+fn parse_file_search_payload(payload: &str) -> (Vec<String>, Vec<String>, String) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+        let mut evidence = Vec::new();
+        let mut artifacts = Vec::new();
+        if let Some(results) = value.get("results").and_then(|item| item.as_array()) {
+            for result in results.iter().take(12) {
+                let name = result
+                    .get("name")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("unknown");
+                let path = result
+                    .get("path")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("");
+                if !path.is_empty() {
+                    evidence.push(format!("{name}: {path}"));
+                    artifacts.push(path.to_string());
+                }
+            }
+        }
+
+        let summary = if let Some(first) = artifacts.first() {
+            format!("Found matching file paths on this PC. Best match: {}", first)
+        } else {
+            "No matching file path was found on this PC.".to_string()
+        };
+
+        return (evidence, artifacts, summary);
+    }
+
+    (
+        vec!["Local file search completed.".to_string()],
+        Vec::new(),
+        "Local file search completed.".to_string(),
+    )
+}
+
+fn parse_process_list_payload(payload: &str) -> (Vec<String>, String) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+        let total = value
+            .get("total_processes")
+            .and_then(|item| item.as_i64())
+            .unwrap_or(0);
+        let background = value
+            .get("background_count")
+            .and_then(|item| item.as_i64())
+            .unwrap_or(0);
+
+        let mut evidence = Vec::new();
+        if let Some(processes) = value
+            .get("background_processes")
+            .and_then(|item| item.as_array())
+        {
+            for process in processes.iter().take(12) {
+                let name = process
+                    .get("ProcessName")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("unknown");
+                let pid = process
+                    .get("Id")
+                    .and_then(|item| item.as_i64())
+                    .unwrap_or_default();
+                let cpu = process
+                    .get("CPU")
+                    .and_then(|item| item.as_f64())
+                    .unwrap_or(0.0);
+                evidence.push(format!("{name} (PID {pid}, CPU {cpu:.1})"));
+            }
+        }
+
+        let summary = if total > 0 {
+            format!(
+                "Observed {} running processes. Here are the current background tasks with the highest activity.",
+                total
+            )
+        } else if background > 0 {
+            format!(
+                "Observed {} background processes. Here are the current background tasks with the highest activity.",
+                background
+            )
+        } else {
+            "Observed the current running background tasks.".to_string()
+        };
+
+        return (evidence, summary);
+    }
+
+    (
+        vec!["Current running processes were inspected natively.".to_string()],
+        "Observed the current running background tasks.".to_string(),
+    )
+}
+
+fn parse_screenshot_artifact_payload(payload: &str) -> (Vec<String>, Vec<String>, String) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+        let path = value
+            .get("path")
+            .and_then(|item| item.as_str())
+            .unwrap_or("screenshot artifact");
+        let width = value.get("width").and_then(|item| item.as_i64());
+        let height = value.get("height").and_then(|item| item.as_i64());
+        let summary = match (width, height) {
+            (Some(w), Some(h)) => format!("Captured a desktop screenshot at {}x{}.", w, h),
+            _ => "Captured a desktop screenshot.".to_string(),
+        };
+        let mut evidence = vec![format!("Native screenshot artifact created at {}.", path)];
+        if let (Some(w), Some(h)) = (width, height) {
+            evidence.push(format!("Screenshot dimensions: {}x{}.", w, h));
+        }
+        return (evidence, vec![path.to_string()], summary);
+    }
+
+    (
+        vec!["Native screenshot artifact created.".to_string()],
+        vec!["screenshot".to_string()],
+        "Captured a desktop screenshot.".to_string(),
+    )
 }
 
 pub async fn dispatch_domain(
@@ -670,6 +1007,214 @@ pub async fn dispatch_domain(
     let tools = crate::backend::get_supervisor_tools(db, s.id)
         .await
         .unwrap_or_default();
+
+    if is_native_screenshot_request(query, step, domain) {
+        if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
+            let raw = crate::engine::tools::call_dynamic_tool(
+                os_tool,
+                serde_json::json!({ "action": "screenshot" }),
+            )
+            .await
+            .map_err(|err| format!("Native screenshot capture failed: {}", err))?;
+
+            let (evidence, artifacts, summary) = parse_screenshot_artifact_payload(&raw);
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_started",
+                "running",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some("Using native screenshot capture fast path."),
+                Some(r#"{"action":"screenshot"}"#),
+            )
+            .await;
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_completed",
+                "completed",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some(&summary),
+                Some(&raw),
+            )
+            .await;
+
+            return Ok(SupervisorExecutionResult::completed(
+                summary,
+                evidence,
+                artifacts,
+                true,
+                s.hide_evidence,
+                raw,
+            ));
+        }
+    }
+
+    if is_native_process_list_request(query, step, domain) {
+        if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
+            let raw = crate::engine::tools::call_dynamic_tool(
+                os_tool,
+                serde_json::json!({ "action": "list_processes" }),
+            )
+            .await
+            .map_err(|err| format!("Native process inspection failed: {}", err))?;
+
+            let (evidence, summary) = parse_process_list_payload(&raw);
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_started",
+                "running",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some("Using native running-process inspection fast path."),
+                Some(r#"{"action":"list_processes"}"#),
+            )
+            .await;
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_completed",
+                "completed",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some(&summary),
+                Some(&raw),
+            )
+            .await;
+
+            return Ok(SupervisorExecutionResult::completed(
+                summary,
+                evidence,
+                Vec::new(),
+                true,
+                s.hide_evidence,
+                raw,
+            ));
+        }
+    }
+
+    if is_native_file_search_request(query, step, domain) {
+        if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
+            let raw = crate::engine::tools::call_dynamic_tool(
+                os_tool,
+                serde_json::json!({ "action": "find_files", "query": query }),
+            )
+            .await
+            .map_err(|err| format!("Native file search failed: {}", err))?;
+
+            let (evidence, artifacts, summary) = parse_file_search_payload(&raw);
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_started",
+                "running",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some("Using native local-file search fast path."),
+                Some(&format!(r#"{{"action":"find_files","query":{:?}}}"#, query)),
+            )
+            .await;
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_completed",
+                "completed",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some(&summary),
+                Some(&raw),
+            )
+            .await;
+
+            return Ok(SupervisorExecutionResult::completed(
+                summary,
+                evidence,
+                artifacts,
+                true,
+                s.hide_evidence,
+                raw,
+            ));
+        }
+    }
+
+    if is_native_browser_state_request(query, step, domain) {
+        if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
+            let raw = crate::engine::tools::call_dynamic_tool(
+                os_tool,
+                serde_json::json!({ "action": "browser_state" }),
+            )
+            .await
+            .map_err(|err| format!("Native browser inspection failed: {}", err))?;
+
+            let (evidence, summary) = parse_browser_state_payload(&raw);
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_started",
+                "running",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some("Using native browser-state inspection fast path."),
+                Some(r#"{"action":"browser_state"}"#),
+            )
+            .await;
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_completed",
+                "completed",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some(&summary),
+                Some(&raw),
+            )
+            .await;
+
+            return Ok(SupervisorExecutionResult::completed(
+                summary,
+                evidence,
+                Vec::new(),
+                true,
+                s.hide_evidence,
+                raw,
+            ));
+        }
+    }
 
     let agent = AgentBuilder::new(ollama_client.completion_model(&supervisor_model))
     .preamble(s.instructions.as_deref().unwrap_or(""))

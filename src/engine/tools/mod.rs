@@ -1,3 +1,9 @@
+use std::path::PathBuf;
+
+#[cfg(windows)]
+use enigo::{
+    Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings,
+};
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use regex::Regex;
@@ -263,7 +269,7 @@ async fn native_http_request(args: &serde_json::Value) -> Result<String, Dynamic
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(10))
         .timeout(std::time::Duration::from_secs(30))
-        .user_agent("Overseer/0.1.1 (+local-first mission control)")
+        .user_agent("Overseer/0.1.2 (+local-first mission control)")
         .build()
         .map_err(|err| DynamicToolError::ExecutionFailed {
             tool: "http_request".to_string(),
@@ -344,7 +350,7 @@ async fn native_stealth_browse(args: &serde_json::Value) -> Result<String, Dynam
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(10))
         .timeout(std::time::Duration::from_secs(30))
-        .user_agent("Mozilla/5.0 Overseer/0.1.1")
+        .user_agent("Mozilla/5.0 Overseer/0.1.2")
         .build()
         .map_err(|err| DynamicToolError::ExecutionFailed {
             tool: "stealth_browse".to_string(),
@@ -398,7 +404,7 @@ async fn native_stealth_search(args: &serde_json::Value) -> Result<String, Dynam
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(10))
         .timeout(std::time::Duration::from_secs(30))
-        .user_agent("Mozilla/5.0 Overseer/0.1.1")
+        .user_agent("Mozilla/5.0 Overseer/0.1.2")
         .build()
         .map_err(|err| DynamicToolError::ExecutionFailed {
             tool: "stealth_search".to_string(),
@@ -552,11 +558,114 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         return "list_windows".to_string();
     }
 
+    if matches!(
+        lower.as_str(),
+        "list_processes" | "processes" | "tasks" | "background_tasks" | "background processes"
+    ) || ((lower.contains("background") || lower.contains("running"))
+        && (lower.contains("task") || lower.contains("process")))
+        || lower.contains("what's running")
+        || lower.contains("whats running")
+    {
+        return "list_processes".to_string();
+    }
+
+    if matches!(lower.as_str(), "find_files" | "search_files" | "locate_file")
+        || (lower.contains("find") && (lower.contains("file") || lower.contains("path")))
+        || (lower.contains("locate") && lower.contains("file"))
+        || (lower.contains("search") && lower.contains("file"))
+    {
+        return "find_files".to_string();
+    }
+
+    if matches!(lower.as_str(), "read_file" | "read" | "show_file")
+        || ((lower.contains("read") || lower.contains("show"))
+            && (lower.contains("file") || lower.contains(".txt") || lower.contains(".md") || lower.contains(".json")))
+    {
+        return "read_file".to_string();
+    }
+
+    if matches!(lower.as_str(), "open_file" | "open document" | "open path")
+        || (lower.contains("open") && (lower.contains("file") || lower.contains("document") || lower.contains("path")))
+    {
+        return "open_file".to_string();
+    }
+
+    if matches!(lower.as_str(), "browser_state" | "browser" | "tab_state")
+        || (lower.contains("browser") && (lower.contains("state") || lower.contains("open") || lower.contains("which")))
+        || lower.contains("current tab")
+        || lower.contains("current page")
+    {
+        return "browser_state".to_string();
+    }
+
     if matches!(lower.as_str(), "focus" | "activate" | "activate_window")
         || lower.starts_with("focus ")
         || lower.starts_with("activate ")
     {
         return "focus".to_string();
+    }
+
+    if matches!(
+        lower.as_str(),
+        "screenshot" | "capture" | "capture_screen" | "screen_capture"
+    ) || lower.contains("take screenshot")
+        || lower.contains("capture screen")
+    {
+        return "screenshot".to_string();
+    }
+
+    if matches!(lower.as_str(), "double_click" | "double click")
+        || lower.starts_with("double click")
+    {
+        return "double_click".to_string();
+    }
+
+    if matches!(lower.as_str(), "right_click" | "right click")
+        || lower.starts_with("right click")
+    {
+        return "right_click".to_string();
+    }
+
+    if matches!(lower.as_str(), "click" | "left_click" | "tap")
+        || lower.starts_with("click ")
+        || lower.starts_with("tap ")
+    {
+        return "click".to_string();
+    }
+
+    if matches!(lower.as_str(), "move_mouse" | "move cursor" | "move pointer")
+        || lower.starts_with("move mouse")
+        || lower.starts_with("move cursor")
+    {
+        return "move_mouse".to_string();
+    }
+
+    if matches!(lower.as_str(), "type" | "type_text" | "enter_text" | "input_text")
+        || lower.starts_with("type ")
+        || lower.starts_with("enter text ")
+        || lower.starts_with("input text ")
+    {
+        return "type_text".to_string();
+    }
+
+    if matches!(lower.as_str(), "press_key" | "keypress" | "key_press")
+        || lower.starts_with("press ")
+    {
+        return "press_key".to_string();
+    }
+
+    if matches!(lower.as_str(), "hotkey" | "shortcut" | "key_combo" | "combo")
+        || lower.starts_with("hotkey ")
+        || lower.starts_with("shortcut ")
+        || lower.starts_with("combo ")
+    {
+        return "hotkey".to_string();
+    }
+
+    if matches!(lower.as_str(), "scroll" | "scroll_down" | "scroll_up")
+        || lower.starts_with("scroll ")
+    {
+        return "scroll".to_string();
     }
 
     if matches!(lower.as_str(), "launch" | "open_app" | "start_app")
@@ -591,7 +700,7 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
 fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<String> {
     if let Some(value) = read_string_field(
         input,
-        &["target", "title", "window", "app", "application", "url"],
+        &["target", "title", "window", "app", "application", "url", "query", "filename", "name"],
     ) {
         return Some(value);
     }
@@ -633,10 +742,214 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
                 return Some(rest.trim().to_string());
             }
         }
+        "find_files" => {
+            if let Some(rest) = raw.strip_prefix("find ") {
+                return Some(rest.trim().to_string());
+            }
+            if let Some(rest) = raw.strip_prefix("search for ") {
+                return Some(rest.trim().to_string());
+            }
+            if let Some(rest) = raw.strip_prefix("locate ") {
+                return Some(rest.trim().to_string());
+            }
+        }
+        "read_file" | "open_file" => {
+            if let Some(rest) = raw.strip_prefix("read ") {
+                return Some(rest.trim().to_string());
+            }
+            if let Some(rest) = raw.strip_prefix("open ") {
+                return Some(rest.trim().to_string());
+            }
+            if let Some(rest) = raw.strip_prefix("show ") {
+                return Some(rest.trim().to_string());
+            }
+        }
         _ => {}
     }
 
     None
+}
+
+fn extract_text_value(input: &serde_json::Value) -> Option<String> {
+    if let Some(value) = read_string_field(input, &["text", "value", "content"]) {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    let raw = read_string_field(input, &["input"])?;
+    let lower = raw.to_lowercase();
+    for prefix in ["type ", "enter text ", "input text "] {
+        if lower.starts_with(prefix) {
+            let extracted = raw[prefix.len()..].trim();
+            if !extracted.is_empty() {
+                return Some(extracted.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn extract_coordinates(input: &serde_json::Value) -> Option<(i32, i32)> {
+    let x = read_i64_field(input, &["x", "left"]).map(|value| value as i32);
+    let y = read_i64_field(input, &["y", "top"]).map(|value| value as i32);
+    match (x, y) {
+        (Some(x), Some(y)) => return Some((x, y)),
+        _ => {}
+    }
+
+    if let Some(coords) = input.get("coords").and_then(|value| value.as_array()) {
+        if coords.len() >= 2 {
+            let x = coords.first().and_then(|value| value.as_i64())? as i32;
+            let y = coords.get(1).and_then(|value| value.as_i64())? as i32;
+            return Some((x, y));
+        }
+    }
+
+    None
+}
+
+fn extract_key_tokens(input: &serde_json::Value) -> Vec<String> {
+    if let Some(keys) = input.get("keys").and_then(|value| value.as_array()) {
+        let tokens: Vec<String> = keys
+            .iter()
+            .filter_map(|value| value.as_str())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect();
+        if !tokens.is_empty() {
+            return tokens;
+        }
+    }
+
+    if let Some(key) = read_string_field(input, &["key", "shortcut", "combo"]) {
+        return key
+            .split(|c| matches!(c, '+' | ',' | ' '))
+            .map(str::trim)
+            .filter(|token| !token.is_empty())
+            .map(ToString::to_string)
+            .collect();
+    }
+
+    if let Some(raw) = read_string_field(input, &["input"]) {
+        let lower = raw.to_lowercase();
+        let prefixes = [
+            "press ",
+            "hotkey ",
+            "shortcut ",
+            "key combo ",
+            "combo ",
+        ];
+        for prefix in prefixes {
+            if lower.starts_with(prefix) {
+                return raw[prefix.len()..]
+                    .split(|c| matches!(c, '+' | ',' | ' '))
+                    .map(str::trim)
+                    .filter(|token| !token.is_empty())
+                    .map(ToString::to_string)
+                    .collect();
+            }
+        }
+    }
+
+    Vec::new()
+}
+
+#[cfg(windows)]
+fn key_from_token(token: &str) -> Option<Key> {
+    let lower = token.trim().to_lowercase();
+    Some(match lower.as_str() {
+        "ctrl" | "control" => Key::Control,
+        "alt" | "option" => Key::Alt,
+        "shift" => Key::Shift,
+        "meta" | "win" | "windows" | "super" | "cmd" | "command" => Key::Meta,
+        "enter" | "return" => Key::Return,
+        "tab" => Key::Tab,
+        "esc" | "escape" => Key::Escape,
+        "backspace" => Key::Backspace,
+        "delete" | "del" => Key::Delete,
+        "space" => Key::Space,
+        "up" => Key::UpArrow,
+        "down" => Key::DownArrow,
+        "left" => Key::LeftArrow,
+        "right" => Key::RightArrow,
+        "pageup" | "page_up" => Key::PageUp,
+        "pagedown" | "page_down" => Key::PageDown,
+        "home" => Key::Home,
+        "end" => Key::End,
+        "f1" => Key::F1,
+        "f2" => Key::F2,
+        "f3" => Key::F3,
+        "f4" => Key::F4,
+        "f5" => Key::F5,
+        "f6" => Key::F6,
+        "f7" => Key::F7,
+        "f8" => Key::F8,
+        "f9" => Key::F9,
+        "f10" => Key::F10,
+        "f11" => Key::F11,
+        "f12" => Key::F12,
+        _ => {
+            let mut chars = lower.chars();
+            let first = chars.next()?;
+            if chars.next().is_none() {
+                Key::Unicode(first)
+            } else {
+                return None;
+            }
+        }
+    })
+}
+
+#[cfg(windows)]
+fn with_enigo() -> Result<Enigo, DynamicToolError> {
+    Enigo::new(&Settings::default()).map_err(|err| DynamicToolError::ExecutionFailed {
+        tool: "os_tool".to_string(),
+        details: format!("Failed to initialize native desktop input: {}", err),
+    })
+}
+
+#[cfg(windows)]
+fn runtime_artifacts_dir() -> Result<PathBuf, DynamicToolError> {
+    let dir = crate::engine::utils::discovery::runtime_dir().join("artifacts");
+    std::fs::create_dir_all(&dir).map_err(|err| DynamicToolError::ExecutionFailed {
+        tool: "vision_analysis".to_string(),
+        details: format!("Failed to prepare runtime artifacts directory: {}", err),
+    })?;
+    Ok(dir)
+}
+
+#[cfg(windows)]
+async fn capture_windows_screenshot_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S-%3f");
+    let output_path = runtime_artifacts_dir()?.join(format!("desktop-{}.png", timestamp));
+    let output_path_str = output_path.to_string_lossy().replace('\'', "''");
+    let script = format!(
+        r#"
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+$bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size)
+$bitmap.Save('{path}', [System.Drawing.Imaging.ImageFormat]::Png)
+$graphics.Dispose()
+$bitmap.Dispose()
+[pscustomobject]@{{
+    action = 'screenshot'
+    path = '{path}'
+    width = $bounds.Width
+    height = $bounds.Height
+    left = $bounds.Left
+    top = $bounds.Top
+}} | ConvertTo-Json -Compress
+"#,
+        path = output_path_str
+    );
+
+    run_powershell_hidden(&script, tool_name).await
 }
 
 async fn run_powershell_hidden(script: &str, tool_name: &str) -> Result<String, DynamicToolError> {
@@ -723,6 +1036,212 @@ $windows = Get-Process |
     run_powershell_hidden(script, tool_name).await
 }
 
+#[cfg(windows)]
+async fn windows_process_list_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    let script = r#"
+$all = Get-Process
+$top = $all |
+    Sort-Object -Property CPU -Descending |
+    Select-Object -First 20 ProcessName, Id, CPU, WS, MainWindowTitle
+$background = $all |
+    Where-Object { -not $_.MainWindowTitle -or $_.MainWindowTitle.Trim().Length -eq 0 } |
+    Sort-Object -Property CPU -Descending |
+    Select-Object -First 20 ProcessName, Id, CPU, WS
+[pscustomobject]@{
+    action = 'list_processes'
+    total_processes = @($all).Count
+    background_count = @($background).Count
+    top_processes = $top
+    background_processes = $background
+} | ConvertTo-Json -Depth 5 -Compress
+"#;
+
+    run_powershell_hidden(script, tool_name).await
+}
+
+#[cfg(windows)]
+async fn windows_find_files_json(
+    tool_name: &str,
+    query: &str,
+) -> Result<String, DynamicToolError> {
+    let escaped_query = escape_powershell_single_quoted(query);
+    let script = format!(
+        r#"
+$query = '{query}'
+$home = [Environment]::GetFolderPath('UserProfile')
+$roots = @(
+    (Join-Path $home 'Desktop'),
+    (Join-Path $home 'Documents'),
+    (Join-Path $home 'Downloads'),
+    (Join-Path $home 'OneDrive')
+) | Where-Object {{ $_ -and (Test-Path $_) }} | Select-Object -Unique
+
+$tokens = $query.ToLower().Split(@(' ', '?', '.', ',', ':', ';', '\', '/'), [System.StringSplitOptions]::RemoveEmptyEntries) |
+    Where-Object {{ $_.Length -ge 3 -and $_ -notin @('find','path','file','files','pc','computer','my','the','in') }}
+if (-not $tokens -or $tokens.Count -eq 0) {{
+    $tokens = @($query.ToLower())
+}}
+
+$results = New-Object System.Collections.Generic.List[object]
+foreach ($root in $roots) {{
+    try {{
+        Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object {{
+                $name = $_.Name.ToLower()
+                $full = $_.FullName.ToLower()
+                foreach ($token in $tokens) {{
+                    if ($name -like "*$token*" -or $full -like "*$token*") {{ return $true }}
+                }}
+                return $false
+            }} |
+            Select-Object -First 12 |
+            ForEach-Object {{
+                $results.Add([pscustomobject]@{{
+                    name = $_.Name
+                    path = $_.FullName
+                    directory = $_.DirectoryName
+                    extension = $_.Extension
+                }})
+            }}
+    }} catch {{}}
+}}
+
+[pscustomobject]@{{
+    action = 'find_files'
+    query = $query
+    roots = $roots
+    results = $results
+}} | ConvertTo-Json -Depth 5 -Compress
+"#,
+        query = escaped_query
+    );
+
+    run_powershell_hidden(&script, tool_name).await
+}
+
+#[cfg(windows)]
+async fn windows_read_file_json(
+    tool_name: &str,
+    path: &str,
+) -> Result<String, DynamicToolError> {
+    let escaped_path = escape_powershell_single_quoted(path);
+    let script = format!(
+        r#"
+$path = '{path}'
+if (-not (Test-Path $path)) {{
+    throw "File not found: $path"
+}}
+$item = Get-Item $path
+$content = $null
+if ($item.Extension -in @('.txt','.md','.json','.rs','.toml','.yaml','.yml','.log','.csv')) {{
+    $content = Get-Content -Path $path -Raw -ErrorAction SilentlyContinue
+    if ($content -and $content.Length -gt 4000) {{
+        $content = $content.Substring(0, 4000)
+    }}
+}}
+[pscustomobject]@{{
+    action = 'read_file'
+    path = $item.FullName
+    name = $item.Name
+    extension = $item.Extension
+    size = $item.Length
+    preview = $content
+}} | ConvertTo-Json -Depth 4 -Compress
+"#,
+        path = escaped_path
+    );
+
+    run_powershell_hidden(&script, tool_name).await
+}
+
+#[cfg(windows)]
+async fn windows_open_file_json(
+    tool_name: &str,
+    path: &str,
+) -> Result<String, DynamicToolError> {
+    let escaped_path = escape_powershell_single_quoted(path);
+    let script = format!(
+        r#"
+$path = '{path}'
+if (-not (Test-Path $path)) {{
+    throw "File not found: $path"
+}}
+Start-Process -FilePath $path
+[pscustomobject]@{{
+    action = 'open_file'
+    path = (Resolve-Path $path).Path
+    ok = $true
+}} | ConvertTo-Json -Compress
+"#,
+        path = escaped_path
+    );
+
+    run_powershell_hidden(&script, tool_name).await
+}
+
+#[cfg(windows)]
+async fn windows_browser_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    let script = r#"
+$browserNames = @('chrome','msedge','firefox','brave','opera')
+$windows = Get-Process |
+    Where-Object { $browserNames -contains $_.ProcessName.ToLower() -and $_.MainWindowTitle -and $_.MainWindowTitle.Trim().Length -gt 0 } |
+    Select-Object -First 12 ProcessName, Id, MainWindowTitle
+[pscustomobject]@{
+    action = 'browser_state'
+    browser_windows = $windows
+    browser_count = @($windows).Count
+} | ConvertTo-Json -Depth 4 -Compress
+"#;
+
+    run_powershell_hidden(script, tool_name).await
+}
+
+#[cfg(not(windows))]
+async fn windows_process_list_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    run_command_simple("ps -eo pid,comm,%cpu,rss --sort=-%cpu", tool_name).await
+}
+
+#[cfg(not(windows))]
+async fn windows_find_files_json(
+    tool_name: &str,
+    _query: &str,
+) -> Result<String, DynamicToolError> {
+    Err(DynamicToolError::ExecutionFailed {
+        tool: tool_name.to_string(),
+        details: "Native file search is currently implemented for Windows only.".to_string(),
+    })
+}
+
+#[cfg(not(windows))]
+async fn windows_read_file_json(
+    tool_name: &str,
+    _path: &str,
+) -> Result<String, DynamicToolError> {
+    Err(DynamicToolError::ExecutionFailed {
+        tool: tool_name.to_string(),
+        details: "Native file read is currently implemented for Windows only.".to_string(),
+    })
+}
+
+#[cfg(not(windows))]
+async fn windows_open_file_json(
+    tool_name: &str,
+    _path: &str,
+) -> Result<String, DynamicToolError> {
+    Err(DynamicToolError::ExecutionFailed {
+        tool: tool_name.to_string(),
+        details: "Native file open is currently implemented for Windows only.".to_string(),
+    })
+}
+
+#[cfg(not(windows))]
+async fn windows_browser_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    Err(DynamicToolError::ExecutionFailed {
+        tool: tool_name.to_string(),
+        details: "Native browser state inspection is currently implemented for Windows only.".to_string(),
+    })
+}
+
 #[cfg(not(windows))]
 async fn windows_desktop_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     // Get active window title using xprop
@@ -787,6 +1306,27 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
 
     match action.as_str() {
         "get_state" | "list_windows" => windows_desktop_state_json("os_tool").await,
+        "browser_state" => windows_browser_state_json("os_tool").await,
+        "list_processes" => windows_process_list_json("os_tool").await,
+        "find_files" => {
+            let query = extract_os_tool_target(&input, "find_files").unwrap_or_else(|| stringify_tool_input(&input));
+            windows_find_files_json("os_tool", &query).await
+        }
+        "read_file" => {
+            let path = extract_os_tool_target(&input, "read_file").ok_or_else(|| DynamicToolError::ExecutionFailed {
+                tool: "os_tool".to_string(),
+                details: "Read file action requires a target path.".to_string(),
+            })?;
+            windows_read_file_json("os_tool", &path).await
+        }
+        "open_file" => {
+            let path = extract_os_tool_target(&input, "open_file").ok_or_else(|| DynamicToolError::ExecutionFailed {
+                tool: "os_tool".to_string(),
+                details: "Open file action requires a target path.".to_string(),
+            })?;
+            windows_open_file_json("os_tool", &path).await
+        }
+        "screenshot" => capture_windows_screenshot_json("os_tool").await,
         "focus" => {
             #[cfg(windows)]
             {
@@ -847,6 +1387,263 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
             );
             run_powershell_hidden(&script, "os_tool").await
         }
+        "click" | "double_click" | "right_click" => {
+            #[cfg(windows)]
+            {
+                let mut enigo = with_enigo()?;
+                let (x, y) = extract_coordinates(&input).ok_or_else(|| {
+                    DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!(
+                            "{} action requires `x` and `y` coordinates.",
+                            action
+                        ),
+                    }
+                })?;
+                enigo
+                    .move_mouse(x, y, Coordinate::Abs)
+                    .map_err(|err| DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("Failed to move mouse: {}", err),
+                    })?;
+                let button = if action == "right_click" {
+                    Button::Right
+                } else {
+                    Button::Left
+                };
+                enigo
+                    .button(button, Direction::Click)
+                    .map_err(|err| DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("Failed to click mouse: {}", err),
+                    })?;
+                if action == "double_click" {
+                    enigo
+                        .button(button, Direction::Click)
+                        .map_err(|err| DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("Failed to complete double click: {}", err),
+                        })?;
+                }
+                Ok(json!({
+                    "action": action,
+                    "x": x,
+                    "y": y,
+                    "button": if action == "right_click" { "right" } else { "left" },
+                    "ok": true
+                })
+                .to_string())
+            }
+            #[cfg(not(windows))]
+            {
+                Err(DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: "Mouse click actions are currently implemented for Windows only.".to_string(),
+                })
+            }
+        }
+        "move_mouse" => {
+            #[cfg(windows)]
+            {
+                let mut enigo = with_enigo()?;
+                let (x, y) = extract_coordinates(&input).ok_or_else(|| {
+                    DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: "Move mouse requires `x` and `y` coordinates.".to_string(),
+                    }
+                })?;
+                enigo
+                    .move_mouse(x, y, Coordinate::Abs)
+                    .map_err(|err| DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("Failed to move mouse: {}", err),
+                    })?;
+                Ok(json!({
+                    "action": "move_mouse",
+                    "x": x,
+                    "y": y,
+                    "ok": true
+                })
+                .to_string())
+            }
+            #[cfg(not(windows))]
+            {
+                Err(DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: "Mouse movement is currently implemented for Windows only.".to_string(),
+                })
+            }
+        }
+        "type_text" => {
+            #[cfg(windows)]
+            {
+                let mut enigo = with_enigo()?;
+                let text = extract_text_value(&input).ok_or_else(|| {
+                    DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: "Type text requires a `text` value.".to_string(),
+                    }
+                })?;
+                enigo
+                    .text(&text)
+                    .map_err(|err| DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("Failed to type text: {}", err),
+                    })?;
+                Ok(json!({
+                    "action": "type_text",
+                    "typed_chars": text.chars().count(),
+                    "ok": true
+                })
+                .to_string())
+            }
+            #[cfg(not(windows))]
+            {
+                Err(DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: "Typing is currently implemented for Windows only.".to_string(),
+                })
+            }
+        }
+        "press_key" => {
+            #[cfg(windows)]
+            {
+                let mut enigo = with_enigo()?;
+                let key = extract_key_tokens(&input).into_iter().next().ok_or_else(|| {
+                    DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: "Press key requires a `key` value.".to_string(),
+                    }
+                })?;
+                let resolved = key_from_token(&key).ok_or_else(|| DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: format!("Unsupported key token '{}'.", key),
+                })?;
+                enigo
+                    .key(resolved, Direction::Click)
+                    .map_err(|err| DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("Failed to press key: {}", err),
+                    })?;
+                Ok(json!({
+                    "action": "press_key",
+                    "key": key,
+                    "ok": true
+                })
+                .to_string())
+            }
+            #[cfg(not(windows))]
+            {
+                Err(DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: "Key presses are currently implemented for Windows only.".to_string(),
+                })
+            }
+        }
+        "hotkey" => {
+            #[cfg(windows)]
+            {
+                let mut enigo = with_enigo()?;
+                let keys = extract_key_tokens(&input);
+                if keys.len() < 2 {
+                    return Err(DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: "Hotkey requires at least two key tokens, like `Ctrl+L`.".to_string(),
+                    });
+                }
+                let resolved: Vec<Key> = keys
+                    .iter()
+                    .map(|token| {
+                        key_from_token(token).ok_or_else(|| DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("Unsupported key token '{}'.", token),
+                        })
+                    })
+                    .collect::<Result<_, _>>()?;
+
+                for key in &resolved[..resolved.len() - 1] {
+                    enigo
+                        .key(*key, Direction::Press)
+                        .map_err(|err| DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("Failed to press hotkey modifier: {}", err),
+                        })?;
+                }
+                let final_key = *resolved.last().expect("checked len");
+                enigo
+                    .key(final_key, Direction::Click)
+                    .map_err(|err| DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("Failed to trigger hotkey: {}", err),
+                    })?;
+                for key in resolved[..resolved.len() - 1].iter().rev() {
+                    enigo
+                        .key(*key, Direction::Release)
+                        .map_err(|err| DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("Failed to release hotkey modifier: {}", err),
+                        })?;
+                }
+                Ok(json!({
+                    "action": "hotkey",
+                    "keys": keys,
+                    "ok": true
+                })
+                .to_string())
+            }
+            #[cfg(not(windows))]
+            {
+                Err(DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: "Hotkeys are currently implemented for Windows only.".to_string(),
+                })
+            }
+        }
+        "scroll" => {
+            #[cfg(windows)]
+            {
+                let mut enigo = with_enigo()?;
+                let amount = read_i64_field(&input, &["amount", "delta", "lines"])
+                    .unwrap_or_else(|| {
+                        let direction = read_string_field(&input, &["direction"])
+                            .unwrap_or_else(|| stringify_tool_input(&input))
+                            .to_lowercase();
+                        if direction.contains("up") {
+                            -3
+                        } else {
+                            3
+                        }
+                    }) as i32;
+                let axis = match read_string_field(&input, &["axis"])
+                    .unwrap_or_else(|| "vertical".to_string())
+                    .to_lowercase()
+                    .as_str()
+                {
+                    "horizontal" | "x" => Axis::Horizontal,
+                    _ => Axis::Vertical,
+                };
+                enigo
+                    .scroll(amount, axis)
+                    .map_err(|err| DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("Failed to scroll: {}", err),
+                    })?;
+                Ok(json!({
+                    "action": "scroll",
+                    "amount": amount,
+                    "axis": if matches!(axis, Axis::Horizontal) { "horizontal" } else { "vertical" },
+                    "ok": true
+                })
+                .to_string())
+            }
+            #[cfg(not(windows))]
+            {
+                Err(DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: "Scrolling is currently implemented for Windows only.".to_string(),
+                })
+            }
+        }
         "wait" => {
             let duration_ms =
                 read_i64_field(&input, &["milliseconds", "ms", "duration_ms", "duration"])
@@ -863,7 +1660,7 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
         other => Err(DynamicToolError::ExecutionFailed {
             tool: "os_tool".to_string(),
             details: format!(
-                "Unsupported os_tool action '{}'. Supported actions: get_state, list_windows, focus, launch, open_url, wait.",
+                "Unsupported os_tool action '{}'. Supported actions: get_state, list_windows, browser_state, list_processes, find_files, read_file, open_file, screenshot, focus, click, double_click, right_click, move_mouse, type_text, press_key, hotkey, scroll, launch, open_url, wait.",
                 other
             ),
         }),
@@ -873,6 +1670,7 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
 async fn native_vision_analysis(args: &serde_json::Value) -> Result<String, DynamicToolError> {
     let input = object_tool_input(args);
     let desktop_state = windows_desktop_state_json("vision_analysis").await?;
+    let screenshot = capture_windows_screenshot_json("vision_analysis").await?;
 
     let source = read_string_field(&input, &["image", "path", "url", "input"])
         .unwrap_or_else(|| "live desktop session".to_string());
@@ -880,8 +1678,9 @@ async fn native_vision_analysis(args: &serde_json::Value) -> Result<String, Dyna
     Ok(json!({
         "mode": "desktop_snapshot",
         "source": source,
-        "note": "Native vision analysis currently reports desktop state and visible windows. OCR and full screenshot understanding are not enabled yet.",
+        "note": "Native vision analysis reports desktop state, visible windows, and a screenshot artifact. OCR and full UI semantic understanding are still limited.",
         "state": serde_json::from_str::<serde_json::Value>(&desktop_state).unwrap_or_else(|_| json!({ "raw": desktop_state })),
+        "screenshot": serde_json::from_str::<serde_json::Value>(&screenshot).unwrap_or_else(|_| json!({ "raw": screenshot })),
     })
     .to_string())
 }
