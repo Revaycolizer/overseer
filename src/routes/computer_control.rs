@@ -46,10 +46,6 @@ pub fn ComputerControl() -> Element {
         .get("computer_session_state")
         .cloned()
         .unwrap_or_else(|| "idle".to_string());
-    let session_note = values
-        .get("computer_session_note")
-        .cloned()
-        .unwrap_or_else(|| "No supervised computer session is active.".to_string());
     let approval_state = values
         .get("computer_approval_state")
         .cloned()
@@ -67,16 +63,11 @@ pub fn ComputerControl() -> Element {
         .cloned()
         .unwrap_or_else(|| "0".to_string());
     let approval_label = approval_state.replace('_', " ");
-    let pending_tool_label = if pending_tool.is_empty() {
-        "None".to_string()
-    } else {
-        pending_tool.clone()
-    };
     let allowlist_count = allowlist
         .lines()
         .filter(|line| !line.trim().is_empty())
         .count();
-    let session_profile = match supervision_mode.as_str() {
+    let supervision_profile = match supervision_mode.as_str() {
         "observe_only" => "Observation only. Overseer can inspect and propose, but not execute desktop actions.",
         "approval_required" => "Approval required. Every desktop action should stage a permission gate first.",
         "session_trusted" => "Session trusted. Overseer can act inside the current guardrails for this session.",
@@ -93,11 +84,31 @@ pub fn ComputerControl() -> Element {
         "emergency_stopped" => "Reset the session after reviewing what triggered the stop.",
         _ => "Review the current session state before continuing.",
     };
-    let session_started_label = values
-        .get("computer_session_started_at")
-        .cloned()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "Not started".to_string());
+    let session_posture = match session_state.as_str() {
+        "observing" => "Observation session active. Overseer should inspect first and avoid direct desktop actions.",
+        "approval_session" => "Approval session active. Each desktop action should wait for your explicit approval.",
+        "trusted_session" => "Trusted session active. Overseer can execute bounded desktop actions inside the configured guardrails.",
+        "paused" => "Session paused. No desktop actions should continue until you resume or restart the session.",
+        "emergency_stopped" => "Emergency stop active. Overseer must not touch the desktop until you reset the session.",
+        _ => supervision_profile,
+    };
+    let session_status_title = match session_state.as_str() {
+        "observing" => "Observing",
+        "approval_session" => "Approval Session",
+        "trusted_session" => "Trusted Session",
+        "paused" => "Paused",
+        "emergency_stopped" => "Emergency Stop",
+        _ => "Idle",
+    };
+    let pending_summary = if approval_state == "pending" {
+        if pending_tool.is_empty() {
+            "Waiting for approval".to_string()
+        } else {
+            format!("Waiting: {}", pending_tool)
+        }
+    } else {
+        "No pending action".to_string()
+    };
 
     rsx! {
         div { class: "flex-1 flex flex-col min-h-0 bg-slate-50 overflow-y-auto custom-scrollbar",
@@ -127,7 +138,7 @@ pub fn ComputerControl() -> Element {
                             div { class: "space-y-2 max-w-3xl",
                                 p { class: "text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400", "Desktop Supervision Console" }
                                 h2 { class: "text-2xl font-black tracking-tight text-slate-900", "Control whole-computer sessions with a clear operating posture." }
-                                p { class: "text-sm leading-relaxed text-slate-500", "{session_profile}" }
+                                p { class: "text-sm leading-relaxed text-slate-500", "{session_posture}" }
                             }
                             div { class: "rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-right min-w-[140px]",
                                 p { class: "text-[10px] font-bold uppercase tracking-widest text-slate-400", "Next Step" }
@@ -301,9 +312,10 @@ pub fn ComputerControl() -> Element {
                                 h2 { class: "text-lg font-black text-slate-900", "Session Controls" }
                                 p { class: "text-sm text-slate-500 mt-1", "These controls manage the operator state. The actual desktop actions should still remain approval-aware and fully traced." }
                             }
-                            div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-4",
-                                p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Current Session Note" }
-                                p { class: "text-sm text-slate-700 mt-2 whitespace-pre-wrap", "{session_note}" }
+                            div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-4 flex flex-col gap-2",
+                                p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Current Session" }
+                                p { class: "text-lg font-black text-slate-900", "{session_status_title}" }
+                                p { class: "text-sm text-slate-600 leading-relaxed", "{session_posture}" }
                             }
                             div { class: "grid gap-4 md:grid-cols-3",
                                 div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-4",
@@ -311,22 +323,12 @@ pub fn ComputerControl() -> Element {
                                     p { class: "text-2xl font-black text-slate-900 mt-2", "{action_count}" }
                                 }
                                 div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-4",
-                                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Approval State" }
-                                    p { class: "text-2xl font-black text-slate-900 mt-2", "{approval_label}" }
+                                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Pending Approval" }
+                                    p { class: "text-sm font-bold text-slate-900 mt-2 leading-relaxed", "{pending_summary}" }
                                 }
                                 div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-4",
-                                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Pending Tool" }
-                                    p { class: "text-sm font-bold text-slate-900 mt-2 break-all", "{pending_tool_label}" }
-                                }
-                            }
-                            div { class: "grid gap-4 md:grid-cols-2",
-                                div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-4",
-                                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Session Started" }
-                                    p { class: "text-sm font-bold text-slate-900 mt-2 break-all", "{session_started_label}" }
-                                }
-                                div { class: "rounded-2xl border border-slate-200 bg-slate-50 p-4",
-                                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Operating Posture" }
-                                    p { class: "text-sm text-slate-700 mt-2 leading-relaxed", "{session_profile}" }
+                                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Mode" }
+                                    p { class: "text-sm font-bold text-slate-900 mt-2", "{supervision_mode.replace('_', \" \")}" }
                                 }
                             }
 
@@ -376,7 +378,7 @@ pub fn ComputerControl() -> Element {
                             } else {
                                 div { class: "rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 space-y-2",
                                     p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Pending Approval" }
-                                    p { class: "text-sm text-slate-600", "No action is currently waiting for approval. Keep this panel open while the computer supervisor plans the next move." }
+                                    p { class: "text-sm text-slate-600", "No action is waiting right now. Leave this page open when using approval mode so you can review the next step quickly." }
                                 }
                             }
 
