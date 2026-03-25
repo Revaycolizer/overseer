@@ -109,6 +109,21 @@ async fn heuristic_decision(db: &crate::db::Database, query: &str) -> Orchestrat
         "active window",
         "current window",
         "foreground window",
+        "background task",
+        "background tasks",
+        "running process",
+        "running processes",
+        "what's running",
+        "whats running",
+        "resume path",
+        "find file",
+        "locate file",
+        "file path",
+        "where is",
+        "current tab",
+        "current page",
+        "browser state",
+        "which browser",
     ];
 
     let looks_like_direct_chat = query.len() < 220
