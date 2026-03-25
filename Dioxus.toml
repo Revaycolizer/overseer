@@ -1,4 +1,10 @@
 [application]
+name = "overseer"
+asset_dir = "assets"
+
+[assets]
+# List of assets to bundle
+# By default, everything in assets_dir is bundled
 
 [web.app]
 
