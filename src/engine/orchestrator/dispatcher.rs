@@ -541,6 +541,9 @@ impl SupervisorExecutionResult {
             if let Some(error) = &self.error {
                 parts.push(format!("Error: {}", error));
             }
+            if std::path::Path::new(&path).exists() {
+                parts.push(format!("[[ATTACH_IMAGE:{}]]", path));
+            }
             return parts.join("\n\n");
         }
 
@@ -734,12 +737,27 @@ fn is_native_process_list_request(query: &str, step: &str, domain: &str) -> bool
         return false;
     }
     let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
-    (combined.contains("background task")
+    let explicit_process_words = combined.contains("background task")
         || combined.contains("background tasks")
         || combined.contains("running process")
         || combined.contains("running processes")
+        || combined.contains("process list")
+        || combined.contains("active process")
+        || combined.contains("active processes")
         || combined.contains("what's running")
-        || combined.contains("whats running"))
+        || combined.contains("whats running");
+    let general_running_state = (combined.contains("currently running")
+        || combined.contains("current running")
+        || combined.contains("what is currently running")
+        || combined.contains("what is running")
+        || combined.contains("show what is running")
+        || combined.contains("tell me what is running"))
+        && (combined.contains("computer")
+            || combined.contains("pc")
+            || combined.contains("machine")
+            || combined.contains("system"));
+
+    (explicit_process_words || general_running_state)
         && !(combined.contains("how to") || combined.contains("manage background tasks"))
 }
 
@@ -2031,4 +2049,94 @@ fn sanitize_context(context: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_request_detectors_choose_computer_fast_paths() {
+        assert!(is_native_screenshot_request(
+            "Take a screenshot of my desktop",
+            "Capture the desktop",
+            "computer"
+        ));
+        assert!(is_native_process_list_request(
+            "Tell me the background tasks that I'm currently running",
+            "Inspect running processes",
+            "computer"
+        ));
+        assert!(is_native_process_list_request(
+            "What is currently running on my computer",
+            "Inspect current machine activity",
+            "computer"
+        ));
+        assert!(is_native_file_search_request(
+            "Find my resume path on this PC",
+            "Search local files",
+            "computer"
+        ));
+        assert!(is_native_browser_state_request(
+            "Which browser windows are open right now?",
+            "Inspect browser state",
+            "computer"
+        ));
+    }
+
+    #[test]
+    fn screenshot_payload_becomes_grounded_chat_summary() {
+        let payload = r#"{"action":"screenshot","path":"C:\\temp\\desktop-test.png","width":1536,"height":864}"#;
+        let (evidence, artifacts, summary) = parse_screenshot_artifact_payload(payload);
+        assert_eq!(artifacts, vec!["C:\\temp\\desktop-test.png".to_string()]);
+        assert!(summary.contains("1536x864"));
+        assert!(evidence.iter().any(|item| item.contains("Native screenshot artifact created")));
+    }
+
+    #[test]
+    fn screenshot_display_text_stays_clean() {
+        let screenshot_path = std::env::temp_dir().join("overseer-test-screenshot.png");
+        std::fs::write(&screenshot_path, b"test").expect("temp screenshot file");
+        let result = SupervisorExecutionResult::completed(
+            "### Screenshot of Your Desktop".to_string(),
+            vec![
+                "Screenshot dimensions: 1536x864.".to_string(),
+                format!("<img src='{}'>", screenshot_path.display()),
+            ],
+            vec![screenshot_path.to_string_lossy().to_string()],
+            true,
+            false,
+            format!(
+                r#"{{"action":"screenshot","path":"{}","width":1536,"height":864}}"#,
+                screenshot_path.to_string_lossy()
+            ),
+        );
+
+        let display = result.display_text();
+        assert!(display.contains("Screenshot of Your Desktop"));
+        assert!(display.contains("Screenshot dimensions: 1536x864."));
+        assert!(display.contains("Screenshot attached below."));
+        assert!(display.contains("[[ATTACH_IMAGE:"));
+        assert!(!display.contains("###"));
+        assert!(!display.contains("<img"));
+        let _ = std::fs::remove_file(screenshot_path);
+    }
+
+    #[test]
+    fn process_payload_prefers_observed_process_summary() {
+        let payload = r#"{
+            "action":"list_processes",
+            "total_processes":42,
+            "background_count":12,
+            "background_processes":[
+                {"ProcessName":"ollama","Id":11434,"CPU":3.2,"WS":1234},
+                {"ProcessName":"code","Id":999,"CPU":1.2,"WS":5678}
+            ]
+        }"#;
+
+        let (evidence, summary) = parse_process_list_payload(payload);
+        assert!(summary.contains("42 running processes"));
+        assert!(evidence.iter().any(|item| item.contains("ollama")));
+        assert!(evidence.iter().any(|item| item.contains("PID 11434")));
+    }
 }
