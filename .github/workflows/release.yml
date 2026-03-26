@@ -155,8 +155,65 @@ jobs:
             dist/${{ steps.tag.outputs.value }}/SHA256SUMS-linux-x64.txt
             dist/${{ steps.tag.outputs.value }}/release-linux-x64.json
 
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+          echo "value=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Dioxus CLI
+        run: |
+          cargo install dioxus-cli --locked
+
+      - name: Install macOS dependencies
+        run: |
+          brew install protobuf
+
+      - name: Build macOS release package
+        shell: bash
+        run: |
+          chmod +x ./scripts/build-release-macos.sh
+          ./scripts/build-release-macos.sh --tag "${{ steps.tag.outputs.value }}"
+
+      - name: Upload macOS manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-macos-x64
+          path: dist/${{ steps.tag.outputs.value }}/release-macos-x64.json
+
+      - name: Publish macOS assets to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.value }}
+          files: |
+            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}.dmg
+            dist/${{ steps.tag.outputs.value }}/SHA256SUMS-macos-x64.txt
+            dist/${{ steps.tag.outputs.value }}/release-macos-x64.json
+
   update-registry:
-    needs: [build-windows, build-linux]
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
