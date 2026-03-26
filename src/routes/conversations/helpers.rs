@@ -1,7 +1,15 @@
 use dioxus::prelude::document::eval;
 
 pub fn clean_content(content: &str) -> String {
-    let trimmed = content.trim();
+    let without_attach_markers = content
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            !(trimmed.starts_with("[[ATTACH_IMAGE:") && trimmed.ends_with("]]"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let trimmed = without_attach_markers.trim();
 
     // 1. Reject raw tool calls — agent sent JSON instead of a final answer
     if trimmed.starts_with('{') && trimmed.contains("\"tool\"") {
@@ -97,6 +105,13 @@ mod tests {
         let content = "Here is some analysis about Next.js growth.";
         let cleaned = clean_content(content);
         assert_eq!(cleaned, content);
+    }
+
+    #[test]
+    fn test_attach_markers_are_hidden_from_chat_text() {
+        let content = "Here is the screenshot again.\n[[ATTACH_IMAGE:C:\\temp\\desktop.png]]";
+        let cleaned = clean_content(content);
+        assert_eq!(cleaned, "Here is the screenshot again.");
     }
 
     #[test]
