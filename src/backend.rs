@@ -810,17 +810,34 @@ fn extract_local_image_paths_from_content(content: &str) -> Vec<std::path::PathB
         Some(line[start + 2..start + 2 + end].trim().to_string())
     }
 
+    fn extract_attach_marker_target(line: &str) -> Option<String> {
+        let trimmed = line.trim();
+        let target = trimmed
+            .strip_prefix("[[ATTACH_IMAGE:")
+            .and_then(|value| value.strip_suffix("]]"))?;
+        let clean = target.trim();
+        if clean.is_empty() {
+            None
+        } else {
+            Some(clean.to_string())
+        }
+    }
+
     let mut paths = Vec::new();
     let mut seen = HashSet::new();
 
     for line in content.lines() {
+        let attach_marker = extract_attach_marker_target(line);
         let markdown_target = if line.contains("![") && line.contains("](") {
             extract_markdown_image_target(line)
         } else {
             None
         };
 
-        let Some(candidate) = markdown_target.or_else(|| normalize_candidate(line).map(str::to_string)) else {
+        let Some(candidate) = attach_marker
+            .or(markdown_target)
+            .or_else(|| normalize_candidate(line).map(str::to_string))
+        else {
             continue;
         };
 
