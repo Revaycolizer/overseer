@@ -1,6 +1,6 @@
 {
   "product": "Overseer",
-  "updated_at": "2026-03-25T19:00:22Z",
+  "updated_at": "2026-03-26T20:09:36Z",
   "latest": "v0.1.2",
   "channels": {
     "latest": "v0.1.2",
@@ -35,6 +35,7 @@
       "is_stable": true,
       "labels": [
         "linux-x64",
+        "macos-x64",
         "windows-x64",
         "stable"
       ],
@@ -69,6 +70,13 @@
           "kind": "uninstaller-script",
           "label": "uninstall-overseer.ps1",
           "path": "dist/v0.1.2/uninstall-overseer.ps1"
+        },
+        {
+          "name": "Overseer-v0.1.2.dmg",
+          "platform": "macos-x64",
+          "kind": "dmg",
+          "label": "Overseer-v0.1.2.dmg",
+          "path": "dist/v0.1.2/Overseer-v0.1.2.dmg"
         },
         {
           "name": "Overseer-v0.1.2-amd64.deb",
