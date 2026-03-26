@@ -533,8 +533,142 @@ fn escape_powershell_single_quoted(value: &str) -> String {
     value.replace('\'', "''")
 }
 
+fn tokenize_file_query(query: &str) -> Vec<String> {
+    let mut tokens: Vec<String> = query
+        .to_lowercase()
+        .split(|ch: char| matches!(ch, ' ' | '?' | '.' | ',' | ':' | ';' | '\\' | '/'))
+        .map(str::trim)
+        .filter(|token| {
+            token.len() >= 3
+                && !matches!(
+                    *token,
+                    "find" | "path" | "file" | "files" | "pc" | "computer" | "my" | "the" | "in"
+                )
+        })
+        .map(|token| token.to_string())
+        .collect();
+
+    if tokens.is_empty() {
+        let trimmed = query.trim().to_lowercase();
+        if !trimmed.is_empty() {
+            tokens.push(trimmed);
+        }
+    }
+
+    tokens
+}
+
+fn score_file_match(path_lower: &str, name_lower: &str, query_lower: &str, tokens: &[String]) -> i32 {
+    let mut score = 0;
+
+    if name_lower == query_lower {
+        score += 200;
+    }
+
+    for token in tokens {
+        if name_lower == token {
+            score += 80;
+        }
+        if name_lower.contains(token) {
+            score += 30;
+        }
+        if path_lower.contains(token) {
+            score += 10;
+        }
+    }
+
+    if path_lower.contains("\\overseer\\src\\") || path_lower.contains("/overseer/src/") {
+        score += 40;
+    }
+    if path_lower.contains("\\desktop\\") || path_lower.contains("/desktop/") {
+        score += 5;
+    }
+
+    score
+}
+
+async fn search_workspace_files_fast(query: &str) -> Option<Vec<serde_json::Value>> {
+    let cwd = std::env::current_dir().ok()?;
+    let query_lower = query.trim().to_lowercase();
+    if query_lower.is_empty() {
+        return None;
+    }
+
+    let tokens = tokenize_file_query(query);
+    let mut command = Command::new("rg");
+    command.arg("--files").arg(&cwd);
+    command.kill_on_drop(true);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = command.output().await.ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut matches: Vec<(i32, PathBuf)> = stdout
+        .lines()
+        .filter_map(|line| {
+            let relative = line.trim();
+            if relative.is_empty() {
+                return None;
+            }
+
+            let absolute = cwd.join(relative);
+            let path_lower = absolute.to_string_lossy().to_lowercase();
+            let name_lower = absolute
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_lowercase();
+
+            let score = score_file_match(&path_lower, &name_lower, &query_lower, &tokens);
+            if score <= 0 {
+                return None;
+            }
+
+            Some((score, absolute))
+        })
+        .collect();
+
+    matches.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| left.1.to_string_lossy().cmp(&right.1.to_string_lossy()))
+    });
+
+    matches.dedup_by(|left, right| left.1 == right.1);
+
+    let results = matches
+        .into_iter()
+        .take(20)
+        .map(|(_, path)| {
+            json!({
+                "name": path.file_name().and_then(|value| value.to_str()).unwrap_or_default(),
+                "path": path.to_string_lossy().to_string(),
+                "directory": path.parent().map(|value| value.to_string_lossy().to_string()).unwrap_or_default(),
+                "extension": path.extension().map(|value| format!(".{}", value.to_string_lossy())).unwrap_or_default(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if results.is_empty() {
+        None
+    } else {
+        Some(results)
+    }
+}
+
 fn infer_os_tool_action(input: &serde_json::Value) -> String {
     let explicit = read_string_field(input, &["action", "command", "mode"])
+        .or_else(|| read_string_field(input, &["input"]))
         .unwrap_or_else(|| stringify_tool_input(input));
     let lower = explicit.trim().to_lowercase();
 
@@ -565,6 +699,13 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         && (lower.contains("task") || lower.contains("process")))
         || lower.contains("what's running")
         || lower.contains("whats running")
+        || ((lower.contains("currently running")
+            || lower.contains("what is running")
+            || lower.contains("what is currently running"))
+            && (lower.contains("computer")
+                || lower.contains("pc")
+                || lower.contains("machine")
+                || lower.contains("system")))
     {
         return "list_processes".to_string();
     }
@@ -609,6 +750,7 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         lower.as_str(),
         "screenshot" | "capture" | "capture_screen" | "screen_capture"
     ) || lower.contains("take screenshot")
+        || lower.contains("take a screenshot")
         || lower.contains("capture screen")
     {
         return "screenshot".to_string();
@@ -700,7 +842,18 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
 fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<String> {
     if let Some(value) = read_string_field(
         input,
-        &["target", "title", "window", "app", "application", "url", "query", "filename", "name"],
+        &[
+            "target",
+            "title",
+            "window",
+            "app",
+            "application",
+            "url",
+            "query",
+            "filename",
+            "name",
+            "path",
+        ],
     ) {
         return Some(value);
     }
@@ -1064,12 +1217,33 @@ async fn windows_find_files_json(
     tool_name: &str,
     query: &str,
 ) -> Result<String, DynamicToolError> {
+    if let Some(results) = search_workspace_files_fast(query).await {
+        let cwd = std::env::current_dir()
+            .ok()
+            .map(|path| path.to_string_lossy().to_string())
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        return Ok(
+            json!({
+                "action": "find_files",
+                "query": query,
+                "roots": cwd,
+                "source": "workspace_fast_path",
+                "results": results,
+            })
+            .to_string(),
+        );
+    }
+
     let escaped_query = escape_powershell_single_quoted(query);
     let script = format!(
         r#"
 $query = '{query}'
 $home = [Environment]::GetFolderPath('UserProfile')
+$cwd = [System.IO.Directory]::GetCurrentDirectory()
 $roots = @(
+    $cwd,
     (Join-Path $home 'Desktop'),
     (Join-Path $home 'Documents'),
     (Join-Path $home 'Downloads'),
@@ -1082,29 +1256,79 @@ if (-not $tokens -or $tokens.Count -eq 0) {{
     $tokens = @($query.ToLower())
 }}
 
-$results = New-Object System.Collections.Generic.List[object]
+$seen = New-Object 'System.Collections.Generic.HashSet[string]'
+$matches = New-Object System.Collections.Generic.List[object]
 foreach ($root in $roots) {{
     try {{
-        Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object {{
-                $name = $_.Name.ToLower()
-                $full = $_.FullName.ToLower()
-                foreach ($token in $tokens) {{
-                    if ($name -like "*$token*" -or $full -like "*$token*") {{ return $true }}
+        foreach ($token in $tokens) {{
+            Get-ChildItem -Path $root -Recurse -File -Filter "*$token*" -ErrorAction SilentlyContinue |
+                Select-Object -First 25 |
+                ForEach-Object {{
+                $normalized = $_.FullName.ToLower()
+                if (-not $seen.Add($normalized)) {{
+                    return
                 }}
-                return $false
-            }} |
-            Select-Object -First 12 |
-            ForEach-Object {{
-                $results.Add([pscustomobject]@{{
+                $full = $_.FullName.ToLower()
+                $name = $_.Name.ToLower()
+                $score = 0
+                if ($name -eq $query.ToLower()) {{ $score += 200 }}
+                foreach ($token in $tokens) {{
+                    if ($name -eq $token) {{ $score += 80 }}
+                    if ($name -like "*$token*") {{ $score += 30 }}
+                    if ($full -like "*$token*") {{ $score += 10 }}
+                }}
+                if ($full -like "*\overseer\src\*") {{ $score += 40 }}
+                if ($full -like "*\desktop\*") {{ $score += 5 }}
+
+                $matches.Add([pscustomobject]@{{
                     name = $_.Name
                     path = $_.FullName
                     directory = $_.DirectoryName
                     extension = $_.Extension
+                    score = $score
                 }})
-            }}
+                }}
+
+            if ($matches.Count -ge 40) {{ break }}
+        }}
     }} catch {{}}
+    if ($matches.Count -ge 40) {{ break }}
 }}
+
+if ($matches.Count -eq 0) {{
+    foreach ($root in $roots) {{
+        try {{
+            Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue |
+                Where-Object {{
+                    $name = $_.Name.ToLower()
+                    $full = $_.FullName.ToLower()
+                    foreach ($token in $tokens) {{
+                        if ($name -like "*$token*" -or $full -like "*$token*") {{ return $true }}
+                    }}
+                    return $false
+                }} |
+                Select-Object -First 20 |
+                ForEach-Object {{
+                    $normalized = $_.FullName.ToLower()
+                    if (-not $seen.Add($normalized)) {{
+                        return
+                    }}
+                    $matches.Add([pscustomobject]@{{
+                        name = $_.Name
+                        path = $_.FullName
+                        directory = $_.DirectoryName
+                        extension = $_.Extension
+                        score = 1
+                    }})
+                }}
+        }} catch {{}}
+        if ($matches.Count -ge 20) {{ break }}
+    }}
+}}
+
+$results = $matches |
+    Sort-Object -Property @{{Expression='score';Descending=$true}}, @{{Expression='path';Descending=$false}} |
+    Select-Object -First 20 name, path, directory, extension
 
 [pscustomobject]@{{
     action = 'find_files'
@@ -1183,9 +1407,9 @@ Start-Process -FilePath $path
 async fn windows_browser_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     let script = r#"
 $browserNames = @('chrome','msedge','firefox','brave','opera')
-$windows = Get-Process |
+$windows = @(Get-Process |
     Where-Object { $browserNames -contains $_.ProcessName.ToLower() -and $_.MainWindowTitle -and $_.MainWindowTitle.Trim().Length -gt 0 } |
-    Select-Object -First 12 ProcessName, Id, MainWindowTitle
+    Select-Object -First 12 ProcessName, Id, MainWindowTitle)
 [pscustomobject]@{
     action = 'browser_state'
     browser_windows = $windows
@@ -1871,5 +2095,143 @@ pub struct StructuredPerceptionTool {
 impl StructuredPerceptionTool {
     pub fn new(db: crate::db::Database) -> Self {
         Self { db }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn infer_os_tool_action_understands_computer_requests() {
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"take a screenshot of my desktop"})),
+            "screenshot"
+        );
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"list background tasks"})),
+            "list_processes"
+        );
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"what is currently running on my computer"})),
+            "list_processes"
+        );
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"action":"find_files","query":"resume"})),
+            "find_files"
+        );
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"which browser windows are open"})),
+            "browser_state"
+        );
+    }
+
+    #[test]
+    fn extract_os_tool_target_prefers_explicit_fields() {
+        assert_eq!(
+            extract_os_tool_target(&serde_json::json!({"query":"state.rs"}), "find_files"),
+            Some("state.rs".to_string())
+        );
+        assert_eq!(
+            extract_os_tool_target(&serde_json::json!({"path":"src/state.rs"}), "read_file"),
+            Some("src/state.rs".to_string())
+        );
+        assert_eq!(
+            extract_os_tool_target(&serde_json::json!({"window":"Visual Studio Code"}), "focus"),
+            Some("Visual Studio Code".to_string())
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    #[ignore = "smoke test for live Windows desktop session"]
+    async fn native_os_tool_lists_processes() {
+        let raw = native_os_tool(&serde_json::json!({"action":"list_processes"}))
+            .await
+            .expect("list_processes should succeed");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
+        assert_eq!(value["action"], "list_processes");
+        assert!(value.get("total_processes").and_then(|v| v.as_i64()).unwrap_or(0) > 0);
+        assert!(value.get("background_processes").and_then(|v| v.as_array()).is_some());
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    #[ignore = "smoke test for live Windows desktop session"]
+    async fn native_os_tool_finds_repo_files() {
+        let raw = native_os_tool(&serde_json::json!({
+            "action":"find_files",
+            "query":"state.rs"
+        }))
+        .await
+        .expect("find_files should succeed");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
+        assert_eq!(value["action"], "find_files");
+        let results = value["results"].as_array().expect("results array");
+        assert!(results.iter().any(|item| {
+            item.get("path")
+                .and_then(|v| v.as_str())
+                .map(|path| path.to_lowercase().contains("\\overseer\\src\\state.rs"))
+                .unwrap_or(false)
+        }));
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    #[ignore = "smoke test for live Windows desktop session"]
+    async fn native_os_tool_reads_repo_file() {
+        let path = std::env::current_dir()
+            .expect("cwd")
+            .join("src")
+            .join("state.rs");
+        let raw = native_os_tool(&serde_json::json!({
+            "action":"read_file",
+            "path": path.to_string_lossy().to_string()
+        }))
+        .await
+        .expect("read_file should succeed");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
+        assert_eq!(value["action"], "read_file");
+        assert!(value["path"].as_str().unwrap_or_default().to_lowercase().contains("state.rs"));
+        assert!(value.get("preview").is_some());
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    #[ignore = "smoke test for live Windows desktop session"]
+    async fn native_os_tool_reports_desktop_state() {
+        let raw = native_os_tool(&serde_json::json!({"action":"get_state"}))
+            .await
+            .expect("get_state should succeed");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
+        assert!(value.get("active_window_title").is_some());
+        assert!(value.get("visible_windows").and_then(|v| v.as_array()).is_some());
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    #[ignore = "smoke test for live Windows desktop session"]
+    async fn native_os_tool_captures_screenshot() {
+        let raw = native_os_tool(&serde_json::json!({"action":"screenshot"}))
+            .await
+            .expect("screenshot should succeed");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
+        assert_eq!(value["action"], "screenshot");
+        let path = value["path"].as_str().expect("screenshot path");
+        assert!(std::path::Path::new(path).exists());
+        assert!(value["width"].as_i64().unwrap_or(0) > 0);
+        assert!(value["height"].as_i64().unwrap_or(0) > 0);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    #[ignore = "smoke test for live Windows desktop session"]
+    async fn native_os_tool_reports_browser_state() {
+        let raw = native_os_tool(&serde_json::json!({"action":"browser_state"}))
+            .await
+            .expect("browser_state should succeed");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
+        assert_eq!(value["action"], "browser_state");
+        assert!(value.get("browser_windows").and_then(|v| v.as_array()).is_some());
     }
 }
