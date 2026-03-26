@@ -22,6 +22,13 @@ use tokio::time::{sleep, timeout};
 use crate::engine::tools::StructuredPerceptionTool;
 use crate::engine::utils::discovery::AgentInfo;
 
+fn should_bypass_final_synthesizer(domains: &[String]) -> bool {
+    !domains.is_empty()
+        && domains
+            .iter()
+            .all(|domain| matches!(domain.as_str(), "computer" | "desktop"))
+}
+
 fn user_facing_runtime_error(details: &str) -> Option<String> {
     let lower = details.to_lowercase();
 
@@ -186,6 +193,116 @@ fn is_affirmative_follow_up(query: &str) -> bool {
         || normalized.starts_with("go ahead")
         || normalized.starts_with("yes,")
         || normalized.starts_with("proceed ")
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScreenshotFollowUpIntent {
+    Locate,
+    Resend,
+}
+
+fn classify_screenshot_follow_up(query: &str) -> Option<ScreenshotFollowUpIntent> {
+    let normalized = query
+        .trim()
+        .to_lowercase()
+        .replace('?', "")
+        .replace('.', "");
+    let compact = normalized.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    let locate_markers = [
+        "where is it",
+        "where is the screenshot",
+        "where did you save it",
+        "where was it saved",
+        "what is the path",
+        "show me the path",
+        "where is that image",
+        "where is the image",
+    ];
+    if locate_markers
+        .iter()
+        .any(|marker| compact == *marker || compact.contains(marker))
+    {
+        return Some(ScreenshotFollowUpIntent::Locate);
+    }
+
+    let resend_markers = [
+        "send it here",
+        "show it here",
+        "attach it here",
+        "send it",
+        "show it",
+        "attach it",
+        "send the screenshot here",
+        "show the screenshot here",
+        "put it here",
+        "display it here",
+    ];
+    if resend_markers
+        .iter()
+        .any(|marker| compact == *marker || compact.contains(marker))
+    {
+        return Some(ScreenshotFollowUpIntent::Resend);
+    }
+
+    None
+}
+
+async fn latest_assistant_image_attachment(
+    db: &crate::db::Database,
+    conversation_id: i64,
+) -> Option<crate::backend::Attachment> {
+    let messages = crate::backend::get_messages(db, conversation_id).await.ok()?;
+    for message in messages.into_iter().rev() {
+        if message.role != "assistant" {
+            continue;
+        }
+        if let Some(attachment) = message
+            .attachments
+            .into_iter()
+            .rev()
+            .find(|attachment| attachment.content_type.starts_with("image/"))
+        {
+            return Some(attachment);
+        }
+    }
+    None
+}
+
+async fn resolve_screenshot_follow_up(
+    db: &crate::db::Database,
+    conversation_id: i64,
+    query: &str,
+) -> Option<(String, String)> {
+    let intent = classify_screenshot_follow_up(query)?;
+    let attachment = latest_assistant_image_attachment(db, conversation_id).await?;
+    let path = attachment.file_path.trim();
+    if path.is_empty() {
+        return None;
+    }
+
+    let response = match intent {
+        ScreenshotFollowUpIntent::Locate => format!(
+            "The latest desktop screenshot is saved here:\n\n{}\n\nFilename: {}",
+            path, attachment.filename
+        ),
+        ScreenshotFollowUpIntent::Resend => format!(
+            "Here is the latest desktop screenshot.\n\n[[ATTACH_IMAGE:{}]]",
+            path
+        ),
+    };
+
+    let details = serde_json::json!({
+        "intent": match intent {
+            ScreenshotFollowUpIntent::Locate => "locate",
+            ScreenshotFollowUpIntent::Resend => "resend",
+        },
+        "path": path,
+        "filename": attachment.filename,
+    })
+    .to_string();
+
+    Some((response, details))
 }
 
 async fn decide_orchestration(
@@ -374,6 +491,36 @@ pub async fn orchestrate_request<'a>(
         None,
     )
     .await;
+
+    if let Some((follow_up_response, details)) =
+        resolve_screenshot_follow_up(db, conversation_id, query).await
+    {
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "computer_follow_up_resolved",
+            "completed",
+            Some("computer"),
+            None,
+            Some("os_tool"),
+            None,
+            Some("Resolved screenshot follow-up from the latest assistant attachment."),
+            Some(&details),
+        )
+        .await;
+        if let Some(run_id) = run_id {
+            let _ = crate::backend::finish_execution_run(
+                db,
+                run_id,
+                "completed",
+                Some(&follow_up_response),
+                None,
+            )
+            .await;
+        }
+        return follow_up_response;
+    }
 
     let decision = match decide_orchestration(db, all_agents, query, &history, memory_context, ollama_client).await
     {
@@ -1174,6 +1321,22 @@ pub async fn orchestrate_request<'a>(
         return bypass;
     }
 
+    let macro_task_domains: Vec<String> = macro_tasks.iter().map(|task| task.domain.clone()).collect();
+    if should_bypass_final_synthesizer(&macro_task_domains) {
+        println!("Bypassing final synthesizer for direct computer/desktop run.");
+        if let Some(run_id) = run_id {
+            let _ = crate::backend::finish_execution_run(
+                db,
+                run_id,
+                "completed",
+                Some(&final_report),
+                None,
+            )
+            .await;
+        }
+        return final_report;
+    }
+
     let chart_markers = ["---CHART_SVG---", "---CHART_HTML---", "---CHART_ASSET---"];
     for marker in &chart_markers {
         if final_report.contains(marker) {
@@ -1294,4 +1457,33 @@ pub async fn orchestrate_request<'a>(
     }
 
     final_response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_screenshot_follow_up, should_bypass_final_synthesizer, ScreenshotFollowUpIntent};
+
+    #[test]
+    fn computer_and_desktop_runs_skip_final_synthesis() {
+        assert!(should_bypass_final_synthesizer(&["computer".to_string()]));
+        assert!(should_bypass_final_synthesizer(&[
+            "computer".to_string(),
+            "desktop".to_string()
+        ]));
+        assert!(!should_bypass_final_synthesizer(&["computer".to_string(), "chat".to_string()]));
+        assert!(!should_bypass_final_synthesizer(&[]));
+    }
+
+    #[test]
+    fn screenshot_follow_up_intents_are_classified() {
+        assert_eq!(
+            classify_screenshot_follow_up("where is it?"),
+            Some(ScreenshotFollowUpIntent::Locate)
+        );
+        assert_eq!(
+            classify_screenshot_follow_up("send it here"),
+            Some(ScreenshotFollowUpIntent::Resend)
+        );
+        assert_eq!(classify_screenshot_follow_up("hello there"), None);
+    }
 }
