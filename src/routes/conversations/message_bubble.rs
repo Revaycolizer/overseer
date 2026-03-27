@@ -156,7 +156,7 @@ fn SearchBlock(payload: String, hide_evidence: bool) -> Element {
                         href: "{res.url}",
                         target: "_blank",
                         class: "group flex flex-col bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all overflow-hidden",
-                        
+
                         // Image/Icon Area
                         div { class: "relative h-32 bg-slate-50 flex items-center justify-center overflow-hidden border-b border-slate-50",
                             if let Some(img) = res.image_url {
@@ -174,7 +174,7 @@ fn SearchBlock(payload: String, hide_evidence: bool) -> Element {
                                     color: MaterialIconColor::Custom("text-slate-200".to_string())
                                 }
                             }
-                            
+
                             // Domain badge
                             div { class: "absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded text-[9px] text-white font-medium",
                                 {res.url.split('/').nth(2).unwrap_or("Link")}
@@ -415,7 +415,7 @@ fn ChartBlock(block: VizBlock, hide_evidence: bool) -> Element {
     if block.kind == VizKind::Search {
         return rsx! { SearchBlock { payload: block.payload, hide_evidence: hide_evidence } };
     }
-    
+
     let is_asset = block.kind == VizKind::Asset;
     let payload = block.payload.clone();
 
@@ -523,12 +523,12 @@ pub fn MessageBubble(msg: backend::Message, on_copy: EventHandler<String>) -> El
                     }
                     div { class: "group relative inline-block text-left max-w-[85%]",
                         div { class: "bg-[var(--user-bubble)] p-4 rounded-2xl rounded-tl-none text-[var(--text-main)] text-sm leading-relaxed shadow-bubble border border-slate-200",
-                            p { class: "select-text", "{msg.content}" }
+                            p { class: "select-text", "{raw_content}" }
                         }
                         button {
                             class: "absolute -left-10 top-2 p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all shadow-sm",
                             title: "Copy to clipboard",
-                            onclick: move |_| on_copy.call(msg.content.clone()),
+                            onclick: move |_| on_copy.call(raw_content.clone()),
                             MaterialIcon { name: "content_copy", size: 16 }
                         }
                         if !msg.attachments.is_empty() {
@@ -628,7 +628,6 @@ pub fn ThinkingBubble() -> Element {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -639,7 +638,9 @@ mod tests {
         let segments = parse_markdown_text(text);
         assert_eq!(segments.len(), 3);
         assert!(matches!(segments[0], MarkdownSegment::Plain(ref t) if t == "Check "));
-        assert!(matches!(segments[1], MarkdownSegment::Link { ref title, ref url } if title == "this" && url == "https://google.com"));
+        assert!(
+            matches!(segments[1], MarkdownSegment::Link { ref title, ref url } if title == "this" && url == "https://google.com")
+        );
         assert!(matches!(segments[2], MarkdownSegment::Plain(ref t) if t == " link."));
     }
 
@@ -649,7 +650,9 @@ mod tests {
         let segments = parse_markdown_text(text);
         assert_eq!(segments.len(), 3);
         assert!(matches!(segments[0], MarkdownSegment::Plain(ref t) if t == "Look at "));
-        assert!(matches!(segments[1], MarkdownSegment::Image { ref alt, ref url } if alt == "this" && url == "https://example.com/img.png"));
+        assert!(
+            matches!(segments[1], MarkdownSegment::Image { ref alt, ref url } if alt == "this" && url == "https://example.com/img.png")
+        );
         assert!(matches!(segments[2], MarkdownSegment::Plain(ref t) if t == " image."));
     }
 
