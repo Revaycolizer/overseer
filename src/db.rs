@@ -126,11 +126,11 @@ impl Database {
 
     async fn seed_all(&self) -> anyhow::Result<()> {
         println!("🌱 Initializing v10 Database Environment...");
-     //   self.seed_agents().await?;
-     //   self.seed_tools().await?;
-     //   self.seed_agent_tools().await?;
-     //   self.seed_supervisors().await?; // This now handles system supervisors too
-     //   self.seed_planners().await?;
+        //   self.seed_agents().await?;
+        //   self.seed_tools().await?;
+        //   self.seed_agent_tools().await?;
+        //   self.seed_supervisors().await?; // This now handles system supervisors too
+        //   self.seed_planners().await?;
         self.ensure_setting_defaults().await?;
         self.backfill_ids().await?;
         Ok(())
@@ -153,7 +153,10 @@ impl Database {
             ("computer_supervision_session_timeout_ms", "600000"),
             ("computer_supervision_allowlist", ""),
             ("computer_session_state", "idle"),
-            ("computer_session_note", "No supervised computer session is active."),
+            (
+                "computer_session_note",
+                "No supervised computer session is active.",
+            ),
             ("computer_approval_state", "idle"),
             ("computer_pending_tool", ""),
             ("computer_pending_action", ""),
@@ -294,8 +297,7 @@ impl Database {
                     "You are the Computer Operator for Overseer. You may observe, plan, and act on the user's computer only within approved safety policies.\
                       Prefer describing the next safe action before acting. Record evidence, mention the target window or app, and stop when confidence is low or a blocked action is encountered.\n\n\
                       IMAGE RULE: You CAN display images directly in your summary to provide a premium, modern experience.".to_string()
-                }
-                else if !path.is_empty() {
+                } else if !path.is_empty() {
                     std::fs::read_to_string(path).unwrap_or_else(|_| "Default preamble".to_string())
                 } else {
                     "Default preamble".to_string()
@@ -327,11 +329,12 @@ impl Database {
 
         for (name, desc, domain, model, inst, version, code) in agents_data {
             let id = self.next_id().await;
-            
+
             // Clean purge by domain
             sqlx::query("DELETE FROM agents WHERE domain = ?")
                 .bind(domain.clone())
-                .execute(&mut *tx).await?;
+                .execute(&mut *tx)
+                .await?;
 
             sqlx::query("INSERT INTO agents (id, name, description, domain, model, instructions, version, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
                 .bind(id).bind(name).bind(desc).bind(domain).bind(model).bind(inst).bind(version).bind(code)
@@ -420,11 +423,12 @@ impl Database {
         for (name, desc, lang, path, code) in tools_data {
             let id = self.next_id().await;
             let script_path = if path.is_empty() { None } else { Some(path) };
-            
+
             // Clean purge to avoid constraint conflicts with migrations
             sqlx::query("DELETE FROM tools WHERE name = ?")
                 .bind(name.clone())
-                .execute(&mut *tx).await?;
+                .execute(&mut *tx)
+                .await?;
 
             sqlx::query("INSERT INTO tools (id, name, description, language, script_path, code, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
                 .bind(id).bind(name).bind(desc).bind(lang).bind(script_path).bind(code).bind("1.0.0")
@@ -550,7 +554,8 @@ impl Database {
             // Clean purge to avoid ID/constraint conflicts with migrations
             sqlx::query("DELETE FROM supervisors WHERE domain = ?")
                 .bind(domain)
-                .execute(&mut *tx).await?;
+                .execute(&mut *tx)
+                .await?;
 
             // Fresh insert with v10 metadata
             sqlx::query("INSERT INTO supervisors (id, name, description, instructions, model, domain, version, fast_path_keywords, routing_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
