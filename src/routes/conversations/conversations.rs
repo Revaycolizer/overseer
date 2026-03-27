@@ -5,8 +5,10 @@ use super::message_bubble::{MessageBubble, ThinkingBubble};
 use super::sidebar::Sidebar;
 use crate::backend;
 use crate::routes::execution_trace::ExecutionTracePanel;
+use base64::{engine::general_purpose, Engine as _};
 use dioxus::prelude::document::eval;
 use dioxus::prelude::*;
+use dioxus_material_icons::MaterialIcon;
 use serde_json::Value;
 
 #[component]
@@ -40,12 +42,14 @@ pub fn Conversations() -> Element {
 
     let mut visible_messages = use_signal(Vec::<backend::Message>::new);
     let mut selected_conversation_for_cache = use_signal(|| None::<i64>);
+    let mut selected_artifacts = use_signal(Vec::<backend::Artifact>::new);
 
     use_effect(move || {
         let conv_id = selected_conversation_id();
         if selected_conversation_for_cache() != conv_id {
             selected_conversation_for_cache.set(conv_id);
             visible_messages.set(Vec::new());
+            selected_artifacts.set(Vec::new());
         }
     });
 
@@ -115,6 +119,23 @@ pub fn Conversations() -> Element {
         .cloned()
         .unwrap_or_default();
     let events_loading = execution_events_resource.read().is_none();
+
+    let db_for_artifacts = db.clone();
+    let artifacts_resource = use_resource(move || {
+        let db = db_for_artifacts.clone();
+        let conv_id = selected_conversation_id();
+        async move {
+            if let Some(id) = conv_id {
+                backend::get_artifacts_for_conversation(&db, id, 12)
+                    .await
+                    .unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
+
+    let artifacts = artifacts_resource.read().cloned().unwrap_or_default();
     let selected_conversation = conversations
         .iter()
         .find(|conversation| Some(conversation.id) == selected_conversation_id())
@@ -133,11 +154,13 @@ pub fn Conversations() -> Element {
 
     let mut execution_runs_poll = execution_runs_resource.clone();
     let mut execution_events_poll = execution_events_resource.clone();
+    let mut artifacts_poll = artifacts_resource.clone();
     use_future(move || async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             execution_runs_poll.restart();
             execution_events_poll.restart();
+            artifacts_poll.restart();
         }
     });
 
@@ -277,21 +300,35 @@ pub fn Conversations() -> Element {
                                 messages_resource: messages_resource.clone(),
                                 visible_messages: visible_messages,
                                 conversations_resource: conversations_resource.clone(),
+                                selected_artifacts: selected_artifacts,
                                 is_first_msg: is_first_msg,
                                 is_thinking: is_thinking,
                                 starter_prompt: starter_prompt,
                             }
                         }
-                        ExecutionTracePanel {
-                            heading: "Conversation Trace".to_string(),
-                            subtitle: "Inspect the planner, supervisor, tool, and synthesis events behind this conversation.".to_string(),
-                            empty_title: "No runs yet".to_string(),
-                            empty_body: "Send a message and Overseer will capture execution runs here so you can inspect what happened.".to_string(),
-                            runs: execution_runs,
-                            events: execution_events,
-                            selected_run_id: selected_execution_run_id,
-                            runs_loading: runs_loading,
-                            events_loading: events_loading,
+                        div { class: "h-full min-h-0 flex flex-col",
+                            RecentArtifactsPanel {
+                                artifacts: artifacts,
+                                selected_artifacts: selected_artifacts,
+                                on_open: move |path: String| {
+                                    spawn(async move {
+                                        let _ = backend::open_local_path(&path).await;
+                                    });
+                                },
+                            }
+                            div { class: "flex-1 min-h-0",
+                                ExecutionTracePanel {
+                                    heading: "Conversation Trace".to_string(),
+                                    subtitle: "Inspect the planner, supervisor, tool, and synthesis events behind this conversation.".to_string(),
+                                    empty_title: "No runs yet".to_string(),
+                                    empty_body: "Send a message and Overseer will capture execution runs here so you can inspect what happened.".to_string(),
+                                    runs: execution_runs,
+                                    events: execution_events,
+                                    selected_run_id: selected_execution_run_id,
+                                    runs_loading: runs_loading,
+                                    events_loading: events_loading,
+                                }
+                            }
                         }
                     }
                 }
@@ -343,7 +380,9 @@ fn derive_execution_route_summary(
         .or_else(|| event.message.clone());
 
     let route_label = match (route, domain) {
-        (Some(route), Some(domain)) if !route.contains(&domain) => Some(format!("{route}: {domain}")),
+        (Some(route), Some(domain)) if !route.contains(&domain) => {
+            Some(format!("{route}: {domain}"))
+        }
         (Some(route), _) => Some(route),
         _ => None,
     };
@@ -385,6 +424,201 @@ fn status_tone(status: &str) -> &'static str {
         "failed" | "error" => "red",
         "running" | "in_progress" => "blue",
         _ => "slate",
+    }
+}
+
+#[component]
+fn RecentArtifactsPanel(
+    artifacts: Vec<backend::Artifact>,
+    selected_artifacts: Signal<Vec<backend::Artifact>>,
+    on_open: EventHandler<String>,
+) -> Element {
+    rsx! {
+        div { class: "border-l border-slate-200 border-b border-slate-200 bg-white/95 backdrop-blur-sm",
+            div { class: "px-5 py-4 space-y-3",
+                div {
+                    p { class: "text-[10px] font-black uppercase tracking-[0.24em] text-slate-400", "Recent Artifacts" }
+                    h3 { class: "text-sm font-black text-slate-900 mt-1", "Outputs that agents can hand off, inspect, or reuse." }
+                }
+
+                if artifacts.is_empty() {
+                    div { class: "rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 leading-relaxed",
+                        "No artifacts recorded yet. Screenshot files, links, and machine-state outputs will show up here after a run produces them."
+                    }
+                } else {
+                    div { class: "space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1",
+                        for artifact in artifacts {
+                            ArtifactCard {
+                                key: "{artifact.id}",
+                                artifact: artifact,
+                                selected_artifacts: selected_artifacts,
+                                on_open: on_open.clone(),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn ArtifactKindBadge(kind: String) -> Element {
+    let (label, class) = match kind.as_str() {
+        "image" => ("Image", "bg-blue-50 text-blue-700 border-blue-200"),
+        "file" => ("File", "bg-emerald-50 text-emerald-700 border-emerald-200"),
+        "link" => ("Link", "bg-violet-50 text-violet-700 border-violet-200"),
+        "record" => ("Record", "bg-amber-50 text-amber-700 border-amber-200"),
+        _ => ("Note", "bg-slate-100 text-slate-600 border-slate-200"),
+    };
+
+    rsx! {
+        span { class: format!("inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] {}", class),
+            "{label}"
+        }
+    }
+}
+
+#[component]
+fn ArtifactCard(
+    artifact: backend::Artifact,
+    selected_artifacts: Signal<Vec<backend::Artifact>>,
+    on_open: EventHandler<String>,
+) -> Element {
+    let artifact_kind = artifact.kind.clone();
+    let artifact_content_type = artifact.content_type.clone();
+    let file_path = artifact.file_path.clone();
+    let is_selected = selected_artifacts()
+        .iter()
+        .any(|selected| selected.id == artifact.id);
+    let image_preview = use_resource(move || {
+        let kind = artifact_kind.clone();
+        let file_path = file_path.clone();
+        let content_type = artifact_content_type
+            .clone()
+            .unwrap_or_else(|| "image/png".to_string());
+        async move {
+            if kind != "image" {
+                return None;
+            }
+            let Some(path) = file_path else {
+                return None;
+            };
+            match std::fs::read(&path) {
+                Ok(bytes) if !bytes.is_empty() => Some(format!(
+                    "data:{};base64,{}",
+                    content_type,
+                    general_purpose::STANDARD.encode(bytes)
+                )),
+                _ => None,
+            }
+        }
+    });
+
+    rsx! {
+        div { class: "rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 space-y-3",
+            div { class: "flex items-start justify-between gap-3",
+                div { class: "min-w-0",
+                    p { class: "text-xs font-black text-slate-900 truncate", "{artifact.label}" }
+                    p { class: "text-[11px] text-slate-400 mt-1",
+                        {artifact.created_at.format("%Y-%m-%d %H:%M").to_string()}
+                    }
+                }
+                ArtifactKindBadge { kind: artifact.kind.clone() }
+            }
+
+            button {
+                class: format!(
+                    "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all {}",
+                    if is_selected {
+                        "border-blue-200 bg-blue-50 text-blue-700"
+                    } else {
+                        "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-700"
+                    }
+                ),
+                onclick: {
+                    let artifact = artifact.clone();
+                    move |_| {
+                        selected_artifacts.with_mut(|selected| {
+                            if let Some(index) =
+                                selected.iter().position(|item| item.id == artifact.id)
+                            {
+                                selected.remove(index);
+                            } else {
+                                selected.push(artifact.clone());
+                            }
+                        });
+                    }
+                },
+                MaterialIcon { name: if is_selected { "task_alt" } else { "add_circle" }, size: 14 }
+                if is_selected {
+                    "Selected for Next Prompt"
+                } else {
+                    "Use in Next Prompt"
+                }
+            }
+
+            if let Some(domain) = artifact.domain.clone().filter(|value| !value.trim().is_empty()) {
+                p { class: "text-[10px] font-black uppercase tracking-[0.18em] text-slate-400",
+                    "{prettify_token(&domain)}"
+                }
+            }
+            if let Some(step_text) = artifact.step_text.clone().filter(|value| !value.trim().is_empty()) {
+                p { class: "text-xs text-slate-600 line-clamp-2", "{step_text}" }
+            }
+
+            if artifact.kind == "image" {
+                match image_preview().flatten() {
+                    Some(src) => rsx! {
+                        img {
+                            src: "{src}",
+                            alt: "{artifact.label}",
+                            class: "rounded-xl border border-slate-200 bg-white shadow-sm max-w-full h-auto block"
+                        }
+                    },
+                    None => rsx! {
+                        div { class: "rounded-xl border border-dashed border-slate-200 bg-white px-4 py-5 text-xs text-slate-400",
+                            "Image preview unavailable."
+                        }
+                    },
+                }
+            }
+
+            if let Some(path) = artifact.file_path.clone().filter(|value| !value.trim().is_empty()) {
+                p { class: "text-[11px] font-mono text-slate-500 break-all", "{path}" }
+                div { class: "flex flex-wrap gap-2",
+                    button {
+                        class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 hover:border-blue-200 hover:text-blue-700 transition-all",
+                        onclick: {
+                            let path = path.clone();
+                            move |_| on_open.call(path.clone())
+                        },
+                        MaterialIcon { name: "open_in_new", size: 14 }
+                        "Open"
+                    }
+                    button {
+                        class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 hover:border-blue-200 hover:text-blue-700 transition-all",
+                        onclick: {
+                            let path = path.clone();
+                            move |_| copy_to_clipboard(path.clone())
+                        },
+                        MaterialIcon { name: "content_copy", size: 14 }
+                        "Copy Path"
+                    }
+                }
+            } else if let Some(content) = artifact.content.clone().filter(|value| !value.trim().is_empty()) {
+                p { class: "text-xs text-slate-600 whitespace-pre-wrap break-words line-clamp-3", "{content}" }
+                button {
+                    class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 hover:border-blue-200 hover:text-blue-700 transition-all",
+                    onclick: {
+                        let content = content.clone();
+                        move |_| copy_to_clipboard(content.clone())
+                    },
+                    MaterialIcon { name: "content_copy", size: 14 }
+                    "Copy"
+                }
+            }
+        }
     }
 }
 
