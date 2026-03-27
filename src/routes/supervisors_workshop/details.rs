@@ -60,9 +60,8 @@ pub fn SupervisorDetails(
             .unwrap_or_default()
     });
 
-    let agents = use_resource(move || async move {
-        get_agents(&state.read().db).await.unwrap_or_default()
-    });
+    let agents =
+        use_resource(move || async move { get_agents(&state.read().db).await.unwrap_or_default() });
 
     let mut models = use_signal(|| vec!["loading...".to_string()]);
     let _ = use_resource(move || async move {
