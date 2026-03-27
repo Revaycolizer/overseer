@@ -9,7 +9,9 @@ use tokio::time::timeout;
 
 fn looks_like_screenshot_artifact(value: &str) -> bool {
     let lower = value.to_lowercase();
-    lower.contains(".png") || lower.contains("screenshot") || lower.contains("\"action\":\"screenshot\"")
+    lower.contains(".png")
+        || lower.contains("screenshot")
+        || lower.contains("\"action\":\"screenshot\"")
 }
 
 fn parse_json_value(value: &str) -> Option<serde_json::Value> {
@@ -122,13 +124,12 @@ pub async fn verify_execution_grounding(
     model_timeout_ms: u64,
 ) -> Result<SupervisorExecutionResult, String> {
     // 1. Resolve Supervisor to see if they have a custom verification agent
-    let supervisor = sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT * FROM supervisors WHERE domain = ?"
-    )
-    .bind(macro_task_domain)
-    .fetch_optional(&db.pool)
-    .await
-    .map_err(|e| format!("DB error loading supervisor for grounding: {}", e))?;
+    let supervisor =
+        sqlx::query_as::<_, crate::db::Supervisor>("SELECT * FROM supervisors WHERE domain = ?")
+            .bind(macro_task_domain)
+            .fetch_optional(&db.pool)
+            .await
+            .map_err(|e| format!("DB error loading supervisor for grounding: {}", e))?;
 
     let verification_agent = if let Some(ref s) = supervisor {
         if let Some(agent_id) = s.verification_agent_id {
@@ -137,7 +138,10 @@ pub async fn verify_execution_grounding(
             // Fallback for system domains
             let interactive_domains = ["web", "desktop", "computer", "neontune", "app"];
             if interactive_domains.contains(&macro_task_domain) {
-                all_agents.iter().find(|a| a.name == "Grounding Agent").cloned()
+                all_agents
+                    .iter()
+                    .find(|a| a.name == "Grounding Agent")
+                    .cloned()
             } else {
                 None
             }
@@ -162,7 +166,9 @@ pub async fn verify_execution_grounding(
                     if let Ok(state_json) = crate::engine::tools::call_dynamic_tool(
                         vision_tool,
                         serde_json::json!({"input": "live desktop session"}),
-                    ).await {
+                    )
+                    .await
+                    {
                         state_context = state_json;
                     }
                 }
@@ -171,7 +177,9 @@ pub async fn verify_execution_grounding(
                         if let Ok(state_json) = crate::engine::tools::call_dynamic_tool(
                             os_tool,
                             serde_json::json!({"action": "get_state"}),
-                        ).await {
+                        )
+                        .await
+                        {
                             state_context = state_json;
                         }
                     }
@@ -215,14 +223,26 @@ pub async fn verify_execution_grounding(
                     || combined.contains(".docx")
                     || combined.contains("path"));
 
-            let has_screenshot_artifact =
-                has_native_evidence(&supervisor_result, &state_context, looks_like_screenshot_artifact);
-            let has_process_observation =
-                has_native_evidence(&supervisor_result, &state_context, looks_like_process_observation);
-            let has_browser_observation =
-                has_native_evidence(&supervisor_result, &state_context, looks_like_browser_observation);
-            let has_file_search_observation =
-                has_native_evidence(&supervisor_result, &state_context, looks_like_file_search_observation);
+            let has_screenshot_artifact = has_native_evidence(
+                &supervisor_result,
+                &state_context,
+                looks_like_screenshot_artifact,
+            );
+            let has_process_observation = has_native_evidence(
+                &supervisor_result,
+                &state_context,
+                looks_like_process_observation,
+            );
+            let has_browser_observation = has_native_evidence(
+                &supervisor_result,
+                &state_context,
+                looks_like_browser_observation,
+            );
+            let has_file_search_observation = has_native_evidence(
+                &supervisor_result,
+                &state_context,
+                looks_like_file_search_observation,
+            );
 
             if (screenshot_request && has_screenshot_artifact)
                 || (process_request && has_process_observation)
@@ -238,13 +258,13 @@ pub async fn verify_execution_grounding(
                 Some(&ga.model),
                 "default_chat_model",
                 "qwen2.5:7b-instruct",
-            ).await;
-            
-            let ga_client = rig::agent::AgentBuilder::new(
-                ollama_client.completion_model(&grounding_model),
             )
-            .preamble(&ga.instructions)
-            .build();
+            .await;
+
+            let ga_client =
+                rig::agent::AgentBuilder::new(ollama_client.completion_model(&grounding_model))
+                    .preamble(&ga.instructions)
+                    .build();
 
             let evidence_context = if supervisor_result.evidence.is_empty() {
                 "No explicit evidence supplied.".to_string()
@@ -271,7 +291,9 @@ pub async fn verify_execution_grounding(
             if let Ok(Ok(ga_response)) = timeout(
                 Duration::from_millis(model_timeout_ms),
                 ga_client.prompt(ga_prompt),
-            ).await {
+            )
+            .await
+            {
                 println!("👁️ GROUNDING EYE: {}", ga_response);
                 if ga_response.contains("STATE_MISMATCH") {
                     supervisor_result = SupervisorExecutionResult {
