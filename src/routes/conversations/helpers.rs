@@ -5,10 +5,12 @@ pub fn clean_content(content: &str) -> String {
         .lines()
         .filter(|line| {
             let trimmed = line.trim();
-            if trimmed == "ARTIFACT_CONTEXT:" {
+            if trimmed == "ARTIFACT_CONTEXT:" || trimmed == "WORK_ITEM_CONTEXT:" {
                 return false;
             }
-            !((trimmed.starts_with("[[ATTACH_IMAGE:") || trimmed.starts_with("[[ARTIFACT_REF:"))
+            !((trimmed.starts_with("[[ATTACH_IMAGE:")
+                || trimmed.starts_with("[[ARTIFACT_REF:")
+                || trimmed.starts_with("[[WORK_ITEM_REF:"))
                 && trimmed.ends_with("]]"))
         })
         .collect::<Vec<_>>()
@@ -123,6 +125,14 @@ mod tests {
         let content = "Use this file.\n[[ARTIFACT_REF:{\"id\":1,\"label\":\"Spec\"}]]";
         let cleaned = clean_content(content);
         assert_eq!(cleaned, "Use this file.");
+    }
+
+    #[test]
+    fn test_work_item_markers_are_hidden_from_chat_text() {
+        let content =
+            "Do this next.\nWORK_ITEM_CONTEXT:\n[[WORK_ITEM_REF:{\"id\":1,\"title\":\"Review\"}]]";
+        let cleaned = clean_content(content);
+        assert_eq!(cleaned, "Do this next.");
     }
 
     #[test]
