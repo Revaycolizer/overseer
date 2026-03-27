@@ -288,11 +288,13 @@ fn matches_trace_filter(event: &ExecutionEvent, filter: &str) -> bool {
             event.event_type.as_str(),
             "macro_plan" | "single_domain_route" | "micro_step" | "planning"
         ),
-        "tool" => event.tool_name.is_some()
-            || matches!(
-                event.event_type.as_str(),
-                "tool_call" | "tool_execution" | "tool_result"
-            ),
+        "tool" => {
+            event.tool_name.is_some()
+                || matches!(
+                    event.event_type.as_str(),
+                    "tool_call" | "tool_execution" | "tool_result"
+                )
+        }
         "synthesis" => matches!(
             event.event_type.as_str(),
             "direct_chat" | "final_response" | "synthesis"
@@ -309,9 +311,7 @@ fn classify_event(event: &ExecutionEvent) -> String {
 
     match event.event_type.as_str() {
         "orchestration_decision" => "Decision".to_string(),
-        "macro_plan" | "single_domain_route" | "micro_step" | "planning" => {
-            "Planning".to_string()
-        }
+        "macro_plan" | "single_domain_route" | "micro_step" | "planning" => "Planning".to_string(),
         "tool_call" | "tool_execution" | "tool_result" => "Tool".to_string(),
         "direct_chat" | "final_response" | "synthesis" => "Synthesis".to_string(),
         _ if event.tool_name.is_some() => "Tool".to_string(),
