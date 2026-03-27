@@ -129,7 +129,11 @@ fn locate_protoc() -> Option<String> {
             current_dir
                 .join("tools")
                 .join("bin")
-                .join(if cfg!(windows) { "protoc.exe" } else { "protoc" })
+                .join(if cfg!(windows) {
+                    "protoc.exe"
+                } else {
+                    "protoc"
+                })
                 .display()
                 .to_string(),
         );
@@ -180,7 +184,8 @@ fn locate_protoc() -> Option<String> {
 pub async fn get_runtime_health(db: &Database) -> RuntimeHealth {
     let strict_models = try_get_available_models().await.unwrap_or_default();
     let ollama_reachable = !strict_models.is_empty() || try_get_available_models().await.is_ok();
-    let selected_runtime_model = get_setting_or(db, "default_chat_model", "qwen2.5:7b-instruct").await;
+    let selected_runtime_model =
+        get_setting_or(db, "default_chat_model", "qwen2.5:7b-instruct").await;
     let title_model = get_setting_or(db, "title_generator_model", "qwen2.5:7b-instruct").await;
     let python_command =
         crate::engine::utils::discovery::detect_python_command().map(|parts| parts.join(" "));
@@ -189,7 +194,9 @@ pub async fn get_runtime_health(db: &Database) -> RuntimeHealth {
         .display()
         .to_string();
 
-    let runtime_model_available = strict_models.iter().any(|model| model == &selected_runtime_model);
+    let runtime_model_available = strict_models
+        .iter()
+        .any(|model| model == &selected_runtime_model);
     let title_model_available = strict_models.iter().any(|model| model == &title_model);
 
     RuntimeHealth {
@@ -325,10 +332,7 @@ pub async fn update_agent(db: &Database, agent: AgentInfo) -> anyhow::Result<()>
     Ok(())
 }
 
-pub async fn get_tool_test_cases(
-    db: &Database,
-    tool_id: i64,
-) -> anyhow::Result<Vec<ToolTestCase>> {
+pub async fn get_tool_test_cases(db: &Database, tool_id: i64) -> anyhow::Result<Vec<ToolTestCase>> {
     let cases = sqlx::query_as::<_, ToolTestCase>(
         "SELECT id, tool_id, name, input, expected_substring, last_status, last_output, last_run_at, created_at, updated_at
          FROM tool_test_cases
@@ -363,10 +367,7 @@ pub async fn add_tool_test_case(
     Ok(())
 }
 
-pub async fn update_tool_test_case(
-    db: &Database,
-    test_case: ToolTestCase,
-) -> anyhow::Result<()> {
+pub async fn update_tool_test_case(db: &Database, test_case: ToolTestCase) -> anyhow::Result<()> {
     sqlx::query(
         "UPDATE tool_test_cases
          SET name = ?, input = ?, expected_substring = ?, updated_at = CURRENT_TIMESTAMP
@@ -1191,6 +1192,22 @@ pub struct ExecutionEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
+pub struct Artifact {
+    pub id: i64,
+    pub conversation_id: i64,
+    pub execution_run_id: Option<i64>,
+    pub domain: Option<String>,
+    pub step_text: Option<String>,
+    pub kind: String,
+    pub label: String,
+    pub content: Option<String>,
+    pub file_path: Option<String>,
+    pub content_type: Option<String>,
+    pub metadata_json: Option<String>,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
 pub struct Workflow {
     pub id: i64,
     pub name: String,
@@ -1363,6 +1380,121 @@ pub async fn get_execution_events(
     .fetch_all(&db.pool)
     .await?;
     Ok(rows)
+}
+
+pub async fn create_artifact(
+    db: &Database,
+    conversation_id: i64,
+    execution_run_id: Option<i64>,
+    domain: Option<&str>,
+    step_text: Option<&str>,
+    kind: &str,
+    label: &str,
+    content: Option<&str>,
+    file_path: Option<&str>,
+    content_type: Option<&str>,
+    metadata_json: Option<&str>,
+) -> anyhow::Result<i64> {
+    let id = db.next_id().await;
+    sqlx::query(
+        "INSERT INTO artifacts (
+            id,
+            conversation_id,
+            execution_run_id,
+            domain,
+            step_text,
+            kind,
+            label,
+            content,
+            file_path,
+            content_type,
+            metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(conversation_id)
+    .bind(execution_run_id)
+    .bind(domain)
+    .bind(step_text)
+    .bind(kind)
+    .bind(label)
+    .bind(content)
+    .bind(file_path)
+    .bind(content_type)
+    .bind(metadata_json)
+    .execute(&db.pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn get_artifacts_for_conversation(
+    db: &Database,
+    conversation_id: i64,
+    limit: i64,
+) -> anyhow::Result<Vec<Artifact>> {
+    let rows = sqlx::query_as::<_, Artifact>(
+        "SELECT
+            id,
+            conversation_id,
+            execution_run_id,
+            domain,
+            step_text,
+            kind,
+            label,
+            content,
+            file_path,
+            content_type,
+            metadata_json,
+            created_at
+         FROM artifacts
+         WHERE conversation_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?",
+    )
+    .bind(conversation_id)
+    .bind(limit.max(1))
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn open_local_path(path: &str) -> anyhow::Result<()> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("Path is empty");
+    }
+
+    #[cfg(windows)]
+    {
+        let script = format!(
+            "$target = @'\n{}\n'@; Start-Process -FilePath $target",
+            trimmed
+        );
+
+        let mut command = std::process::Command::new("powershell");
+        command.args(["-NoProfile", "-Command", &script]);
+
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+
+        let status = command.status()?;
+        if !status.success() {
+            anyhow::bail!("Failed to open path: {}", trimmed);
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    {
+        let status = std::process::Command::new("xdg-open")
+            .arg(trimmed)
+            .status()?;
+        if !status.success() {
+            anyhow::bail!("Failed to open path: {}", trimmed);
+        }
+        Ok(())
+    }
 }
 
 pub async fn get_latest_execution_run_for_conversation(
@@ -1915,9 +2047,8 @@ pub async fn get_computer_supervision_state(db: &Database) -> ComputerSupervisio
         "No supervised computer session is active.",
     )
     .await;
-    let allowlist = parse_allowlist(
-        &get_setting_or(db, "computer_supervision_allowlist", "").await,
-    );
+    let allowlist =
+        parse_allowlist(&get_setting_or(db, "computer_supervision_allowlist", "").await);
     let max_actions = get_setting_i64(db, "computer_supervision_max_actions", 25).await;
     let action_count = get_setting_i64(db, "computer_session_action_count", 0).await;
     let timeout_ms = get_setting_i64(db, "computer_supervision_session_timeout_ms", 600_000).await;
