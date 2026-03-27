@@ -2,6 +2,7 @@ use crate::backend;
 use crate::state::use_global_state;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+use serde::Serialize;
 
 #[derive(Props, Clone, PartialEq)]
 pub struct ChatInputProps {
@@ -9,9 +10,61 @@ pub struct ChatInputProps {
     pub messages_resource: Resource<Vec<backend::Message>>,
     pub visible_messages: Signal<Vec<backend::Message>>,
     pub conversations_resource: Resource<Vec<backend::Conversation>>,
+    pub selected_artifacts: Signal<Vec<backend::Artifact>>,
     pub is_first_msg: bool,
     pub is_thinking: Signal<bool>,
     pub starter_prompt: Signal<Option<String>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ArtifactReferencePayload {
+    id: i64,
+    label: String,
+    kind: String,
+    domain: Option<String>,
+    file_path: Option<String>,
+    content_type: Option<String>,
+    content_excerpt: Option<String>,
+}
+
+fn build_query_with_artifacts(query: &str, artifacts: &[backend::Artifact]) -> String {
+    if artifacts.is_empty() {
+        return query.to_string();
+    }
+
+    let markers = artifacts
+        .iter()
+        .filter_map(|artifact| {
+            let content_excerpt = artifact.content.as_ref().map(|content| {
+                content
+                    .split_whitespace()
+                    .take(48)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            });
+            serde_json::to_string(&ArtifactReferencePayload {
+                id: artifact.id,
+                label: artifact.label.clone(),
+                kind: artifact.kind.clone(),
+                domain: artifact.domain.clone(),
+                file_path: artifact.file_path.clone(),
+                content_type: artifact.content_type.clone(),
+                content_excerpt,
+            })
+            .ok()
+            .map(|json| format!("[[ARTIFACT_REF:{}]]", json))
+        })
+        .collect::<Vec<_>>();
+
+    if markers.is_empty() {
+        query.to_string()
+    } else {
+        format!(
+            "{}\n\nARTIFACT_CONTEXT:\n{}",
+            query.trim(),
+            markers.join("\n")
+        )
+    }
 }
 
 #[component]
@@ -31,6 +84,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let mut messages_resource = props.messages_resource.clone();
     let mut visible_messages = props.visible_messages;
     let mut conversations_resource = props.conversations_resource.clone();
+    let mut selected_artifacts = props.selected_artifacts;
     let selected_conversation_id = props.selected_conversation_id.clone();
     let selected_conversation_for_placeholder = selected_conversation_id.clone();
     let is_first_msg = props.is_first_msg;
@@ -97,6 +151,9 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         input_text.set(String::new());
         let attachments = pending_attachments();
         pending_attachments.set(vec![]);
+        let artifacts_for_prompt = selected_artifacts();
+        selected_artifacts.set(Vec::new());
+        let query_with_artifacts = build_query_with_artifacts(&val, &artifacts_for_prompt);
 
         let db_inner = db.clone();
         let agent_inner = agent_system.clone();
@@ -114,7 +171,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                     id: optimistic_id,
                     conversation_id: id,
                     role: "user".to_string(),
-                    content: query.clone(),
+                    content: val.clone(),
                     created_at: chrono::Utc::now().naive_utc(),
                     attachments: vec![],
                     hide_evidence: false,
@@ -136,7 +193,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                             id: optimistic_id,
                             conversation_id: id,
                             role: "user".to_string(),
-                            content: query.clone(),
+                            content: val.clone(),
                             created_at: chrono::Utc::now().naive_utc(),
                             attachments: vec![],
                             hide_evidence: false,
@@ -147,10 +204,20 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                 }
             };
 
-            if let Ok(msg_id) = backend::add_message(&db_inner, conversation_id, "user", &query, false).await {
+            if let Ok(msg_id) = backend::add_message(
+                &db_inner,
+                conversation_id,
+                "user",
+                &query_with_artifacts,
+                false,
+            )
+            .await
+            {
                 if is_first_msg || created_new_conversation {
                     let new_title = agent_inner.generate_title(&db_inner, &query).await;
-                    let _ = backend::update_conversation_title(&db_inner, conversation_id, &new_title).await;
+                    let _ =
+                        backend::update_conversation_title(&db_inner, conversation_id, &new_title)
+                            .await;
                     conversations_inner.restart();
                 }
                 for (name, mime, data) in attachments {
@@ -170,9 +237,13 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                 }
                 messages_inner.restart();
                 is_thinking.set(true);
-                let response = agent_inner.orchestrate(&db_inner, conversation_id, &query).await;
+                let response = agent_inner
+                    .orchestrate(&db_inner, conversation_id, &query_with_artifacts)
+                    .await;
                 is_thinking.set(false);
-                let _ = backend::add_message(&db_inner, conversation_id, "assistant", &response, false).await;
+                let _ =
+                    backend::add_message(&db_inner, conversation_id, "assistant", &response, false)
+                        .await;
                 messages_inner.restart();
             } else {
                 visible_messages_inner
@@ -185,6 +256,26 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     rsx! {
         div { class: "p-6 bg-gradient-to-t from-[var(--workspace-bg)] via-[var(--workspace-bg)]/95 to-transparent",
             div { class: "max-w-3xl mx-auto",
+                if !selected_artifacts().is_empty() {
+                    div { class: "mb-3 flex flex-wrap gap-2",
+                        for artifact in selected_artifacts().iter() {
+                            div { class: "flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2 text-[10px] font-black tracking-[0.08em] text-emerald-700 shadow-sm",
+                                MaterialIcon { name: "deployed_code", size: 16 }
+                                "{artifact.label}"
+                                button {
+                                    class: "ml-1 rounded-md p-0.5 text-emerald-400 hover:bg-emerald-100 hover:text-emerald-700 transition-colors",
+                                    onclick: {
+                                        let artifact_id = artifact.id;
+                                        move |_| {
+                                            selected_artifacts.write().retain(|item| item.id != artifact_id);
+                                        }
+                                    },
+                                    MaterialIcon { name: "close", size: 14 }
+                                }
+                            }
+                        }
+                    }
+                }
                 if !pending_attachments().is_empty() {
                     div { class: "mb-3 flex flex-wrap gap-2",
                         for (i, (name, _, _)) in pending_attachments().iter().enumerate() {
