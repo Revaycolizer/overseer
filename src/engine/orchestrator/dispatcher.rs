@@ -119,7 +119,11 @@ fn summarize_computer_action(tool_name: &str, input_json: &serde_json::Value) ->
     format!("{} -> {}", tool_name, input_json)
 }
 
-fn computer_strategy_hint(query: &str, step: &str, tools: &[crate::engine::utils::discovery::ToolInfo]) -> Option<String> {
+fn computer_strategy_hint(
+    query: &str,
+    step: &str,
+    tools: &[crate::engine::utils::discovery::ToolInfo],
+) -> Option<String> {
     let lower = format!("{} {}", query.to_lowercase(), step.to_lowercase());
     if !(lower.contains("computer")
         || lower.contains("desktop")
@@ -146,7 +150,8 @@ fn computer_strategy_hint(query: &str, step: &str, tools: &[crate::engine::utils
         if has_vision_tool {
             guidance.push("After taking a screenshot, use `vision_analysis` only if you need to confirm the live desktop state or reference the screenshot artifact.");
         }
-        guidance.push("A native screenshot artifact counts as completion for a screenshot request.");
+        guidance
+            .push("A native screenshot artifact counts as completion for a screenshot request.");
     }
 
     if lower.contains("active window")
@@ -242,7 +247,8 @@ fn session_elapsed_timed_out(started_at: Option<&str>, timeout_ms: i64) -> bool 
     chrono::DateTime::parse_from_rfc3339(started_at)
         .ok()
         .map(|started| {
-            let elapsed = chrono::Utc::now().signed_duration_since(started.with_timezone(&chrono::Utc));
+            let elapsed =
+                chrono::Utc::now().signed_duration_since(started.with_timezone(&chrono::Utc));
             elapsed.num_milliseconds() >= timeout_ms
         })
         .unwrap_or(false)
@@ -374,7 +380,8 @@ async fn evaluate_computer_tool_gate(
             || state.session_state == "approval_session");
 
     if requires_approval {
-        let pending_matches = state.pending_tool.trim().is_empty() || state.pending_tool == tool_name;
+        let pending_matches =
+            state.pending_tool.trim().is_empty() || state.pending_tool == tool_name;
 
         if state.approval_state == "approved_once" && pending_matches {
             return ToolGateDecision {
@@ -385,13 +392,9 @@ async fn evaluate_computer_tool_gate(
             };
         }
 
-        let _ = crate::backend::stage_computer_approval_request(
-            db,
-            domain,
-            tool_name,
-            &action_summary,
-        )
-        .await;
+        let _ =
+            crate::backend::stage_computer_approval_request(db, domain, tool_name, &action_summary)
+                .await;
 
         return ToolGateDecision {
             allowed: false,
@@ -524,7 +527,11 @@ impl SupervisorExecutionResult {
             .artifacts
             .iter()
             .find_map(|item| extract_artifact_path(item))
-            .or_else(|| self.evidence.iter().find_map(|item| extract_artifact_path(item)));
+            .or_else(|| {
+                self.evidence
+                    .iter()
+                    .find_map(|item| extract_artifact_path(item))
+            });
 
         if let Some(path) = screenshot_artifact {
             let mut parts = vec![if final_summary.is_empty() {
@@ -553,18 +560,26 @@ impl SupervisorExecutionResult {
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(e) {
                     if let Some(img_url) = value.get("image_url").and_then(|v| v.as_str()) {
                         if !img_url.is_empty() && !final_summary.contains(img_url) {
-                             // STRIP common model refusals before adding the image
-                             let lower = final_summary.to_lowercase();
-                             if lower.contains("cannot directly show images") || lower.contains("cannot display images") {
-                                 final_summary = final_summary.replace("While I cannot directly show images, ", "");
-                                 final_summary = final_summary.replace("Since I cannot display images directly, ", "");
-                                 final_summary = final_summary.replace("I cannot show images directly. ", "");
-                                 final_summary = final_summary.replace("While I cannot display images directly, ", "");
-                                 final_summary = final_summary.replace("I cannot provide an image directly, ", "");
-                             }
-                             
-                             final_summary = format!("{}\n\n![Source Image]({})", final_summary, img_url);
-                             break; // Just one primary image is enough for the text bubble
+                            // STRIP common model refusals before adding the image
+                            let lower = final_summary.to_lowercase();
+                            if lower.contains("cannot directly show images")
+                                || lower.contains("cannot display images")
+                            {
+                                final_summary = final_summary
+                                    .replace("While I cannot directly show images, ", "");
+                                final_summary = final_summary
+                                    .replace("Since I cannot display images directly, ", "");
+                                final_summary =
+                                    final_summary.replace("I cannot show images directly. ", "");
+                                final_summary = final_summary
+                                    .replace("While I cannot display images directly, ", "");
+                                final_summary = final_summary
+                                    .replace("I cannot provide an image directly, ", "");
+                            }
+
+                            final_summary =
+                                format!("{}\n\n![Source Image]({})", final_summary, img_url);
+                            break; // Just one primary image is enough for the text bubble
                         }
                     }
                 }
@@ -577,7 +592,8 @@ impl SupervisorExecutionResult {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(item) {
                 if let Some(obj) = value.as_object() {
                     let url = obj.get("url").and_then(|u| u.as_str()).unwrap_or("");
-                    let title = obj.get("title")
+                    let title = obj
+                        .get("title")
                         .and_then(|t| t.as_str())
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| {
@@ -593,7 +609,7 @@ impl SupervisorExecutionResult {
                         });
                     let snippet = obj.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
                     let image_url = obj.get("image_url").and_then(|i| i.as_str()).unwrap_or("");
-                    
+
                     let mut result = if !url.is_empty() {
                         if snippet.is_empty() {
                             format!("[{}]({})", title, url)
@@ -615,11 +631,12 @@ impl SupervisorExecutionResult {
                 if let Some(first_line) = lines.next() {
                     let url = first_line.trim();
                     if url.starts_with("http") && url.len() < 512 {
-                         let domain = url.split('/')
+                        let domain = url
+                            .split('/')
                             .nth(2)
                             .unwrap_or("Source")
                             .trim_start_matches("www.");
-                         return format!("[{}]({})", domain, url);
+                        return format!("[{}]({})", domain, url);
                     }
                 }
             }
@@ -637,7 +654,10 @@ impl SupervisorExecutionResult {
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(e) {
                     if let Some(obj) = value.as_object() {
                         let url = obj.get("url").and_then(|u| u.as_str()).unwrap_or("");
-                        let title = obj.get("title").and_then(|t| t.as_str()).unwrap_or("Source");
+                        let title = obj
+                            .get("title")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("Source");
                         let snippet = obj.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
                         if !url.is_empty() {
                             if snippet.is_empty() {
@@ -653,13 +673,18 @@ impl SupervisorExecutionResult {
                         for item in arr {
                             if let Some(obj) = item.as_object() {
                                 let url = obj.get("url").and_then(|u| u.as_str()).unwrap_or("");
-                                let title = obj.get("title").and_then(|t| t.as_str()).unwrap_or("Source");
-                                let snippet = obj.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
+                                let title = obj
+                                    .get("title")
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or("Source");
+                                let snippet =
+                                    obj.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
                                 if !url.is_empty() {
                                     if snippet.is_empty() {
                                         link_lines.push(format!("- [{}]({})", title, url));
                                     } else {
-                                        link_lines.push(format!("- [{}]({}): {}", title, url, snippet));
+                                        link_lines
+                                            .push(format!("- [{}]({}): {}", title, url, snippet));
                                     }
                                 }
                             }
@@ -670,7 +695,11 @@ impl SupervisorExecutionResult {
                 // Plain text with URL
                 let text = e.trim();
                 if text.starts_with("http") && text.len() < 512 {
-                    let domain = text.split('/').nth(2).unwrap_or("Source").trim_start_matches("www.");
+                    let domain = text
+                        .split('/')
+                        .nth(2)
+                        .unwrap_or("Source")
+                        .trim_start_matches("www.");
                     link_lines.push(format!("- [{}]({})", domain, text));
                 } else if !text.starts_with("---SEARCH_RESULTS---") && !text.is_empty() {
                     link_lines.push(format!("- {}", text));
@@ -683,22 +712,31 @@ impl SupervisorExecutionResult {
         }
 
         if !self.artifacts.is_empty() {
-            let formatted_artifacts: Vec<String> = self.artifacts
+            let formatted_artifacts: Vec<String> = self
+                .artifacts
                 .iter()
                 .map(|a| {
                     let item = a.to_string();
                     let formatted = format_json_if_possible(&item);
                     // If it looks like a direct image URL, render it
                     let lower = item.to_lowercase();
-                    if (item.starts_with("http://") || item.starts_with("https://")) 
-                        && (lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".webp") || lower.ends_with(".svg")) {
+                    if (item.starts_with("http://") || item.starts_with("https://"))
+                        && (lower.ends_with(".png")
+                            || lower.ends_with(".jpg")
+                            || lower.ends_with(".jpeg")
+                            || lower.ends_with(".webp")
+                            || lower.ends_with(".svg"))
+                    {
                         format!("![Artifact]({})", item)
                     } else {
                         formatted
                     }
                 })
                 .collect();
-            parts.push(format!("**Artifacts**:\n- {}", formatted_artifacts.join("\n- ")));
+            parts.push(format!(
+                "**Artifacts**:\n- {}",
+                formatted_artifacts.join("\n- ")
+            ));
         }
 
         if !self.verified && self.status == "completed" {
@@ -773,7 +811,9 @@ fn is_native_file_search_request(query: &str, step: &str, domain: &str) -> bool 
         || combined.contains(".pdf")
         || combined.contains(".doc")
         || combined.contains(".docx")
-        || ((combined.contains("find") || combined.contains("locate") || combined.contains("where is"))
+        || ((combined.contains("find")
+            || combined.contains("locate")
+            || combined.contains("where is"))
             && (combined.contains("file") || combined.contains("path"))))
         && !combined.contains("open file explorer")
 }
@@ -793,7 +833,10 @@ fn is_native_browser_state_request(query: &str, step: &str, domain: &str) -> boo
 fn parse_browser_state_payload(payload: &str) -> (Vec<String>, String) {
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
         let mut evidence = Vec::new();
-        if let Some(windows) = value.get("browser_windows").and_then(|item| item.as_array()) {
+        if let Some(windows) = value
+            .get("browser_windows")
+            .and_then(|item| item.as_array())
+        {
             for window in windows.iter().take(12) {
                 let name = window
                     .get("ProcessName")
@@ -842,7 +885,10 @@ fn parse_file_search_payload(payload: &str) -> (Vec<String>, Vec<String>, String
         }
 
         let summary = if let Some(first) = artifacts.first() {
-            format!("Found matching file paths on this PC. Best match: {}", first)
+            format!(
+                "Found matching file paths on this PC. Best match: {}",
+                first
+            )
         } else {
             "No matching file path was found on this PC.".to_string()
         };
@@ -1000,11 +1046,7 @@ pub async fn dispatch_domain(
         "qwen2.5:7b-instruct",
     )
     .await;
-    let _overseer = OverseerAgent::new(
-        ollama_client,
-        &overseer_model,
-        &overseer_info.instructions,
-    );
+    let _overseer = OverseerAgent::new(ollama_client, &overseer_model, &overseer_info.instructions);
 
     println!("Dispatching dynamic supervisor for domain '{}'", domain);
     let s = supervisor
@@ -1235,8 +1277,8 @@ pub async fn dispatch_domain(
     }
 
     let agent = AgentBuilder::new(ollama_client.completion_model(&supervisor_model))
-    .preamble(s.instructions.as_deref().unwrap_or(""))
-    .build();
+        .preamble(s.instructions.as_deref().unwrap_or(""))
+        .build();
 
     let tool_descriptions = if tools.is_empty() {
         String::new()
@@ -1312,13 +1354,19 @@ pub async fn dispatch_domain(
         Some(step),
         None,
         s.model.as_deref(),
-        Some(&format!("Supervisor '{}' starting for domain '{}'.", s.name, domain)),
+        Some(&format!(
+            "Supervisor '{}' starting for domain '{}'.",
+            s.name, domain
+        )),
         None,
     )
     .await;
 
     println!("Prompt text:\n{}", initial_prompt);
-    println!("Supervisor preamble:\n{}", s.instructions.as_deref().unwrap_or(""));
+    println!(
+        "Supervisor preamble:\n{}",
+        s.instructions.as_deref().unwrap_or("")
+    );
 
     let base_iterations = crate::backend::get_setting_i64(db, "max_iterations", 10)
         .await
@@ -1412,8 +1460,7 @@ pub async fn dispatch_domain(
                 let tool_signature = format!(
                     "{}::{}",
                     tool_name,
-                    serde_json::to_string(&input_json)
-                        .unwrap_or_else(|_| input_json.to_string())
+                    serde_json::to_string(&input_json).unwrap_or_else(|_| input_json.to_string())
                 );
 
                 if last_tool_signature.as_ref() == Some(&tool_signature) {
@@ -1423,7 +1470,8 @@ pub async fn dispatch_domain(
                     repeated_tool_calls = 1;
                 }
 
-                let new_progress_signature = tool_progress_signatures.insert(tool_signature.clone());
+                let new_progress_signature =
+                    tool_progress_signatures.insert(tool_signature.clone());
                 if new_progress_signature
                     && iteration_budget < hard_iteration_cap
                     && iteration + 2 >= iteration_budget
@@ -1457,7 +1505,9 @@ pub async fn dispatch_domain(
                 if repeated_tool_calls >= 2 {
                     let alternate_tool = suggest_alternate_tool(tool_name, &tools);
                     let monitoring_override = if is_monitoring_task(query, step) {
-                        if let Some(url) = extract_first_url(step).or_else(|| extract_first_url(query)) {
+                        if let Some(url) =
+                            extract_first_url(step).or_else(|| extract_first_url(query))
+                        {
                             Some(format!(
                                 "This is a monitoring task. Stop guessing alternate sites and verify the exact target URL '{}'. Prefer http_request with {{\"url\":\"{}\",\"method\":\"GET\"}} if available.",
                                 url, url
@@ -1546,18 +1596,16 @@ pub async fn dispatch_domain(
 
                 let tool_info = tools.iter().find(|t| t.name == tool_name);
                 let computer_gate = match tool_info {
-                    Some(info) => {
-                        Some(
-                            evaluate_computer_tool_gate(
-                                db,
-                                domain,
-                                tool_name,
-                                &info.safety_level,
-                                &input_json,
-                            )
-                            .await,
+                    Some(info) => Some(
+                        evaluate_computer_tool_gate(
+                            db,
+                            domain,
+                            tool_name,
+                            &info.safety_level,
+                            &input_json,
                         )
-                    }
+                        .await,
+                    ),
                     None => None,
                 };
 
@@ -1589,15 +1637,13 @@ pub async fn dispatch_domain(
                             continue;
                         }
                     }
-                    let guardrail = super::guardrails::check_tool_guardrails(
-                        query,
-                        step,
-                        info,
-                        &input_json,
-                    );
- 
+                    let guardrail =
+                        super::guardrails::check_tool_guardrails(query, step, info, &input_json);
+
                     if !guardrail.allowed {
-                        let reason = guardrail.reason.unwrap_or_else(|| "Tool execution blocked by safety guardrails.".to_string());
+                        let reason = guardrail.reason.unwrap_or_else(|| {
+                            "Tool execution blocked by safety guardrails.".to_string()
+                        });
                         log_event(
                             db,
                             run_id,
@@ -1612,7 +1658,7 @@ pub async fn dispatch_domain(
                             Some(&input_json.to_string()),
                         )
                         .await;
- 
+
                         current_prompt = format!(
                             "{}\n\n[GUARDRAIL INTERCEPT: {}]\n\nNext: Explain to the user why this specific tool/intent is needed, or choose an alternate strategy.",
                             current_prompt, reason
@@ -1787,16 +1833,26 @@ fn suggest_alternate_tool<'a>(
 
 fn extract_first_url(text: &str) -> Option<String> {
     text.split_whitespace()
-        .map(|token| token.trim_matches(|c: char| matches!(c, '"' | '\'' | '(' | ')' | '[' | ']' | ',')))
+        .map(|token| {
+            token.trim_matches(|c: char| matches!(c, '"' | '\'' | '(' | ')' | '[' | ']' | ','))
+        })
         .find(|token| token.starts_with("http://") || token.starts_with("https://"))
         .map(|token| token.to_string())
 }
 
 fn is_monitoring_task(query: &str, step: &str) -> bool {
     let combined = format!("{} {}", query, step).to_lowercase();
-    ["status", "uptime", "monitor", "monitoring", "healthcheck", "up/down", "availability"]
-        .iter()
-        .any(|keyword| combined.contains(keyword))
+    [
+        "status",
+        "uptime",
+        "monitor",
+        "monitoring",
+        "healthcheck",
+        "up/down",
+        "availability",
+    ]
+    .iter()
+    .any(|keyword| combined.contains(keyword))
 }
 
 fn monitoring_strategy_hint(
@@ -1937,8 +1993,12 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
 
     // BEST EFFORT PARSING for malformed or truncated JSON
     println!("⚠️ FAILED to parse supervisor JSON. Attempting best-effort extraction...");
-    let status = if cleaned.contains("\"status\":\"failed\"") { "failed" } else { "completed" };
-    
+    let status = if cleaned.contains("\"status\":\"failed\"") {
+        "failed"
+    } else {
+        "completed"
+    };
+
     // Extract summary using a simple string search
     let mut summary = "Research completed. See sources below for details.".to_string();
     if let Some(start) = cleaned.find("\"summary\":\"") {
@@ -1946,7 +2006,7 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
         if let Some(end) = after.find("\",\"") {
             summary = after[..end].to_string();
         } else if let Some(end) = after.find("\"") {
-             summary = after[..end].to_string();
+            summary = after[..end].to_string();
         }
     }
 
@@ -2090,7 +2150,9 @@ mod tests {
         let (evidence, artifacts, summary) = parse_screenshot_artifact_payload(payload);
         assert_eq!(artifacts, vec!["C:\\temp\\desktop-test.png".to_string()]);
         assert!(summary.contains("1536x864"));
-        assert!(evidence.iter().any(|item| item.contains("Native screenshot artifact created")));
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("Native screenshot artifact created")));
     }
 
     #[test]
