@@ -1,5 +1,5 @@
-mod dispatcher;
 pub mod discovery;
+mod dispatcher;
 pub mod dynamic;
 pub mod grounding;
 pub mod guardrails;
@@ -135,7 +135,9 @@ async fn heuristic_decision(db: &crate::db::Database, query: &str) -> Orchestrat
 
     let looks_like_direct_chat = query.len() < 220
         && inferred_domain.is_none()
-        && direct_chat_markers.iter().any(|marker| lower.contains(marker))
+        && direct_chat_markers
+            .iter()
+            .any(|marker| lower.contains(marker))
         && !delegation_markers
             .iter()
             .any(|marker| lower.contains(marker));
@@ -145,7 +147,8 @@ async fn heuristic_decision(db: &crate::db::Database, query: &str) -> Orchestrat
             route: OrchestrationRoute::DirectChat,
             domain: Some("chat".to_string()),
             personality_mode: "assistant".to_string(),
-            reason: "Short informational request with no clear automation or tool need.".to_string(),
+            reason: "Short informational request with no clear automation or tool need."
+                .to_string(),
         };
     }
 
@@ -155,9 +158,7 @@ async fn heuristic_decision(db: &crate::db::Database, query: &str) -> Orchestrat
             domain: Some(domain.clone()),
             personality_mode: match domain.as_str() {
                 "stealth" => "analyst".to_string(),
-                "web" | "desktop" | "computer" | "office" | "neontune" => {
-                    "operator".to_string()
-                }
+                "web" | "desktop" | "computer" | "office" | "neontune" => "operator".to_string(),
                 "vision" => "vision".to_string(),
                 _ => "specialist".to_string(),
             },
@@ -252,7 +253,9 @@ async fn latest_assistant_image_attachment(
     db: &crate::db::Database,
     conversation_id: i64,
 ) -> Option<crate::backend::Attachment> {
-    let messages = crate::backend::get_messages(db, conversation_id).await.ok()?;
+    let messages = crate::backend::get_messages(db, conversation_id)
+        .await
+        .ok()?;
     for message in messages.into_iter().rev() {
         if message.role != "assistant" {
             continue;
@@ -314,7 +317,9 @@ async fn decide_orchestration(
     ollama_client: &ollama::Client,
 ) -> Result<OrchestrationDecision, String> {
     // 1. Check for Fast-Path keyword matches from the database (fully dynamic)
-    if let Some(domain) = crate::engine::orchestrator::discovery::discover_fast_path_domain(db, query).await {
+    if let Some(domain) =
+        crate::engine::orchestrator::discovery::discover_fast_path_domain(db, query).await
+    {
         return Ok(OrchestrationDecision {
             route: OrchestrationRoute::SingleDomain,
             domain: Some(domain.clone()),
@@ -326,7 +331,8 @@ async fn decide_orchestration(
     // 2. Handle affirmative follow-ups (e.g., "yes", "ok", "continue")
     if is_affirmative_follow_up(query) {
         // Look for the original intent in history to understand the goal
-        let original_intent = history.iter()
+        let original_intent = history
+            .iter()
             .find(|m| matches!(m, Message::User { .. }))
             .map(|m| match m {
                 Message::User { content, .. } => serde_json::to_string(content).unwrap_or_default(),
@@ -335,16 +341,25 @@ async fn decide_orchestration(
             .unwrap_or_else(|| query.to_string());
 
         // Dynamic Supervisor Discovery: Iterate all supervisors and check their tool guardrails
-        let all_supervisors = crate::backend::get_supervisors(db).await.unwrap_or_default();
-        
+        let all_supervisors = crate::backend::get_supervisors(db)
+            .await
+            .unwrap_or_default();
+
         // Priority-ordered check for an authorized domain
         let mut potential_domains = Vec::new();
 
         for s in all_supervisors {
-            let tools = crate::backend::get_supervisor_tools(db, s.id).await.unwrap_or_default();
+            let tools = crate::backend::get_supervisor_tools(db, s.id)
+                .await
+                .unwrap_or_default();
             // If any tool in this domain allows the intent, this domain is a candidate
             if tools.iter().any(|t| {
-                let g = crate::engine::orchestrator::guardrails::check_tool_guardrails(&original_intent, "", t, &serde_json::json!({}));
+                let g = crate::engine::orchestrator::guardrails::check_tool_guardrails(
+                    &original_intent,
+                    "",
+                    t,
+                    &serde_json::json!({}),
+                );
                 g.allowed
             }) {
                 potential_domains.push(s);
@@ -353,21 +368,28 @@ async fn decide_orchestration(
 
         // Sort by priority or most recent activity (heuristic: if history has it, prefer it)
         if !potential_domains.is_empty() {
-             potential_domains.sort_by(|a, b| b.routing_priority.cmp(&a.routing_priority));
-             let winner = potential_domains.remove(0);
-             return Ok(OrchestrationDecision {
+            potential_domains.sort_by(|a, b| b.routing_priority.cmp(&a.routing_priority));
+            let winner = potential_domains.remove(0);
+            return Ok(OrchestrationDecision {
                 route: OrchestrationRoute::SingleDomain,
                 domain: Some(winner.domain.clone()),
                 personality_mode: "operator".to_string(),
-                reason: format!("Domain '{}' authorized by tool guardrails for this intent.", winner.domain),
+                reason: format!(
+                    "Domain '{}' authorized by tool guardrails for this intent.",
+                    winner.domain
+                ),
             });
         }
     }
 
     let heuristic = heuristic_decision(db, query).await;
-    let is_greeting = ["hi", "hello", "hey", "how are you", "who are you"].iter().any(|&g| query.to_lowercase().starts_with(g));
+    let is_greeting = ["hi", "hello", "hey", "how are you", "who are you"]
+        .iter()
+        .any(|&g| query.to_lowercase().starts_with(g));
 
-    if matches!(heuristic.route, OrchestrationRoute::DirectChat) && (query.len() < 40 || is_greeting) {
+    if matches!(heuristic.route, OrchestrationRoute::DirectChat)
+        && (query.len() < 40 || is_greeting)
+    {
         return Ok(heuristic);
     }
 
@@ -419,7 +441,12 @@ async fn decide_orchestration(
     let cleaned = crate::engine::utils::clean_response(raw);
 
     serde_json::from_str::<OrchestrationDecision>(&cleaned)
-        .map_err(|e| format!("Routing decision failed to parse: {} for input: {}", e, cleaned))
+        .map_err(|e| {
+            format!(
+                "Routing decision failed to parse: {} for input: {}",
+                e, cleaned
+            )
+        })
         .or_else(|_| Ok(heuristic))
 }
 
@@ -456,6 +483,160 @@ pub(crate) async fn record_event(
         {
             println!("⚠️  Failed to log execution event '{}': {}", event_type, e);
         }
+    }
+}
+
+fn infer_artifact_kind_and_content_type(value: &str) -> (String, Option<String>) {
+    let trimmed = value.trim();
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return ("link".to_string(), Some("text/uri-list".to_string()));
+    }
+
+    let path = std::path::Path::new(trimmed);
+    let looks_like_file = path.is_absolute()
+        || path.exists()
+        || (path.extension().is_some()
+            && (trimmed.contains('\\') || trimmed.contains('/') || trimmed.contains('.')));
+
+    if looks_like_file {
+        let content_type = mime_guess::from_path(path)
+            .first_or_octet_stream()
+            .essence_str()
+            .to_string();
+        let kind = if content_type.starts_with("image/") {
+            "image"
+        } else {
+            "file"
+        };
+        return (kind.to_string(), Some(content_type));
+    }
+
+    if serde_json::from_str::<serde_json::Value>(trimmed).is_ok() {
+        return ("record".to_string(), Some("application/json".to_string()));
+    }
+
+    ("note".to_string(), Some("text/plain".to_string()))
+}
+
+fn infer_artifact_label(kind: &str, step: &str, value: &str) -> String {
+    let trimmed = value.trim();
+    let path = std::path::Path::new(trimmed);
+
+    if matches!(kind, "image" | "file") {
+        if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+            return if kind == "image" && name.to_ascii_lowercase().contains("desktop") {
+                "Desktop Screenshot".to_string()
+            } else {
+                name.to_string()
+            };
+        }
+    }
+
+    if kind == "link" {
+        return "Linked Artifact".to_string();
+    }
+
+    let compact_step = step.trim();
+    if !compact_step.is_empty() {
+        return compact_step
+            .chars()
+            .take(72)
+            .collect::<String>()
+            .trim()
+            .to_string();
+    }
+
+    trimmed
+        .chars()
+        .take(72)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+async fn persist_step_artifacts(
+    db: &crate::db::Database,
+    conversation_id: i64,
+    execution_run_id: Option<i64>,
+    event_sequence: &mut i64,
+    domain: &str,
+    step: &str,
+    summary: &str,
+    artifacts: &[String],
+) {
+    let mut seen = std::collections::HashSet::new();
+    let mut recorded = Vec::new();
+
+    for artifact in artifacts {
+        let trimmed = artifact.trim();
+        if trimmed.is_empty() || !seen.insert(trimmed.to_string()) {
+            continue;
+        }
+
+        let (kind, content_type) = infer_artifact_kind_and_content_type(trimmed);
+        let label = infer_artifact_label(&kind, step, trimmed);
+        let is_file_like = matches!(kind.as_str(), "image" | "file");
+        let file_path = is_file_like.then_some(trimmed);
+        let content = if is_file_like {
+            Some(summary)
+        } else {
+            Some(trimmed)
+        };
+        let metadata_json = serde_json::json!({
+            "source": "supervisor_result",
+            "domain": domain,
+            "step_text": step,
+            "raw_value": trimmed,
+        })
+        .to_string();
+
+        match crate::backend::create_artifact(
+            db,
+            conversation_id,
+            execution_run_id,
+            Some(domain),
+            Some(step),
+            &kind,
+            &label,
+            content,
+            file_path,
+            content_type.as_deref(),
+            Some(&metadata_json),
+        )
+        .await
+        {
+            Ok(_) => recorded.push(serde_json::json!({
+                "kind": kind,
+                "label": label,
+                "value": trimmed,
+            })),
+            Err(err) => println!("Failed to persist artifact '{}': {}", trimmed, err),
+        }
+    }
+
+    if !recorded.is_empty() {
+        let details = serde_json::json!({
+            "count": recorded.len(),
+            "artifacts": recorded,
+        })
+        .to_string();
+        record_event(
+            db,
+            execution_run_id,
+            event_sequence,
+            "artifacts_recorded",
+            "completed",
+            Some(domain),
+            Some(step),
+            None,
+            None,
+            Some(&format!(
+                "Recorded {} artifacts for this step.",
+                recorded.len()
+            )),
+            Some(&details),
+        )
+        .await;
     }
 }
 
@@ -522,7 +703,15 @@ pub async fn orchestrate_request<'a>(
         return follow_up_response;
     }
 
-    let decision = match decide_orchestration(db, all_agents, query, &history, memory_context, ollama_client).await
+    let decision = match decide_orchestration(
+        db,
+        all_agents,
+        query,
+        &history,
+        memory_context,
+        ollama_client,
+    )
+    .await
     {
         Ok(decision) => decision,
         Err(err) => {
@@ -1124,10 +1313,7 @@ pub async fn orchestrate_request<'a>(
                             step,
                             result
                         ));
-                        final_report.push_str(&format!(
-                            "\n\n{}",
-                            result
-                        ));
+                        final_report.push_str(&format!("\n\n{}", result));
                         record_event(
                             db,
                             run_id,
@@ -1169,9 +1355,15 @@ pub async fn orchestrate_request<'a>(
             {
                 Ok(r) => {
                     let mut supervisor_result = r.clone();
-                    let mut final_result = if supervisor_result.raw_response.starts_with("---CHART_SVG---")
-                        || supervisor_result.raw_response.starts_with("---CHART_HTML---")
-                        || supervisor_result.raw_response.starts_with("---CHART_ASSET---")
+                    let mut final_result = if supervisor_result
+                        .raw_response
+                        .starts_with("---CHART_SVG---")
+                        || supervisor_result
+                            .raw_response
+                            .starts_with("---CHART_HTML---")
+                        || supervisor_result
+                            .raw_response
+                            .starts_with("---CHART_ASSET---")
                     {
                         supervisor_result.raw_response.clone()
                     } else {
@@ -1188,11 +1380,19 @@ pub async fn orchestrate_request<'a>(
                         &macro_task.domain,
                         supervisor_result.clone(),
                         model_timeout_ms,
-                    ).await.unwrap_or(supervisor_result);
+                    )
+                    .await
+                    .unwrap_or(supervisor_result);
 
-                    final_result = if supervisor_result.raw_response.starts_with("---CHART_SVG---")
-                        || supervisor_result.raw_response.starts_with("---CHART_HTML---")
-                        || supervisor_result.raw_response.starts_with("---CHART_ASSET---")
+                    final_result = if supervisor_result
+                        .raw_response
+                        .starts_with("---CHART_SVG---")
+                        || supervisor_result
+                            .raw_response
+                            .starts_with("---CHART_HTML---")
+                        || supervisor_result
+                            .raw_response
+                            .starts_with("---CHART_ASSET---")
                     {
                         supervisor_result.raw_response.clone()
                     } else {
@@ -1205,6 +1405,20 @@ pub async fn orchestrate_request<'a>(
                         _ => "unverified",
                     };
                     let supervisor_details = serde_json::to_string(&supervisor_result).ok();
+
+                    if !supervisor_result.artifacts.is_empty() {
+                        persist_step_artifacts(
+                            db,
+                            conversation_id,
+                            run_id,
+                            &mut event_sequence,
+                            &macro_task.domain,
+                            step,
+                            &final_result,
+                            &supervisor_result.artifacts,
+                        )
+                        .await;
+                    }
 
                     if supervisor_result.status == "failed" {
                         record_event(
@@ -1258,10 +1472,7 @@ pub async fn orchestrate_request<'a>(
                         step,
                         final_result
                     ));
-                    final_report.push_str(&format!(
-                        "\n\n{}",
-                        final_result
-                    ));
+                    final_report.push_str(&format!("\n\n{}", final_result));
                     record_event(
                         db,
                         run_id,
@@ -1321,7 +1532,8 @@ pub async fn orchestrate_request<'a>(
         return bypass;
     }
 
-    let macro_task_domains: Vec<String> = macro_tasks.iter().map(|task| task.domain.clone()).collect();
+    let macro_task_domains: Vec<String> =
+        macro_tasks.iter().map(|task| task.domain.clone()).collect();
     if should_bypass_final_synthesizer(&macro_task_domains) {
         println!("Bypassing final synthesizer for direct computer/desktop run.");
         if let Some(run_id) = run_id {
@@ -1370,21 +1582,27 @@ pub async fn orchestrate_request<'a>(
 
     let synthesis_instructions = synthesizer_agent
         .map(|a| a.instructions.as_str())
-        .unwrap_or("You are a research synthesizer. Produce clean, detailed Markdown from research findings.");
+        .unwrap_or(
+        "You are a research synthesizer. Produce clean, detailed Markdown from research findings.",
+    );
 
     let synthesis_agent =
         rig::agent::AgentBuilder::new(ollama_client.completion_model(&synthesis_model))
             .preamble(synthesis_instructions)
             .build();
 
-    let style = decision.domain.as_ref().and_then(|d| {
-        // Simple heuristic: fetch style for the first domain in the decision
-        // In a real multi-step, we might want a more complex aggregation, but for now this works.
-        Some(d.clone())
-    }).unwrap_or_else(|| "chat".to_string());
+    let style = decision
+        .domain
+        .as_ref()
+        .and_then(|d| {
+            // Simple heuristic: fetch style for the first domain in the decision
+            // In a real multi-step, we might want a more complex aggregation, but for now this works.
+            Some(d.clone())
+        })
+        .unwrap_or_else(|| "chat".to_string());
 
     let report_style = sqlx::query_scalar::<_, String>(
-        "SELECT report_style FROM supervisors WHERE domain = ? LIMIT 1"
+        "SELECT report_style FROM supervisors WHERE domain = ? LIMIT 1",
     )
     .bind(&style)
     .fetch_optional(&db.pool)
@@ -1461,7 +1679,9 @@ pub async fn orchestrate_request<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_screenshot_follow_up, should_bypass_final_synthesizer, ScreenshotFollowUpIntent};
+    use super::{
+        classify_screenshot_follow_up, should_bypass_final_synthesizer, ScreenshotFollowUpIntent,
+    };
 
     #[test]
     fn computer_and_desktop_runs_skip_final_synthesis() {
@@ -1470,7 +1690,10 @@ mod tests {
             "computer".to_string(),
             "desktop".to_string()
         ]));
-        assert!(!should_bypass_final_synthesizer(&["computer".to_string(), "chat".to_string()]));
+        assert!(!should_bypass_final_synthesizer(&[
+            "computer".to_string(),
+            "chat".to_string()
+        ]));
         assert!(!should_bypass_final_synthesizer(&[]));
     }
 
