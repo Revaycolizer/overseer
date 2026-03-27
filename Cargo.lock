@@ -6259,6 +6259,7 @@ dependencies = [
  "rs-snowflake",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "tempfile",
  "tokio",
