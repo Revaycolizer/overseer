@@ -110,7 +110,11 @@ pub fn SupervisorsWorkshop() -> Element {
         verification_agent_id_input.set(s.verification_agent_id);
         routing_priority_input.set(s.routing_priority);
         hide_evidence_input.set(s.hide_evidence);
-        report_style_input.set(s.report_style.clone().unwrap_or_else(|| "detailed".to_string()));
+        report_style_input.set(
+            s.report_style
+                .clone()
+                .unwrap_or_else(|| "detailed".to_string()),
+        );
         show_modal.set(true);
     };
 
