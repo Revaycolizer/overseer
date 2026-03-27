@@ -1,5 +1,6 @@
 use crate::backend;
 use crate::state::use_global_state;
+use base64::{engine::general_purpose, Engine as _};
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 use serde::Serialize;
@@ -11,6 +12,7 @@ pub struct ChatInputProps {
     pub visible_messages: Signal<Vec<backend::Message>>,
     pub conversations_resource: Resource<Vec<backend::Conversation>>,
     pub selected_artifacts: Signal<Vec<backend::Artifact>>,
+    pub selected_work_item: Signal<Option<backend::WorkItem>>,
     pub is_first_msg: bool,
     pub is_thinking: Signal<bool>,
     pub starter_prompt: Signal<Option<String>>,
@@ -27,12 +29,25 @@ struct ArtifactReferencePayload {
     content_excerpt: Option<String>,
 }
 
-fn build_query_with_artifacts(query: &str, artifacts: &[backend::Artifact]) -> String {
-    if artifacts.is_empty() {
-        return query.to_string();
-    }
+#[derive(Debug, Clone, Serialize)]
+struct WorkItemReferencePayload {
+    id: i64,
+    title: String,
+    brief: Option<String>,
+    status: String,
+    surface_kind: String,
+    assigned_domain: Option<String>,
+    prompt: String,
+}
 
-    let markers = artifacts
+fn build_query_with_context(
+    query: &str,
+    artifacts: &[backend::Artifact],
+    work_item: Option<&backend::WorkItem>,
+) -> String {
+    let mut sections = Vec::new();
+
+    let artifact_markers = artifacts
         .iter()
         .filter_map(|artifact| {
             let content_excerpt = artifact.content.as_ref().map(|content| {
@@ -56,14 +71,31 @@ fn build_query_with_artifacts(query: &str, artifacts: &[backend::Artifact]) -> S
         })
         .collect::<Vec<_>>();
 
-    if markers.is_empty() {
+    if !artifact_markers.is_empty() {
+        sections.push(format!(
+            "ARTIFACT_CONTEXT:\n{}",
+            artifact_markers.join("\n")
+        ));
+    }
+
+    if let Some(work_item) = work_item {
+        if let Ok(json) = serde_json::to_string(&WorkItemReferencePayload {
+            id: work_item.id,
+            title: work_item.title.clone(),
+            brief: work_item.brief.clone(),
+            status: work_item.status.clone(),
+            surface_kind: work_item.surface_kind.clone(),
+            assigned_domain: work_item.assigned_domain.clone(),
+            prompt: work_item.prompt.clone(),
+        }) {
+            sections.push(format!("WORK_ITEM_CONTEXT:\n[[WORK_ITEM_REF:{}]]", json));
+        }
+    }
+
+    if sections.is_empty() {
         query.to_string()
     } else {
-        format!(
-            "{}\n\nARTIFACT_CONTEXT:\n{}",
-            query.trim(),
-            markers.join("\n")
-        )
+        format!("{}\n\n{}", query.trim(), sections.join("\n\n"))
     }
 }
 
@@ -85,10 +117,13 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let mut visible_messages = props.visible_messages;
     let mut conversations_resource = props.conversations_resource.clone();
     let mut selected_artifacts = props.selected_artifacts;
+    let mut selected_work_item = props.selected_work_item;
     let selected_conversation_id = props.selected_conversation_id.clone();
     let selected_conversation_for_placeholder = selected_conversation_id.clone();
     let is_first_msg = props.is_first_msg;
     let mut starter_prompt = props.starter_prompt;
+    let selected_artifact_count = selected_artifacts().len();
+    let has_active_work_item = selected_work_item().is_some();
 
     use_future(move || {
         let mut animated_placeholder = animated_placeholder;
@@ -152,8 +187,10 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         let attachments = pending_attachments();
         pending_attachments.set(vec![]);
         let artifacts_for_prompt = selected_artifacts();
+        let work_item_for_prompt = selected_work_item();
         selected_artifacts.set(Vec::new());
-        let query_with_artifacts = build_query_with_artifacts(&val, &artifacts_for_prompt);
+        let query_with_artifacts =
+            build_query_with_context(&val, &artifacts_for_prompt, work_item_for_prompt.as_ref());
 
         let db_inner = db.clone();
         let agent_inner = agent_system.clone();
@@ -256,23 +293,23 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     rsx! {
         div { class: "p-6 bg-gradient-to-t from-[var(--workspace-bg)] via-[var(--workspace-bg)]/95 to-transparent",
             div { class: "max-w-3xl mx-auto",
-                if !selected_artifacts().is_empty() {
-                    div { class: "mb-3 flex flex-wrap gap-2",
-                        for artifact in selected_artifacts().iter() {
-                            div { class: "flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2 text-[10px] font-black tracking-[0.08em] text-emerald-700 shadow-sm",
-                                MaterialIcon { name: "deployed_code", size: 16 }
-                                "{artifact.label}"
-                                button {
-                                    class: "ml-1 rounded-md p-0.5 text-emerald-400 hover:bg-emerald-100 hover:text-emerald-700 transition-colors",
-                                    onclick: {
-                                        let artifact_id = artifact.id;
-                                        move |_| {
-                                            selected_artifacts.write().retain(|item| item.id != artifact_id);
-                                        }
-                                    },
-                                    MaterialIcon { name: "close", size: 14 }
-                                }
-                            }
+                if selected_artifact_count > 0 {
+                    ArtifactWorkspaceSurface {
+                        selected_artifacts: selected_artifacts,
+                        starter_prompt: starter_prompt,
+                    }
+                }
+                if let Some(work_item) = selected_work_item() {
+                    div { class: "mb-3 flex items-start justify-between gap-3 rounded-2xl border border-violet-200 bg-violet-50/80 px-4 py-3 shadow-sm",
+                        div { class: "min-w-0 space-y-1",
+                            p { class: "text-[10px] font-black uppercase tracking-[0.18em] text-violet-600", "Active Work Item" }
+                            p { class: "text-sm font-black text-slate-900 break-words", "{work_item.title}" }
+                            p { class: "text-xs text-slate-600 line-clamp-2", "{work_item.prompt}" }
+                        }
+                        button {
+                            class: "rounded-xl border border-violet-200 bg-white p-2 text-violet-400 hover:bg-violet-100 hover:text-violet-700 transition-all",
+                            onclick: move |_| selected_work_item.set(None),
+                            MaterialIcon { name: "close", size: 16 }
                         }
                     }
                 }
@@ -359,7 +396,11 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                     div { class: "flex items-center gap-2 min-w-0",
                         MaterialIcon { name: "radar", size: 14 }
                         span {
-                            if is_thinking() {
+                            if has_active_work_item {
+                                "Your next message will include the active work item as structured coordination context."
+                            } else if selected_artifact_count > 0 {
+                                "Your next message will include {selected_artifact_count} selected artifact(s) as structured context."
+                            } else if is_thinking() {
                                 "Overseer is processing the current request."
                             } else if selected_conversation_id().is_some() {
                                 "Conversation is active. Trace events will appear automatically."
@@ -373,4 +414,229 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
             }
         }
     }
+}
+
+#[component]
+fn ArtifactWorkspaceSurface(
+    selected_artifacts: Signal<Vec<backend::Artifact>>,
+    starter_prompt: Signal<Option<String>>,
+) -> Element {
+    let artifacts = selected_artifacts();
+    let actions = build_artifact_workspace_actions(&artifacts);
+
+    rsx! {
+        div { class: "mb-3 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-blue-50 shadow-sm",
+            div { class: "border-b border-emerald-100 px-4 py-3",
+                div { class: "flex flex-wrap items-start justify-between gap-3",
+                    div { class: "space-y-1",
+                        p { class: "text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600", "Artifact Workspace" }
+                        h3 { class: "text-sm font-black text-slate-900", "Selected artifacts will guide the next task." }
+                        p { class: "text-xs text-slate-600 leading-relaxed",
+                            "Use these as explicit working context instead of relying on chat memory alone."
+                        }
+                    }
+                    button {
+                        class: "inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 transition-all",
+                        onclick: move |_| selected_artifacts.set(Vec::new()),
+                        MaterialIcon { name: "layers_clear", size: 14 }
+                        "Clear Selection"
+                    }
+                }
+            }
+            div { class: "space-y-3 px-4 py-4",
+                div { class: "grid gap-3",
+                    for artifact in artifacts.iter() {
+                        ArtifactWorkspaceCard {
+                            key: "{artifact.id}",
+                            artifact: artifact.clone(),
+                            selected_artifacts: selected_artifacts,
+                        }
+                    }
+                }
+                if !actions.is_empty() {
+                    div { class: "space-y-2 pt-1",
+                        p { class: "text-[10px] font-black uppercase tracking-[0.18em] text-slate-400", "Suggested Next Moves" }
+                        div { class: "flex flex-wrap gap-2",
+                            for (label, icon, prompt) in actions {
+                                button {
+                                    class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-all",
+                                    onclick: {
+                                        let prompt = prompt.clone();
+                                        move |_| starter_prompt.set(Some(prompt.clone()))
+                                    },
+                                    MaterialIcon { name: icon, size: 14 }
+                                    "{label}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn ArtifactWorkspaceCard(
+    artifact: backend::Artifact,
+    selected_artifacts: Signal<Vec<backend::Artifact>>,
+) -> Element {
+    let artifact_kind = artifact.kind.clone();
+    let artifact_path = artifact.file_path.clone();
+    let artifact_content_type = artifact
+        .content_type
+        .clone()
+        .unwrap_or_else(|| "image/png".to_string());
+    let image_preview = use_resource(move || {
+        let kind = artifact_kind.clone();
+        let path = artifact_path.clone();
+        let content_type = artifact_content_type.clone();
+        async move {
+            if kind != "image" {
+                return None;
+            }
+            let Some(path) = path else {
+                return None;
+            };
+            match std::fs::read(&path) {
+                Ok(bytes) if !bytes.is_empty() => Some(format!(
+                    "data:{};base64,{}",
+                    content_type,
+                    general_purpose::STANDARD.encode(bytes)
+                )),
+                _ => None,
+            }
+        }
+    });
+
+    let kind_label = artifact.kind.to_uppercase();
+    let domain_label = artifact
+        .domain
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "general".to_string())
+        .replace('_', " ");
+    let excerpt = artifact.content.clone().unwrap_or_default();
+
+    rsx! {
+        div { class: "rounded-2xl border border-white/80 bg-white/90 px-4 py-4 shadow-sm",
+            div { class: "flex items-start justify-between gap-3",
+                div { class: "min-w-0 space-y-1",
+                    div { class: "flex flex-wrap items-center gap-2",
+                        span { class: "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700",
+                            "{kind_label}"
+                        }
+                        span { class: "text-[10px] font-black uppercase tracking-[0.18em] text-slate-400",
+                            "{domain_label}"
+                        }
+                    }
+                    p { class: "text-sm font-black text-slate-900 break-words", "{artifact.label}" }
+                    if let Some(step_text) = artifact.step_text.clone().filter(|value| !value.trim().is_empty()) {
+                        p { class: "text-xs text-slate-500 leading-relaxed", "{step_text}" }
+                    }
+                }
+                button {
+                    class: "rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-all",
+                    onclick: {
+                        let artifact_id = artifact.id;
+                        move |_| selected_artifacts.write().retain(|item| item.id != artifact_id)
+                    },
+                    MaterialIcon { name: "close", size: 16 }
+                }
+            }
+
+            if artifact.kind == "image" {
+                match image_preview().flatten() {
+                    Some(src) => rsx! {
+                        img {
+                            src: "{src}",
+                            alt: "{artifact.label}",
+                            class: "mt-3 max-h-48 rounded-xl border border-slate-200 bg-slate-50 object-contain"
+                        }
+                    },
+                    None => rsx! {
+                        div { class: "mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-xs text-slate-400",
+                            "Image preview unavailable."
+                        }
+                    },
+                }
+            } else if let Some(path) = artifact.file_path.clone().filter(|value| !value.trim().is_empty()) {
+                p { class: "mt-3 text-[11px] font-mono text-slate-500 break-all", "{path}" }
+            } else if !excerpt.trim().is_empty() {
+                p { class: "mt-3 text-xs text-slate-600 whitespace-pre-wrap break-words line-clamp-4", "{excerpt}" }
+            } else {
+                p { class: "mt-3 text-xs text-slate-400", "This artifact is selected as context for the next task." }
+            }
+        }
+    }
+}
+
+fn build_artifact_workspace_actions(
+    artifacts: &[backend::Artifact],
+) -> Vec<(String, String, String)> {
+    if artifacts.is_empty() {
+        return Vec::new();
+    }
+
+    if artifacts.len() == 1 {
+        let artifact = &artifacts[0];
+        let mut actions = vec![(
+            "Summarize It".to_string(),
+            "summarize".to_string(),
+            "Summarize the selected artifact and tell me what matters most.".to_string(),
+        )];
+
+        match artifact.kind.as_str() {
+            "image" => {
+                actions.push((
+                    "Analyze Screenshot".to_string(),
+                    "image_search".to_string(),
+                    "Analyze the selected screenshot and describe what is visible, important, or unusual.".to_string(),
+                ));
+            }
+            "file" => {
+                actions.push((
+                    "Read File".to_string(),
+                    "description".to_string(),
+                    "Read the selected file and summarize its contents.".to_string(),
+                ));
+            }
+            "record" => {
+                actions.push((
+                    "Extract Facts".to_string(),
+                    "fact_check".to_string(),
+                    "Extract the key facts from the selected artifact in a concise list."
+                        .to_string(),
+                ));
+            }
+            _ => {}
+        }
+
+        actions.push((
+            "Turn Into Task".to_string(),
+            "conversion_path".to_string(),
+            "Use the selected artifact as context and help me decide the best next action."
+                .to_string(),
+        ));
+        return actions;
+    }
+
+    vec![
+        (
+            "Compare Selected".to_string(),
+            "compare".to_string(),
+            "Compare the selected artifacts and explain the important differences.".to_string(),
+        ),
+        (
+            "Synthesize Report".to_string(),
+            "auto_awesome".to_string(),
+            "Synthesize the selected artifacts into one clear report with the key takeaways."
+                .to_string(),
+        ),
+        (
+            "Plan Next Step".to_string(),
+            "account_tree".to_string(),
+            "Use the selected artifacts as context and propose the best next step.".to_string(),
+        ),
+    ]
 }
