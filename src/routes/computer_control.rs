@@ -15,7 +15,11 @@ pub fn ComputerControl() -> Element {
 
     let supervisors = use_resource(move || {
         let db = supervisors_db.clone();
-        async move { crate::backend::get_supervisors(&db).await.unwrap_or_default() }
+        async move {
+            crate::backend::get_supervisors(&db)
+                .await
+                .unwrap_or_default()
+        }
     });
 
     let values = settings.read().cloned().unwrap_or_default();
@@ -77,9 +81,13 @@ pub fn ComputerControl() -> Element {
     let session_next_step = match session_state.as_str() {
         "idle" => "Start an approval session before handing over any desktop task.",
         "observing" => "Keep observing until Overseer can describe the next action clearly.",
-        "approval_session" if approval_state == "pending" => "Approve or reject the staged desktop action.",
+        "approval_session" if approval_state == "pending" => {
+            "Approve or reject the staged desktop action."
+        }
         "approval_session" => "Continue the task and review each staged action before approval.",
-        "trusted_session" => "Monitor the trace and keep the allowlist narrow while actions execute.",
+        "trusted_session" => {
+            "Monitor the trace and keep the allowlist narrow while actions execute."
+        }
         "paused" => "Resume or end the session before asking Overseer to act again.",
         "emergency_stopped" => "Reset the session after reviewing what triggered the stop.",
         _ => "Review the current session state before continuing.",
