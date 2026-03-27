@@ -30,6 +30,7 @@ enigo = "0.3.0"
 rand = "0.10"
 regex = "1.11"
 md5 = "0.7"
+sha2 = "0.10"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "macros", "chrono"] }
 rs-snowflake = "0.6.0"
 tempfile = "3.27.0"
