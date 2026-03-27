@@ -73,10 +73,11 @@ impl AgentSystem {
                 .take(6)
                 .rev()
                 .map(|m| {
+                    let cleaned = strip_internal_message_markers(&m.content);
                     format!(
                         "[{}]: {}",
                         m.role.to_uppercase(),
-                        &m.content[..m.content.len().min(300)]
+                        &cleaned[..cleaned.len().min(300)]
                     )
                 })
                 .collect();
@@ -91,10 +92,11 @@ impl AgentSystem {
         let mut history = Vec::new();
         for m in messages {
             if m.role == "user" {
-                let content_text = if m.content.trim().is_empty() {
+                let cleaned_content = strip_internal_message_markers(&m.content);
+                let content_text = if cleaned_content.trim().is_empty() {
                     "(user message)".to_string()
                 } else {
-                    m.content.clone()
+                    cleaned_content
                 };
                 let mut contents = vec![rig::message::UserContent::text(content_text)];
 
@@ -149,10 +151,11 @@ impl AgentSystem {
                     content: rig::OneOrMany::many(contents).unwrap(),
                 });
             } else {
-                let content_text = if m.content.trim().is_empty() {
+                let cleaned_content = strip_internal_message_markers(&m.content);
+                let content_text = if cleaned_content.trim().is_empty() {
                     "(assistant message)".to_string()
                 } else {
-                    m.content.clone()
+                    cleaned_content
                 };
                 history.push(rig::completion::Message::Assistant {
                     id: None,
@@ -234,4 +237,23 @@ impl AgentSystem {
             }
         }
     }
+}
+
+fn strip_internal_message_markers(content: &str) -> String {
+    content
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            if trimmed == "ARTIFACT_CONTEXT:" || trimmed == "WORK_ITEM_CONTEXT:" {
+                return false;
+            }
+            !((trimmed.starts_with("[[ATTACH_IMAGE:")
+                || trimmed.starts_with("[[ARTIFACT_REF:")
+                || trimmed.starts_with("[[WORK_ITEM_REF:"))
+                && trimmed.ends_with("]]"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }
