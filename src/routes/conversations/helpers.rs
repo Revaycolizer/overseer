@@ -5,7 +5,11 @@ pub fn clean_content(content: &str) -> String {
         .lines()
         .filter(|line| {
             let trimmed = line.trim();
-            !(trimmed.starts_with("[[ATTACH_IMAGE:") && trimmed.ends_with("]]"))
+            if trimmed == "ARTIFACT_CONTEXT:" {
+                return false;
+            }
+            !((trimmed.starts_with("[[ATTACH_IMAGE:") || trimmed.starts_with("[[ARTIFACT_REF:"))
+                && trimmed.ends_with("]]"))
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -112,6 +116,13 @@ mod tests {
         let content = "Here is the screenshot again.\n[[ATTACH_IMAGE:C:\\temp\\desktop.png]]";
         let cleaned = clean_content(content);
         assert_eq!(cleaned, "Here is the screenshot again.");
+    }
+
+    #[test]
+    fn test_artifact_ref_markers_are_hidden_from_chat_text() {
+        let content = "Use this file.\n[[ARTIFACT_REF:{\"id\":1,\"label\":\"Spec\"}]]";
+        let cleaned = clean_content(content);
+        assert_eq!(cleaned, "Use this file.");
     }
 
     #[test]
