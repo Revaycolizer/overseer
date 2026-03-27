@@ -79,7 +79,8 @@ pub fn Settings() -> Element {
             && health.native_runtime
         {
             if health.python_command.is_some() {
-                "Local runtime is ready for chat, native tools, and optional Python extensions.".to_string()
+                "Local runtime is ready for chat, native tools, and optional Python extensions."
+                    .to_string()
             } else {
                 "Local runtime is ready for chat and native tools. Python is optional for advanced extensions.".to_string()
             }
@@ -88,9 +89,11 @@ pub fn Settings() -> Element {
         } else if !health.runtime_model_available {
             "Your selected runtime model is not installed yet. Pick an installed model or pull the missing one.".to_string()
         } else if health.protoc_path.is_none() {
-            "protoc is missing. Build and generation flows will stay blocked until it is available.".to_string()
+            "protoc is missing. Build and generation flows will stay blocked until it is available."
+                .to_string()
         } else if !health.native_runtime {
-            "The native tool runtime is not ready yet. Restart Overseer and refresh this panel.".to_string()
+            "The native tool runtime is not ready yet. Restart Overseer and refresh this panel."
+                .to_string()
         } else {
             "Runtime health is partially ready. Review the checks below before running deeper workflows.".to_string()
         }
