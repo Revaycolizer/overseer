@@ -1208,6 +1208,22 @@ pub struct Artifact {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
+pub struct WorkItem {
+    pub id: i64,
+    pub conversation_id: i64,
+    pub title: String,
+    pub brief: Option<String>,
+    pub status: String,
+    pub surface_kind: String,
+    pub assigned_domain: Option<String>,
+    pub prompt: String,
+    pub source_artifact_ids_json: Option<String>,
+    pub metadata_json: Option<String>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
 pub struct Workflow {
     pub id: i64,
     pub name: String,
@@ -1456,6 +1472,96 @@ pub async fn get_artifacts_for_conversation(
     .fetch_all(&db.pool)
     .await?;
     Ok(rows)
+}
+
+pub async fn create_work_item(
+    db: &Database,
+    conversation_id: i64,
+    title: &str,
+    brief: Option<&str>,
+    status: &str,
+    surface_kind: &str,
+    assigned_domain: Option<&str>,
+    prompt: &str,
+    source_artifact_ids_json: Option<&str>,
+    metadata_json: Option<&str>,
+) -> anyhow::Result<i64> {
+    let id = db.next_id().await;
+    sqlx::query(
+        "INSERT INTO work_items (
+            id,
+            conversation_id,
+            title,
+            brief,
+            status,
+            surface_kind,
+            assigned_domain,
+            prompt,
+            source_artifact_ids_json,
+            metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(conversation_id)
+    .bind(title)
+    .bind(brief)
+    .bind(status)
+    .bind(surface_kind)
+    .bind(assigned_domain)
+    .bind(prompt)
+    .bind(source_artifact_ids_json)
+    .bind(metadata_json)
+    .execute(&db.pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn get_work_items_for_conversation(
+    db: &Database,
+    conversation_id: i64,
+    limit: i64,
+) -> anyhow::Result<Vec<WorkItem>> {
+    let rows = sqlx::query_as::<_, WorkItem>(
+        "SELECT
+            id,
+            conversation_id,
+            title,
+            brief,
+            status,
+            surface_kind,
+            assigned_domain,
+            prompt,
+            source_artifact_ids_json,
+            metadata_json,
+            created_at,
+            updated_at
+         FROM work_items
+         WHERE conversation_id = ?
+         ORDER BY updated_at DESC, created_at DESC
+         LIMIT ?",
+    )
+    .bind(conversation_id)
+    .bind(limit.max(1))
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn update_work_item_status(
+    db: &Database,
+    work_item_id: i64,
+    status: &str,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE work_items
+         SET status = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?",
+    )
+    .bind(status)
+    .bind(work_item_id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn open_local_path(path: &str) -> anyhow::Result<()> {
