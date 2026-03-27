@@ -1,12 +1,10 @@
 use std::path::PathBuf;
 
 #[cfg(windows)]
-use enigo::{
-    Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings,
-};
+use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
+use regex::Regex;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::process::Command;
@@ -302,10 +300,13 @@ async fn native_http_request(args: &serde_json::Value) -> Result<String, Dynamic
         request = request.json(json_body);
     }
 
-    let response = request.send().await.map_err(|err| DynamicToolError::ExecutionFailed {
-        tool: "http_request".to_string(),
-        details: err.to_string(),
-    })?;
+    let response = request
+        .send()
+        .await
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "http_request".to_string(),
+            details: err.to_string(),
+        })?;
 
     let status = response.status();
     let final_url = response.url().to_string();
@@ -315,23 +316,24 @@ async fn native_http_request(args: &serde_json::Value) -> Result<String, Dynamic
         .and_then(|value| value.to_str().ok())
         .unwrap_or("unknown")
         .to_string();
-    let body = response.text().await.map_err(|err| DynamicToolError::ExecutionFailed {
-        tool: "http_request".to_string(),
-        details: err.to_string(),
-    })?;
+    let body = response
+        .text()
+        .await
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "http_request".to_string(),
+            details: err.to_string(),
+        })?;
 
     let body_preview = truncate_for_tool(clean_text_content(&body), 6000);
 
-    Ok(
-        json!({
-            "status": status.as_u16(),
-            "ok": status.is_success(),
-            "url": final_url,
-            "content_type": content_type,
-            "body": body_preview,
-        })
-        .to_string(),
-    )
+    Ok(json!({
+        "status": status.as_u16(),
+        "ok": status.is_success(),
+        "url": final_url,
+        "content_type": content_type,
+        "body": body_preview,
+    })
+    .to_string())
 }
 
 async fn native_stealth_browse(args: &serde_json::Value) -> Result<String, DynamicToolError> {
@@ -357,28 +359,42 @@ async fn native_stealth_browse(args: &serde_json::Value) -> Result<String, Dynam
             details: err.to_string(),
         })?;
 
-    let response = client.get(&url).send().await.map_err(|err| DynamicToolError::ExecutionFailed {
-        tool: "stealth_browse".to_string(),
-        details: err.to_string(),
-    })?;
+    let response =
+        client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|err| DynamicToolError::ExecutionFailed {
+                tool: "stealth_browse".to_string(),
+                details: err.to_string(),
+            })?;
 
     let final_url = response.url().to_string();
     let status = response.status();
-    let body = response.text().await.map_err(|err| DynamicToolError::ExecutionFailed {
-        tool: "stealth_browse".to_string(),
-        details: err.to_string(),
-    })?;
+    let body = response
+        .text()
+        .await
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "stealth_browse".to_string(),
+            details: err.to_string(),
+        })?;
 
     let title = extract_html_title(&body).unwrap_or_else(|| "Untitled page".to_string());
-    
+
     // Extract images before cleaning tags
     let mut image_markers = String::new();
     let img_re = Regex::new(r#"(?i)<img[^>]+src="(?P<src>https?://[^"]+)"[^>]*>"#).unwrap();
     let mut count = 0;
     for cap in img_re.captures_iter(&body) {
-        if count >= 10 { break; }
+        if count >= 10 {
+            break;
+        }
         let src = &cap["src"];
-        if !src.contains("favicon") && !src.contains("pixel") && !src.contains("logo") && !src.contains("icon") {
+        if !src.contains("favicon")
+            && !src.contains("pixel")
+            && !src.contains("logo")
+            && !src.contains("icon")
+        {
             image_markers.push_str(&format!("[IMAGE: {}]\n", src));
             count += 1;
         }
@@ -438,10 +454,7 @@ async fn native_stealth_search(args: &serde_json::Value) -> Result<String, Dynam
 
     let mut results = parse_duckduckgo_results(&html);
     if results.is_empty() {
-        return Ok(format!(
-            "No search results found for '{}'.",
-            query.trim()
-        ));
+        return Ok(format!("No search results found for '{}'.", query.trim()));
     }
 
     // --- RE-RANKING ---
@@ -465,7 +478,7 @@ async fn native_stealth_search(args: &serde_json::Value) -> Result<String, Dynam
     });
 
     let top_results: Vec<SearchResult> = results.into_iter().take(8).collect();
-    
+
     Ok(format!(
         "---SEARCH_RESULTS---\n{}",
         serde_json::to_string(&top_results).unwrap_or_else(|_| "[]".to_string())
@@ -502,10 +515,12 @@ async fn native_app_launcher(args: &serde_json::Value) -> Result<String, Dynamic
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    command.spawn().map_err(|err| DynamicToolError::ExecutionFailed {
-        tool: "app_launcher".to_string(),
-        details: err.to_string(),
-    })?;
+    command
+        .spawn()
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "app_launcher".to_string(),
+            details: err.to_string(),
+        })?;
 
     Ok(format!("Launched '{}'.", app))
 }
@@ -523,9 +538,11 @@ fn read_string_field(input: &serde_json::Value, keys: &[&str]) -> Option<String>
 
 fn read_i64_field(input: &serde_json::Value, keys: &[&str]) -> Option<i64> {
     keys.iter().find_map(|key| {
-        input
-            .get(*key)
-            .and_then(|value| value.as_i64().or_else(|| value.as_str()?.trim().parse().ok()))
+        input.get(*key).and_then(|value| {
+            value
+                .as_i64()
+                .or_else(|| value.as_str()?.trim().parse().ok())
+        })
     })
 }
 
@@ -558,7 +575,12 @@ fn tokenize_file_query(query: &str) -> Vec<String> {
     tokens
 }
 
-fn score_file_match(path_lower: &str, name_lower: &str, query_lower: &str, tokens: &[String]) -> i32 {
+fn score_file_match(
+    path_lower: &str,
+    name_lower: &str,
+    query_lower: &str,
+    tokens: &[String],
+) -> i32 {
     let mut score = 0;
 
     if name_lower == query_lower {
@@ -710,8 +732,10 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         return "list_processes".to_string();
     }
 
-    if matches!(lower.as_str(), "find_files" | "search_files" | "locate_file")
-        || (lower.contains("find") && (lower.contains("file") || lower.contains("path")))
+    if matches!(
+        lower.as_str(),
+        "find_files" | "search_files" | "locate_file"
+    ) || (lower.contains("find") && (lower.contains("file") || lower.contains("path")))
         || (lower.contains("locate") && lower.contains("file"))
         || (lower.contains("search") && lower.contains("file"))
     {
@@ -720,19 +744,24 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
 
     if matches!(lower.as_str(), "read_file" | "read" | "show_file")
         || ((lower.contains("read") || lower.contains("show"))
-            && (lower.contains("file") || lower.contains(".txt") || lower.contains(".md") || lower.contains(".json")))
+            && (lower.contains("file")
+                || lower.contains(".txt")
+                || lower.contains(".md")
+                || lower.contains(".json")))
     {
         return "read_file".to_string();
     }
 
     if matches!(lower.as_str(), "open_file" | "open document" | "open path")
-        || (lower.contains("open") && (lower.contains("file") || lower.contains("document") || lower.contains("path")))
+        || (lower.contains("open")
+            && (lower.contains("file") || lower.contains("document") || lower.contains("path")))
     {
         return "open_file".to_string();
     }
 
     if matches!(lower.as_str(), "browser_state" | "browser" | "tab_state")
-        || (lower.contains("browser") && (lower.contains("state") || lower.contains("open") || lower.contains("which")))
+        || (lower.contains("browser")
+            && (lower.contains("state") || lower.contains("open") || lower.contains("which")))
         || lower.contains("current tab")
         || lower.contains("current page")
     {
@@ -762,9 +791,7 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         return "double_click".to_string();
     }
 
-    if matches!(lower.as_str(), "right_click" | "right click")
-        || lower.starts_with("right click")
-    {
+    if matches!(lower.as_str(), "right_click" | "right click") || lower.starts_with("right click") {
         return "right_click".to_string();
     }
 
@@ -775,15 +802,19 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         return "click".to_string();
     }
 
-    if matches!(lower.as_str(), "move_mouse" | "move cursor" | "move pointer")
-        || lower.starts_with("move mouse")
+    if matches!(
+        lower.as_str(),
+        "move_mouse" | "move cursor" | "move pointer"
+    ) || lower.starts_with("move mouse")
         || lower.starts_with("move cursor")
     {
         return "move_mouse".to_string();
     }
 
-    if matches!(lower.as_str(), "type" | "type_text" | "enter_text" | "input_text")
-        || lower.starts_with("type ")
+    if matches!(
+        lower.as_str(),
+        "type" | "type_text" | "enter_text" | "input_text"
+    ) || lower.starts_with("type ")
         || lower.starts_with("enter text ")
         || lower.starts_with("input text ")
     {
@@ -796,8 +827,10 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         return "press_key".to_string();
     }
 
-    if matches!(lower.as_str(), "hotkey" | "shortcut" | "key_combo" | "combo")
-        || lower.starts_with("hotkey ")
+    if matches!(
+        lower.as_str(),
+        "hotkey" | "shortcut" | "key_combo" | "combo"
+    ) || lower.starts_with("hotkey ")
         || lower.starts_with("shortcut ")
         || lower.starts_with("combo ")
     {
@@ -988,13 +1021,7 @@ fn extract_key_tokens(input: &serde_json::Value) -> Vec<String> {
 
     if let Some(raw) = read_string_field(input, &["input"]) {
         let lower = raw.to_lowercase();
-        let prefixes = [
-            "press ",
-            "hotkey ",
-            "shortcut ",
-            "key combo ",
-            "combo ",
-        ];
+        let prefixes = ["press ", "hotkey ", "shortcut ", "key combo ", "combo "];
         for prefix in prefixes {
             if lower.starts_with(prefix) {
                 return raw[prefix.len()..]
@@ -1213,10 +1240,7 @@ $background = $all |
 }
 
 #[cfg(windows)]
-async fn windows_find_files_json(
-    tool_name: &str,
-    query: &str,
-) -> Result<String, DynamicToolError> {
+async fn windows_find_files_json(tool_name: &str, query: &str) -> Result<String, DynamicToolError> {
     if let Some(results) = search_workspace_files_fast(query).await {
         let cwd = std::env::current_dir()
             .ok()
@@ -1224,16 +1248,14 @@ async fn windows_find_files_json(
             .into_iter()
             .collect::<Vec<_>>();
 
-        return Ok(
-            json!({
-                "action": "find_files",
-                "query": query,
-                "roots": cwd,
-                "source": "workspace_fast_path",
-                "results": results,
-            })
-            .to_string(),
-        );
+        return Ok(json!({
+            "action": "find_files",
+            "query": query,
+            "roots": cwd,
+            "source": "workspace_fast_path",
+            "results": results,
+        })
+        .to_string());
     }
 
     let escaped_query = escape_powershell_single_quoted(query);
@@ -1344,10 +1366,7 @@ $results = $matches |
 }
 
 #[cfg(windows)]
-async fn windows_read_file_json(
-    tool_name: &str,
-    path: &str,
-) -> Result<String, DynamicToolError> {
+async fn windows_read_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
     let escaped_path = escape_powershell_single_quoted(path);
     let script = format!(
         r#"
@@ -1379,10 +1398,7 @@ if ($item.Extension -in @('.txt','.md','.json','.rs','.toml','.yaml','.yml','.lo
 }
 
 #[cfg(windows)]
-async fn windows_open_file_json(
-    tool_name: &str,
-    path: &str,
-) -> Result<String, DynamicToolError> {
+async fn windows_open_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
     let escaped_path = escape_powershell_single_quoted(path);
     let script = format!(
         r#"
@@ -1422,7 +1438,9 @@ $windows = @(Get-Process |
 
 #[cfg(not(windows))]
 async fn capture_windows_screenshot_json(tool_name: &str) -> Result<String, DynamicToolError> {
-    Err(DynamicToolError::NativeNotImplemented(tool_name.to_string()))
+    Err(DynamicToolError::NativeNotImplemented(
+        tool_name.to_string(),
+    ))
 }
 
 #[cfg(not(windows))]
@@ -1442,10 +1460,7 @@ async fn windows_find_files_json(
 }
 
 #[cfg(not(windows))]
-async fn windows_read_file_json(
-    tool_name: &str,
-    _path: &str,
-) -> Result<String, DynamicToolError> {
+async fn windows_read_file_json(tool_name: &str, _path: &str) -> Result<String, DynamicToolError> {
     Err(DynamicToolError::ExecutionFailed {
         tool: tool_name.to_string(),
         details: "Native file read is currently implemented for Windows only.".to_string(),
@@ -1453,10 +1468,7 @@ async fn windows_read_file_json(
 }
 
 #[cfg(not(windows))]
-async fn windows_open_file_json(
-    tool_name: &str,
-    _path: &str,
-) -> Result<String, DynamicToolError> {
+async fn windows_open_file_json(tool_name: &str, _path: &str) -> Result<String, DynamicToolError> {
     Err(DynamicToolError::ExecutionFailed {
         tool: tool_name.to_string(),
         details: "Native file open is currently implemented for Windows only.".to_string(),
@@ -1467,7 +1479,8 @@ async fn windows_open_file_json(
 async fn windows_browser_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     Err(DynamicToolError::ExecutionFailed {
         tool: tool_name.to_string(),
-        details: "Native browser state inspection is currently implemented for Windows only.".to_string(),
+        details: "Native browser state inspection is currently implemented for Windows only."
+            .to_string(),
     })
 }
 
@@ -1477,46 +1490,59 @@ async fn windows_desktop_state_json(tool_name: &str) -> Result<String, DynamicTo
     let active_window_id = run_command_simple("xprop -root _NET_ACTIVE_WINDOW", tool_name).await?;
     let mut active_title = String::new();
     if let Some(id) = active_window_id.split_whitespace().last() {
-        let title_out = run_command_simple(&format!("xprop -id {} _NET_WM_NAME", id), tool_name).await?;
+        let title_out =
+            run_command_simple(&format!("xprop -id {} _NET_WM_NAME", id), tool_name).await?;
         if let Some(pos) = title_out.find(" = \"") {
             active_title = title_out[pos + 4..].trim_end_matches('"').to_string();
         } else {
             // Fallback to WM_NAME if _NET_WM_NAME is missing
-            let title_out_fallback = run_command_simple(&format!("xprop -id {} WM_NAME", id), tool_name).await?;
+            let title_out_fallback =
+                run_command_simple(&format!("xprop -id {} WM_NAME", id), tool_name).await?;
             if let Some(pos) = title_out_fallback.find(" = \"") {
-                active_title = title_out_fallback[pos + 4..].trim_end_matches('"').to_string();
+                active_title = title_out_fallback[pos + 4..]
+                    .trim_end_matches('"')
+                    .to_string();
             }
         }
     }
 
     // List windows using wmctrl
-    let windows_raw = run_command_simple("wmctrl -l", tool_name).await.unwrap_or_default();
-    let visible_windows: Vec<serde_json::Value> = windows_raw.lines().take(12).map(|line| {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        let name = if parts.len() >= 4 {
-            parts[3..].join(" ")
-        } else {
-            "Unknown Window".to_string()
-        };
-        json!({
-            "ProcessName": "unknown",
-            "Id": parts.get(0).copied().unwrap_or("0"),
-            "MainWindowTitle": name
+    let windows_raw = run_command_simple("wmctrl -l", tool_name)
+        .await
+        .unwrap_or_default();
+    let visible_windows: Vec<serde_json::Value> = windows_raw
+        .lines()
+        .take(12)
+        .map(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            let name = if parts.len() >= 4 {
+                parts[3..].join(" ")
+            } else {
+                "Unknown Window".to_string()
+            };
+            json!({
+                "ProcessName": "unknown",
+                "Id": parts.get(0).copied().unwrap_or("0"),
+                "MainWindowTitle": name
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(json!({
         "active_window_title": active_title,
         "active_pid": 0,
         "visible_windows": visible_windows
-    }).to_string())
+    })
+    .to_string())
 }
 
 #[cfg(not(windows))]
 async fn run_command_simple(cmd: &str, tool_name: &str) -> Result<String, DynamicToolError> {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
-    if parts.is_empty() { return Ok(String::new()); }
-    
+    if parts.is_empty() {
+        return Ok(String::new());
+    }
+
     let output = Command::new(parts[0])
         .args(&parts[1..])
         .output()
@@ -1525,7 +1551,7 @@ async fn run_command_simple(cmd: &str, tool_name: &str) -> Result<String, Dynami
             tool: tool_name.to_string(),
             details: e.to_string(),
         })?;
-    
+
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
@@ -1932,7 +1958,12 @@ fn parse_duckduckgo_results(html: &str) -> Vec<SearchResult> {
     item_re
         .captures_iter(html)
         .map(|capture| {
-            let mut url = decode_html_entities(capture.name("url").map(|value| value.as_str()).unwrap_or_default());
+            let mut url = decode_html_entities(
+                capture
+                    .name("url")
+                    .map(|value| value.as_str())
+                    .unwrap_or_default(),
+            );
             if url.starts_with("//") {
                 url = format!("https:{}", url);
             }
@@ -1948,9 +1979,14 @@ fn parse_duckduckgo_results(html: &str) -> Vec<SearchResult> {
                     }
                 }
             }
-            
+
             SearchResult {
-                title: clean_text_content(capture.name("title").map(|value| value.as_str()).unwrap_or_default()),
+                title: clean_text_content(
+                    capture
+                        .name("title")
+                        .map(|value| value.as_str())
+                        .unwrap_or_default(),
+                ),
                 url,
                 snippet: clean_text_content(
                     capture
@@ -2113,7 +2149,9 @@ mod tests {
             "list_processes"
         );
         assert_eq!(
-            infer_os_tool_action(&serde_json::json!({"input":"what is currently running on my computer"})),
+            infer_os_tool_action(
+                &serde_json::json!({"input":"what is currently running on my computer"})
+            ),
             "list_processes"
         );
         assert_eq!(
@@ -2151,8 +2189,17 @@ mod tests {
             .expect("list_processes should succeed");
         let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
         assert_eq!(value["action"], "list_processes");
-        assert!(value.get("total_processes").and_then(|v| v.as_i64()).unwrap_or(0) > 0);
-        assert!(value.get("background_processes").and_then(|v| v.as_array()).is_some());
+        assert!(
+            value
+                .get("total_processes")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
+                > 0
+        );
+        assert!(value
+            .get("background_processes")
+            .and_then(|v| v.as_array())
+            .is_some());
     }
 
     #[cfg(windows)]
@@ -2192,7 +2239,11 @@ mod tests {
         .expect("read_file should succeed");
         let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
         assert_eq!(value["action"], "read_file");
-        assert!(value["path"].as_str().unwrap_or_default().to_lowercase().contains("state.rs"));
+        assert!(value["path"]
+            .as_str()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("state.rs"));
         assert!(value.get("preview").is_some());
     }
 
@@ -2205,7 +2256,10 @@ mod tests {
             .expect("get_state should succeed");
         let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
         assert!(value.get("active_window_title").is_some());
-        assert!(value.get("visible_windows").and_then(|v| v.as_array()).is_some());
+        assert!(value
+            .get("visible_windows")
+            .and_then(|v| v.as_array())
+            .is_some());
     }
 
     #[cfg(windows)]
@@ -2232,6 +2286,9 @@ mod tests {
             .expect("browser_state should succeed");
         let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
         assert_eq!(value["action"], "browser_state");
-        assert!(value.get("browser_windows").and_then(|v| v.as_array()).is_some());
+        assert!(value
+            .get("browser_windows")
+            .and_then(|v| v.as_array())
+            .is_some());
     }
 }
