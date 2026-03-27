@@ -22,7 +22,10 @@ pub async fn discover_fast_path_domain(db: &Database, query: &str) -> Option<Str
             let keywords: Vec<&str> = keywords_str.split(',').map(|k| k.trim()).collect();
             for k in keywords {
                 if !k.is_empty() && lower_query.contains(&k.to_lowercase()) {
-                    println!("🎯 FAST-PATH: Query matched keyword '{}' for domain '{}'", k, s.domain);
+                    println!(
+                        "🎯 FAST-PATH: Query matched keyword '{}' for domain '{}'",
+                        k, s.domain
+                    );
                     return Some(s.domain.clone());
                 }
             }
@@ -129,7 +132,8 @@ mod tests {
     #[test]
     fn computer_requests_fall_back_to_computer_domain() {
         let lower_query = "take a screenshot of my desktop".to_string();
-        let screenshot_request = (lower_query.contains("desktop") || lower_query.contains("screen"))
+        let screenshot_request = (lower_query.contains("desktop")
+            || lower_query.contains("screen"))
             && (lower_query.contains("screenshot")
                 || lower_query.contains("screen capture")
                 || lower_query.contains("capture screen")
