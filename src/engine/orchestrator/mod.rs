@@ -202,6 +202,154 @@ enum ScreenshotFollowUpIntent {
     Resend,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ArtifactReference {
+    id: i64,
+    label: String,
+    kind: String,
+    domain: Option<String>,
+    file_path: Option<String>,
+    content_type: Option<String>,
+    content_excerpt: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkItemReference {
+    id: i64,
+    title: String,
+    brief: Option<String>,
+    status: String,
+    surface_kind: String,
+    assigned_domain: Option<String>,
+    prompt: String,
+}
+
+fn extract_structured_context(
+    query: &str,
+) -> (String, Vec<ArtifactReference>, Vec<WorkItemReference>) {
+    let mut refs = Vec::new();
+    let mut work_items = Vec::new();
+    let mut visible_lines = Vec::new();
+
+    for line in query.lines() {
+        let trimmed = line.trim();
+        if trimmed == "ARTIFACT_CONTEXT:" || trimmed == "WORK_ITEM_CONTEXT:" {
+            continue;
+        }
+        if let Some(payload) = trimmed
+            .strip_prefix("[[ARTIFACT_REF:")
+            .and_then(|value| value.strip_suffix("]]"))
+        {
+            if let Ok(parsed) = serde_json::from_str::<ArtifactReference>(payload) {
+                refs.push(parsed);
+            }
+            continue;
+        }
+        if let Some(payload) = trimmed
+            .strip_prefix("[[WORK_ITEM_REF:")
+            .and_then(|value| value.strip_suffix("]]"))
+        {
+            if let Ok(parsed) = serde_json::from_str::<WorkItemReference>(payload) {
+                work_items.push(parsed);
+            }
+            continue;
+        }
+        visible_lines.push(line);
+    }
+
+    (
+        visible_lines.join("\n").trim().to_string(),
+        refs,
+        work_items,
+    )
+}
+
+fn format_artifact_context(artifact_refs: &[ArtifactReference]) -> String {
+    if artifact_refs.is_empty() {
+        return String::new();
+    }
+
+    let lines = artifact_refs
+        .iter()
+        .map(|artifact| {
+            let mut parts = vec![
+                format!("Artifact #{}", artifact.id),
+                format!("label={}", artifact.label),
+                format!("kind={}", artifact.kind),
+            ];
+            if let Some(domain) = artifact
+                .domain
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                parts.push(format!("domain={domain}"));
+            }
+            if let Some(path) = artifact
+                .file_path
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                parts.push(format!("path={path}"));
+            }
+            if let Some(content_type) = artifact
+                .content_type
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                parts.push(format!("content_type={content_type}"));
+            }
+            if let Some(excerpt) = artifact
+                .content_excerpt
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                parts.push(format!("excerpt={excerpt}"));
+            }
+            format!("- {}", parts.join(" | "))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("SELECTED ARTIFACTS:\n{}", lines)
+}
+
+fn format_work_item_context(work_items: &[WorkItemReference]) -> String {
+    if work_items.is_empty() {
+        return String::new();
+    }
+
+    let lines = work_items
+        .iter()
+        .map(|work_item| {
+            let mut parts = vec![
+                format!("WorkItem #{}", work_item.id),
+                format!("title={}", work_item.title),
+                format!("status={}", work_item.status),
+                format!("surface={}", work_item.surface_kind),
+                format!("prompt={}", work_item.prompt),
+            ];
+            if let Some(domain) = work_item
+                .assigned_domain
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                parts.push(format!("assigned_domain={domain}"));
+            }
+            if let Some(brief) = work_item
+                .brief
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                parts.push(format!("brief={brief}"));
+            }
+            format!("- {}", parts.join(" | "))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("ACTIVE WORK ITEMS:\n{}", lines)
+}
+
 fn classify_screenshot_follow_up(query: &str) -> Option<ScreenshotFollowUpIntent> {
     let normalized = query
         .trim()
@@ -653,6 +801,21 @@ pub async fn orchestrate_request<'a>(
 ) -> String {
     let model_timeout_ms =
         crate::backend::get_setting_i64(db, "model_timeout_ms", 90_000).await as u64;
+    let (clean_query, artifact_refs, work_item_refs) = extract_structured_context(query);
+    let artifact_context = format_artifact_context(&artifact_refs);
+    let work_item_context = format_work_item_context(&work_item_refs);
+    let structured_context = [artifact_context.clone(), work_item_context.clone()]
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let enriched_memory_context = if structured_context.is_empty() {
+        memory_context.to_string()
+    } else if memory_context.trim().is_empty() {
+        structured_context.clone()
+    } else {
+        format!("{}\n\n{}", memory_context.trim(), structured_context)
+    };
     let run_id = crate::backend::start_execution_run(db, conversation_id, query)
         .await
         .ok();
@@ -673,8 +836,47 @@ pub async fn orchestrate_request<'a>(
     )
     .await;
 
+    if !artifact_refs.is_empty() {
+        let details = serde_json::to_string(&artifact_refs).ok();
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "artifact_context_loaded",
+            "completed",
+            None,
+            None,
+            None,
+            None,
+            Some(&format!(
+                "Loaded {} selected artifacts into execution context.",
+                artifact_refs.len()
+            )),
+            details.as_deref(),
+        )
+        .await;
+    }
+
+    if !work_item_refs.is_empty() {
+        let details = serde_json::to_string(&work_item_refs).ok();
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "work_item_context_loaded",
+            "completed",
+            None,
+            None,
+            None,
+            None,
+            Some("Loaded selected work items into execution context."),
+            details.as_deref(),
+        )
+        .await;
+    }
+
     if let Some((follow_up_response, details)) =
-        resolve_screenshot_follow_up(db, conversation_id, query).await
+        resolve_screenshot_follow_up(db, conversation_id, &clean_query).await
     {
         record_event(
             db,
@@ -706,9 +908,9 @@ pub async fn orchestrate_request<'a>(
     let decision = match decide_orchestration(
         db,
         all_agents,
-        query,
+        &clean_query,
         &history,
-        memory_context,
+        &enriched_memory_context,
         ollama_client,
     )
     .await
@@ -742,7 +944,7 @@ pub async fn orchestrate_request<'a>(
                 }
                 return friendly_error;
             }
-            heuristic_decision(db, query).await
+            heuristic_decision(db, &clean_query).await
         }
     };
 
@@ -791,10 +993,10 @@ pub async fn orchestrate_request<'a>(
         .await;
 
         let chat_agent = ChatAgent::new(ollama_client, &chat_model, &chat_info.instructions);
-        let direct_context = if memory_context.is_empty() {
+        let direct_context = if enriched_memory_context.is_empty() {
             "No recent context.".to_string()
         } else {
-            memory_context.to_string()
+            enriched_memory_context.to_string()
         };
 
         record_event(
@@ -804,7 +1006,7 @@ pub async fn orchestrate_request<'a>(
             "direct_chat_started",
             "running",
             Some("chat"),
-            Some(query),
+            Some(&clean_query),
             None,
             Some(&chat_model),
             Some("Routing request directly to chat agent."),
@@ -812,7 +1014,7 @@ pub async fn orchestrate_request<'a>(
         )
         .await;
 
-        let direct_response = chat_agent.answer(query, &direct_context).await;
+        let direct_response = chat_agent.answer(&clean_query, &direct_context).await;
         if let Some(friendly_error) = user_facing_runtime_error(&direct_response) {
             record_event(
                 db,
@@ -821,7 +1023,7 @@ pub async fn orchestrate_request<'a>(
                 "direct_chat_failed",
                 "error",
                 Some("chat"),
-                Some(query),
+                Some(&clean_query),
                 None,
                 Some(&chat_model),
                 Some("Direct chat failed because the model backend is unavailable."),
@@ -848,7 +1050,7 @@ pub async fn orchestrate_request<'a>(
             "direct_chat_completed",
             "completed",
             Some("chat"),
-            Some(query),
+            Some(&clean_query),
             None,
             Some(&chat_model),
             Some("Direct chat completed."),
@@ -877,7 +1079,7 @@ pub async fn orchestrate_request<'a>(
             .unwrap_or_else(|| "chat".to_string());
         let synthetic_plan = serde_json::json!([{
             "domain": domain,
-            "task": query,
+            "task": clean_query,
         }])
         .to_string();
         record_event(
@@ -887,19 +1089,24 @@ pub async fn orchestrate_request<'a>(
             "macro_plan_generated",
             "completed",
             decision.domain.as_deref(),
-            Some(query),
+            Some(&clean_query),
             None,
             None,
             Some("Orchestrator routed request directly to a single domain."),
             Some(&synthetic_plan),
         )
         .await;
-        planner::sanitize_plan(&synthetic_plan, query)
+        planner::sanitize_plan(&synthetic_plan, &clean_query)
     } else {
         println!("🧠 MASTER PLANNER Thinking...");
+        let planner_query = if artifact_context.is_empty() {
+            clean_query.clone()
+        } else {
+            format!("{}\n\n{}", clean_query, artifact_context)
+        };
         let plan_text: String = match timeout(
             Duration::from_millis(model_timeout_ms),
-            master_planner.plan(query),
+            master_planner.plan(&planner_query),
         )
         .await
         {
@@ -978,13 +1185,13 @@ pub async fn orchestrate_request<'a>(
         )
         .await;
 
-        planner::sanitize_plan(&plan_text, query)
+        planner::sanitize_plan(&plan_text, &clean_query)
     };
 
     let mut final_report = String::new();
     let mut browser_pid: Option<i32> = None;
 
-    let safe_memory = memory_context
+    let safe_memory = enriched_memory_context
         .replace("TASK_COMPLETED", "[PAST RUN FINISHED]")
         .replace("completed successfully", "[past success]")
         .replace("PLAN EXECUTION HALTED", "[INTERRUPTED]")
@@ -1340,11 +1547,11 @@ pub async fn orchestrate_request<'a>(
                 all_agents,
                 &macro_task.domain,
                 step,
-                query,
+                &clean_query,
                 history.clone(),
                 &memories,
                 &plan_history,
-                memory_context,
+                &enriched_memory_context,
                 &macro_task.task,
                 perception_tool,
                 ollama_client,
@@ -1375,7 +1582,7 @@ pub async fn orchestrate_request<'a>(
                         db,
                         all_agents,
                         ollama_client,
-                        query,
+                        &clean_query,
                         step,
                         &macro_task.domain,
                         supervisor_result.clone(),
@@ -1620,7 +1827,7 @@ pub async fn orchestrate_request<'a>(
     let synthesis_prompt = format!(
         "USER_QUERY: {}\n\nRESEARCH FINDINGS:\n{}\n\n\
          Instructions: {}",
-        query, final_report, style_instructions
+        clean_query, final_report, style_instructions
     );
 
     record_event(
