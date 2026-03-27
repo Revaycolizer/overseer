@@ -98,7 +98,7 @@ pub fn clean_response(response: String) -> String {
     // If it's a raw JSON object (or truncated one), find the start and attempt to repair
     if let Some(start_idx) = json_content.find('{') {
         let candidate = &json_content[start_idx..];
-        
+
         // If it parses directly, return it
         if serde_json::from_str::<serde_json::Value>(candidate).is_ok() {
             return candidate.to_string();
@@ -157,7 +157,7 @@ fn repair_json_truncation(input: &str) -> String {
     // One more try: If the last char is a comma, it's definitely truncated mid-field
     let trimmed = repaired.trim();
     if trimmed.ends_with(',') {
-        let mut final_repaired = trimmed[..trimmed.len()-1].to_string();
+        let mut final_repaired = trimmed[..trimmed.len() - 1].to_string();
         // Recalculate braces for the shorter version
         // (Simplified: just re-run the same logic)
         return repair_json_truncation(&final_repaired);
