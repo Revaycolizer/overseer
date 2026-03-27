@@ -64,12 +64,11 @@ fn main() {
     #[cfg(feature = "desktop")]
     {
         use dioxus::desktop::{Config, WindowBuilder};
-        let config = Config::new()
-            .with_window(
-                WindowBuilder::new()
-                    .with_title("Overseer")
-                    .with_decorations(false),
-            );
+        let config = Config::new().with_window(
+            WindowBuilder::new()
+                .with_title("Overseer")
+                .with_decorations(false),
+        );
         dioxus::LaunchBuilder::desktop()
             .with_cfg(config)
             .launch(App);
