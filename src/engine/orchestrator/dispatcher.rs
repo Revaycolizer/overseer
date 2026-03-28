@@ -101,6 +101,44 @@ fn summarize_computer_action(tool_name: &str, input_json: &serde_json::Value) ->
     }
 
     if let Some(action) = input_json.get("action").and_then(|value| value.as_str()) {
+        if matches!(
+            action,
+            "inspect_accessibility" | "focus_element" | "invoke_element"
+        ) {
+            let selector = input_json
+                .get("selector")
+                .and_then(|value| value.as_str())
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .or_else(|| {
+                    let mut parts = Vec::new();
+                    for (label, key) in [
+                        ("name", "name"),
+                        ("automation_id", "automation_id"),
+                        ("class", "class_name"),
+                        ("control_type", "control_type"),
+                    ] {
+                        if let Some(value) = input_json.get(key).and_then(|value| value.as_str()) {
+                            let trimmed = value.trim();
+                            if !trimmed.is_empty() {
+                                parts.push(format!("{}={}", label, trimmed));
+                            }
+                        }
+                    }
+                    if parts.is_empty() {
+                        None
+                    } else {
+                        Some(parts.join(", "))
+                    }
+                });
+
+            if let Some(selector) = selector {
+                return format!("{} -> {} ({})", tool_name, action.trim(), selector);
+            }
+        }
+    }
+
+    if let Some(action) = input_json.get("action").and_then(|value| value.as_str()) {
         if let Some(app) = input_json.get("app").and_then(|value| value.as_str()) {
             return format!("{} -> {} ({})", tool_name, action.trim(), app.trim());
         }
@@ -206,6 +244,28 @@ fn computer_strategy_hint(
             guidance.push("Use `os_tool` with action `browser_state` to inspect open browser windows and titles on the local machine.");
         }
         guidance.push("Do not guess the user's browser state. Report the actual open browser windows from tool output.");
+    }
+
+    if lower.contains("accessibility")
+        || lower.contains("ui automation")
+        || lower.contains("automation tree")
+        || lower.contains("focused element")
+        || lower.contains("focused control")
+        || lower.contains("button")
+        || lower.contains("field")
+        || lower.contains("input")
+        || lower.contains("textbox")
+        || lower.contains("form")
+        || lower.contains("selector")
+        || lower.contains("automation id")
+    {
+        if has_os_tool {
+            guidance.push("For accessibility or UI Automation tasks, call `os_tool` with action `inspect_accessibility` first to inspect the focused element and the active window accessibility tree.");
+            guidance.push("When the user wants a specific control targeted, call `os_tool` with action `focus_element` or `invoke_element` and pass selector fields like `name`, `automation_id`, `class_name`, or `control_type`.");
+            guidance.push("For text entry into a specific control, call `os_tool` with action `type_text` plus selector fields and the text value so Overseer can prefer UI Automation value-setting over blind keyboard input.");
+            guidance.push("Prefer selector-based UI Automation interaction over coordinate clicks whenever the control can be identified from accessibility state.");
+        }
+        guidance.push("Do not rely on screenshots alone for control targeting if accessibility state is available.");
     }
 
     if guidance.is_empty() {
@@ -762,12 +822,46 @@ fn is_native_screenshot_request(query: &str, step: &str, domain: &str) -> bool {
         return false;
     }
     let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
-    (combined.contains("desktop") || combined.contains("screen"))
+    (combined.contains("desktop")
+        || combined.contains("screen")
+        || combined.contains("workspace")
+        || combined.contains("window")
+        || combined.contains("app"))
         && (combined.contains("screenshot")
+            || combined.contains("screeshot")
+            || combined.contains("screen shot")
             || combined.contains("screen capture")
             || combined.contains("capture screen")
             || combined.contains("capture my desktop")
+            || combined.contains("capture my workspace")
+            || combined.contains("capture the workspace")
+            || combined.contains("capture this window")
             || combined.contains("take a screenshot"))
+}
+
+fn is_native_launch_request(query: &str, step: &str, domain: &str) -> bool {
+    if !matches!(domain, "computer" | "desktop") {
+        return false;
+    }
+    let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
+    let launch_verbs =
+        combined.contains("open ") || combined.contains("launch ") || combined.contains("start ");
+    let launch_targets = combined.contains("discord")
+        || combined.contains("chrome")
+        || combined.contains("spotify")
+        || combined.contains("explorer")
+        || combined.contains("browser")
+        || combined.contains("vscode")
+        || combined.contains("visual studio code")
+        || combined.contains("app")
+        || combined.contains("pc")
+        || combined.contains("computer");
+    let excludes = combined.contains("open url")
+        || combined.contains("open link")
+        || combined.contains("open website")
+        || combined.contains("open web");
+
+    launch_verbs && launch_targets && !excludes
 }
 
 fn is_native_process_list_request(query: &str, step: &str, domain: &str) -> bool {
@@ -830,6 +924,67 @@ fn is_native_browser_state_request(query: &str, step: &str, domain: &str) -> boo
         || (combined.contains("browser") && combined.contains("open"))
 }
 
+fn is_native_accessibility_request(query: &str, step: &str, domain: &str) -> bool {
+    if !matches!(domain, "computer" | "desktop") {
+        return false;
+    }
+    let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
+    combined.contains("accessibility")
+        || combined.contains("ui automation")
+        || combined.contains("automation tree")
+        || combined.contains("inspect ui")
+        || combined.contains("inspect accessibility")
+        || combined.contains("focused element")
+        || combined.contains("focused control")
+}
+
+fn native_selector_action(query: &str, step: &str, domain: &str) -> Option<&'static str> {
+    if !matches!(domain, "computer" | "desktop") {
+        return None;
+    }
+
+    let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
+
+    let typed_into_control = (combined.contains("type ") || combined.contains("enter "))
+        && (combined.contains(" into ") || combined.contains(" in "))
+        && (combined.contains("field")
+            || combined.contains("input")
+            || combined.contains("textbox")
+            || combined.contains("text box")
+            || combined.contains("search box")
+            || combined.contains("element")
+            || combined.contains("control"));
+    if typed_into_control {
+        return Some("type_text");
+    }
+
+    let focus_control = combined.contains("focus element")
+        || combined.contains("focus control")
+        || combined.contains("focus field")
+        || combined.contains("focus input")
+        || combined.contains("focus textbox")
+        || combined.contains("focus text box")
+        || combined.contains("focus search box")
+        || combined.contains("focus button");
+    if focus_control {
+        return Some("focus_element");
+    }
+
+    let invoke_control = combined.contains("invoke ")
+        || combined.contains("invoke element")
+        || combined.contains("invoke control")
+        || combined.contains("click element")
+        || combined.contains("click button")
+        || combined.contains("press button")
+        || combined.contains("select checkbox")
+        || combined.contains("toggle checkbox");
+    if invoke_control {
+        return Some("invoke_element");
+    }
+
+    None
+}
+
 fn parse_browser_state_payload(payload: &str) -> (Vec<String>, String) {
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
         let mut evidence = Vec::new();
@@ -860,6 +1015,110 @@ fn parse_browser_state_payload(payload: &str) -> (Vec<String>, String) {
     (
         vec!["Browser windows were inspected natively.".to_string()],
         "Observed the current browser state.".to_string(),
+    )
+}
+
+fn parse_accessibility_payload(payload: &str) -> (Vec<String>, String) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+        let mut evidence = Vec::new();
+        let scope = value
+            .get("search_scope")
+            .and_then(|item| item.as_str())
+            .unwrap_or("active_window");
+        let match_count = value
+            .get("match_count")
+            .and_then(|item| item.as_u64())
+            .unwrap_or(0);
+
+        if let Some(focused) = value.get("focused_element").and_then(|item| item.as_object()) {
+            let name = focused
+                .get("name")
+                .and_then(|item| item.as_str())
+                .unwrap_or("unnamed element");
+            let control_type = focused
+                .get("control_type")
+                .and_then(|item| item.as_str())
+                .unwrap_or("control");
+            evidence.push(format!("Focused element: {} ({})", name, control_type));
+        }
+
+        if let Some(matches) = value.get("matches").and_then(|item| item.as_array()) {
+            for matched in matches.iter().take(5) {
+                let name = matched
+                    .get("name")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("unnamed element");
+                let control_type = matched
+                    .get("control_type")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("control");
+                evidence.push(format!("Matched element: {} ({})", name, control_type));
+            }
+        }
+
+        evidence.push(format!("Accessibility search scope: {}.", scope));
+        let summary = if match_count > 0 {
+            format!(
+                "Inspected accessibility state and found {} matching UI elements.",
+                match_count
+            )
+        } else {
+            "Inspected accessibility state for the current UI scope.".to_string()
+        };
+        return (evidence, summary);
+    }
+
+    (
+        vec!["Accessibility state was inspected natively.".to_string()],
+        "Inspected accessibility state for the current UI scope.".to_string(),
+    )
+}
+
+fn parse_uia_interaction_payload(payload: &str) -> (Vec<String>, String) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+        let action = value
+            .get("action")
+            .and_then(|item| item.as_str())
+            .unwrap_or("focus_element");
+        let method = value
+            .get("method")
+            .and_then(|item| item.as_str())
+            .unwrap_or("uia");
+        let scope = value
+            .get("search_scope")
+            .and_then(|item| item.as_str())
+            .unwrap_or("active_window");
+        let element = value.get("element").and_then(|item| item.as_object());
+        let name = element
+            .and_then(|item| item.get("name"))
+            .and_then(|item| item.as_str())
+            .unwrap_or("target element");
+        let control_type = element
+            .and_then(|item| item.get("control_type"))
+            .and_then(|item| item.as_str())
+            .unwrap_or("control");
+
+        let mut evidence = vec![
+            format!("Matched UI element: {} ({})", name, control_type),
+            format!("Interaction method: {}.", method),
+            format!("UIA search scope: {}.", scope),
+        ];
+        if let Some(text_length) = value.get("text_length").and_then(|item| item.as_u64()) {
+            evidence.push(format!("Typed {} characters through the UI control.", text_length));
+        }
+
+        let summary = match action {
+            "invoke_element" => format!("Invoked UI element '{}'.", name),
+            "type_text" => format!("Entered text into UI element '{}'.", name),
+            _ => format!("Focused UI element '{}'.", name),
+        };
+
+        return (evidence, summary);
+    }
+
+    (
+        vec!["A UI Automation element interaction completed natively.".to_string()],
+        "Completed a native UI Automation interaction.".to_string(),
     )
 }
 
@@ -982,6 +1241,23 @@ fn parse_screenshot_artifact_payload(payload: &str) -> (Vec<String>, Vec<String>
         vec!["Native screenshot artifact created.".to_string()],
         vec!["screenshot".to_string()],
         "Captured a desktop screenshot.".to_string(),
+    )
+}
+
+fn parse_launch_payload(payload: &str) -> (Vec<String>, String) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+        let app = value
+            .get("app")
+            .and_then(|item| item.as_str())
+            .unwrap_or("the requested app");
+        let summary = format!("Launched {}.", app);
+        let evidence = vec![format!("Native app launch executed for {}.", app)];
+        return (evidence, summary);
+    }
+
+    (
+        vec!["Native app launch executed.".to_string()],
+        "Launched the requested app.".to_string(),
     )
 }
 
@@ -1113,6 +1389,168 @@ pub async fn dispatch_domain(
                 summary,
                 evidence,
                 artifacts,
+                true,
+                s.hide_evidence,
+                raw,
+            ));
+        }
+    }
+
+    if is_native_accessibility_request(query, step, domain) {
+        if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
+            let raw = crate::engine::tools::call_dynamic_tool(
+                os_tool,
+                serde_json::json!({ "action": "inspect_accessibility", "input": query }),
+            )
+            .await
+            .map_err(|err| format!("Native accessibility inspection failed: {}", err))?;
+
+            let (evidence, summary) = parse_accessibility_payload(&raw);
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_started",
+                "running",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some("Using native accessibility inspection fast path."),
+                Some(&format!(
+                    r#"{{"action":"inspect_accessibility","input":{:?}}}"#,
+                    query
+                )),
+            )
+            .await;
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_completed",
+                "completed",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some(&summary),
+                Some(&raw),
+            )
+            .await;
+
+            return Ok(SupervisorExecutionResult::completed(
+                summary,
+                evidence,
+                Vec::new(),
+                true,
+                s.hide_evidence,
+                raw,
+            ));
+        }
+    }
+
+    if let Some(action) = native_selector_action(query, step, domain) {
+        if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
+            let raw = crate::engine::tools::call_dynamic_tool(
+                os_tool,
+                serde_json::json!({ "action": action, "input": query }),
+            )
+            .await
+            .map_err(|err| format!("Native UI Automation interaction failed: {}", err))?;
+
+            let (evidence, summary) = parse_uia_interaction_payload(&raw);
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_started",
+                "running",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some("Using native selector-based UI Automation fast path."),
+                Some(&format!(
+                    r#"{{"action":"{}","input":{:?}}}"#,
+                    action, query
+                )),
+            )
+            .await;
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_completed",
+                "completed",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some(&summary),
+                Some(&raw),
+            )
+            .await;
+
+            return Ok(SupervisorExecutionResult::completed(
+                summary,
+                evidence,
+                Vec::new(),
+                true,
+                s.hide_evidence,
+                raw,
+            ));
+        }
+    }
+
+    if is_native_launch_request(query, step, domain) {
+        if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
+            let raw = crate::engine::tools::call_dynamic_tool(
+                os_tool,
+                serde_json::json!({ "action": "launch", "input": query }),
+            )
+            .await
+            .map_err(|err| format!("Native app launch failed: {}", err))?;
+
+            let (evidence, summary) = parse_launch_payload(&raw);
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_started",
+                "running",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some("Using native app launch fast path."),
+                Some(&format!(r#"{{"action":"launch","input":{:?}}}"#, query)),
+            )
+            .await;
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_completed",
+                "completed",
+                Some(domain),
+                Some(step),
+                Some("os_tool"),
+                None,
+                Some(&summary),
+                Some(&raw),
+            )
+            .await;
+
+            return Ok(SupervisorExecutionResult::completed(
+                summary,
+                evidence,
+                Vec::new(),
                 true,
                 s.hide_evidence,
                 raw,
@@ -1329,7 +1767,9 @@ pub async fn dispatch_domain(
                 .map(|pos| after_header + pos)
                 .unwrap_or(clean_context.len());
 
-            let artifact_content = clean_context[artifact_block_start + "SELECTED ARTIFACTS:".len()..artifact_block_end].trim();
+            let artifact_content = clean_context
+                [artifact_block_start + "SELECTED ARTIFACTS:".len()..artifact_block_end]
+                .trim();
             let before = clean_context[..artifact_block_start].trim();
             let after = clean_context[artifact_block_end..].trim();
             let remaining = format!("{}\n{}", before, after).trim().to_string();
@@ -1354,7 +1794,9 @@ pub async fn dispatch_domain(
                     // Parse [Attached File: filename (Path: path)] markers
                     for line in text.text.lines() {
                         let trimmed = line.trim();
-                        if trimmed.starts_with("[Attached File:") || trimmed.starts_with("[Attached Image:") {
+                        if trimmed.starts_with("[Attached File:")
+                            || trimmed.starts_with("[Attached Image:")
+                        {
                             // Extract file path from the marker
                             if let Some(path_start) = trimmed.find("Path: ") {
                                 let path_rest = &trimmed[path_start + 6..];
@@ -1363,7 +1805,11 @@ pub async fn dispatch_domain(
                                 match std::fs::read_to_string(path) {
                                     Ok(content) if !content.trim().is_empty() => {
                                         let truncated = if content.len() > 8000 {
-                                            format!("{}\n... [truncated, {} total chars]", &content[..8000], content.len())
+                                            format!(
+                                                "{}\n... [truncated, {} total chars]",
+                                                &content[..8000],
+                                                content.len()
+                                            )
                                         } else {
                                             content
                                         };
@@ -2204,6 +2650,16 @@ mod tests {
             "Capture the desktop",
             "computer"
         ));
+        assert!(is_native_screenshot_request(
+            "Take a screenshot of my workspace",
+            "Capture the current workspace",
+            "computer"
+        ));
+        assert!(is_native_screenshot_request(
+            "Take a screeshot on my pc",
+            "Capture the current desktop",
+            "computer"
+        ));
         assert!(is_native_process_list_request(
             "Tell me the background tasks that I'm currently running",
             "Inspect running processes",
@@ -2224,6 +2680,32 @@ mod tests {
             "Inspect browser state",
             "computer"
         ));
+        assert!(is_native_launch_request(
+            "Take a open discord on my pc",
+            "Open Discord locally",
+            "computer"
+        ));
+        assert!(is_native_accessibility_request(
+            "Inspect accessibility tree for the current window",
+            "Inspect accessibility state",
+            "computer"
+        ));
+        assert_eq!(
+            native_selector_action(
+                "Focus element Save button",
+                "Focus the Save control",
+                "computer"
+            ),
+            Some("focus_element")
+        );
+        assert_eq!(
+            native_selector_action(
+                "Type hello@example.com into the Email field",
+                "Fill the Email field",
+                "computer"
+            ),
+            Some("type_text")
+        );
     }
 
     #[test]
