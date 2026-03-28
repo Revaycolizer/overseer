@@ -29,6 +29,33 @@ fn parse_work_item_runtime_metadata(work_item: &backend::WorkItem) -> WorkItemRu
         .unwrap_or_default()
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum WorkspaceSessionRef {
+    Artifact(i64),
+    WorkItem(i64),
+}
+
+fn workspace_session_key(session: &WorkspaceSessionRef) -> String {
+    match session {
+        WorkspaceSessionRef::Artifact(id) => format!("artifact:{id}"),
+        WorkspaceSessionRef::WorkItem(id) => format!("work-item:{id}"),
+    }
+}
+
+fn upsert_workspace_session(
+    sessions: &mut Vec<WorkspaceSessionRef>,
+    session: WorkspaceSessionRef,
+) -> String {
+    let key = workspace_session_key(&session);
+    if !sessions
+        .iter()
+        .any(|existing| workspace_session_key(existing) == key)
+    {
+        sessions.push(session);
+    }
+    key
+}
+
 #[component]
 pub fn Conversations() -> Element {
     let global_state = crate::state::use_global_state();
@@ -63,6 +90,8 @@ pub fn Conversations() -> Element {
     let mut selected_artifacts = use_signal(Vec::<backend::Artifact>::new);
     let mut focused_artifact = use_signal(|| None::<backend::Artifact>);
     let mut selected_work_item = use_signal(|| None::<backend::WorkItem>);
+    let mut workspace_sessions = use_signal(Vec::<WorkspaceSessionRef>::new);
+    let mut active_workspace_session_key = use_signal(|| None::<String>);
 
     use_effect(move || {
         let conv_id = selected_conversation_id();
@@ -72,6 +101,42 @@ pub fn Conversations() -> Element {
             selected_artifacts.set(Vec::new());
             focused_artifact.set(None);
             selected_work_item.set(None);
+            workspace_sessions.set(Vec::new());
+            active_workspace_session_key.set(None);
+        }
+    });
+
+    use_effect(move || {
+        if let Some(artifact) = focused_artifact() {
+            let key = workspace_sessions.with_mut(|sessions| {
+                upsert_workspace_session(sessions, WorkspaceSessionRef::Artifact(artifact.id))
+            });
+            active_workspace_session_key.set(Some(key));
+        }
+    });
+
+    use_effect(move || {
+        if let Some(work_item) = selected_work_item() {
+            let key = workspace_sessions.with_mut(|sessions| {
+                upsert_workspace_session(sessions, WorkspaceSessionRef::WorkItem(work_item.id))
+            });
+            active_workspace_session_key.set(Some(key));
+        }
+    });
+
+    use_effect(move || {
+        let sessions = workspace_sessions();
+        let active_key = active_workspace_session_key();
+        if sessions.is_empty() {
+            if active_key.is_some() {
+                active_workspace_session_key.set(None);
+            }
+        } else if active_key.as_ref().is_none_or(|key| {
+            !sessions
+                .iter()
+                .any(|session| workspace_session_key(session) == *key)
+        }) {
+            active_workspace_session_key.set(Some(workspace_session_key(&sessions[0])));
         }
     });
 
@@ -313,6 +378,29 @@ pub fn Conversations() -> Element {
                                     }
                                 }
                             }
+                            if !workspace_sessions().is_empty() {
+                                div { class: "border-b border-slate-200 bg-white/70 px-6 py-4",
+                                    div { class: "max-w-3xl mx-auto",
+                                        WorkspaceSessionDeck {
+                                            db: db.clone(),
+                                            sessions: workspace_sessions(),
+                                            sessions_signal: workspace_sessions,
+                                            active_session_key: active_workspace_session_key,
+                                            artifacts: artifacts.clone(),
+                                            work_items: work_items.clone(),
+                                            selected_artifacts: selected_artifacts,
+                                            selected_work_item: selected_work_item,
+                                            starter_prompt: starter_prompt,
+                                            work_items_resource: work_items_resource.clone(),
+                                            on_open: move |path: String| {
+                                                spawn(async move {
+                                                    let _ = backend::open_local_path(&path).await;
+                                                });
+                                            },
+                                        }
+                                    }
+                                }
+                            }
                             div {
                                 id: "chat-scroll-container",
                                 class: "flex-1 overflow-y-auto scroll-smooth custom-scrollbar",
@@ -348,13 +436,9 @@ pub fn Conversations() -> Element {
                         }
                         div { class: "h-full min-h-0 flex flex-col",
                             RecentArtifactsPanel {
-                                db: db.clone(),
                                 artifacts: artifacts,
                                 selected_artifacts: selected_artifacts,
                                 focused_artifact: focused_artifact,
-                                selected_work_item: selected_work_item,
-                                starter_prompt: starter_prompt,
-                                work_items_resource: work_items_resource.clone(),
                                 on_open: move |path: String| {
                                     spawn(async move {
                                         let _ = backend::open_local_path(&path).await;
@@ -483,14 +567,247 @@ fn status_tone(status: &str) -> &'static str {
 }
 
 #[component]
-fn RecentArtifactsPanel(
+fn WorkspaceSessionDeck(
     db: std::sync::Arc<crate::db::Database>,
+    sessions: Vec<WorkspaceSessionRef>,
+    sessions_signal: Signal<Vec<WorkspaceSessionRef>>,
+    active_session_key: Signal<Option<String>>,
     artifacts: Vec<backend::Artifact>,
+    work_items: Vec<backend::WorkItem>,
     selected_artifacts: Signal<Vec<backend::Artifact>>,
-    focused_artifact: Signal<Option<backend::Artifact>>,
     selected_work_item: Signal<Option<backend::WorkItem>>,
     starter_prompt: Signal<Option<String>>,
     work_items_resource: Resource<Vec<backend::WorkItem>>,
+    on_open: EventHandler<String>,
+) -> Element {
+    let active_key = active_session_key().or_else(|| sessions.first().map(workspace_session_key));
+    let active_session = active_key.as_ref().and_then(|key| {
+        sessions
+            .iter()
+            .find(|session| workspace_session_key(session) == *key)
+            .cloned()
+    });
+
+    rsx! {
+        div { class: "space-y-4",
+            div { class: "flex items-center justify-between gap-3",
+                div {
+                    p { class: "text-[10px] font-black uppercase tracking-[0.22em] text-slate-400", "Workspace Sessions" }
+                    p { class: "text-xs text-slate-500 mt-1", "Keep artifact and work-item contexts open as switchable task surfaces." }
+                }
+                span { class: "text-[10px] font-black uppercase tracking-[0.18em] text-slate-400", "{sessions.len()} open" }
+            }
+
+            div { class: "flex flex-wrap gap-2",
+                for session in sessions.iter().cloned() {
+                    WorkspaceSessionTab {
+                        session: session,
+                        sessions_signal: sessions_signal,
+                        active_session_key: active_session_key,
+                        active_key: active_key.clone(),
+                        sessions: sessions.clone(),
+                        artifacts: artifacts.clone(),
+                        work_items: work_items.clone(),
+                    }
+                }
+            }
+
+            if let Some(session) = active_session {
+                match session {
+                    WorkspaceSessionRef::Artifact(artifact_id) => {
+                        if let Some(artifact) = artifacts.iter().find(|artifact| artifact.id == artifact_id).cloned() {
+                            rsx! {
+                                ArtifactWorkbenchPanel {
+                                    db: db,
+                                    artifact: artifact,
+                                    selected_artifacts: selected_artifacts,
+                                    selected_work_item: selected_work_item,
+                                    starter_prompt: starter_prompt,
+                                    work_items_resource: work_items_resource,
+                                    on_open: on_open,
+                                }
+                            }
+                        } else {
+                            rsx! {
+                                div { class: "rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500",
+                                    "This artifact is no longer available in the current conversation state."
+                                }
+                            }
+                        }
+                    }
+                    WorkspaceSessionRef::WorkItem(work_item_id) => {
+                        if let Some(work_item) = work_items.iter().find(|work_item| work_item.id == work_item_id).cloned() {
+                            rsx! {
+                                WorkItemWorkspacePanel {
+                                    work_item: work_item,
+                                    selected_work_item: selected_work_item,
+                                    starter_prompt: starter_prompt,
+                                }
+                            }
+                        } else {
+                            rsx! {
+                                div { class: "rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500",
+                                    "This work item is no longer available in the current conversation state."
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn WorkspaceSessionTab(
+    session: WorkspaceSessionRef,
+    sessions_signal: Signal<Vec<WorkspaceSessionRef>>,
+    active_session_key: Signal<Option<String>>,
+    active_key: Option<String>,
+    sessions: Vec<WorkspaceSessionRef>,
+    artifacts: Vec<backend::Artifact>,
+    work_items: Vec<backend::WorkItem>,
+) -> Element {
+    let session_key = workspace_session_key(&session);
+    let is_active = active_key.as_ref().is_some_and(|key| key == &session_key);
+    let label = match session {
+        WorkspaceSessionRef::Artifact(artifact_id) => artifacts
+            .iter()
+            .find(|artifact| artifact.id == artifact_id)
+            .map(|artifact| artifact.label.clone())
+            .unwrap_or_else(|| format!("Artifact {artifact_id}")),
+        WorkspaceSessionRef::WorkItem(work_item_id) => work_items
+            .iter()
+            .find(|work_item| work_item.id == work_item_id)
+            .map(|work_item| work_item.title.clone())
+            .unwrap_or_else(|| format!("Work Item {work_item_id}")),
+    };
+
+    rsx! {
+        div { class: format!(
+                "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 transition-all {}",
+                if is_active {
+                    "border-blue-200 bg-blue-50 text-blue-700"
+                } else {
+                    "border-slate-200 bg-white text-slate-700"
+                }
+            ),
+            button {
+                class: "text-[10px] font-black uppercase tracking-[0.14em]",
+                onclick: {
+                    let session_key = session_key.clone();
+                    move |_| active_session_key.set(Some(session_key.clone()))
+                },
+                "{label}"
+            }
+            button {
+                class: "inline-flex size-5 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all",
+                onclick: {
+                    let session_key = session_key.clone();
+                    let sessions = sessions.clone();
+                    move |_| {
+                        let next_key = sessions
+                            .iter()
+                            .filter(|existing| workspace_session_key(existing) != session_key)
+                            .map(workspace_session_key)
+                            .next();
+                        sessions_signal.with_mut(|open_sessions| {
+                            open_sessions.retain(|existing| workspace_session_key(existing) != session_key);
+                        });
+                        active_session_key.with_mut(|active| {
+                            if active.as_ref().is_some_and(|current| current == &session_key) {
+                                *active = next_key;
+                            }
+                        });
+                    }
+                },
+                MaterialIcon { name: "close", size: 14 }
+            }
+        }
+    }
+}
+
+#[component]
+fn WorkItemWorkspacePanel(
+    work_item: backend::WorkItem,
+    selected_work_item: Signal<Option<backend::WorkItem>>,
+    starter_prompt: Signal<Option<String>>,
+) -> Element {
+    let runtime_metadata = parse_work_item_runtime_metadata(&work_item);
+
+    rsx! {
+        div { class: "rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 shadow-sm space-y-4",
+            div {
+                p { class: "text-[10px] font-black uppercase tracking-[0.2em] text-slate-400", "Work Item Session" }
+                h4 { class: "text-sm font-black text-slate-900 mt-1", "{work_item.title}" }
+                if let Some(brief) = work_item.brief.clone().filter(|value| !value.trim().is_empty()) {
+                    p { class: "text-xs text-slate-500 mt-1 leading-relaxed", "{brief}" }
+                }
+            }
+
+            div { class: "flex flex-wrap items-center gap-2",
+                WorkItemStatusBadge { status: work_item.status.clone() }
+                span { class: "inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500",
+                    "{prettify_token(&work_item.surface_kind)}"
+                }
+                if let Some(domain) = work_item.assigned_domain.clone().filter(|value| !value.trim().is_empty()) {
+                    span { class: "inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500",
+                        "{prettify_token(&domain)}"
+                    }
+                }
+            }
+
+            div { class: "rounded-xl border border-slate-200 bg-white px-4 py-3 space-y-2",
+                p { class: "text-[10px] font-black uppercase tracking-[0.18em] text-slate-400", "Prompt" }
+                p { class: "text-sm text-slate-700 whitespace-pre-wrap break-words", "{work_item.prompt}" }
+            }
+
+            if let Some(excerpt) = runtime_metadata.latest_response_excerpt.filter(|value| !value.trim().is_empty()) {
+                div { class: "rounded-xl border border-slate-200 bg-white px-4 py-3 space-y-2",
+                    div { class: "flex flex-wrap items-center justify-between gap-2",
+                        p { class: "text-[10px] font-black uppercase tracking-[0.18em] text-slate-400", "Latest Result" }
+                        if let Some(status) = runtime_metadata.latest_run_status.filter(|value| !value.trim().is_empty()) {
+                            span { class: "text-[10px] font-black uppercase tracking-[0.16em] text-slate-500",
+                                "{prettify_token(&status)}"
+                            }
+                        }
+                    }
+                    p { class: "text-sm text-slate-700 whitespace-pre-wrap break-words", "{excerpt}" }
+                }
+            }
+
+            div { class: "flex flex-wrap gap-2",
+                button {
+                    class: "inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-violet-700 hover:bg-violet-100 transition-all",
+                    onclick: {
+                        let work_item = work_item.clone();
+                        move |_| {
+                            selected_work_item.set(Some(work_item.clone()));
+                            starter_prompt.set(Some(work_item.prompt.clone()));
+                        }
+                    },
+                    MaterialIcon { name: "edit_note", size: 14 }
+                    "Use in Composer"
+                }
+                button {
+                    class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 hover:border-blue-200 hover:text-blue-700 transition-all",
+                    onclick: {
+                        let prompt = work_item.prompt.clone();
+                        move |_| copy_to_clipboard(prompt.clone())
+                    },
+                    MaterialIcon { name: "content_copy", size: 14 }
+                    "Copy Prompt"
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn RecentArtifactsPanel(
+    artifacts: Vec<backend::Artifact>,
+    selected_artifacts: Signal<Vec<backend::Artifact>>,
+    focused_artifact: Signal<Option<backend::Artifact>>,
     on_open: EventHandler<String>,
 ) -> Element {
     rsx! {
@@ -516,18 +833,6 @@ fn RecentArtifactsPanel(
                                 on_open: on_open.clone(),
                             }
                         }
-                    }
-                }
-
-                if let Some(artifact) = focused_artifact() {
-                    ArtifactWorkbenchPanel {
-                        db: db,
-                        artifact: artifact,
-                        selected_artifacts: selected_artifacts,
-                        selected_work_item: selected_work_item,
-                        starter_prompt: starter_prompt,
-                        work_items_resource: work_items_resource,
-                        on_open: on_open,
                     }
                 }
             }
@@ -658,9 +963,9 @@ fn ArtifactCard(
                 },
                 MaterialIcon { name: "visibility", size: 14 }
                 if is_focused {
-                    "Inspector Open"
+                    "Session Open"
                 } else {
-                    "Inspect"
+                    "Open Session"
                 }
             }
 
@@ -1317,7 +1622,7 @@ fn WorkItemCard(
                         move |_| selected_work_item.set(Some(work_item.clone()))
                     },
                     MaterialIcon { name: "visibility", size: 14 }
-                    if is_selected { "Focused" } else { "Focus" }
+                    if is_selected { "Session Open" } else { "Open Session" }
                 }
 
                 button {
