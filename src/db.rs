@@ -139,8 +139,8 @@ impl Database {
 
     async fn seed_all(&self) -> anyhow::Result<()> {
         println!("🌱 Initializing v10 Database Environment...");
-     //   self.seed_agents().await?;
-      //  self.seed_tools().await?;
+        //   self.seed_agents().await?;
+        //  self.seed_tools().await?;
         // self.seed_agent_tools().await?;
         // self.seed_supervisors().await?; // This now handles system supervisors too
         // self.seed_planners().await?;
@@ -589,7 +589,9 @@ impl Database {
         ];
 
         let mut tx = self.pool.begin().await?;
-        for (name, desc, domain, model, keywords, priority, skip_fast_path, artifact_keywords) in supervisors {
+        for (name, desc, domain, model, keywords, priority, skip_fast_path, artifact_keywords) in
+            supervisors
+        {
             let id = self.next_id().await;
             let inst = format!("You are the {} supervisor. Your mission is to complete the user request using the available tools. IMAGE RULE: If search results contain images, you ARE authorized to show them directly in your summary via markdown ![](). Never say \"I cannot show images\" to the user.", name);
 
