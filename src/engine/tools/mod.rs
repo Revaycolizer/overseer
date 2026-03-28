@@ -716,6 +716,25 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
 
     if matches!(
         lower.as_str(),
+        "inspect_accessibility"
+            | "accessibility"
+            | "accessibility_tree"
+            | "ui_tree"
+            | "focused_element"
+            | "uia"
+    ) || lower.contains("accessibility tree")
+        || lower.contains("ui automation")
+        || lower.contains("automation tree")
+        || lower.contains("focused element")
+        || lower.contains("focused control")
+        || lower.contains("inspect accessibility")
+        || lower.contains("inspect ui")
+    {
+        return "inspect_accessibility".to_string();
+    }
+
+    if matches!(
+        lower.as_str(),
         "list_processes" | "processes" | "tasks" | "background_tasks" | "background processes"
     ) || ((lower.contains("background") || lower.contains("running"))
         && (lower.contains("task") || lower.contains("process")))
@@ -768,6 +787,13 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         return "browser_state".to_string();
     }
 
+    if matches!(lower.as_str(), "focus_element" | "focus control")
+        || lower.starts_with("focus element ")
+        || lower.starts_with("focus control ")
+    {
+        return "focus_element".to_string();
+    }
+
     if matches!(lower.as_str(), "focus" | "activate" | "activate_window")
         || lower.starts_with("focus ")
         || lower.starts_with("activate ")
@@ -780,6 +806,8 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         "screenshot" | "capture" | "capture_screen" | "screen_capture"
     ) || lower.contains("take screenshot")
         || lower.contains("take a screenshot")
+        || lower.contains("screeshot")
+        || lower.contains("screen shot")
         || lower.contains("capture screen")
     {
         return "screenshot".to_string();
@@ -793,6 +821,14 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
 
     if matches!(lower.as_str(), "right_click" | "right click") || lower.starts_with("right click") {
         return "right_click".to_string();
+    }
+
+    if matches!(lower.as_str(), "invoke" | "invoke_element" | "invoke control")
+        || lower.starts_with("invoke ")
+        || lower.starts_with("click element ")
+        || lower.starts_with("press button ")
+    {
+        return "invoke_element".to_string();
     }
 
     if matches!(lower.as_str(), "click" | "left_click" | "tap")
@@ -847,6 +883,15 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         || lower.starts_with("launch ")
         || lower.starts_with("open app ")
         || lower.starts_with("start app ")
+        || ((lower.contains("open ") || lower.contains("start "))
+            && (lower.contains("pc")
+                || lower.contains("computer")
+                || lower.contains("discord")
+                || lower.contains("chrome")
+                || lower.contains("spotify")
+                || lower.contains("vscode")
+                || lower.contains("visual studio code")
+                || lower.contains("explorer")))
     {
         return "launch".to_string();
     }
@@ -903,6 +948,21 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
                 return Some(rest.trim().to_string());
             }
         }
+        "focus_element" => {
+            if let Some(rest) = lower.strip_prefix("focus element ") {
+                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+            }
+            if let Some(rest) = lower.strip_prefix("focus control ") {
+                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+            }
+        }
+        "invoke_element" => {
+            for prefix in ["invoke ", "click element ", "press button "] {
+                if let Some(rest) = lower.strip_prefix(prefix) {
+                    return Some(raw[raw.len() - rest.len()..].trim().to_string());
+                }
+            }
+        }
         "launch" => {
             if let Some(rest) = raw.strip_prefix("launch ") {
                 return Some(rest.trim().to_string());
@@ -912,6 +972,39 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
             }
             if lower.starts_with("start app ") {
                 return Some(raw["start app ".len()..].trim().to_string());
+            }
+            if let Some(index) = lower.find("open ") {
+                let rest = raw[index + "open ".len()..].trim();
+                let cleaned = rest
+                    .trim_start_matches("a ")
+                    .trim_start_matches("an ")
+                    .trim_start_matches("the ")
+                    .trim();
+                let lowered = cleaned.to_lowercase();
+                let suffixes = [
+                    " on my pc",
+                    " on my computer",
+                    " on pc",
+                    " on computer",
+                    " on this pc",
+                    " on this computer",
+                ];
+                for suffix in suffixes {
+                    if lowered.ends_with(suffix) {
+                        let end = cleaned.len().saturating_sub(suffix.len());
+                        return Some(cleaned[..end].trim().to_string());
+                    }
+                }
+                return Some(cleaned.to_string());
+            }
+            if let Some(index) = lower.find("start ") {
+                let rest = raw[index + "start ".len()..].trim();
+                let cleaned = rest
+                    .trim_start_matches("a ")
+                    .trim_start_matches("an ")
+                    .trim_start_matches("the ")
+                    .trim();
+                return Some(cleaned.to_string());
             }
         }
         "open_url" => {
@@ -954,6 +1047,186 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
     }
 
     None
+}
+
+fn infer_uia_control_type(text: &str) -> Option<&'static str> {
+    let lower = text.to_lowercase();
+    if lower.contains("checkbox") || lower.contains("check box") {
+        return Some("CheckBox");
+    }
+    if lower.contains("radio button") || lower.contains("radio") {
+        return Some("RadioButton");
+    }
+    if lower.contains("button") {
+        return Some("Button");
+    }
+    if lower.contains("textbox")
+        || lower.contains("text box")
+        || lower.contains("input")
+        || lower.contains("field")
+        || lower.contains("edit")
+        || lower.contains("search box")
+    {
+        return Some("Edit");
+    }
+    if lower.contains("tab") {
+        return Some("TabItem");
+    }
+    if lower.contains("link") {
+        return Some("Hyperlink");
+    }
+    if lower.contains("menu item") || lower.contains("menu") {
+        return Some("MenuItem");
+    }
+    if lower.contains("combo box") || lower.contains("dropdown") || lower.contains("drop-down") {
+        return Some("ComboBox");
+    }
+    None
+}
+
+fn clean_uia_selector_name(text: &str) -> String {
+    let mut cleaned = text.trim().to_string();
+    for prefix in [
+        "the ",
+        "a ",
+        "an ",
+        "this ",
+        "that ",
+        "my ",
+        "current ",
+    ] {
+        if cleaned.to_lowercase().starts_with(prefix) {
+            cleaned = cleaned[prefix.len()..].trim().to_string();
+        }
+    }
+
+    for suffix in [
+        " button",
+        " field",
+        " input",
+        " textbox",
+        " text box",
+        " edit",
+        " box",
+        " checkbox",
+        " check box",
+        " radio button",
+        " radio",
+        " tab",
+        " link",
+        " menu item",
+        " menu",
+        " dropdown",
+        " drop-down",
+        " combo box",
+        " control",
+        " element",
+    ] {
+        if cleaned.to_lowercase().ends_with(suffix) {
+            let end = cleaned.len().saturating_sub(suffix.len());
+            cleaned = cleaned[..end].trim().to_string();
+            break;
+        }
+    }
+
+    cleaned
+}
+
+fn extract_uia_selector_target(input: &serde_json::Value, action: &str) -> Option<String> {
+    if let Some(target) = extract_os_tool_target(input, action) {
+        return Some(target);
+    }
+
+    let raw = read_string_field(input, &["input"])?;
+    let lower = raw.to_lowercase();
+
+    match action {
+        "click" => {
+            for prefix in ["click ", "tap "] {
+                if let Some(rest) = lower.strip_prefix(prefix) {
+                    return Some(raw[raw.len() - rest.len()..].trim().to_string());
+                }
+            }
+        }
+        "focus" => {
+            if let Some(rest) = lower.strip_prefix("focus ") {
+                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+            }
+        }
+        "type_text" => {
+            for marker in [" into the ", " into ", " in the ", " in "] {
+                if let Some(index) = lower.find(marker) {
+                    let target = raw[index + marker.len()..].trim();
+                    if !target.is_empty() {
+                        return Some(target.to_string());
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    None
+}
+
+fn build_uia_selector_object(input: &serde_json::Value) -> serde_json::Value {
+    let mut selector = serde_json::Map::new();
+
+    for (src, dst) in [
+        ("selector", "selector"),
+        ("name", "name"),
+        ("automation_id", "automation_id"),
+        ("automationid", "automation_id"),
+        ("class_name", "class_name"),
+        ("classname", "class_name"),
+        ("control_type", "control_type"),
+        ("controltype", "control_type"),
+    ] {
+        if let Some(value) = read_string_field(input, &[src]) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                selector.insert(dst.to_string(), serde_json::Value::String(trimmed.to_string()));
+            }
+        }
+    }
+
+    if selector.is_empty() {
+        let action = infer_os_tool_action(input);
+        if let Some(target) = extract_uia_selector_target(input, &action)
+            .or_else(|| read_string_field(input, &["input"]))
+        {
+            let trimmed = target.trim();
+            if !trimmed.is_empty() {
+                let cleaned_name = clean_uia_selector_name(trimmed);
+                if !cleaned_name.is_empty() && cleaned_name.len() < trimmed.len() {
+                    selector.insert(
+                        "name".to_string(),
+                        serde_json::Value::String(cleaned_name),
+                    );
+                } else {
+                    selector.insert(
+                        "selector".to_string(),
+                        serde_json::Value::String(trimmed.to_string()),
+                    );
+                }
+                if let Some(control_type) = infer_uia_control_type(trimmed) {
+                    selector.insert(
+                        "control_type".to_string(),
+                        serde_json::Value::String(control_type.to_string()),
+                    );
+                }
+            }
+        }
+    }
+
+    serde_json::Value::Object(selector)
+}
+
+fn has_uia_selector(input: &serde_json::Value) -> bool {
+    build_uia_selector_object(input)
+        .as_object()
+        .map(|selector| !selector.is_empty())
+        .unwrap_or(false)
 }
 
 fn extract_text_value(input: &serde_json::Value) -> Option<String> {
@@ -1194,6 +1467,7 @@ public static class OverseerWinApi {
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 }
 "@
+Add-Type -AssemblyName UIAutomationClient
 $hwnd = [OverseerWinApi]::GetForegroundWindow()
 $activeTitle = ""
 $activePid = 0
@@ -1203,6 +1477,51 @@ if ($hwnd -ne [IntPtr]::Zero) {
     $activeTitle = $sb.ToString()
     [void][OverseerWinApi]::GetWindowThreadProcessId($hwnd, [ref]$activePid)
 }
+$activeElement = $null
+try {
+    if ($hwnd -ne [IntPtr]::Zero) {
+        $activeElement = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+    }
+} catch {}
+$focusedElement = $null
+try {
+    $focusedElement = [System.Windows.Automation.AutomationElement]::FocusedElement
+} catch {}
+function Convert-UiElement($element) {
+    if ($null -eq $element) { return $null }
+    $rect = $null
+    try { $rect = $element.Current.BoundingRectangle } catch {}
+    [pscustomobject]@{
+        name = try { $element.Current.Name } catch { $null }
+        automation_id = try { $element.Current.AutomationId } catch { $null }
+        class_name = try { $element.Current.ClassName } catch { $null }
+        control_type = try { $element.Current.ControlType.ProgrammaticName } catch { $null }
+        process_id = try { $element.Current.ProcessId } catch { $null }
+        is_enabled = try { $element.Current.IsEnabled } catch { $null }
+        has_keyboard_focus = try { $element.Current.HasKeyboardFocus } catch { $null }
+        bounding_rectangle = if ($rect) {
+            [pscustomobject]@{
+                left = [int]$rect.Left
+                top = [int]$rect.Top
+                width = [int]$rect.Width
+                height = [int]$rect.Height
+            }
+        } else { $null }
+    }
+}
+$uiaElements = @()
+if ($activeElement -ne $null) {
+    try {
+        $descendants = $activeElement.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.Condition]::TrueCondition
+        )
+        $max = [Math]::Min($descendants.Count, 40)
+        for ($i = 0; $i -lt $max; $i++) {
+            $uiaElements += Convert-UiElement($descendants.Item($i))
+        }
+    } catch {}
+}
 $windows = Get-Process |
     Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle.Trim().Length -gt 0 } |
     Select-Object -First 12 ProcessName, Id, MainWindowTitle
@@ -1210,10 +1529,338 @@ $windows = Get-Process |
     active_window_title = $activeTitle
     active_pid = $activePid
     visible_windows = $windows
-} | ConvertTo-Json -Depth 4 -Compress
+    accessibility = [pscustomobject]@{
+        active_window = Convert-UiElement($activeElement)
+        focused_element = Convert-UiElement($focusedElement)
+        elements = $uiaElements
+        element_count = @($uiaElements).Count
+    }
+} | ConvertTo-Json -Depth 6 -Compress
 "#;
 
     run_powershell_hidden(script, tool_name).await
+}
+
+#[cfg(windows)]
+async fn windows_accessibility_state_json(
+    tool_name: &str,
+    input: &serde_json::Value,
+) -> Result<String, DynamicToolError> {
+    let selector_json = build_uia_selector_object(input).to_string();
+    let escaped_selector_json = escape_powershell_single_quoted(&selector_json);
+    let script = format!(
+        r#"
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class OverseerWinApi {{
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+}}
+"@
+Add-Type -AssemblyName UIAutomationClient
+$selector = '{selector_json}' | ConvertFrom-Json
+$hwnd = [OverseerWinApi]::GetForegroundWindow()
+$root = $null
+try {{
+    if ($hwnd -ne [IntPtr]::Zero) {{
+        $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+    }}
+}} catch {{}}
+if ($null -eq $root) {{
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+}}
+function Convert-UiElement($element) {{
+    if ($null -eq $element) {{ return $null }}
+    $rect = $null
+    try {{ $rect = $element.Current.BoundingRectangle }} catch {{}}
+    [pscustomobject]@{{
+        name = try {{ $element.Current.Name }} catch {{ $null }}
+        automation_id = try {{ $element.Current.AutomationId }} catch {{ $null }}
+        class_name = try {{ $element.Current.ClassName }} catch {{ $null }}
+        control_type = try {{ $element.Current.ControlType.ProgrammaticName }} catch {{ $null }}
+        process_id = try {{ $element.Current.ProcessId }} catch {{ $null }}
+        is_enabled = try {{ $element.Current.IsEnabled }} catch {{ $null }}
+        has_keyboard_focus = try {{ $element.Current.HasKeyboardFocus }} catch {{ $null }}
+        bounding_rectangle = if ($rect) {{
+            [pscustomobject]@{{
+                left = [int]$rect.Left
+                top = [int]$rect.Top
+                width = [int]$rect.Width
+                height = [int]$rect.Height
+            }}
+        }} else {{ $null }}
+    }}
+}}
+function Matches-Selector($element, $selector) {{
+    if ($null -eq $element) {{ return $false }}
+    $name = (try {{ $element.Current.Name }} catch {{ '' }})
+    $automationId = (try {{ $element.Current.AutomationId }} catch {{ '' }})
+    $className = (try {{ $element.Current.ClassName }} catch {{ '' }})
+    $controlType = (try {{ $element.Current.ControlType.ProgrammaticName }} catch {{ '' }})
+    if ($selector.name -and $name -notlike ('*' + $selector.name + '*')) {{ return $false }}
+    if ($selector.automation_id -and $automationId -notlike ('*' + $selector.automation_id + '*')) {{ return $false }}
+    if ($selector.class_name -and $className -notlike ('*' + $selector.class_name + '*')) {{ return $false }}
+    if ($selector.control_type -and $controlType -notlike ('*' + $selector.control_type + '*')) {{ return $false }}
+    if ($selector.selector) {{
+        $needle = [string]$selector.selector
+        if ($name -notlike ('*' + $needle + '*') -and
+            $automationId -notlike ('*' + $needle + '*') -and
+            $className -notlike ('*' + $needle + '*') -and
+            $controlType -notlike ('*' + $needle + '*')) {{
+            return $false
+        }}
+    }}
+    return $true
+}}
+$focused = $null
+try {{ $focused = [System.Windows.Automation.AutomationElement]::FocusedElement }} catch {{}}
+$searchRoots = New-Object System.Collections.Generic.List[System.Windows.Automation.AutomationElement]
+if ($null -ne $root) {{
+    $searchRoots.Add($root)
+}}
+$desktopRoot = [System.Windows.Automation.AutomationElement]::RootElement
+if ($null -ne $desktopRoot) {{
+    $rootHandle = $null
+    $desktopHandle = $null
+    try {{ $rootHandle = $root.Current.NativeWindowHandle }} catch {{}}
+    try {{ $desktopHandle = $desktopRoot.Current.NativeWindowHandle }} catch {{}}
+    if ($rootHandle -ne $desktopHandle) {{
+        $searchRoots.Add($desktopRoot)
+    }}
+}}
+$found = @()
+$searchScope = 'active_window'
+foreach ($searchRoot in $searchRoots) {{
+    try {{
+        $all = $searchRoot.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+        $max = [Math]::Min($all.Count, 180)
+        for ($i = 0; $i -lt $max; $i++) {{
+            $candidate = $all.Item($i)
+            if (Matches-Selector $candidate $selector) {{
+                $found += Convert-UiElement($candidate)
+            }}
+        }}
+        if (@($found).Count -gt 0) {{
+            try {{
+                if ($searchRoot.Current.NativeWindowHandle -eq $desktopRoot.Current.NativeWindowHandle) {{
+                    $searchScope = 'desktop_root'
+                }}
+            }} catch {{}}
+            break
+        }}
+    }} catch {{}}
+}}
+[pscustomobject]@{{
+    action = 'inspect_accessibility'
+    selector = $selector
+    focused_element = Convert-UiElement($focused)
+    search_scope = $searchScope
+    matches = $found | Select-Object -First 20
+    match_count = @($found).Count
+}} | ConvertTo-Json -Depth 6 -Compress
+"#,
+        selector_json = escaped_selector_json
+    );
+
+    run_powershell_hidden(&script, tool_name).await
+}
+
+#[cfg(windows)]
+async fn windows_uia_interaction_json(
+    tool_name: &str,
+    action: &str,
+    input: &serde_json::Value,
+) -> Result<String, DynamicToolError> {
+    let selector_json = build_uia_selector_object(input).to_string();
+    let escaped_selector_json = escape_powershell_single_quoted(&selector_json);
+    let escaped_action = escape_powershell_single_quoted(action);
+    let interaction_text = if action == "type_text" {
+        extract_text_value(input).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let escaped_text = escape_powershell_single_quoted(&interaction_text);
+    let script = format!(
+        r#"
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class OverseerWinApi {{
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+}}
+"@
+Add-Type -AssemblyName UIAutomationClient
+$selector = '{selector_json}' | ConvertFrom-Json
+$action = '{action_name}'
+$text = '{text_value}'
+$hwnd = [OverseerWinApi]::GetForegroundWindow()
+$root = $null
+try {{
+    if ($hwnd -ne [IntPtr]::Zero) {{
+        $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+    }}
+}} catch {{}}
+if ($null -eq $root) {{
+    throw 'No active window UI Automation root available.'
+}}
+function Convert-UiElement($element) {{
+    if ($null -eq $element) {{ return $null }}
+    $rect = $null
+    try {{ $rect = $element.Current.BoundingRectangle }} catch {{}}
+    [pscustomobject]@{{
+        name = try {{ $element.Current.Name }} catch {{ $null }}
+        automation_id = try {{ $element.Current.AutomationId }} catch {{ $null }}
+        class_name = try {{ $element.Current.ClassName }} catch {{ $null }}
+        control_type = try {{ $element.Current.ControlType.ProgrammaticName }} catch {{ $null }}
+        process_id = try {{ $element.Current.ProcessId }} catch {{ $null }}
+        is_enabled = try {{ $element.Current.IsEnabled }} catch {{ $null }}
+        has_keyboard_focus = try {{ $element.Current.HasKeyboardFocus }} catch {{ $null }}
+        bounding_rectangle = if ($rect) {{
+            [pscustomobject]@{{
+                left = [int]$rect.Left
+                top = [int]$rect.Top
+                width = [int]$rect.Width
+                height = [int]$rect.Height
+            }}
+        }} else {{ $null }}
+    }}
+}}
+function Matches-Selector($element, $selector) {{
+    if ($null -eq $element) {{ return $false }}
+    $name = (try {{ $element.Current.Name }} catch {{ '' }})
+    $automationId = (try {{ $element.Current.AutomationId }} catch {{ '' }})
+    $className = (try {{ $element.Current.ClassName }} catch {{ '' }})
+    $controlType = (try {{ $element.Current.ControlType.ProgrammaticName }} catch {{ '' }})
+    if ($selector.name -and $name -notlike ('*' + $selector.name + '*')) {{ return $false }}
+    if ($selector.automation_id -and $automationId -notlike ('*' + $selector.automation_id + '*')) {{ return $false }}
+    if ($selector.class_name -and $className -notlike ('*' + $selector.class_name + '*')) {{ return $false }}
+    if ($selector.control_type -and $controlType -notlike ('*' + $selector.control_type + '*')) {{ return $false }}
+    if ($selector.selector) {{
+        $needle = [string]$selector.selector
+        if ($name -notlike ('*' + $needle + '*') -and
+            $automationId -notlike ('*' + $needle + '*') -and
+            $className -notlike ('*' + $needle + '*') -and
+            $controlType -notlike ('*' + $needle + '*')) {{
+            return $false
+        }}
+    }}
+    return $true
+}}
+$searchRoots = New-Object System.Collections.Generic.List[System.Windows.Automation.AutomationElement]
+if ($null -ne $root) {{
+    $searchRoots.Add($root)
+}}
+$desktopRoot = [System.Windows.Automation.AutomationElement]::RootElement
+if ($null -ne $desktopRoot) {{
+    $rootHandle = $null
+    $desktopHandle = $null
+    try {{ $rootHandle = $root.Current.NativeWindowHandle }} catch {{}}
+    try {{ $desktopHandle = $desktopRoot.Current.NativeWindowHandle }} catch {{}}
+    if ($rootHandle -ne $desktopHandle) {{
+        $searchRoots.Add($desktopRoot)
+    }}
+}}
+$match = $null
+$searchScope = 'active_window'
+foreach ($searchRoot in $searchRoots) {{
+    try {{
+        $all = $searchRoot.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+        $max = [Math]::Min($all.Count, 220)
+        for ($i = 0; $i -lt $max; $i++) {{
+            $candidate = $all.Item($i)
+            if (Matches-Selector $candidate $selector) {{
+                $match = $candidate
+                try {{
+                    if ($searchRoot.Current.NativeWindowHandle -eq $desktopRoot.Current.NativeWindowHandle) {{
+                        $searchScope = 'desktop_root'
+                    }}
+                }} catch {{}}
+                break
+            }}
+        }}
+    }} catch {{}}
+    if ($null -ne $match) {{
+        break
+    }}
+}}
+if ($null -eq $match) {{
+    throw ('No UI Automation element matched selector: ' + ($selector | ConvertTo-Json -Compress))
+}}
+$method = 'focus'
+if ($action -eq 'invoke_element') {{
+    $invoked = $false
+    try {{
+        $pattern = $match.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+        if ($pattern) {{
+            $pattern.Invoke()
+            $method = 'invoke_pattern'
+            $invoked = $true
+        }}
+    }} catch {{}}
+    if (-not $invoked) {{
+        try {{
+            $pattern = $match.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+            if ($pattern) {{
+                $pattern.Select()
+                $method = 'selection_item_pattern'
+                $invoked = $true
+            }}
+        }} catch {{}}
+    }}
+    if (-not $invoked) {{
+        try {{
+            $pattern = $match.GetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern)
+            if ($pattern) {{
+                $pattern.DoDefaultAction()
+                $method = 'legacy_default_action'
+                $invoked = $true
+            }}
+        }} catch {{}}
+    }}
+    if (-not $invoked) {{
+        $match.SetFocus()
+        $method = 'focus_fallback'
+    }}
+}} elseif ($action -eq 'type_text') {{
+    $typed = $false
+    try {{
+        $pattern = $match.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+        if ($pattern) {{
+            $pattern.SetValue($text)
+            $method = 'value_pattern'
+            $typed = $true
+        }}
+    }} catch {{}}
+    if (-not $typed) {{
+        try {{
+            $match.SetFocus()
+            $method = 'focus_ready'
+        }} catch {{
+            throw 'Matched UI Automation element could not be prepared for text input.'
+        }}
+    }}
+}} else {{
+    $match.SetFocus()
+    $method = 'focus'
+}}
+[pscustomobject]@{{
+    action = $action
+    selector = $selector
+    search_scope = $searchScope
+    method = $method
+    element = Convert-UiElement($match)
+    text_length = if ($action -eq 'type_text') {{ $text.Length }} else {{ $null }}
+    ok = $true
+}} | ConvertTo-Json -Depth 6 -Compress
+"#,
+        selector_json = escaped_selector_json,
+        action_name = escaped_action,
+        text_value = escaped_text
+    );
+
+    run_powershell_hidden(&script, tool_name).await
 }
 
 #[cfg(windows)]
@@ -1558,9 +2205,11 @@ async fn run_command_simple(cmd: &str, tool_name: &str) -> Result<String, Dynami
 async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolError> {
     let input = object_tool_input(args);
     let action = infer_os_tool_action(&input);
+    let selector_present = has_uia_selector(&input);
 
     match action.as_str() {
         "get_state" | "list_windows" => windows_desktop_state_json("os_tool").await,
+        "inspect_accessibility" => windows_accessibility_state_json("os_tool", &input).await,
         "browser_state" => windows_browser_state_json("os_tool").await,
         "list_processes" => windows_process_list_json("os_tool").await,
         "find_files" => {
@@ -1583,6 +2232,9 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
         }
         "screenshot" => capture_windows_screenshot_json("os_tool").await,
         "focus" => {
+            if selector_present {
+                return windows_uia_interaction_json("os_tool", "focus_element", &input).await;
+            }
             #[cfg(windows)]
             {
                 let target = extract_os_tool_target(&input, "focus").ok_or_else(|| {
@@ -1607,6 +2259,10 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
                     details: "Window focus is currently implemented for Windows only.".to_string(),
                 })
             }
+        }
+        "focus_element" => windows_uia_interaction_json("os_tool", "focus_element", &input).await,
+        "invoke_element" => {
+            windows_uia_interaction_json("os_tool", "invoke_element", &input).await
         }
         "launch" => {
             let app = extract_os_tool_target(&input, "launch").ok_or_else(|| {
@@ -1643,6 +2299,9 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
             run_powershell_hidden(&script, "os_tool").await
         }
         "click" | "double_click" | "right_click" => {
+            if action == "click" && selector_present && extract_coordinates(&input).is_none() {
+                return windows_uia_interaction_json("os_tool", "invoke_element", &input).await;
+            }
             #[cfg(windows)]
             {
                 let mut enigo = with_enigo()?;
@@ -1732,13 +2391,47 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
         "type_text" => {
             #[cfg(windows)]
             {
-                let mut enigo = with_enigo()?;
                 let text = extract_text_value(&input).ok_or_else(|| {
                     DynamicToolError::ExecutionFailed {
                         tool: "os_tool".to_string(),
                         details: "Type text requires a `text` value.".to_string(),
                     }
                 })?;
+                if selector_present {
+                    let raw =
+                        windows_uia_interaction_json("os_tool", "type_text", &input).await?;
+                    let mut value: serde_json::Value =
+                        serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
+                    let method = value
+                        .get("method")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    if method != "value_pattern" {
+                        let mut enigo = with_enigo()?;
+                        enigo
+                            .text(&text)
+                            .map_err(|err| DynamicToolError::ExecutionFailed {
+                                tool: "os_tool".to_string(),
+                                details: format!("Failed to type text after focusing element: {}", err),
+                            })?;
+                        if let Some(object) = value.as_object_mut() {
+                            object.insert(
+                                "method".to_string(),
+                                serde_json::Value::String("uia_focus_then_type".to_string()),
+                            );
+                        }
+                    }
+                    if let Some(object) = value.as_object_mut() {
+                        object.insert(
+                            "typed_chars".to_string(),
+                            serde_json::Value::Number((text.chars().count() as u64).into()),
+                        );
+                        object.insert("ok".to_string(), serde_json::Value::Bool(true));
+                    }
+                    return Ok(value.to_string());
+                }
+
+                let mut enigo = with_enigo()?;
                 enigo
                     .text(&text)
                     .map_err(|err| DynamicToolError::ExecutionFailed {
@@ -1748,6 +2441,7 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
                 Ok(json!({
                     "action": "type_text",
                     "typed_chars": text.chars().count(),
+                    "method": "keyboard_text",
                     "ok": true
                 })
                 .to_string())
@@ -1915,7 +2609,7 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
         other => Err(DynamicToolError::ExecutionFailed {
             tool: "os_tool".to_string(),
             details: format!(
-                "Unsupported os_tool action '{}'. Supported actions: get_state, list_windows, browser_state, list_processes, find_files, read_file, open_file, screenshot, focus, click, double_click, right_click, move_mouse, type_text, press_key, hotkey, scroll, launch, open_url, wait.",
+                "Unsupported os_tool action '{}'. Supported actions: get_state, list_windows, inspect_accessibility, browser_state, list_processes, find_files, read_file, open_file, screenshot, focus, focus_element, invoke_element, click, double_click, right_click, move_mouse, type_text, press_key, hotkey, scroll, launch, open_url, wait.",
                 other
             ),
         }),
@@ -2145,6 +2839,10 @@ mod tests {
             "screenshot"
         );
         assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"take a screeshot on my pc"})),
+            "screenshot"
+        );
+        assert_eq!(
             infer_os_tool_action(&serde_json::json!({"input":"list background tasks"})),
             "list_processes"
         );
@@ -2155,12 +2853,32 @@ mod tests {
             "list_processes"
         );
         assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"inspect accessibility tree"})),
+            "inspect_accessibility"
+        );
+        assert_eq!(
             infer_os_tool_action(&serde_json::json!({"action":"find_files","query":"resume"})),
             "find_files"
         );
         assert_eq!(
             infer_os_tool_action(&serde_json::json!({"input":"which browser windows are open"})),
             "browser_state"
+        );
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"Take a open discord on my pc"})),
+            "launch"
+        );
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"focus element Save"})),
+            "focus_element"
+        );
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"invoke Save"})),
+            "invoke_element"
+        );
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"click element Save"})),
+            "invoke_element"
         );
     }
 
@@ -2178,6 +2896,36 @@ mod tests {
             extract_os_tool_target(&serde_json::json!({"window":"Visual Studio Code"}), "focus"),
             Some("Visual Studio Code".to_string())
         );
+        assert_eq!(
+            extract_os_tool_target(
+                &serde_json::json!({"input":"Take a open discord on my pc"}),
+                "launch"
+            ),
+            Some("discord".to_string())
+        );
+        assert_eq!(
+            build_uia_selector_object(&serde_json::json!({"name":"Save","control_type":"Button"})),
+            serde_json::json!({"name":"Save","control_type":"Button"})
+        );
+        assert_eq!(
+            build_uia_selector_object(&serde_json::json!({"input":"click Save button"})),
+            serde_json::json!({"name":"Save","control_type":"Button"})
+        );
+        assert_eq!(
+            build_uia_selector_object(&serde_json::json!({"input":"type hello@example.com into the Email field"})),
+            serde_json::json!({"name":"Email","control_type":"Edit"})
+        );
+        assert!(has_uia_selector(&serde_json::json!({
+            "action":"click",
+            "name":"Save",
+            "control_type":"Button"
+        })));
+        assert!(has_uia_selector(&serde_json::json!({
+            "action":"type_text",
+            "name":"Email",
+            "control_type":"Edit",
+            "text":"hello@example.com"
+        })));
     }
 
     #[cfg(windows)]
