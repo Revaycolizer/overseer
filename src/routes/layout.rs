@@ -2,6 +2,8 @@ use crate::Route;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
+const BRAND_ICON: Asset = asset!("/assets/overseer.png");
+
 #[component]
 pub fn Sidebar() -> Element {
     let route = use_route::<Route>();
@@ -9,8 +11,12 @@ pub fn Sidebar() -> Element {
     rsx! {
         aside { class: "w-[64px] border-r border-slate-200 bg-white flex flex-col items-center py-4 shrink-0 shadow-sm",
             div { class: "mb-6",
-                div { class: "bg-slate-900 p-2 rounded-lg flex items-center justify-center shadow-lg shadow-black/10 cursor-pointer hover:scale-105 transition-transform",
-                    MaterialIcon { name: "token", color: MaterialIconColor::Light, size: 24 }
+                div { class: "p-1 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform",
+                    img {
+                        src: BRAND_ICON,
+                        alt: "Overseer logo",
+                        class: "w-8 h-8 object-contain"
+                    }
                 }
             }
             nav { class: "flex-1 flex flex-col items-center gap-1",
@@ -82,16 +88,16 @@ pub fn Layout() -> Element {
     #[cfg(feature = "desktop")]
     let window = dioxus::desktop::use_window();
 
-    let (title, icon) = match route {
-        Route::Conversations {} => ("Overseer", "forum"),
-        Route::AgentsWorkshop {} => ("Agents Workshop", "smart_toy"),
-        Route::ToolsWorkshop {} => ("Tools Workshop", "build"),
-        Route::ComputerControl {} => ("Computer Control", "computer"),
-        Route::WorkflowAutomation {} => ("Workflow Automation", "terminal"),
-        Route::SupervisorsWorkshop {} => ("Supervisors Workshop", "supervised_user_circle"),
-        Route::PlannersWorkshop {} => ("Planners Workshop", "architecture"),
-        Route::Settings {} => ("Settings", "settings"),
-        _ => ("Overseer", "apps"),
+    let title = match route {
+        Route::Conversations {} => "Overseer",
+        Route::AgentsWorkshop {} => "Agents Workshop",
+        Route::ToolsWorkshop {} => "Tools Workshop",
+        Route::ComputerControl {} => "Computer Control",
+        Route::WorkflowAutomation {} => "Workflow Automation",
+        Route::SupervisorsWorkshop {} => "Supervisors Workshop",
+        Route::PlannersWorkshop {} => "Planners Workshop",
+        Route::Settings {} => "Settings",
+        _ => "Overseer",
     };
 
     rsx! {
@@ -152,7 +158,11 @@ pub fn Layout() -> Element {
                         }
                     }
                     div { class: "flex items-center gap-2 text-slate-500",
-                        MaterialIcon { name: icon, size: 16 }
+                        img {
+                            src: BRAND_ICON,
+                            alt: "Overseer logo",
+                            class: "w-4 h-4 object-contain"
+                        }
                         span { class: "text-xs font-semibold tracking-wide uppercase", "{title}" }
                     }
                 }
