@@ -76,10 +76,10 @@ struct OrchestrationDecision {
     reason: String,
 }
 
-async fn heuristic_decision(db: &crate::db::Database, query: &str) -> OrchestrationDecision {
+async fn heuristic_decision(db: &crate::db::Database, query: &str, has_artifacts: bool) -> OrchestrationDecision {
     let lower = query.to_lowercase();
     // Phase 2: Orchestration Generalization
-    let inferred_domain = discovery::discover_fast_path_domain(db, query).await;
+    let inferred_domain = discovery::discover_fast_path_domain(db, query, has_artifacts).await;
     let direct_chat_markers = [
         "hello",
         "hi",
@@ -463,10 +463,11 @@ async fn decide_orchestration(
     history: &[Message],
     memory_context: &str,
     ollama_client: &ollama::Client,
+    has_artifacts: bool,
 ) -> Result<OrchestrationDecision, String> {
     // 1. Check for Fast-Path keyword matches from the database (fully dynamic)
     if let Some(domain) =
-        crate::engine::orchestrator::discovery::discover_fast_path_domain(db, query).await
+        crate::engine::orchestrator::discovery::discover_fast_path_domain(db, query, has_artifacts).await
     {
         return Ok(OrchestrationDecision {
             route: OrchestrationRoute::SingleDomain,
@@ -530,7 +531,7 @@ async fn decide_orchestration(
         }
     }
 
-    let heuristic = heuristic_decision(db, query).await;
+    let heuristic = heuristic_decision(db, query, has_artifacts).await;
     let is_greeting = ["hi", "hello", "hey", "how are you", "who are you"]
         .iter()
         .any(|&g| query.to_lowercase().starts_with(g));
@@ -572,15 +573,33 @@ async fn decide_orchestration(
             .default_max_turns(1)
             .build();
 
-    let prompt = format!(
-        "USER_REQUEST:\n{}\n\nRECENT_CONTEXT:\n{}\n\nReturn only JSON.",
-        query,
-        if memory_context.is_empty() {
-            "No recent context.".to_string()
-        } else {
-            memory_context.to_string()
-        }
-    );
+    let prompt = if has_artifacts {
+        let artifact_hint = crate::backend::get_setting_or(
+            db,
+            "artifact_routing_hint",
+            "[ARTIFACTS ATTACHED] The user has selected local file artifacts as context. Route to 'chat' domain so the agent can answer from the attached content. Do NOT route to 'stealth' (search) unless the user explicitly asks to search the web.",
+        ).await;
+        format!(
+            "{}\n\nUSER_REQUEST:\n{}\n\nRECENT_CONTEXT:\n{}\n\nReturn only JSON.",
+            artifact_hint,
+            query,
+            if memory_context.is_empty() {
+                "No recent context.".to_string()
+            } else {
+                memory_context.to_string()
+            }
+        )
+    } else {
+        format!(
+            "USER_REQUEST:\n{}\n\nRECENT_CONTEXT:\n{}\n\nReturn only JSON.",
+            query,
+            if memory_context.is_empty() {
+                "No recent context.".to_string()
+            } else {
+                memory_context.to_string()
+            }
+        )
+    };
 
     let raw = decision_agent
         .prompt(&prompt)
@@ -801,7 +820,9 @@ pub async fn orchestrate_request<'a>(
 ) -> String {
     let model_timeout_ms =
         crate::backend::get_setting_i64(db, "model_timeout_ms", 90_000).await as u64;
+    println!("🔍 ORCHESTRATOR: Received query [len={}]: '{}'", query.len(), query);
     let (clean_query, artifact_refs, work_item_refs) = extract_structured_context(query);
+    println!("🔍 ORCHESTRATOR: Extracted {} artifacts, {} work items", artifact_refs.len(), work_item_refs.len());
     let artifact_context = format_artifact_context(&artifact_refs);
     let work_item_context = format_work_item_context(&work_item_refs);
     let structured_context = [artifact_context.clone(), work_item_context.clone()]
@@ -816,10 +837,84 @@ pub async fn orchestrate_request<'a>(
     } else {
         format!("{}\n\n{}", memory_context.trim(), structured_context)
     };
+    println!("🔍 ORCHESTRATOR: Enriched memory context [len={}]", enriched_memory_context.len());
+
     let run_id = crate::backend::start_execution_run(db, conversation_id, query)
         .await
         .ok();
     let mut event_sequence = 1_i64;
+
+    let mut has_artifacts = !artifact_refs.is_empty();
+    
+    // Also check entire conversation history for attachments (from system.rs).
+    // We scan all messages (not just recent) so follow-up messages still know artifacts exist.
+    if !has_artifacts {
+        for msg in history.iter() {
+            if let rig::completion::Message::User { content } = msg {
+                for item in content.iter() {
+                    if let rig::message::UserContent::Text(text) = item {
+                        if text.text.contains("[Attached File:") || text.text.contains("[Attached Image:") {
+                            has_artifacts = true;
+                            break;
+                        }
+                    } else if let rig::message::UserContent::Image(_) = item {
+                        has_artifacts = true;
+                        break;
+                    }
+                }
+            }
+            if has_artifacts { break; }
+        }
+    }
+
+    // Determine the fast-path domain, or fall back to artifact default domain for follow-up messages
+    let fast_path_domain = match discovery::discover_fast_path_domain(db, &clean_query, has_artifacts).await {
+        Some(domain) => Some(domain),
+        None if has_artifacts => {
+            // No keyword matched, but artifacts are present (likely a follow-up question about attached files).
+            // Fall back to a DB-configurable default domain so the agent retains file context.
+            let default_domain = crate::backend::get_setting_or(
+                db,
+                "artifact_default_domain",
+                "chat",
+            ).await;
+            println!(
+                "🎯 ARTIFACT-FALLBACK: No keyword match, but artifacts present. Routing to default domain '{}'",
+                default_domain
+            );
+            Some(default_domain)
+        }
+        None => None,
+    };
+
+    if let Some(domain) = fast_path_domain {
+        println!("🎯 FAST-PATH: Query matched keyword for domain '{}'", domain);
+        let mut browser_pid: Option<i32> = None;
+        let status_res = dispatcher::dispatch_domain(
+            db,
+            run_id,
+            &mut event_sequence,
+            all_agents,
+            &domain,
+            "Executing fast-path request",
+            &clean_query,
+            history.clone(),
+            "", // _memories
+            "Fast-path execution start.", // plan_history
+            &enriched_memory_context,
+            "Fast-path task", // _macro_task_description
+            perception_tool,
+            ollama_client,
+            model_timeout_ms,
+            &mut browser_pid,
+        )
+        .await;
+        
+        return match status_res {
+            Ok(r) => r.display_text(),
+            Err(e) => format!("Error in fast-path dispatcher: {}", e),
+        };
+    }
 
     record_event(
         db,
@@ -912,6 +1007,7 @@ pub async fn orchestrate_request<'a>(
         &history,
         &enriched_memory_context,
         ollama_client,
+        has_artifacts,
     )
     .await
     {
@@ -944,7 +1040,7 @@ pub async fn orchestrate_request<'a>(
                 }
                 return friendly_error;
             }
-            heuristic_decision(db, &clean_query).await
+            heuristic_decision(db, &clean_query, has_artifacts).await
         }
     };
 

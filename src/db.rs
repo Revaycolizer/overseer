@@ -33,6 +33,9 @@ pub struct Supervisor {
     pub routing_priority: i32,
     pub hide_evidence: bool,
     pub report_style: Option<String>,
+    #[sqlx(default)]
+    pub skip_fast_path_if_artifacts: bool,
+    pub artifact_fast_path_keywords: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
@@ -136,11 +139,11 @@ impl Database {
 
     async fn seed_all(&self) -> anyhow::Result<()> {
         println!("🌱 Initializing v10 Database Environment...");
-        //   self.seed_agents().await?;
-        //   self.seed_tools().await?;
-        //   self.seed_agent_tools().await?;
-        //   self.seed_supervisors().await?; // This now handles system supervisors too
-        //   self.seed_planners().await?;
+     //   self.seed_agents().await?;
+      //  self.seed_tools().await?;
+        // self.seed_agent_tools().await?;
+        // self.seed_supervisors().await?; // This now handles system supervisors too
+        // self.seed_planners().await?;
         self.ensure_setting_defaults().await?;
         self.backfill_ids().await?;
         Ok(())
@@ -173,6 +176,15 @@ impl Database {
             ("computer_pending_domain", ""),
             ("computer_session_action_count", "0"),
             ("computer_session_started_at", ""),
+            (
+                "artifact_routing_hint",
+                "[ARTIFACTS ATTACHED] The user has selected local file artifacts as context for this request. Route to 'chat' or 'vision' domain so the agent can answer from the attached content. Do NOT route to 'stealth' (search) unless the user explicitly asks to search the web. The attached artifacts contain the information needed to answer.",
+            ),
+            (
+                "artifact_context_header",
+                "ATTACHED ARTIFACTS (the user explicitly selected these as context — use them to answer):",
+            ),
+            ("artifact_default_domain", "chat"),
         ];
 
         for (key, value) in defaults {
@@ -519,8 +531,10 @@ impl Database {
                 "Automates UI-based web interaction, form filling, and Chrome-specific automation",
                 "web",
                 "qwen2.5:7b-instruct",
-                "chrome, browser, automate, website automation, click, type",
+                "chrome, browser, automate, website automation, click, type, website, internet, web",
                 10,
+                true,
+                None, // artifact_fast_path_keywords
             ),
             (
                 "Stealth Supervisor",
@@ -529,35 +543,53 @@ impl Database {
                 "qwen2.5:7b-instruct",
                 "research, search, browse, internet, query, latest, which is, who is",
                 20,
+                true,
+                None,
             ),
             (
                 "Desktop Supervisor",
                 "Controls native desktop applications and standard OS tasks",
                 "desktop",
                 "qwen2.5:7b-instruct",
-                "app, application, desktop, window, file, directory",
+                "app, application, desktop, window, file, directory, find file, locate file, resume",
                 15,
+                false,
+                None,
             ),
             (
                 "Chat Supervisor",
                 "General conversation manager and summary assistant",
                 "chat",
                 "qwen2.5:7b-instruct",
-                "hello, hi, help, explain, what if",
+                "hello, hi, help, explain, what if, who are you, tell me about",
                 5,
+                true, // skip_fast_path_if_artifacts - ensures Planner is used if files/artifacts are present
+                Some("explain,summarize,analyze,read,describe,what is this,tell me about,review,interpret,break down,walk me through"),
             ),
             (
                 "Computer Supervisor",
                 "Broad computer operation with safety boundaries",
                 "computer",
                 "qwen2.5:7b-instruct",
-                "screen, desktop, computer, operate pc",
+                "screen, desktop, computer, operate pc, screenshot, capture, observe, inspect, watch, background, running, process, task, currently, list, show, ocr, analyze, vision, image, picture, photo, summarize, paddleocr, paddle",
                 25,
+                false,
+                None,
+            ),
+            (
+                "Neontune Supervisor",
+                "Music and audio management assistant",
+                "neontune",
+                "qwen2.5:7b-instruct",
+                "music, play music, play song, audio, song, neontune, volume, pause, next, music theory, chords, lyrics",
+                5,
+                false,
+                None,
             ),
         ];
 
         let mut tx = self.pool.begin().await?;
-        for (name, desc, domain, model, keywords, priority) in supervisors {
+        for (name, desc, domain, model, keywords, priority, skip_fast_path, artifact_keywords) in supervisors {
             let id = self.next_id().await;
             let inst = format!("You are the {} supervisor. Your mission is to complete the user request using the available tools. IMAGE RULE: If search results contain images, you ARE authorized to show them directly in your summary via markdown ![](). Never say \"I cannot show images\" to the user.", name);
 
@@ -567,9 +599,9 @@ impl Database {
                 .execute(&mut *tx)
                 .await?;
 
-            // Fresh insert with v10 metadata
-            sqlx::query("INSERT INTO supervisors (id, name, description, instructions, model, domain, version, fast_path_keywords, routing_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                .bind(id).bind(name).bind(desc).bind(inst).bind(model).bind(domain).bind("1.0.0").bind(keywords).bind(priority)
+            // Fresh insert with v11 metadata
+            sqlx::query("INSERT INTO supervisors (id, name, description, instructions, model, domain, version, fast_path_keywords, routing_priority, skip_fast_path_if_artifacts, artifact_fast_path_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(id).bind(name).bind(desc).bind(inst).bind(model).bind(domain).bind("1.0.0").bind(keywords).bind(priority).bind(skip_fast_path).bind(artifact_keywords)
                 .execute(&mut *tx).await?;
 
             // Auto-link agents based on domain

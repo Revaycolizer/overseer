@@ -993,7 +993,7 @@ pub async fn dispatch_domain(
     domain: &str,
     step: &str,
     query: &str,
-    _history: Vec<Message>,
+    history: Vec<Message>,
     _memories: &str,
     plan_history: &str,
     memory_context: &str,
@@ -1004,7 +1004,7 @@ pub async fn dispatch_domain(
     _browser_pid: &mut Option<i32>,
 ) -> Result<SupervisorExecutionResult, String> {
     let supervisor = sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style FROM supervisors WHERE domain = ?"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords FROM supervisors WHERE domain = ?"
     )
     .bind(domain)
     .fetch_optional(&db.pool)
@@ -1311,13 +1311,95 @@ pub async fn dispatch_domain(
         .map(|hint| format!("\n{}\n", hint))
         .unwrap_or_default();
 
+    // Fix 3: Elevate artifact context above the general CONTEXT block
+    let (artifact_section, remaining_context) = if clean_context.contains("SELECTED ARTIFACTS:") {
+        let artifact_header = crate::backend::get_setting_or(
+            db,
+            "artifact_context_header",
+            "ATTACHED ARTIFACTS (the user explicitly selected these as context — use them to answer):",
+        ).await;
+
+        // Split the context into artifact block and remaining context
+        if let Some(start_idx) = clean_context.find("SELECTED ARTIFACTS:") {
+            // Find where the artifact block ends (next double newline or end of string)
+            let artifact_block_start = start_idx;
+            let after_header = start_idx + "SELECTED ARTIFACTS:".len();
+            let artifact_block_end = clean_context[after_header..]
+                .find("\n\n")
+                .map(|pos| after_header + pos)
+                .unwrap_or(clean_context.len());
+
+            let artifact_content = clean_context[artifact_block_start + "SELECTED ARTIFACTS:".len()..artifact_block_end].trim();
+            let before = clean_context[..artifact_block_start].trim();
+            let after = clean_context[artifact_block_end..].trim();
+            let remaining = format!("{}\n{}", before, after).trim().to_string();
+
+            (
+                format!("{}\n{}\n\n", artifact_header, artifact_content),
+                remaining,
+            )
+        } else {
+            (String::new(), clean_context)
+        }
+    } else {
+        (String::new(), clean_context)
+    };
+
+    // Fix 4: Extract file attachment content from history and inject it into the prompt
+    let mut attachment_content = String::new();
+    for msg in &history {
+        if let Message::User { content } = msg {
+            for item in content.iter() {
+                if let rig::message::UserContent::Text(text) = item {
+                    // Parse [Attached File: filename (Path: path)] markers
+                    for line in text.text.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.starts_with("[Attached File:") || trimmed.starts_with("[Attached Image:") {
+                            // Extract file path from the marker
+                            if let Some(path_start) = trimmed.find("Path: ") {
+                                let path_rest = &trimmed[path_start + 6..];
+                                let path = path_rest.trim_end_matches(|c| c == ')' || c == ']');
+                                // Try to read the file content
+                                match std::fs::read_to_string(path) {
+                                    Ok(content) if !content.trim().is_empty() => {
+                                        let truncated = if content.len() > 8000 {
+                                            format!("{}\n... [truncated, {} total chars]", &content[..8000], content.len())
+                                        } else {
+                                            content
+                                        };
+                                        attachment_content.push_str(&format!(
+                                            "\n--- FILE: {} ---\n{}\n--- END FILE ---\n",
+                                            path, truncated
+                                        ));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let file_section = if !attachment_content.is_empty() {
+        let header = crate::backend::get_setting_or(
+            db,
+            "artifact_context_header",
+            "ATTACHED ARTIFACTS (the user explicitly selected these as context — use them to answer):",
+        ).await;
+        format!("{}\n{}\n\n", header, attachment_content)
+    } else {
+        String::new()
+    };
+
     let mut initial_prompt = format!(
         "GOAL: {}\n\
          TASK: {}\n\n\
-         {}CONTEXT:\n{}\n\n\
+         {}{}{}CONTEXT:\n{}\n\n\
          PROGRESS:\n{}\n\n\
          COMMAND: Execute the task using tools if necessary. Final answers must use the structured JSON result schema.{}{}",
-        query, step, tool_descriptions, clean_context, clean_plan, monitoring_hint, computer_hint
+        query, step, artifact_section, file_section, tool_descriptions, remaining_context, clean_plan, monitoring_hint, computer_hint
     );
 
     if domain == "chat" {
@@ -1329,7 +1411,7 @@ pub async fn dispatch_domain(
     }
 
     let s = match sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style FROM supervisors WHERE domain = ?"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords FROM supervisors WHERE domain = ?"
     )
     .bind(domain)
     .fetch_optional(&db.pool)
