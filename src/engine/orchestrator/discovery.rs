@@ -1,6 +1,10 @@
 use crate::db::Database;
 
-pub async fn discover_fast_path_domain(db: &Database, query: &str, has_artifacts: bool) -> Option<String> {
+pub async fn discover_fast_path_domain(
+    db: &Database,
+    query: &str,
+    has_artifacts: bool,
+) -> Option<String> {
     let lower_query = query.to_lowercase();
 
     // 1. Fetch all supervisors that have any routing keywords defined
@@ -8,10 +12,11 @@ pub async fn discover_fast_path_domain(db: &Database, query: &str, has_artifacts
         "SELECT * FROM supervisors WHERE \
          (fast_path_keywords IS NOT NULL AND fast_path_keywords != '') \
          OR (artifact_fast_path_keywords IS NOT NULL AND artifact_fast_path_keywords != '') \
-         ORDER BY routing_priority DESC"
+         ORDER BY routing_priority DESC",
     )
     .fetch_all(&db.pool)
-    .await {
+    .await
+    {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Error fetching supervisors for fast-path discovery: {}", e);
@@ -31,7 +36,7 @@ pub async fn discover_fast_path_domain(db: &Database, query: &str, has_artifacts
                 if k.is_empty() {
                     continue;
                 }
-                
+
                 let pattern = format!(r"(?i)\b{}\b", regex::escape(k));
                 if let Ok(re) = regex::Regex::new(&pattern) {
                     if re.is_match(&lower_query) {
@@ -73,7 +78,6 @@ pub async fn discover_fast_path_domain(db: &Database, query: &str, has_artifacts
 
     None
 }
-
 
 #[cfg(test)]
 mod tests {
