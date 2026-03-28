@@ -48,7 +48,7 @@ memory = ["dep:lancedb", "dep:arrow"]
 [package.metadata.bundle]
 name = "Overseer"
 identifier = "ai.overseer.desktop"
-icon = ["assets/favicon.ico"]
+icon = ["assets/overseer.png"]
 short_description = "Local-first AI orchestration mission control."
 category = "DeveloperTool"
 
