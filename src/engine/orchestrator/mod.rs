@@ -76,7 +76,149 @@ struct OrchestrationDecision {
     reason: String,
 }
 
-async fn heuristic_decision(db: &crate::db::Database, query: &str, has_artifacts: bool) -> OrchestrationDecision {
+fn infer_native_computer_domain(query: &str) -> Option<String> {
+    let lower = query.to_lowercase();
+
+    let screenshot_request = (lower.contains("screenshot")
+        || lower.contains("screeshot")
+        || lower.contains("screen shot")
+        || lower.contains("screen capture")
+        || lower.contains("capture screen")
+        || lower.contains("capture my "))
+        && (lower.contains("desktop")
+            || lower.contains("screen")
+            || lower.contains("workspace")
+            || lower.contains("window")
+            || lower.contains("app")
+            || lower.contains("pc")
+            || lower.contains("computer"));
+
+    if screenshot_request {
+        return Some("computer".to_string());
+    }
+
+    let launch_request = (lower.contains("open ")
+        || lower.contains("launch ")
+        || lower.contains("start "))
+        && (lower.contains("pc")
+            || lower.contains("computer")
+            || lower.contains("app")
+            || lower.contains("discord")
+            || lower.contains("chrome")
+            || lower.contains("browser")
+            || lower.contains("vscode")
+            || lower.contains("visual studio code")
+            || lower.contains("spotify")
+            || lower.contains("explorer"));
+
+    if launch_request {
+        return Some("computer".to_string());
+    }
+
+    let accessibility_request = lower.contains("accessibility")
+        || lower.contains("ui automation")
+        || lower.contains("automation tree")
+        || lower.contains("focused element")
+        || lower.contains("focused control")
+        || lower.contains("inspect ui")
+        || lower.contains("inspect accessibility");
+    if accessibility_request {
+        return Some("computer".to_string());
+    }
+
+    let selector_control_request = (lower.contains("focus element")
+        || lower.contains("focus control")
+        || lower.contains("invoke ")
+        || lower.contains("invoke element")
+        || lower.contains("invoke control")
+        || lower.contains("click element")
+        || lower.contains("press button"))
+        && (lower.contains("button")
+            || lower.contains("field")
+            || lower.contains("input")
+            || lower.contains("control")
+            || lower.contains("element")
+            || lower.contains("window")
+            || lower.contains("selector")
+            || lower.contains("automation id")
+            || lower.contains("save")
+            || lower.contains("ok")
+            || lower.contains("submit"));
+    if selector_control_request {
+        return Some("computer".to_string());
+    }
+
+    None
+}
+
+fn is_native_computer_fast_path_request(query: &str, domain: &str) -> bool {
+    if !matches!(domain, "computer" | "desktop") {
+        return false;
+    }
+
+    if infer_native_computer_domain(query).is_some() {
+        return true;
+    }
+
+    let lower = query.to_lowercase();
+
+    let process_request = lower.contains("background task")
+        || lower.contains("background tasks")
+        || lower.contains("running process")
+        || lower.contains("running processes")
+        || lower.contains("process list")
+        || lower.contains("active process")
+        || lower.contains("active processes")
+        || lower.contains("what's running")
+        || lower.contains("whats running")
+        || ((lower.contains("currently running")
+            || lower.contains("current running")
+            || lower.contains("what is currently running")
+            || lower.contains("what is running")
+            || lower.contains("show what is running")
+            || lower.contains("tell me what is running"))
+            && (lower.contains("computer")
+                || lower.contains("pc")
+                || lower.contains("machine")
+                || lower.contains("system")));
+
+    let file_search_request = (lower.contains("resume")
+        || lower.contains("file path")
+        || lower.contains("find file")
+        || lower.contains("locate file")
+        || lower.contains(".pdf")
+        || lower.contains(".doc")
+        || lower.contains(".docx")
+        || ((lower.contains("find")
+            || lower.contains("locate")
+            || lower.contains("where is"))
+            && (lower.contains("file") || lower.contains("path"))))
+        && !lower.contains("open file explorer");
+
+    let browser_state_request = lower.contains("current tab")
+        || lower.contains("current page")
+        || lower.contains("browser state")
+        || lower.contains("which browser")
+        || (lower.contains("browser") && lower.contains("open"));
+
+    let selector_typing_request = (lower.contains("type ") || lower.contains("enter "))
+        && (lower.contains(" into ") || lower.contains(" in "))
+        && (lower.contains("field")
+            || lower.contains("input")
+            || lower.contains("textbox")
+            || lower.contains("text box")
+            || lower.contains("search box")
+            || lower.contains("element")
+            || lower.contains("control"));
+
+    process_request || file_search_request || browser_state_request || selector_typing_request
+}
+
+async fn heuristic_decision(
+    db: &crate::db::Database,
+    query: &str,
+    has_artifacts: bool,
+) -> OrchestrationDecision {
     let lower = query.to_lowercase();
     // Phase 2: Orchestration Generalization
     let inferred_domain = discovery::discover_fast_path_domain(db, query, has_artifacts).await;
@@ -163,6 +305,15 @@ async fn heuristic_decision(db: &crate::db::Database, query: &str, has_artifacts
                 _ => "specialist".to_string(),
             },
             reason: "Request maps cleanly to a single operational domain.".to_string(),
+        };
+    }
+
+    if let Some(domain) = infer_native_computer_domain(query) {
+        return OrchestrationDecision {
+            route: OrchestrationRoute::SingleDomain,
+            domain: Some(domain),
+            personality_mode: "operator".to_string(),
+            reason: "Request maps to a native computer action.".to_string(),
         };
     }
 
@@ -467,7 +618,8 @@ async fn decide_orchestration(
 ) -> Result<OrchestrationDecision, String> {
     // 1. Check for Fast-Path keyword matches from the database (fully dynamic)
     if let Some(domain) =
-        crate::engine::orchestrator::discovery::discover_fast_path_domain(db, query, has_artifacts).await
+        crate::engine::orchestrator::discovery::discover_fast_path_domain(db, query, has_artifacts)
+            .await
     {
         return Ok(OrchestrationDecision {
             route: OrchestrationRoute::SingleDomain,
@@ -601,10 +753,16 @@ async fn decide_orchestration(
         )
     };
 
-    let raw = decision_agent
-        .prompt(&prompt)
-        .await
-        .map_err(|e| e.to_string())?;
+    let raw = match decision_agent.prompt(&prompt).await {
+        Ok(raw) => raw,
+        Err(err) => {
+            println!(
+                "⚠️  ORCHESTRATOR: Model routing unavailable, falling back to heuristic routing: {}",
+                err
+            );
+            return Ok(heuristic);
+        }
+    };
     let cleaned = crate::engine::utils::clean_response(raw);
 
     serde_json::from_str::<OrchestrationDecision>(&cleaned)
@@ -820,9 +978,17 @@ pub async fn orchestrate_request<'a>(
 ) -> String {
     let model_timeout_ms =
         crate::backend::get_setting_i64(db, "model_timeout_ms", 90_000).await as u64;
-    println!("🔍 ORCHESTRATOR: Received query [len={}]: '{}'", query.len(), query);
+    println!(
+        "🔍 ORCHESTRATOR: Received query [len={}]: '{}'",
+        query.len(),
+        query
+    );
     let (clean_query, artifact_refs, work_item_refs) = extract_structured_context(query);
-    println!("🔍 ORCHESTRATOR: Extracted {} artifacts, {} work items", artifact_refs.len(), work_item_refs.len());
+    println!(
+        "🔍 ORCHESTRATOR: Extracted {} artifacts, {} work items",
+        artifact_refs.len(),
+        work_item_refs.len()
+    );
     let artifact_context = format_artifact_context(&artifact_refs);
     let work_item_context = format_work_item_context(&work_item_refs);
     let structured_context = [artifact_context.clone(), work_item_context.clone()]
@@ -837,7 +1003,10 @@ pub async fn orchestrate_request<'a>(
     } else {
         format!("{}\n\n{}", memory_context.trim(), structured_context)
     };
-    println!("🔍 ORCHESTRATOR: Enriched memory context [len={}]", enriched_memory_context.len());
+    println!(
+        "🔍 ORCHESTRATOR: Enriched memory context [len={}]",
+        enriched_memory_context.len()
+    );
 
     let run_id = crate::backend::start_execution_run(db, conversation_id, query)
         .await
@@ -845,7 +1014,7 @@ pub async fn orchestrate_request<'a>(
     let mut event_sequence = 1_i64;
 
     let mut has_artifacts = !artifact_refs.is_empty();
-    
+
     // Also check entire conversation history for attachments (from system.rs).
     // We scan all messages (not just recent) so follow-up messages still know artifacts exist.
     if !has_artifacts {
@@ -853,7 +1022,9 @@ pub async fn orchestrate_request<'a>(
             if let rig::completion::Message::User { content } = msg {
                 for item in content.iter() {
                     if let rig::message::UserContent::Text(text) = item {
-                        if text.text.contains("[Attached File:") || text.text.contains("[Attached Image:") {
+                        if text.text.contains("[Attached File:")
+                            || text.text.contains("[Attached Image:")
+                        {
                             has_artifacts = true;
                             break;
                         }
@@ -863,21 +1034,26 @@ pub async fn orchestrate_request<'a>(
                     }
                 }
             }
-            if has_artifacts { break; }
+            if has_artifacts {
+                break;
+            }
         }
     }
 
     // Determine the fast-path domain, or fall back to artifact default domain for follow-up messages
-    let fast_path_domain = match discovery::discover_fast_path_domain(db, &clean_query, has_artifacts).await {
+    let fast_path_domain = match discovery::discover_fast_path_domain(
+        db,
+        &clean_query,
+        has_artifacts,
+    )
+    .await
+    {
         Some(domain) => Some(domain),
         None if has_artifacts => {
             // No keyword matched, but artifacts are present (likely a follow-up question about attached files).
             // Fall back to a DB-configurable default domain so the agent retains file context.
-            let default_domain = crate::backend::get_setting_or(
-                db,
-                "artifact_default_domain",
-                "chat",
-            ).await;
+            let default_domain =
+                crate::backend::get_setting_or(db, "artifact_default_domain", "chat").await;
             println!(
                 "🎯 ARTIFACT-FALLBACK: No keyword match, but artifacts present. Routing to default domain '{}'",
                 default_domain
@@ -888,7 +1064,10 @@ pub async fn orchestrate_request<'a>(
     };
 
     if let Some(domain) = fast_path_domain {
-        println!("🎯 FAST-PATH: Query matched keyword for domain '{}'", domain);
+        println!(
+            "🎯 FAST-PATH: Query matched keyword for domain '{}'",
+            domain
+        );
         let mut browser_pid: Option<i32> = None;
         let status_res = dispatcher::dispatch_domain(
             db,
@@ -899,7 +1078,7 @@ pub async fn orchestrate_request<'a>(
             "Executing fast-path request",
             &clean_query,
             history.clone(),
-            "", // _memories
+            "",                           // _memories
             "Fast-path execution start.", // plan_history
             &enriched_memory_context,
             "Fast-path task", // _macro_task_description
@@ -909,7 +1088,7 @@ pub async fn orchestrate_request<'a>(
             &mut browser_pid,
         )
         .await;
-        
+
         return match status_res {
             Ok(r) => r.display_text(),
             Err(e) => format!("Error in fast-path dispatcher: {}", e),
@@ -1013,34 +1192,61 @@ pub async fn orchestrate_request<'a>(
     {
         Ok(decision) => decision,
         Err(err) => {
+            let heuristic = heuristic_decision(db, &clean_query, has_artifacts).await;
             if let Some(friendly_error) = user_facing_runtime_error(&err) {
-                record_event(
-                    db,
-                    run_id,
-                    &mut event_sequence,
-                    "model_backend_unavailable",
-                    "error",
-                    Some("orchestrator"),
-                    None,
-                    None,
-                    None,
-                    Some("Model backend unavailable during orchestration decision."),
-                    Some(&err),
-                )
-                .await;
-                if let Some(run_id) = run_id {
-                    let _ = crate::backend::finish_execution_run(
+                if heuristic
+                    .domain
+                    .as_deref()
+                    .map(|domain| is_native_computer_fast_path_request(&clean_query, domain))
+                    .unwrap_or(false)
+                {
+                    record_event(
                         db,
                         run_id,
-                        "failed",
+                        &mut event_sequence,
+                        "model_backend_bypassed",
+                        "completed",
+                        heuristic.domain.as_deref(),
                         None,
-                        Some(&friendly_error),
+                        None,
+                        None,
+                        Some(
+                            "Model backend unavailable during orchestration decision; using native computer heuristic fallback.",
+                        ),
+                        Some(&err),
                     )
                     .await;
+                    heuristic
+                } else {
+                    record_event(
+                        db,
+                        run_id,
+                        &mut event_sequence,
+                        "model_backend_unavailable",
+                        "error",
+                        Some("orchestrator"),
+                        None,
+                        None,
+                        None,
+                        Some("Model backend unavailable during orchestration decision."),
+                        Some(&err),
+                    )
+                    .await;
+                    if let Some(run_id) = run_id {
+                        let _ = crate::backend::finish_execution_run(
+                            db,
+                            run_id,
+                            "failed",
+                            None,
+                            Some(&friendly_error),
+                        )
+                        .await;
+                    }
+                    return friendly_error;
                 }
-                return friendly_error;
+            } else {
+                heuristic
             }
-            heuristic_decision(db, &clean_query, has_artifacts).await
         }
     };
 
@@ -1347,7 +1553,27 @@ pub async fn orchestrate_request<'a>(
         .ok()
         .flatten();
 
-        let micro_steps: Vec<String> = if let Some(p) = db_planner {
+        let micro_steps: Vec<String> = if is_native_computer_fast_path_request(
+            &macro_task.task,
+            &macro_task.domain,
+        ) {
+            record_event(
+                db,
+                run_id,
+                &mut event_sequence,
+                "micro_plan_native_fast_path",
+                "completed",
+                Some(&macro_task.domain),
+                Some(&macro_task.task),
+                Some("os_tool"),
+                None,
+                Some("Skipping model planning and using a native computer fast path."),
+                None,
+            )
+            .await;
+
+            vec![macro_task.task.clone()]
+        } else if let Some(p) = db_planner {
             println!("💡 DYNAMIC PLANNER: Using '{}' configuration.", p.name);
             let model_name = crate::backend::resolve_model_name(
                 db,
@@ -1388,34 +1614,54 @@ pub async fn orchestrate_request<'a>(
             .await;
 
             if let Some(friendly_error) = user_facing_runtime_error(&sub_plan) {
-                record_event(
-                    db,
-                    run_id,
-                    &mut event_sequence,
-                    "model_backend_unavailable",
-                    "error",
-                    Some(&macro_task.domain),
-                    Some(&macro_task.task),
-                    None,
-                    Some(&model_name),
-                    Some("Model backend unavailable during domain planning."),
-                    Some(&sub_plan),
-                )
-                .await;
-                if let Some(run_id) = run_id {
-                    let _ = crate::backend::finish_execution_run(
+                if is_native_computer_fast_path_request(&macro_task.task, &macro_task.domain) {
+                    record_event(
                         db,
                         run_id,
-                        "failed",
-                        None,
-                        Some(&friendly_error),
+                        &mut event_sequence,
+                        "model_backend_bypassed",
+                        "completed",
+                        Some(&macro_task.domain),
+                        Some(&macro_task.task),
+                        Some("os_tool"),
+                        Some(&model_name),
+                        Some(
+                            "Model backend unavailable during domain planning; continuing with native computer fast path.",
+                        ),
+                        Some(&sub_plan),
                     )
                     .await;
+                    vec![macro_task.task.clone()]
+                } else {
+                    record_event(
+                        db,
+                        run_id,
+                        &mut event_sequence,
+                        "model_backend_unavailable",
+                        "error",
+                        Some(&macro_task.domain),
+                        Some(&macro_task.task),
+                        None,
+                        Some(&model_name),
+                        Some("Model backend unavailable during domain planning."),
+                        Some(&sub_plan),
+                    )
+                    .await;
+                    if let Some(run_id) = run_id {
+                        let _ = crate::backend::finish_execution_run(
+                            db,
+                            run_id,
+                            "failed",
+                            None,
+                            Some(&friendly_error),
+                        )
+                        .await;
+                    }
+                    return friendly_error;
                 }
-                return friendly_error;
+            } else {
+                planner::parse_micro_steps(&sub_plan, &macro_task.task)
             }
-
-            planner::parse_micro_steps(&sub_plan, &macro_task.task)
         } else if let Some(agent_info) = all_agents.iter().find(|a| {
             a.domain == planner_domain
                 || a.domain == macro_task.domain
@@ -1460,34 +1706,54 @@ pub async fn orchestrate_request<'a>(
             .await;
 
             if let Some(friendly_error) = user_facing_runtime_error(&sub_plan) {
-                record_event(
-                    db,
-                    run_id,
-                    &mut event_sequence,
-                    "model_backend_unavailable",
-                    "error",
-                    Some(&macro_task.domain),
-                    Some(&macro_task.task),
-                    None,
-                    Some(&model_name),
-                    Some("Model backend unavailable during fallback planning."),
-                    Some(&sub_plan),
-                )
-                .await;
-                if let Some(run_id) = run_id {
-                    let _ = crate::backend::finish_execution_run(
+                if is_native_computer_fast_path_request(&macro_task.task, &macro_task.domain) {
+                    record_event(
                         db,
                         run_id,
-                        "failed",
-                        None,
-                        Some(&friendly_error),
+                        &mut event_sequence,
+                        "model_backend_bypassed",
+                        "completed",
+                        Some(&macro_task.domain),
+                        Some(&macro_task.task),
+                        Some("os_tool"),
+                        Some(&model_name),
+                        Some(
+                            "Model backend unavailable during fallback planning; continuing with native computer fast path.",
+                        ),
+                        Some(&sub_plan),
                     )
                     .await;
+                    vec![macro_task.task.clone()]
+                } else {
+                    record_event(
+                        db,
+                        run_id,
+                        &mut event_sequence,
+                        "model_backend_unavailable",
+                        "error",
+                        Some(&macro_task.domain),
+                        Some(&macro_task.task),
+                        None,
+                        Some(&model_name),
+                        Some("Model backend unavailable during fallback planning."),
+                        Some(&sub_plan),
+                    )
+                    .await;
+                    if let Some(run_id) = run_id {
+                        let _ = crate::backend::finish_execution_run(
+                            db,
+                            run_id,
+                            "failed",
+                            None,
+                            Some(&friendly_error),
+                        )
+                        .await;
+                    }
+                    return friendly_error;
                 }
-                return friendly_error;
+            } else {
+                planner::parse_micro_steps(&sub_plan, &macro_task.task)
             }
-
-            planner::parse_micro_steps(&sub_plan, &macro_task.task)
         } else {
             let fallback_steps = match macro_task.domain.as_str() {
                 "math" | "text_writer" | "chat" | "stealth" => vec![macro_task.task.clone()],
@@ -1983,7 +2249,9 @@ pub async fn orchestrate_request<'a>(
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_screenshot_follow_up, should_bypass_final_synthesizer, ScreenshotFollowUpIntent,
+        classify_screenshot_follow_up, infer_native_computer_domain,
+        is_native_computer_fast_path_request, should_bypass_final_synthesizer,
+        ScreenshotFollowUpIntent,
     };
 
     #[test]
@@ -2011,5 +2279,57 @@ mod tests {
             Some(ScreenshotFollowUpIntent::Resend)
         );
         assert_eq!(classify_screenshot_follow_up("hello there"), None);
+    }
+
+    #[test]
+    fn native_computer_domain_handles_loose_local_action_phrasing() {
+        assert_eq!(
+            infer_native_computer_domain("Take a screeshot on my pc"),
+            Some("computer".to_string())
+        );
+        assert_eq!(
+            infer_native_computer_domain("Take a open discord on my pc"),
+            Some("computer".to_string())
+        );
+        assert_eq!(
+            infer_native_computer_domain("Inspect accessibility tree for the current window"),
+            Some("computer".to_string())
+        );
+        assert_eq!(
+            infer_native_computer_domain("Focus element Save button"),
+            Some("computer".to_string())
+        );
+    }
+
+    #[test]
+    fn native_computer_fast_paths_cover_offline_local_tasks() {
+        assert!(is_native_computer_fast_path_request(
+            "Take a screeshot on my pc",
+            "computer"
+        ));
+        assert!(is_native_computer_fast_path_request(
+            "Take a open discord on my pc",
+            "computer"
+        ));
+        assert!(is_native_computer_fast_path_request(
+            "What is currently running on my computer",
+            "computer"
+        ));
+        assert!(is_native_computer_fast_path_request(
+            "Find my resume path on this PC",
+            "computer"
+        ));
+        assert!(is_native_computer_fast_path_request(
+            "Which browser windows are open right now?",
+            "computer"
+        ));
+        assert!(is_native_computer_fast_path_request(
+            "Type hello@example.com into the Email field",
+            "computer"
+        ));
+        assert!(!is_native_computer_fast_path_request(
+            "Write me a poem about the ocean",
+            "chat"
+        ));
     }
 }
