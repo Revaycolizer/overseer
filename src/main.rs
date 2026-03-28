@@ -41,11 +41,10 @@ enum Route {
     Blog { id: i32 },
 }
 
-const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
-const ICON_PNG: Asset = asset!("/assets/icon.png");
+const ICON_PNG: Asset = asset!("/assets/overseer.png");
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -91,7 +90,7 @@ fn App() -> Element {
     });
 
     rsx! {
-        document::Link { rel: "icon", href: FAVICON }
+        document::Link { rel: "icon", href: ICON_PNG }
         document::Stylesheet { href: MAIN_CSS }
         document::Stylesheet { href: TAILWIND_CSS }
 
