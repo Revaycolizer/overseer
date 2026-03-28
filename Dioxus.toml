@@ -5,7 +5,7 @@ asset_dir = "assets"
 [bundle]
 identifier = "ai.overseer.desktop"
 publisher = "Revaycolizer"
-icon = ["assets/favicon.ico"]
+icon = ["assets/overseer.png"]
 description = "Local-first AI orchestration mission mission control."
 category = "DeveloperTool"
 
