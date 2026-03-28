@@ -1474,6 +1474,71 @@ pub async fn get_artifacts_for_conversation(
     Ok(rows)
 }
 
+pub async fn get_artifacts_by_ids(
+    db: &Database,
+    artifact_ids: &[i64],
+) -> anyhow::Result<Vec<Artifact>> {
+    if artifact_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut rows = Vec::new();
+    for artifact_id in artifact_ids {
+        if let Some(artifact) = sqlx::query_as::<_, Artifact>(
+            "SELECT
+                id,
+                conversation_id,
+                execution_run_id,
+                domain,
+                step_text,
+                kind,
+                label,
+                content,
+                file_path,
+                content_type,
+                metadata_json,
+                created_at
+             FROM artifacts
+             WHERE id = ?",
+        )
+        .bind(*artifact_id)
+        .fetch_optional(&db.pool)
+        .await?
+        {
+            rows.push(artifact);
+        }
+    }
+    Ok(rows)
+}
+
+pub async fn get_artifacts_for_execution_run(
+    db: &Database,
+    execution_run_id: i64,
+) -> anyhow::Result<Vec<Artifact>> {
+    let rows = sqlx::query_as::<_, Artifact>(
+        "SELECT
+            id,
+            conversation_id,
+            execution_run_id,
+            domain,
+            step_text,
+            kind,
+            label,
+            content,
+            file_path,
+            content_type,
+            metadata_json,
+            created_at
+         FROM artifacts
+         WHERE execution_run_id = ?
+         ORDER BY created_at DESC",
+    )
+    .bind(execution_run_id)
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
+}
+
 pub async fn create_work_item(
     db: &Database,
     conversation_id: i64,
@@ -1558,6 +1623,25 @@ pub async fn update_work_item_status(
          WHERE id = ?",
     )
     .bind(status)
+    .bind(work_item_id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn update_work_item_runtime(
+    db: &Database,
+    work_item_id: i64,
+    status: &str,
+    metadata_json: Option<&str>,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE work_items
+         SET status = ?, metadata_json = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?",
+    )
+    .bind(status)
+    .bind(metadata_json)
     .bind(work_item_id)
     .execute(&db.pool)
     .await?;
