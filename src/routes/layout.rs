@@ -2,7 +2,7 @@ use crate::Route;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
-const BRAND_ICON: Asset = asset!("/assets/overseer.png");
+const BRAND_ICON: &str = "/assets/overseer.png";
 
 #[component]
 pub fn Sidebar() -> Element {

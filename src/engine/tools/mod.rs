@@ -267,7 +267,7 @@ async fn native_http_request(args: &serde_json::Value) -> Result<String, Dynamic
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(10))
         .timeout(std::time::Duration::from_secs(30))
-        .user_agent("Overseer/0.1.2 (+local-first mission control)")
+        .user_agent("Overseer/0.1.3 (+local-first mission control)")
         .build()
         .map_err(|err| DynamicToolError::ExecutionFailed {
             tool: "http_request".to_string(),
@@ -352,7 +352,7 @@ async fn native_stealth_browse(args: &serde_json::Value) -> Result<String, Dynam
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(10))
         .timeout(std::time::Duration::from_secs(30))
-        .user_agent("Mozilla/5.0 Overseer/0.1.2")
+        .user_agent("Mozilla/5.0 Overseer/0.1.3")
         .build()
         .map_err(|err| DynamicToolError::ExecutionFailed {
             tool: "stealth_browse".to_string(),
@@ -420,7 +420,7 @@ async fn native_stealth_search(args: &serde_json::Value) -> Result<String, Dynam
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(10))
         .timeout(std::time::Duration::from_secs(30))
-        .user_agent("Mozilla/5.0 Overseer/0.1.2")
+        .user_agent("Mozilla/5.0 Overseer/0.1.3")
         .build()
         .map_err(|err| DynamicToolError::ExecutionFailed {
             tool: "stealth_search".to_string(),
@@ -823,10 +823,15 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         return "right_click".to_string();
     }
 
-    if matches!(lower.as_str(), "invoke" | "invoke_element" | "invoke control")
-        || lower.starts_with("invoke ")
+    if matches!(
+        lower.as_str(),
+        "invoke" | "invoke_element" | "invoke control"
+    ) || lower.starts_with("invoke ")
         || lower.starts_with("click element ")
         || lower.starts_with("press button ")
+        || lower.starts_with("toggle ")
+        || lower.starts_with("expand ")
+        || lower.starts_with("collapse ")
     {
         return "invoke_element".to_string();
     }
@@ -1051,7 +1056,11 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
 
 fn infer_uia_control_type(text: &str) -> Option<&'static str> {
     let lower = text.to_lowercase();
-    if lower.contains("checkbox") || lower.contains("check box") {
+    if lower.contains("checkbox")
+        || lower.contains("check box")
+        || lower.contains("toggle")
+        || lower.contains("switch")
+    {
         return Some("CheckBox");
     }
     if lower.contains("radio button") || lower.contains("radio") {
@@ -1066,8 +1075,23 @@ fn infer_uia_control_type(text: &str) -> Option<&'static str> {
         || lower.contains("field")
         || lower.contains("edit")
         || lower.contains("search box")
+        || lower.contains("search field")
+        || lower.contains("address bar")
+        || lower.contains("address field")
+        || lower.contains("command palette")
+        || lower.contains("palette")
     {
         return Some("Edit");
+    }
+    if lower.contains("tree item")
+        || lower.contains("sidebar section")
+        || lower.contains("sidebar item")
+        || lower.contains("section")
+    {
+        return Some("TreeItem");
+    }
+    if lower.contains("list item") || lower.contains("list row") {
+        return Some("ListItem");
     }
     if lower.contains("tab") {
         return Some("TabItem");
@@ -1086,15 +1110,7 @@ fn infer_uia_control_type(text: &str) -> Option<&'static str> {
 
 fn clean_uia_selector_name(text: &str) -> String {
     let mut cleaned = text.trim().to_string();
-    for prefix in [
-        "the ",
-        "a ",
-        "an ",
-        "this ",
-        "that ",
-        "my ",
-        "current ",
-    ] {
+    for prefix in ["the ", "a ", "an ", "this ", "that ", "my ", "current "] {
         if cleaned.to_lowercase().starts_with(prefix) {
             cleaned = cleaned[prefix.len()..].trim().to_string();
         }
@@ -1110,6 +1126,8 @@ fn clean_uia_selector_name(text: &str) -> String {
         " box",
         " checkbox",
         " check box",
+        " toggle",
+        " switch",
         " radio button",
         " radio",
         " tab",
@@ -1119,6 +1137,18 @@ fn clean_uia_selector_name(text: &str) -> String {
         " dropdown",
         " drop-down",
         " combo box",
+        " search box",
+        " search field",
+        " address bar",
+        " address field",
+        " command palette",
+        " palette",
+        " sidebar section",
+        " sidebar item",
+        " tree item",
+        " list item",
+        " section",
+        " item",
         " control",
         " element",
     ] {
@@ -1132,6 +1162,62 @@ fn clean_uia_selector_name(text: &str) -> String {
     cleaned
 }
 
+fn infer_uia_app_hint_details(raw: &str) -> Option<(&'static str, &'static [&'static str])> {
+    let lower = raw.to_lowercase();
+    let mappings: &[(&str, &[&str])] = &[
+        ("discord", &["discord"]),
+        ("chrome", &["google chrome", "chrome"]),
+        ("msedge", &["microsoft edge", "edge", "msedge"]),
+        (
+            "visual studio code",
+            &["visual studio code", "vs code", "vscode"],
+        ),
+        (
+            "explorer",
+            &["file explorer", "windows explorer", "explorer"],
+        ),
+        ("spotify", &["spotify"]),
+    ];
+
+    mappings.iter().find_map(|(canonical, aliases)| {
+        if aliases.iter().any(|alias| lower.contains(alias)) {
+            Some((*canonical, *aliases))
+        } else {
+            None
+        }
+    })
+}
+
+fn infer_uia_app_hint(input: &serde_json::Value) -> Option<String> {
+    for field in ["app_hint", "app", "application"] {
+        if let Some(value) = read_string_field(input, &[field]) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    let raw = read_string_field(input, &["input", "selector", "name"])?;
+    infer_uia_app_hint_details(&raw).map(|(canonical, _)| canonical.to_string())
+}
+
+fn strip_trailing_app_hint(target: &str, aliases: &[&str]) -> String {
+    let lower = target.to_lowercase();
+    for alias in aliases {
+        for prefix in [
+            " in the ", " in ", " on the ", " on ", " inside ", " within ",
+        ] {
+            let suffix = format!("{}{}", prefix, alias);
+            if lower.ends_with(&suffix) {
+                let end = target.len().saturating_sub(suffix.len());
+                return target[..end].trim().to_string();
+            }
+        }
+    }
+    target.trim().to_string()
+}
+
 fn extract_uia_selector_target(input: &serde_json::Value, action: &str) -> Option<String> {
     if let Some(target) = extract_os_tool_target(input, action) {
         return Some(target);
@@ -1143,6 +1229,21 @@ fn extract_uia_selector_target(input: &serde_json::Value, action: &str) -> Optio
     match action {
         "click" => {
             for prefix in ["click ", "tap "] {
+                if let Some(rest) = lower.strip_prefix(prefix) {
+                    return Some(raw[raw.len() - rest.len()..].trim().to_string());
+                }
+            }
+        }
+        "invoke_element" => {
+            for prefix in [
+                "invoke ",
+                "click ",
+                "press ",
+                "toggle ",
+                "expand ",
+                "collapse ",
+                "select ",
+            ] {
                 if let Some(rest) = lower.strip_prefix(prefix) {
                     return Some(raw[raw.len() - rest.len()..].trim().to_string());
                 }
@@ -1185,24 +1286,31 @@ fn build_uia_selector_object(input: &serde_json::Value) -> serde_json::Value {
         if let Some(value) = read_string_field(input, &[src]) {
             let trimmed = value.trim();
             if !trimmed.is_empty() {
-                selector.insert(dst.to_string(), serde_json::Value::String(trimmed.to_string()));
+                selector.insert(
+                    dst.to_string(),
+                    serde_json::Value::String(trimmed.to_string()),
+                );
             }
         }
     }
 
-    if selector.is_empty() {
+    if let Some(app_hint) = infer_uia_app_hint(input) {
+        selector.insert("app_hint".to_string(), serde_json::Value::String(app_hint));
+    }
+
+    if !selector.contains_key("name") && !selector.contains_key("selector") {
         let action = infer_os_tool_action(input);
         if let Some(target) = extract_uia_selector_target(input, &action)
             .or_else(|| read_string_field(input, &["input"]))
         {
-            let trimmed = target.trim();
+            let trimmed_value = infer_uia_app_hint_details(target.trim())
+                .map(|(_, aliases)| strip_trailing_app_hint(target.trim(), aliases))
+                .unwrap_or_else(|| target.trim().to_string());
+            let trimmed = trimmed_value.trim();
             if !trimmed.is_empty() {
                 let cleaned_name = clean_uia_selector_name(trimmed);
                 if !cleaned_name.is_empty() && cleaned_name.len() < trimmed.len() {
-                    selector.insert(
-                        "name".to_string(),
-                        serde_json::Value::String(cleaned_name),
-                    );
+                    selector.insert("name".to_string(), serde_json::Value::String(cleaned_name));
                 } else {
                     selector.insert(
                         "selector".to_string(),
@@ -1613,13 +1721,51 @@ function Matches-Selector($element, $selector) {{
     }}
     return $true
 }}
+function Matches-AppHint($element, $selector) {{
+    if ($null -eq $element -or -not $selector.app_hint) {{ return $false }}
+    $hint = [string]$selector.app_hint
+    $name = (try {{ $element.Current.Name }} catch {{ '' }})
+    $className = (try {{ $element.Current.ClassName }} catch {{ '' }})
+    $processName = ''
+    try {{
+        $processId = $element.Current.ProcessId
+        if ($processId -gt 0) {{
+            $processName = (Get-Process -Id $processId -ErrorAction Stop).ProcessName
+        }}
+    }} catch {{}}
+    return $name -like ('*' + $hint + '*') -or
+        $className -like ('*' + $hint + '*') -or
+        $processName -like ('*' + $hint + '*')
+}}
+$preferredRoot = $null
+$desktopRoot = [System.Windows.Automation.AutomationElement]::RootElement
+if ($selector.app_hint -and $null -ne $desktopRoot) {{
+    try {{
+        $topWindows = $desktopRoot.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+        for ($i = 0; $i -lt $topWindows.Count; $i++) {{
+            $candidateWindow = $topWindows.Item($i)
+            if (Matches-AppHint $candidateWindow $selector) {{
+                $preferredRoot = $candidateWindow
+                break
+            }}
+        }}
+    }} catch {{}}
+}}
 $focused = $null
 try {{ $focused = [System.Windows.Automation.AutomationElement]::FocusedElement }} catch {{}}
 $searchRoots = New-Object System.Collections.Generic.List[System.Windows.Automation.AutomationElement]
-if ($null -ne $root) {{
-    $searchRoots.Add($root)
+if ($null -ne $preferredRoot) {{
+    $searchRoots.Add($preferredRoot)
 }}
-$desktopRoot = [System.Windows.Automation.AutomationElement]::RootElement
+if ($null -ne $root) {{
+    try {{
+        if ($null -eq $preferredRoot -or $preferredRoot.Current.NativeWindowHandle -ne $root.Current.NativeWindowHandle) {{
+            $searchRoots.Add($root)
+        }}
+    }} catch {{
+        $searchRoots.Add($root)
+    }}
+}}
 if ($null -ne $desktopRoot) {{
     $rootHandle = $null
     $desktopHandle = $null
@@ -1643,7 +1789,9 @@ foreach ($searchRoot in $searchRoots) {{
         }}
         if (@($found).Count -gt 0) {{
             try {{
-                if ($searchRoot.Current.NativeWindowHandle -eq $desktopRoot.Current.NativeWindowHandle) {{
+                if ($null -ne $preferredRoot -and $searchRoot.Current.NativeWindowHandle -eq $preferredRoot.Current.NativeWindowHandle) {{
+                    $searchScope = 'preferred_app_window'
+                }} elseif ($searchRoot.Current.NativeWindowHandle -eq $desktopRoot.Current.NativeWindowHandle) {{
                     $searchScope = 'desktop_root'
                 }}
             }} catch {{}}
@@ -1748,11 +1896,72 @@ function Matches-Selector($element, $selector) {{
     }}
     return $true
 }}
-$searchRoots = New-Object System.Collections.Generic.List[System.Windows.Automation.AutomationElement]
-if ($null -ne $root) {{
-    $searchRoots.Add($root)
+function Matches-AppHint($element, $selector) {{
+    if ($null -eq $element -or -not $selector.app_hint) {{ return $false }}
+    $hint = [string]$selector.app_hint
+    $name = (try {{ $element.Current.Name }} catch {{ '' }})
+    $className = (try {{ $element.Current.ClassName }} catch {{ '' }})
+    $processName = ''
+    try {{
+        $processId = $element.Current.ProcessId
+        if ($processId -gt 0) {{
+            $processName = (Get-Process -Id $processId -ErrorAction Stop).ProcessName
+        }}
+    }} catch {{}}
+    return $name -like ('*' + $hint + '*') -or
+        $className -like ('*' + $hint + '*') -or
+        $processName -like ('*' + $hint + '*')
 }}
+function Get-DiagnosticCandidates($searchRoot, $selector) {{
+    $candidates = @()
+    try {{
+        $all = $searchRoot.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+        $max = [Math]::Min($all.Count, 160)
+        for ($i = 0; $i -lt $max; $i++) {{
+            $candidate = $all.Item($i)
+            $converted = Convert-UiElement($candidate)
+            if ($null -eq $converted) {{ continue }}
+            $score = 0
+            if ($selector.name -and $converted.name -like ('*' + $selector.name + '*')) {{ $score += 6 }}
+            if ($selector.selector -and $converted.name -like ('*' + $selector.selector + '*')) {{ $score += 4 }}
+            if ($selector.automation_id -and $converted.automation_id -like ('*' + $selector.automation_id + '*')) {{ $score += 5 }}
+            if ($selector.class_name -and $converted.class_name -like ('*' + $selector.class_name + '*')) {{ $score += 3 }}
+            if ($selector.control_type -and $converted.control_type -like ('*' + $selector.control_type + '*')) {{ $score += 4 }}
+            if ($score -gt 0 -or ($candidates.Count -lt 8 -and $converted.name)) {{
+                $converted | Add-Member -NotePropertyName score -NotePropertyValue $score
+                $candidates += $converted
+            }}
+        }}
+    }} catch {{}}
+    return $candidates | Sort-Object -Property score -Descending | Select-Object -First 8
+}}
+$preferredRoot = $null
 $desktopRoot = [System.Windows.Automation.AutomationElement]::RootElement
+if ($selector.app_hint -and $null -ne $desktopRoot) {{
+    try {{
+        $topWindows = $desktopRoot.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+        for ($i = 0; $i -lt $topWindows.Count; $i++) {{
+            $candidateWindow = $topWindows.Item($i)
+            if (Matches-AppHint $candidateWindow $selector) {{
+                $preferredRoot = $candidateWindow
+                break
+            }}
+        }}
+    }} catch {{}}
+}}
+$searchRoots = New-Object System.Collections.Generic.List[System.Windows.Automation.AutomationElement]
+if ($null -ne $preferredRoot) {{
+    $searchRoots.Add($preferredRoot)
+}}
+if ($null -ne $root) {{
+    try {{
+        if ($null -eq $preferredRoot -or $preferredRoot.Current.NativeWindowHandle -ne $root.Current.NativeWindowHandle) {{
+            $searchRoots.Add($root)
+        }}
+    }} catch {{
+        $searchRoots.Add($root)
+    }}
+}}
 if ($null -ne $desktopRoot) {{
     $rootHandle = $null
     $desktopHandle = $null
@@ -1773,7 +1982,9 @@ foreach ($searchRoot in $searchRoots) {{
             if (Matches-Selector $candidate $selector) {{
                 $match = $candidate
                 try {{
-                    if ($searchRoot.Current.NativeWindowHandle -eq $desktopRoot.Current.NativeWindowHandle) {{
+                    if ($null -ne $preferredRoot -and $searchRoot.Current.NativeWindowHandle -eq $preferredRoot.Current.NativeWindowHandle) {{
+                        $searchScope = 'preferred_app_window'
+                    }} elseif ($searchRoot.Current.NativeWindowHandle -eq $desktopRoot.Current.NativeWindowHandle) {{
                         $searchScope = 'desktop_root'
                     }}
                 }} catch {{}}
@@ -1786,11 +1997,52 @@ foreach ($searchRoot in $searchRoots) {{
     }}
 }}
 if ($null -eq $match) {{
-    throw ('No UI Automation element matched selector: ' + ($selector | ConvertTo-Json -Compress))
+    $focused = $null
+    try {{ $focused = [System.Windows.Automation.AutomationElement]::FocusedElement }} catch {{}}
+    $activeWindow = Convert-UiElement($root)
+    $candidateSearchRoot = if ($null -ne $preferredRoot) {{ $preferredRoot }} elseif ($null -ne $root) {{ $root }} else {{ $desktopRoot }}
+    $blocked = [pscustomobject]@{{
+        action = $action
+        selector = $selector
+        app_hint = $selector.app_hint
+        search_scope = if ($null -ne $preferredRoot) {{ 'preferred_app_window' }} else {{ 'active_window' }}
+        active_window = $activeWindow
+        focused_element = Convert-UiElement($focused)
+        candidates = @(Get-DiagnosticCandidates $candidateSearchRoot $selector)
+        retry_hint = if ($selector.app_hint) {{
+            'The requested control was not found in the preferred app window. Try a more specific control name, or focus the correct window first.'
+        }} else {{
+            'Try inspecting accessibility for the current window, focusing the intended app first, or using a more specific control name.'
+        }}
+    }}
+    throw ('UIA_BLOCKED:' + ($blocked | ConvertTo-Json -Depth 6 -Compress))
 }}
 $method = 'focus'
+$verified = $false
+$verification = 'not_checked'
+$postFocused = $null
+$postElement = $null
+function Same-UiElement($left, $right) {{
+    if ($null -eq $left -or $null -eq $right) {{ return $false }}
+    try {{
+        if ($left.Current.NativeWindowHandle -ne 0 -and $left.Current.NativeWindowHandle -eq $right.Current.NativeWindowHandle) {{
+            return $true
+        }}
+    }} catch {{}}
+    $leftName = (try {{ $left.Current.Name }} catch {{ '' }})
+    $rightName = (try {{ $right.Current.Name }} catch {{ '' }})
+    $leftAuto = (try {{ $left.Current.AutomationId }} catch {{ '' }})
+    $rightAuto = (try {{ $right.Current.AutomationId }} catch {{ '' }})
+    $leftType = (try {{ $left.Current.ControlType.ProgrammaticName }} catch {{ '' }})
+    $rightType = (try {{ $right.Current.ControlType.ProgrammaticName }} catch {{ '' }})
+    return $leftName -eq $rightName -and $leftAuto -eq $rightAuto -and $leftType -eq $rightType
+}}
 if ($action -eq 'invoke_element') {{
     $invoked = $false
+    $toggleBefore = $null
+    $toggleAfter = $null
+    $expandBefore = $null
+    $expandAfter = $null
     try {{
         $pattern = $match.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
         if ($pattern) {{
@@ -1811,6 +2063,34 @@ if ($action -eq 'invoke_element') {{
     }}
     if (-not $invoked) {{
         try {{
+            $pattern = $match.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+            if ($pattern) {{
+                $toggleBefore = [string]$pattern.Current.ToggleState
+                $pattern.Toggle()
+                $toggleAfter = [string]$pattern.Current.ToggleState
+                $method = 'toggle_pattern'
+                $invoked = $true
+            }}
+        }} catch {{}}
+    }}
+    if (-not $invoked) {{
+        try {{
+            $pattern = $match.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+            if ($pattern) {{
+                $expandBefore = [string]$pattern.Current.ExpandCollapseState
+                if ($expandBefore -eq 'Collapsed') {{
+                    $pattern.Expand()
+                }} else {{
+                    $pattern.Collapse()
+                }}
+                $expandAfter = [string]$pattern.Current.ExpandCollapseState
+                $method = 'expand_collapse_pattern'
+                $invoked = $true
+            }}
+        }} catch {{}}
+    }}
+    if (-not $invoked) {{
+        try {{
             $pattern = $match.GetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern)
             if ($pattern) {{
                 $pattern.DoDefaultAction()
@@ -1823,12 +2103,32 @@ if ($action -eq 'invoke_element') {{
         $match.SetFocus()
         $method = 'focus_fallback'
     }}
+    try {{ $postFocused = [System.Windows.Automation.AutomationElement]::FocusedElement }} catch {{}}
+    $postElement = $match
+    if ($method -eq 'selection_item_pattern') {{
+        try {{
+            $pattern = $match.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+            $verified = [bool]$pattern.Current.IsSelected
+            $verification = 'selection_item_selected'
+        }} catch {{}}
+    }} elseif ($method -eq 'toggle_pattern') {{
+        $verified = $toggleBefore -ne $toggleAfter -and $null -ne $toggleAfter
+        $verification = if ($verified) {{ 'toggle_state_changed' }} else {{ 'toggle_state_unknown' }}
+    }} elseif ($method -eq 'expand_collapse_pattern') {{
+        $verified = $expandBefore -ne $expandAfter -and $null -ne $expandAfter
+        $verification = if ($verified) {{ 'expand_collapse_state_changed' }} else {{ 'expand_collapse_state_unknown' }}
+    }} elseif ($method -eq 'invoke_pattern' -or $method -eq 'legacy_default_action' -or $method -eq 'focus_fallback') {{
+        $verified = Same-UiElement $match $postFocused
+        $verification = if ($verified) {{ 'focused_after_invoke' }} else {{ 'invoke_not_confirmed' }}
+    }}
 }} elseif ($action -eq 'type_text') {{
     $typed = $false
+    $typedValue = $null
     try {{
         $pattern = $match.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
         if ($pattern) {{
             $pattern.SetValue($text)
+            $typedValue = [string]$pattern.Current.Value
             $method = 'value_pattern'
             $typed = $true
         }}
@@ -1841,9 +2141,22 @@ if ($action -eq 'invoke_element') {{
             throw 'Matched UI Automation element could not be prepared for text input.'
         }}
     }}
+    try {{ $postFocused = [System.Windows.Automation.AutomationElement]::FocusedElement }} catch {{}}
+    $postElement = $match
+    if ($method -eq 'value_pattern') {{
+        $verified = $typedValue -eq $text
+        $verification = if ($verified) {{ 'value_pattern_roundtrip' }} else {{ 'value_pattern_unconfirmed' }}
+    }} else {{
+        $verified = Same-UiElement $match $postFocused
+        $verification = if ($verified) {{ 'focused_for_keyboard_typing' }} else {{ 'keyboard_typing_unconfirmed' }}
+    }}
 }} else {{
     $match.SetFocus()
     $method = 'focus'
+    try {{ $postFocused = [System.Windows.Automation.AutomationElement]::FocusedElement }} catch {{}}
+    $postElement = $match
+    $verified = Same-UiElement $match $postFocused
+    $verification = if ($verified) {{ 'focused_element_confirmed' }} else {{ 'focus_not_confirmed' }}
 }}
 [pscustomobject]@{{
     action = $action
@@ -1851,6 +2164,10 @@ if ($action -eq 'invoke_element') {{
     search_scope = $searchScope
     method = $method
     element = Convert-UiElement($match)
+    post_action_focused_element = Convert-UiElement($postFocused)
+    post_action_element = Convert-UiElement($postElement)
+    verification = $verification
+    verified = $verified
     text_length = if ($action -eq 'type_text') {{ $text.Length }} else {{ $null }}
     ok = $true
 }} | ConvertTo-Json -Depth 6 -Compress
@@ -2912,8 +3229,48 @@ mod tests {
             serde_json::json!({"name":"Save","control_type":"Button"})
         );
         assert_eq!(
-            build_uia_selector_object(&serde_json::json!({"input":"type hello@example.com into the Email field"})),
+            build_uia_selector_object(
+                &serde_json::json!({"input":"type hello@example.com into the Email field"})
+            ),
             serde_json::json!({"name":"Email","control_type":"Edit"})
+        );
+        assert_eq!(
+            build_uia_selector_object(&serde_json::json!({"input":"click Save button in Discord"})),
+            serde_json::json!({
+                "name":"Save",
+                "control_type":"Button",
+                "app_hint":"discord"
+            })
+        );
+        assert_eq!(
+            build_uia_selector_object(
+                &serde_json::json!({"input":"focus the Search box in Visual Studio Code"})
+            ),
+            serde_json::json!({
+                "name":"Search",
+                "control_type":"Edit",
+                "app_hint":"visual studio code"
+            })
+        );
+        assert_eq!(
+            build_uia_selector_object(
+                &serde_json::json!({"input":"click the Notifications toggle in Discord"})
+            ),
+            serde_json::json!({
+                "name":"Notifications",
+                "control_type":"CheckBox",
+                "app_hint":"discord"
+            })
+        );
+        assert_eq!(
+            build_uia_selector_object(
+                &serde_json::json!({"input":"expand the Explorer sidebar section"})
+            ),
+            serde_json::json!({
+                "name":"Explorer",
+                "control_type":"TreeItem",
+                "app_hint":"explorer"
+            })
         );
         assert!(has_uia_selector(&serde_json::json!({
             "action":"click",

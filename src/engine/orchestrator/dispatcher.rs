@@ -525,6 +525,24 @@ impl SupervisorExecutionResult {
         }
     }
 
+    fn blocked(
+        summary: String,
+        evidence: Vec<String>,
+        error: String,
+        raw_response: String,
+    ) -> Self {
+        Self {
+            status: "blocked".to_string(),
+            summary,
+            evidence,
+            artifacts: Vec::new(),
+            verified: false,
+            hide_evidence: false,
+            error: Some(error),
+            raw_response,
+        }
+    }
+
     pub fn display_text(&self) -> String {
         fn normalize_summary(summary: &str) -> String {
             summary
@@ -952,6 +970,11 @@ fn native_selector_action(query: &str, step: &str, domain: &str) -> Option<&'sta
             || combined.contains("textbox")
             || combined.contains("text box")
             || combined.contains("search box")
+            || combined.contains("search field")
+            || combined.contains("address bar")
+            || combined.contains("address field")
+            || combined.contains("command palette")
+            || combined.contains("palette")
             || combined.contains("element")
             || combined.contains("control"));
     if typed_into_control {
@@ -965,6 +988,11 @@ fn native_selector_action(query: &str, step: &str, domain: &str) -> Option<&'sta
         || combined.contains("focus textbox")
         || combined.contains("focus text box")
         || combined.contains("focus search box")
+        || combined.contains("focus search field")
+        || combined.contains("focus address bar")
+        || combined.contains("focus address field")
+        || combined.contains("focus command palette")
+        || combined.contains("focus palette")
         || combined.contains("focus button");
     if focus_control {
         return Some("focus_element");
@@ -977,7 +1005,10 @@ fn native_selector_action(query: &str, step: &str, domain: &str) -> Option<&'sta
         || combined.contains("click button")
         || combined.contains("press button")
         || combined.contains("select checkbox")
-        || combined.contains("toggle checkbox");
+        || combined.contains("toggle checkbox")
+        || combined.contains("toggle ")
+        || combined.contains("expand ")
+        || combined.contains("collapse ");
     if invoke_control {
         return Some("invoke_element");
     }
@@ -1030,7 +1061,10 @@ fn parse_accessibility_payload(payload: &str) -> (Vec<String>, String) {
             .and_then(|item| item.as_u64())
             .unwrap_or(0);
 
-        if let Some(focused) = value.get("focused_element").and_then(|item| item.as_object()) {
+        if let Some(focused) = value
+            .get("focused_element")
+            .and_then(|item| item.as_object())
+        {
             let name = focused
                 .get("name")
                 .and_then(|item| item.as_str())
@@ -1074,7 +1108,7 @@ fn parse_accessibility_payload(payload: &str) -> (Vec<String>, String) {
     )
 }
 
-fn parse_uia_interaction_payload(payload: &str) -> (Vec<String>, String) {
+fn parse_uia_interaction_payload(payload: &str) -> (Vec<String>, String, bool) {
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
         let action = value
             .get("action")
@@ -1089,6 +1123,14 @@ fn parse_uia_interaction_payload(payload: &str) -> (Vec<String>, String) {
             .and_then(|item| item.as_str())
             .unwrap_or("active_window");
         let element = value.get("element").and_then(|item| item.as_object());
+        let verified = value
+            .get("verified")
+            .and_then(|item| item.as_bool())
+            .unwrap_or(false);
+        let verification = value
+            .get("verification")
+            .and_then(|item| item.as_str())
+            .unwrap_or("not_checked");
         let name = element
             .and_then(|item| item.get("name"))
             .and_then(|item| item.as_str())
@@ -1102,9 +1144,30 @@ fn parse_uia_interaction_payload(payload: &str) -> (Vec<String>, String) {
             format!("Matched UI element: {} ({})", name, control_type),
             format!("Interaction method: {}.", method),
             format!("UIA search scope: {}.", scope),
+            format!("Verification: {}.", verification.replace('_', " ")),
         ];
         if let Some(text_length) = value.get("text_length").and_then(|item| item.as_u64()) {
-            evidence.push(format!("Typed {} characters through the UI control.", text_length));
+            evidence.push(format!(
+                "Typed {} characters through the UI control.",
+                text_length
+            ));
+        }
+        if let Some(post_focus) = value
+            .get("post_action_focused_element")
+            .and_then(|item| item.as_object())
+        {
+            let focus_name = post_focus
+                .get("name")
+                .and_then(|item| item.as_str())
+                .unwrap_or("unnamed element");
+            let focus_type = post_focus
+                .get("control_type")
+                .and_then(|item| item.as_str())
+                .unwrap_or("control");
+            evidence.push(format!(
+                "Focused after action: {} ({})",
+                focus_name, focus_type
+            ));
         }
 
         let summary = match action {
@@ -1113,13 +1176,138 @@ fn parse_uia_interaction_payload(payload: &str) -> (Vec<String>, String) {
             _ => format!("Focused UI element '{}'.", name),
         };
 
-        return (evidence, summary);
+        return (evidence, summary, verified);
     }
 
     (
         vec!["A UI Automation element interaction completed natively.".to_string()],
         "Completed a native UI Automation interaction.".to_string(),
+        false,
     )
+}
+
+fn parse_uia_blocked_payload(payload: &str) -> (Vec<String>, String, String) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+        let action = value
+            .get("action")
+            .and_then(|item| item.as_str())
+            .unwrap_or("focus_element");
+        let search_scope = value
+            .get("search_scope")
+            .and_then(|item| item.as_str())
+            .unwrap_or("active_window");
+        let retry_hint = value
+            .get("retry_hint")
+            .and_then(|item| item.as_str())
+            .unwrap_or("Try a more specific control name or inspect accessibility first.");
+        let app_hint = value.get("app_hint").and_then(|item| item.as_str());
+        let selector = value.get("selector").and_then(|item| item.as_object());
+        let selector_desc = selector
+            .map(|selector| {
+                let mut parts = Vec::new();
+                for (key, label) in [
+                    ("name", "name"),
+                    ("automation_id", "automation id"),
+                    ("class_name", "class"),
+                    ("control_type", "control type"),
+                    ("selector", "selector"),
+                ] {
+                    if let Some(value) = selector.get(key).and_then(|item| item.as_str()) {
+                        if !value.trim().is_empty() {
+                            parts.push(format!("{}={}", label, value));
+                        }
+                    }
+                }
+                parts.join(", ")
+            })
+            .filter(|item| !item.is_empty())
+            .unwrap_or_else(|| "the requested selector".to_string());
+
+        let mut evidence = vec![
+            format!("UIA search scope: {}.", search_scope),
+            format!("Requested selector: {}.", selector_desc),
+        ];
+        if let Some(app_hint) = app_hint {
+            evidence.push(format!("Preferred app window: {}.", app_hint));
+        }
+        if let Some(active_window) = value.get("active_window").and_then(|item| item.as_object()) {
+            let name = active_window
+                .get("name")
+                .and_then(|item| item.as_str())
+                .unwrap_or("unnamed window");
+            let class_name = active_window
+                .get("class_name")
+                .and_then(|item| item.as_str())
+                .unwrap_or("window");
+            evidence.push(format!("Active window: {} ({})", name, class_name));
+        }
+        if let Some(focused) = value
+            .get("focused_element")
+            .and_then(|item| item.as_object())
+        {
+            let name = focused
+                .get("name")
+                .and_then(|item| item.as_str())
+                .unwrap_or("unnamed element");
+            let control_type = focused
+                .get("control_type")
+                .and_then(|item| item.as_str())
+                .unwrap_or("control");
+            evidence.push(format!("Focused element: {} ({})", name, control_type));
+        }
+        if let Some(candidates) = value.get("candidates").and_then(|item| item.as_array()) {
+            for candidate in candidates.iter().take(5) {
+                let name = candidate
+                    .get("name")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("unnamed element");
+                let control_type = candidate
+                    .get("control_type")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("control");
+                let automation_id = candidate
+                    .get("automation_id")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or("");
+                if automation_id.is_empty() {
+                    evidence.push(format!("Closest candidate: {} ({})", name, control_type));
+                } else {
+                    evidence.push(format!(
+                        "Closest candidate: {} ({}, automation id {})",
+                        name, control_type, automation_id
+                    ));
+                }
+            }
+        }
+        evidence.push(format!("Retry hint: {}.", retry_hint.trim_end_matches('.')));
+
+        let summary = match action {
+            "invoke_element" => {
+                "Blocked: Overseer could not find a matching UI element to invoke.".to_string()
+            }
+            "type_text" => {
+                "Blocked: Overseer could not find a matching UI field for text entry.".to_string()
+            }
+            _ => "Blocked: Overseer could not find a matching UI element to focus.".to_string(),
+        };
+        let error = format!(
+            "No UI Automation element matched the requested selector. {}",
+            retry_hint
+        );
+        return (evidence, summary, error);
+    }
+
+    (
+        vec!["No matching UI Automation element was found.".to_string()],
+        "Blocked: Overseer could not find a matching UI element.".to_string(),
+        "No matching UI Automation element was found.".to_string(),
+    )
+}
+
+fn extract_uia_blocked_json(error: &str) -> Option<&str> {
+    error
+        .find("UIA_BLOCKED:")
+        .map(|index| error[index + "UIA_BLOCKED:".len()..].trim())
 }
 
 fn parse_file_search_payload(payload: &str) -> (Vec<String>, Vec<String>, String) {
@@ -1398,14 +1586,8 @@ pub async fn dispatch_domain(
 
     if is_native_accessibility_request(query, step, domain) {
         if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
-            let raw = crate::engine::tools::call_dynamic_tool(
-                os_tool,
-                serde_json::json!({ "action": "inspect_accessibility", "input": query }),
-            )
-            .await
-            .map_err(|err| format!("Native accessibility inspection failed: {}", err))?;
-
-            let (evidence, summary) = parse_accessibility_payload(&raw);
+            let input_json =
+                serde_json::json!({ "action": "inspect_accessibility", "input": query });
 
             record_event(
                 db,
@@ -1418,12 +1600,15 @@ pub async fn dispatch_domain(
                 Some("os_tool"),
                 None,
                 Some("Using native accessibility inspection fast path."),
-                Some(&format!(
-                    r#"{{"action":"inspect_accessibility","input":{:?}}}"#,
-                    query
-                )),
+                Some(&input_json.to_string()),
             )
             .await;
+
+            let raw = crate::engine::tools::call_dynamic_tool(os_tool, input_json.clone())
+                .await
+                .map_err(|err| format!("Native accessibility inspection failed: {}", err))?;
+
+            let (evidence, summary) = parse_accessibility_payload(&raw);
 
             record_event(
                 db,
@@ -1453,14 +1638,7 @@ pub async fn dispatch_domain(
 
     if let Some(action) = native_selector_action(query, step, domain) {
         if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
-            let raw = crate::engine::tools::call_dynamic_tool(
-                os_tool,
-                serde_json::json!({ "action": action, "input": query }),
-            )
-            .await
-            .map_err(|err| format!("Native UI Automation interaction failed: {}", err))?;
-
-            let (evidence, summary) = parse_uia_interaction_payload(&raw);
+            let input_json = serde_json::json!({ "action": action, "input": query });
 
             record_event(
                 db,
@@ -1473,12 +1651,44 @@ pub async fn dispatch_domain(
                 Some("os_tool"),
                 None,
                 Some("Using native selector-based UI Automation fast path."),
-                Some(&format!(
-                    r#"{{"action":"{}","input":{:?}}}"#,
-                    action, query
-                )),
+                Some(&input_json.to_string()),
             )
             .await;
+
+            let raw = match crate::engine::tools::call_dynamic_tool(os_tool, input_json.clone())
+                .await
+            {
+                Ok(raw) => raw,
+                Err(err) => {
+                    let err_text = err.to_string();
+                    if let Some(payload) = extract_uia_blocked_json(&err_text) {
+                        let (evidence, summary, blocked_error) = parse_uia_blocked_payload(payload);
+                        record_event(
+                            db,
+                            run_id,
+                            event_sequence,
+                            "tool_blocked",
+                            "blocked",
+                            Some(domain),
+                            Some(step),
+                            Some("os_tool"),
+                            None,
+                            Some(&summary),
+                            Some(payload),
+                        )
+                        .await;
+                        return Ok(SupervisorExecutionResult::blocked(
+                            summary,
+                            evidence,
+                            blocked_error,
+                            payload.to_string(),
+                        ));
+                    }
+                    return Err(format!("Native UI Automation interaction failed: {}", err));
+                }
+            };
+
+            let (evidence, summary, verified) = parse_uia_interaction_payload(&raw);
 
             record_event(
                 db,
@@ -1499,7 +1709,7 @@ pub async fn dispatch_domain(
                 summary,
                 evidence,
                 Vec::new(),
-                true,
+                verified,
                 s.hide_evidence,
                 raw,
             ));
@@ -2706,6 +2916,22 @@ mod tests {
             ),
             Some("type_text")
         );
+        assert_eq!(
+            native_selector_action(
+                "Expand the Explorer sidebar section",
+                "Open the sidebar section",
+                "computer"
+            ),
+            Some("invoke_element")
+        );
+        assert_eq!(
+            native_selector_action(
+                "Click the Notifications toggle in Discord",
+                "Toggle notifications",
+                "computer"
+            ),
+            Some("invoke_element")
+        );
     }
 
     #[test]
@@ -2764,5 +2990,56 @@ mod tests {
         assert!(summary.contains("42 running processes"));
         assert!(evidence.iter().any(|item| item.contains("ollama")));
         assert!(evidence.iter().any(|item| item.contains("PID 11434")));
+    }
+
+    #[test]
+    fn uia_blocked_payload_becomes_retryable_blocked_result() {
+        let payload = r#"{
+            "action":"invoke_element",
+            "selector":{"name":"Save","control_type":"Button","app_hint":"discord"},
+            "app_hint":"discord",
+            "search_scope":"preferred_app_window",
+            "active_window":{"name":"Discord","class_name":"Chrome_WidgetWin_1"},
+            "focused_element":{"name":"Message","control_type":"Edit"},
+            "candidates":[
+                {"name":"Save As","control_type":"Button","automation_id":"1001"},
+                {"name":"Server List","control_type":"List"}
+            ],
+            "retry_hint":"Try a more specific control name, or focus the correct window first."
+        }"#;
+
+        let (evidence, summary, error) = parse_uia_blocked_payload(payload);
+        assert!(summary.contains("Blocked"));
+        assert!(error.contains("No UI Automation element matched"));
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("Preferred app window: discord")));
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("Closest candidate: Save As")));
+        assert!(evidence.iter().any(|item| item.contains("Retry hint:")));
+    }
+
+    #[test]
+    fn uia_interaction_payload_surfaces_native_verification() {
+        let payload = r#"{
+            "action":"focus_element",
+            "method":"focus",
+            "search_scope":"preferred_app_window",
+            "verification":"focused_element_confirmed",
+            "verified":true,
+            "element":{"name":"Save","control_type":"Button"},
+            "post_action_focused_element":{"name":"Save","control_type":"Button"}
+        }"#;
+
+        let (evidence, summary, verified) = parse_uia_interaction_payload(payload);
+        assert!(verified);
+        assert!(summary.contains("Focused UI element 'Save'"));
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("Verification: focused element confirmed")));
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("Focused after action: Save (Button)")));
     }
 }

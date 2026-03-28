@@ -44,7 +44,7 @@ enum Route {
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
-const ICON_PNG: Asset = asset!("/assets/overseer.png");
+const ICON_PNG: &str = "/assets/overseer.png";
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

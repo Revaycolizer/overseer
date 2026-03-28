@@ -97,19 +97,18 @@ fn infer_native_computer_domain(query: &str) -> Option<String> {
         return Some("computer".to_string());
     }
 
-    let launch_request = (lower.contains("open ")
-        || lower.contains("launch ")
-        || lower.contains("start "))
-        && (lower.contains("pc")
-            || lower.contains("computer")
-            || lower.contains("app")
-            || lower.contains("discord")
-            || lower.contains("chrome")
-            || lower.contains("browser")
-            || lower.contains("vscode")
-            || lower.contains("visual studio code")
-            || lower.contains("spotify")
-            || lower.contains("explorer"));
+    let launch_request =
+        (lower.contains("open ") || lower.contains("launch ") || lower.contains("start "))
+            && (lower.contains("pc")
+                || lower.contains("computer")
+                || lower.contains("app")
+                || lower.contains("discord")
+                || lower.contains("chrome")
+                || lower.contains("browser")
+                || lower.contains("vscode")
+                || lower.contains("visual studio code")
+                || lower.contains("spotify")
+                || lower.contains("explorer"));
 
     if launch_request {
         return Some("computer".to_string());
@@ -189,9 +188,7 @@ fn is_native_computer_fast_path_request(query: &str, domain: &str) -> bool {
         || lower.contains(".pdf")
         || lower.contains(".doc")
         || lower.contains(".docx")
-        || ((lower.contains("find")
-            || lower.contains("locate")
-            || lower.contains("where is"))
+        || ((lower.contains("find") || lower.contains("locate") || lower.contains("where is"))
             && (lower.contains("file") || lower.contains("path"))))
         && !lower.contains("open file explorer");
 
