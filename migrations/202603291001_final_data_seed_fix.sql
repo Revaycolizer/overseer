@@ -52,10 +52,10 @@ INSERT INTO supervisor_agents (id, supervisor_id, agent_id) VALUES (abs(random()
 
 -- Push configurations to these supervisors.
 UPDATE supervisors SET fast_path_keywords = 'chrome, browser, automate, website automation, click, type, website, web, dashboard, form, fill, login, interactive', routing_priority = 10 WHERE domain = 'web';
-UPDATE supervisors SET fast_path_keywords = 'research, search, browse, query, latest, which is, who is, check, version, documentation, news, how to, guide, tutorial, github, release, update, terminal, command, shell', routing_priority = 20 WHERE domain = 'stealth';
-UPDATE supervisors SET fast_path_keywords = 'app, application, desktop, window, file, directory, find file, locate file, resume', routing_priority = 15 WHERE domain = 'desktop';
-UPDATE supervisors SET fast_path_keywords = 'hello, hi, help, explain, what if, who are you, tell me about', routing_priority = 5, skip_fast_path_if_artifacts = 1, artifact_fast_path_keywords = 'explain,summarize,analyze,read,describe,what is this,tell me about,review,interpret,break down,walk me through' WHERE domain = 'chat';
-UPDATE supervisors SET fast_path_keywords = 'screen, desktop, computer, operate pc, screenshot, capture, observe, inspect, watch, background, running, process, task, currently, list, show, ocr, analyze, vision, image, picture, photo, summarize', routing_priority = 25 WHERE domain = 'computer';
+UPDATE supervisors SET fast_path_keywords = 'research, search, browse, query, latest, which is, who is, check, version, documentation, news, how to, guide, tutorial, github, release, update, terminal, command, shell, find, locate, extract, summarize, evidence, summary, info, fact, explore', routing_priority = 25 WHERE domain = 'stealth';
+UPDATE supervisors SET fast_path_keywords = 'app, application, desktop, window, file, directory, find file, locate file, find in pc, search pc, resume', routing_priority = 25 WHERE domain = 'desktop';
+UPDATE supervisors SET fast_path_keywords = 'hello, hi, help, explain, what if, who are you, tell me about, summarize, chat, talk, discuss', routing_priority = 5, skip_fast_path_if_artifacts = 1, artifact_fast_path_keywords = 'explain,summarize,analyze,read,describe,what is this,tell me about,review,interpret,break down,walk me through' WHERE domain = 'chat';
+UPDATE supervisors SET fast_path_keywords = 'screen, desktop, computer, operate pc, screenshot, capture, observe, inspect, watch, background, running, process, task, currently, list, show, ocr, analyze, vision, image, picture, photo', routing_priority = 20 WHERE domain = 'computer';
 UPDATE supervisors SET fast_path_keywords = 'music, play music, play song, audio, song, neontune, volume, pause, next', routing_priority = 5 WHERE domain = 'neontune';
 
 PRAGMA foreign_keys = ON;
