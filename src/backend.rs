@@ -1336,6 +1336,18 @@ pub struct WorkItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
+pub struct WorkItemEvent {
+    pub id: i64,
+    pub work_item_id: i64,
+    pub execution_run_id: Option<i64>,
+    pub event_type: String,
+    pub status: Option<String>,
+    pub summary: Option<String>,
+    pub metadata_json: Option<String>,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
 pub struct Workflow {
     pub id: i64,
     pub name: String,
@@ -1781,6 +1793,66 @@ pub async fn update_work_item_runtime(
     .execute(&db.pool)
     .await?;
     Ok(())
+}
+
+pub async fn log_work_item_event(
+    db: &Database,
+    work_item_id: i64,
+    execution_run_id: Option<i64>,
+    event_type: &str,
+    status: Option<&str>,
+    summary: Option<&str>,
+    metadata_json: Option<&str>,
+) -> anyhow::Result<i64> {
+    let id = db.next_id().await;
+    sqlx::query(
+        "INSERT INTO work_item_events (
+            id,
+            work_item_id,
+            execution_run_id,
+            event_type,
+            status,
+            summary,
+            metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(work_item_id)
+    .bind(execution_run_id)
+    .bind(event_type)
+    .bind(status)
+    .bind(summary)
+    .bind(metadata_json)
+    .execute(&db.pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn get_work_item_events(
+    db: &Database,
+    work_item_id: i64,
+    limit: i64,
+) -> anyhow::Result<Vec<WorkItemEvent>> {
+    let rows = sqlx::query_as::<_, WorkItemEvent>(
+        "SELECT
+            id,
+            work_item_id,
+            execution_run_id,
+            event_type,
+            status,
+            summary,
+            metadata_json,
+            created_at
+         FROM work_item_events
+         WHERE work_item_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?",
+    )
+    .bind(work_item_id)
+    .bind(limit.max(1))
+    .fetch_all(&db.pool)
+    .await?;
+    Ok(rows)
 }
 
 pub async fn open_local_path(path: &str) -> anyhow::Result<()> {

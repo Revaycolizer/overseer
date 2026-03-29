@@ -61,12 +61,49 @@ fn build_work_item_runtime_metadata(
     .to_string()
 }
 
+fn merged_work_item_artifact_ids(work_item: &backend::WorkItem) -> Vec<i64> {
+    let mut artifact_ids = work_item
+        .source_artifact_ids_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<Vec<i64>>(json).ok())
+        .unwrap_or_default();
+
+    if let Some(latest_artifacts) = parse_work_item_runtime_metadata(work_item).latest_artifact_ids
+    {
+        for artifact_id in latest_artifacts {
+            if !artifact_ids.contains(&artifact_id) {
+                artifact_ids.push(artifact_id);
+            }
+        }
+    }
+
+    artifact_ids
+}
+
+fn build_work_item_handoff_prompt(
+    work_item: &backend::WorkItem,
+    runtime_metadata: &WorkItemRuntimeMetadata,
+) -> String {
+    let latest_excerpt = runtime_metadata
+        .latest_response_excerpt
+        .clone()
+        .unwrap_or_else(|| "No latest result summary captured yet.".to_string());
+    format!(
+        "Continue this work item as a handoff.\n\nOriginal title: {}\nOriginal prompt: {}\nCurrent status: {}\nLatest result: {}\n\nTake over from here, use the attached work-item context and artifacts, and propose or execute the next best step.",
+        work_item.title,
+        work_item.prompt,
+        work_item.status,
+        latest_excerpt
+    )
+}
+
 fn update_work_item_manual_status(
     db: std::sync::Arc<crate::db::Database>,
     work_item: backend::WorkItem,
     status: String,
     selected_work_item: Signal<Option<backend::WorkItem>>,
     mut work_items_resource: Resource<Vec<backend::WorkItem>>,
+    mut work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
 ) {
     spawn(async move {
         let now = chrono::Utc::now().naive_utc().to_string();
@@ -86,6 +123,16 @@ fn update_work_item_manual_status(
         );
         let _ = backend::update_work_item_runtime(&db, work_item.id, &status, Some(&metadata_json))
             .await;
+        let _ = backend::log_work_item_event(
+            &db,
+            work_item.id,
+            None,
+            "status_changed",
+            Some(&status),
+            Some(note),
+            Some(&metadata_json),
+        )
+        .await;
         set_selected_work_item_runtime(
             selected_work_item,
             work_item.id,
@@ -93,6 +140,7 @@ fn update_work_item_manual_status(
             Some(metadata_json),
         );
         work_items_resource.restart();
+        work_item_events_resource.restart();
     });
 }
 
@@ -107,6 +155,7 @@ fn run_work_item_now(
     mut work_items_resource: Resource<Vec<backend::WorkItem>>,
     mut execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
     mut artifacts_resource: Resource<Vec<backend::Artifact>>,
+    mut work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
     mut selected_execution_run_id: Signal<Option<i64>>,
 ) {
     let optimistic_id = -chrono::Utc::now().timestamp_micros();
@@ -144,13 +193,20 @@ fn run_work_item_now(
             "in_progress",
             Some(in_progress_metadata),
         );
+        let _ = backend::log_work_item_event(
+            &db,
+            work_item.id,
+            None,
+            "run_started",
+            Some("in_progress"),
+            Some("Work item execution started."),
+            None,
+        )
+        .await;
         work_items_resource.restart();
+        work_item_events_resource.restart();
 
-        let source_artifact_ids = work_item
-            .source_artifact_ids_json
-            .as_deref()
-            .and_then(|json| serde_json::from_str::<Vec<i64>>(json).ok())
-            .unwrap_or_default();
+        let source_artifact_ids = merged_work_item_artifact_ids(&work_item);
         let source_artifacts = backend::get_artifacts_by_ids(&db, &source_artifact_ids)
             .await
             .unwrap_or_default();
@@ -178,6 +234,16 @@ fn run_work_item_now(
                 Some(&metadata_json),
             )
             .await;
+            let _ = backend::log_work_item_event(
+                &db,
+                work_item.id,
+                None,
+                "run_blocked",
+                Some("blocked"),
+                Some(&format!("Failed to queue the work item prompt: {err}")),
+                Some(&metadata_json),
+            )
+            .await;
             set_selected_work_item_runtime(
                 selected_work_item,
                 work_item.id,
@@ -185,6 +251,7 @@ fn run_work_item_now(
                 Some(metadata_json),
             );
             work_items_resource.restart();
+            work_item_events_resource.restart();
             return;
         }
 
@@ -256,6 +323,24 @@ fn run_work_item_now(
         let _ =
             backend::update_work_item_runtime(&db, work_item.id, &status, metadata_json.as_deref())
                 .await;
+        let _ = backend::log_work_item_event(
+            &db,
+            work_item.id,
+            latest_run_id,
+            if status == "done" {
+                "run_completed"
+            } else {
+                "run_blocked"
+            },
+            Some(&status),
+            metadata_json
+                .as_deref()
+                .and_then(|json| serde_json::from_str::<WorkItemRuntimeMetadata>(json).ok())
+                .and_then(|metadata| metadata.latest_response_excerpt)
+                .as_deref(),
+            metadata_json.as_deref(),
+        )
+        .await;
         set_selected_work_item_runtime(selected_work_item, work_item.id, &status, metadata_json);
         if let Some(run_id) = latest_run_id {
             selected_execution_run_id.set(Some(run_id));
@@ -263,6 +348,76 @@ fn run_work_item_now(
         work_items_resource.restart();
         execution_runs_resource.restart();
         artifacts_resource.restart();
+        work_item_events_resource.restart();
+    });
+}
+
+fn create_work_item_handoff(
+    db: std::sync::Arc<crate::db::Database>,
+    work_item: backend::WorkItem,
+    mut selected_work_item: Signal<Option<backend::WorkItem>>,
+    mut work_items_resource: Resource<Vec<backend::WorkItem>>,
+    mut work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
+) {
+    spawn(async move {
+        let runtime_metadata = parse_work_item_runtime_metadata(&work_item);
+        let title = format!("Handoff: {}", work_item.title);
+        let prompt = build_work_item_handoff_prompt(&work_item, &runtime_metadata);
+        let source_artifact_ids_json =
+            serde_json::to_string(&merged_work_item_artifact_ids(&work_item)).ok();
+        if let Ok(id) = backend::create_work_item(
+            &db,
+            work_item.conversation_id,
+            &title,
+            Some("Created as a handoff from an existing work item."),
+            "queued",
+            "handoff",
+            work_item.assigned_domain.as_deref(),
+            &prompt,
+            source_artifact_ids_json.as_deref(),
+            None,
+        )
+        .await
+        {
+            let now = chrono::Utc::now().naive_utc();
+            let new_item = backend::WorkItem {
+                id,
+                conversation_id: work_item.conversation_id,
+                title,
+                brief: Some("Created as a handoff from an existing work item.".to_string()),
+                status: "queued".to_string(),
+                surface_kind: "handoff".to_string(),
+                assigned_domain: work_item.assigned_domain.clone(),
+                prompt: prompt.clone(),
+                source_artifact_ids_json,
+                metadata_json: None,
+                created_at: now,
+                updated_at: now,
+            };
+            let _ = backend::log_work_item_event(
+                &db,
+                work_item.id,
+                None,
+                "handoff_created",
+                Some("queued"),
+                Some("Created a follow-up handoff work item."),
+                None,
+            )
+            .await;
+            let _ = backend::log_work_item_event(
+                &db,
+                id,
+                None,
+                "created",
+                Some("queued"),
+                Some("This work item was created as a handoff."),
+                None,
+            )
+            .await;
+            selected_work_item.set(Some(new_item));
+            work_items_resource.restart();
+            work_item_events_resource.restart();
+        }
     });
 }
 
@@ -476,6 +631,24 @@ pub fn Conversations() -> Element {
         }
     });
     let work_items = work_items_resource.read().cloned().unwrap_or_default();
+    let db_for_work_item_events = db.clone();
+    let work_item_events_resource = use_resource(move || {
+        let db = db_for_work_item_events.clone();
+        let work_item_id = selected_work_item().map(|item| item.id);
+        async move {
+            if let Some(id) = work_item_id {
+                backend::get_work_item_events(&db, id, 24)
+                    .await
+                    .unwrap_or_default()
+            } else {
+                vec![]
+            }
+        }
+    });
+    let work_item_events = work_item_events_resource
+        .read()
+        .cloned()
+        .unwrap_or_default();
     let db_for_registry_status = db.clone();
     let runtime_registry_resource = use_resource(move || {
         let db = db_for_registry_status.clone();
@@ -502,6 +675,7 @@ pub fn Conversations() -> Element {
     let mut execution_events_poll = execution_events_resource.clone();
     let mut artifacts_poll = artifacts_resource.clone();
     let mut work_items_poll = work_items_resource.clone();
+    let mut work_item_events_poll = work_item_events_resource.clone();
     let mut runtime_registry_poll = runtime_registry_resource.clone();
     use_future(move || async move {
         loop {
@@ -510,6 +684,7 @@ pub fn Conversations() -> Element {
             execution_events_poll.restart();
             artifacts_poll.restart();
             work_items_poll.restart();
+            work_item_events_poll.restart();
             runtime_registry_poll.restart();
         }
     });
@@ -644,6 +819,8 @@ pub fn Conversations() -> Element {
                                             work_items_resource: work_items_resource.clone(),
                                             execution_runs_resource: execution_runs_resource.clone(),
                                             artifacts_resource: artifacts_resource.clone(),
+                                            work_item_events: work_item_events.clone(),
+                                            work_item_events_resource: work_item_events_resource.clone(),
                                             selected_execution_run_id: selected_execution_run_id,
                                             on_open: move |path: String| {
                                                 spawn(async move {
@@ -713,6 +890,7 @@ pub fn Conversations() -> Element {
                                 work_items_resource: work_items_resource.clone(),
                                 execution_runs_resource: execution_runs_resource.clone(),
                                 artifacts_resource: artifacts_resource.clone(),
+                                work_item_events_resource: work_item_events_resource.clone(),
                                 selected_execution_run_id: selected_execution_run_id,
                             }
                             div { class: "flex-1 min-h-0",
@@ -882,6 +1060,8 @@ fn WorkspaceSessionDeck(
     work_items_resource: Resource<Vec<backend::WorkItem>>,
     execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
     artifacts_resource: Resource<Vec<backend::Artifact>>,
+    work_item_events: Vec<backend::WorkItemEvent>,
+    work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
     selected_execution_run_id: Signal<Option<i64>>,
     on_open: EventHandler<String>,
 ) -> Element {
@@ -929,6 +1109,7 @@ fn WorkspaceSessionDeck(
                                     selected_work_item: selected_work_item,
                                     starter_prompt: starter_prompt,
                                     work_items_resource: work_items_resource,
+                                    work_item_events_resource: work_item_events_resource.clone(),
                                     on_open: on_open,
                                 }
                             }
@@ -955,6 +1136,8 @@ fn WorkspaceSessionDeck(
                                     work_items_resource: work_items_resource.clone(),
                                     execution_runs_resource: execution_runs_resource.clone(),
                                     artifacts_resource: artifacts_resource.clone(),
+                                    work_item_events: work_item_events.clone(),
+                                    work_item_events_resource: work_item_events_resource.clone(),
                                     selected_execution_run_id: selected_execution_run_id,
                                 }
                             }
@@ -1054,6 +1237,8 @@ fn WorkItemWorkspacePanel(
     work_items_resource: Resource<Vec<backend::WorkItem>>,
     execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
     artifacts_resource: Resource<Vec<backend::Artifact>>,
+    work_item_events: Vec<backend::WorkItemEvent>,
+    work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
     selected_execution_run_id: Signal<Option<i64>>,
 ) -> Element {
     let runtime_metadata = parse_work_item_runtime_metadata(&work_item);
@@ -1163,6 +1348,7 @@ fn WorkItemWorkspacePanel(
                                 work_items_resource.clone(),
                                 execution_runs_resource.clone(),
                                 artifacts_resource.clone(),
+                                work_item_events_resource.clone(),
                                 selected_execution_run_id,
                             );
                         }
@@ -1193,6 +1379,7 @@ fn WorkItemWorkspacePanel(
                                 "blocked".to_string(),
                                 selected_work_item,
                                 work_items_resource.clone(),
+                                work_item_events_resource.clone(),
                             );
                         }
                     },
@@ -1213,11 +1400,101 @@ fn WorkItemWorkspacePanel(
                                 "done".to_string(),
                                 selected_work_item,
                                 work_items_resource.clone(),
+                                work_item_events_resource.clone(),
                             );
                         }
                     },
                     MaterialIcon { name: "task_alt", size: 14 }
                     "Mark Done"
+                }
+            }
+
+            if work_item.status == "blocked" {
+                div { class: "rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-3",
+                    div {
+                        p { class: "text-[10px] font-black uppercase tracking-[0.18em] text-amber-700", "Blocked Resolution" }
+                        p { class: "text-xs text-amber-900 mt-1 leading-relaxed",
+                            "This work item is blocked. Retry with the latest artifacts, hand it off, or seed the composer with an investigation prompt."
+                        }
+                    }
+                    div { class: "flex flex-wrap gap-2",
+                        button {
+                            class: "inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-blue-700 hover:bg-blue-50 transition-all",
+                            onclick: {
+                                let work_item = work_item.clone();
+                                move |_| {
+                                    starter_prompt.set(Some(format!(
+                                        "Investigate why this work item is blocked and propose the next best step.\n\nWork item: {}\nPrompt: {}\nLatest result: {}",
+                                        work_item.title,
+                                        work_item.prompt,
+                                        parse_work_item_runtime_metadata(&work_item)
+                                            .latest_response_excerpt
+                                            .unwrap_or_else(|| "No latest result summary available.".to_string())
+                                    )));
+                                    selected_work_item.set(Some(work_item.clone()));
+                                }
+                            },
+                            MaterialIcon { name: "manage_search", size: 14 }
+                            "Investigate"
+                        }
+                        button {
+                            class: "inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-violet-700 hover:bg-violet-50 transition-all",
+                            onclick: {
+                                let db = db.clone();
+                                let work_item = work_item.clone();
+                                let selected_work_item = selected_work_item;
+                                let work_items_resource = work_items_resource.clone();
+                                let work_item_events_resource = work_item_events_resource.clone();
+                                move |_| {
+                                    create_work_item_handoff(
+                                        db.clone(),
+                                        work_item.clone(),
+                                        selected_work_item,
+                                        work_items_resource.clone(),
+                                        work_item_events_resource.clone(),
+                                    );
+                                }
+                            },
+                            MaterialIcon { name: "forward_to_inbox", size: 14 }
+                            "Create Handoff"
+                        }
+                    }
+                }
+            }
+
+            div { class: "rounded-xl border border-slate-200 bg-white px-4 py-3 space-y-3",
+                div { class: "flex items-center justify-between gap-3",
+                    p { class: "text-[10px] font-black uppercase tracking-[0.18em] text-slate-400", "Activity Timeline" }
+                    span { class: "text-[10px] font-semibold text-slate-400", "{work_item_events.len()} event(s)" }
+                }
+                if work_item_events.is_empty() {
+                    p { class: "text-xs text-slate-500", "No work-item events yet. Run, retry, block, complete, or hand off this item to build a visible history." }
+                } else {
+                    div { class: "space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1",
+                        for event in work_item_events.iter() {
+                            div { class: "rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 space-y-1",
+                                div { class: "flex flex-wrap items-center justify-between gap-2",
+                                    div { class: "flex flex-wrap items-center gap-2",
+                                        span { class: "text-[10px] font-black uppercase tracking-[0.16em] text-slate-500",
+                                            "{prettify_token(&event.event_type)}"
+                                        }
+                                        if let Some(status) = event.status.clone().filter(|value| !value.trim().is_empty()) {
+                                            span { class: "text-[10px] font-black uppercase tracking-[0.16em] text-slate-400",
+                                                "{prettify_token(&status)}"
+                                            }
+                                        }
+                                        if let Some(run_id) = event.execution_run_id {
+                                            span { class: "text-[10px] font-semibold text-slate-400", "Run #{run_id}" }
+                                        }
+                                    }
+                                    span { class: "text-[10px] font-semibold text-slate-400", "{event.created_at}" }
+                                }
+                                if let Some(summary) = event.summary.clone().filter(|value| !value.trim().is_empty()) {
+                                    p { class: "text-xs text-slate-700 leading-relaxed whitespace-pre-wrap break-words", "{summary}" }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1462,6 +1739,7 @@ fn ArtifactWorkbenchPanel(
     selected_work_item: Signal<Option<backend::WorkItem>>,
     starter_prompt: Signal<Option<String>>,
     work_items_resource: Resource<Vec<backend::WorkItem>>,
+    work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
     on_open: EventHandler<String>,
 ) -> Element {
     let artifact_kind = artifact.kind.clone();
@@ -1631,6 +1909,16 @@ fn ArtifactWorkbenchPanel(
                                 )
                                 .await
                                 {
+                                    let _ = backend::log_work_item_event(
+                                        &db,
+                                        id,
+                                        None,
+                                        "created",
+                                        Some("queued"),
+                                        Some("Work item created from an artifact surface."),
+                                        None,
+                                    )
+                                    .await;
                                     let now = chrono::Utc::now().naive_utc();
                                     selected_work_item.set(Some(backend::WorkItem {
                                         id,
@@ -1647,6 +1935,7 @@ fn ArtifactWorkbenchPanel(
                                         updated_at: now,
                                     }));
                                     work_items_resource.restart();
+                                    work_item_events_resource.restart();
                                 }
                             });
                         }
@@ -1904,6 +2193,7 @@ fn WorkboardPanel(
     work_items_resource: Resource<Vec<backend::WorkItem>>,
     execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
     artifacts_resource: Resource<Vec<backend::Artifact>>,
+    work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
     selected_execution_run_id: Signal<Option<i64>>,
 ) -> Element {
     rsx! {
@@ -1934,6 +2224,7 @@ fn WorkboardPanel(
                                 work_items_resource: work_items_resource.clone(),
                                 execution_runs_resource: execution_runs_resource.clone(),
                                 artifacts_resource: artifacts_resource.clone(),
+                                work_item_events_resource: work_item_events_resource.clone(),
                                 selected_execution_run_id: selected_execution_run_id,
                             }
                         }
@@ -1957,6 +2248,7 @@ fn WorkItemCard(
     work_items_resource: Resource<Vec<backend::WorkItem>>,
     execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
     artifacts_resource: Resource<Vec<backend::Artifact>>,
+    work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
     selected_execution_run_id: Signal<Option<i64>>,
 ) -> Element {
     let is_selected = selected_work_item()
@@ -2087,6 +2379,7 @@ fn WorkItemCard(
                         let work_items_resource = work_items_resource.clone();
                         let execution_runs_resource = execution_runs_resource.clone();
                         let artifacts_resource = artifacts_resource.clone();
+                        let work_item_events_resource = work_item_events_resource.clone();
                         let selected_execution_run_id = selected_execution_run_id;
                         move |_| {
                             run_work_item_now(
@@ -2100,6 +2393,7 @@ fn WorkItemCard(
                                 work_items_resource.clone(),
                                 execution_runs_resource.clone(),
                                 artifacts_resource.clone(),
+                                work_item_events_resource.clone(),
                                 selected_execution_run_id,
                             );
                         }
@@ -2123,6 +2417,7 @@ fn WorkItemCard(
                             let work_item = work_item.clone();
                             let status = status.to_string();
                             let work_items_resource = work_items_resource.clone();
+                            let work_item_events_resource = work_item_events_resource.clone();
                             let selected_work_item = selected_work_item;
                             move |_| {
                                 update_work_item_manual_status(
@@ -2131,6 +2426,7 @@ fn WorkItemCard(
                                     status.clone(),
                                     selected_work_item,
                                     work_items_resource.clone(),
+                                    work_item_events_resource.clone(),
                                 );
                             }
                         },
