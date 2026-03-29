@@ -628,9 +628,65 @@ async fn try_native_computer_shortcut(
     Some(rendered)
 }
 
+async fn resolve_fast_path_domain(
+    db: &crate::db::Database,
+    query: &str,
+    history: &[Message],
+    has_artifacts: bool,
+) -> Option<String> {
+    match discovery::discover_fast_path_domain(db, query, has_artifacts).await {
+        Some(domain) => Some(domain),
+        None if has_artifacts => {
+            let has_media = history.iter().any(|msg| {
+                if let rig::completion::Message::User { content } = msg {
+                    content.iter().any(|item| {
+                        if let rig::message::UserContent::Image(_) = item {
+                            return true;
+                        }
+                        if let rig::message::UserContent::Text(text) = item {
+                            let lower = text.text.to_lowercase();
+                            if lower.contains("[attached image:") {
+                                return true;
+                            }
+                            if let Some(path_start) = lower.find("path: ") {
+                                let path_rest = &lower[path_start + 6..];
+                                let path =
+                                    path_rest.trim_end_matches(|c: char| c == ')' || c == ']');
+                                let media_exts = [
+                                    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg",
+                                    ".ico", ".tiff", ".tif", ".heic", ".heif", ".avif", ".pdf",
+                                    ".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a", ".mp4",
+                                    ".mkv", ".avi", ".mov", ".webm",
+                                ];
+                                return media_exts.iter().any(|ext| path.ends_with(ext));
+                            }
+                        }
+                        false
+                    })
+                } else {
+                    false
+                }
+            });
+
+            let default_domain = if has_media {
+                crate::backend::get_setting_or(db, "artifact_media_domain", "computer").await
+            } else {
+                crate::backend::get_setting_or(db, "artifact_default_domain", "chat").await
+            };
+            println!(
+                "🎯 ARTIFACT-FALLBACK: No keyword match, but artifacts present (media={}). Routing to default domain '{}'",
+                has_media, default_domain
+            );
+            Some(default_domain)
+        }
+        None => None,
+    }
+}
+
 async fn heuristic_decision(
     db: &crate::db::Database,
     query: &str,
+    precomputed_fast_path_domain: Option<&str>,
     has_artifacts: bool,
 ) -> OrchestrationDecision {
     if discovery::looks_like_planner_request(query) {
@@ -645,7 +701,11 @@ async fn heuristic_decision(
 
     let lower = query.to_lowercase();
     // Phase 2: Orchestration Generalization
-    let inferred_domain = discovery::discover_fast_path_domain(db, query, has_artifacts).await;
+    let inferred_domain = if let Some(domain) = precomputed_fast_path_domain {
+        Some(domain.to_string())
+    } else {
+        discovery::discover_fast_path_domain(db, query, has_artifacts).await
+    };
     let direct_chat_markers = [
         "hello",
         "hi",
@@ -1038,16 +1098,14 @@ async fn decide_orchestration(
     history: &[Message],
     memory_context: &str,
     ollama_client: &ollama::Client,
+    precomputed_fast_path_domain: Option<&str>,
     has_artifacts: bool,
 ) -> Result<OrchestrationDecision, String> {
     // 1. Check for Fast-Path keyword matches from the database (fully dynamic)
-    if let Some(domain) =
-        crate::engine::orchestrator::discovery::discover_fast_path_domain(db, query, has_artifacts)
-            .await
-    {
+    if let Some(domain) = precomputed_fast_path_domain {
         return Ok(OrchestrationDecision {
             route: OrchestrationRoute::SingleDomain,
-            domain: Some(domain.clone()),
+            domain: Some(domain.to_string()),
             personality_mode: "operator".to_string(),
             reason: format!("Fast-path routing match found for domain: {}", domain),
         });
@@ -1107,7 +1165,7 @@ async fn decide_orchestration(
         }
     }
 
-    let heuristic = heuristic_decision(db, query, has_artifacts).await;
+    let heuristic = heuristic_decision(db, query, precomputed_fast_path_domain, has_artifacts).await;
     let is_greeting = ["hi", "hello", "hey", "how are you", "who are you"]
         .iter()
         .any(|&g| query.to_lowercase().starts_with(g));
@@ -1540,63 +1598,9 @@ pub async fn orchestrate_request<'a>(
         return native_response;
     }
 
-    // Determine the fast-path domain, or fall back to artifact default domain for follow-up messages
-    let fast_path_domain = match discovery::discover_fast_path_domain(
-        db,
-        &clean_query,
-        has_artifacts,
-    )
-    .await
-    {
-        Some(domain) => Some(domain),
-        None if has_artifacts => {
-            // No keyword matched, but artifacts are present.
-            // Check if any attached files are media (images, PDFs, audio, video)
-            // to decide whether to route to a vision-capable domain or chat.
-            let has_media = history.iter().any(|msg| {
-                if let rig::completion::Message::User { content } = msg {
-                    content.iter().any(|item| {
-                        if let rig::message::UserContent::Image(_) = item {
-                            return true;
-                        }
-                        if let rig::message::UserContent::Text(text) = item {
-                            let lower = text.text.to_lowercase();
-                            if lower.contains("[attached image:") {
-                                return true;
-                            }
-                            // Check for media file extensions in attachment paths
-                            if let Some(path_start) = lower.find("path: ") {
-                                let path_rest = &lower[path_start + 6..];
-                                let path = path_rest.trim_end_matches(|c: char| c == ')' || c == ']');
-                                let media_exts = [
-                                    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg",
-                                    ".ico", ".tiff", ".tif", ".heic", ".heif", ".avif",
-                                    ".pdf", ".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a",
-                                    ".mp4", ".mkv", ".avi", ".mov", ".webm",
-                                ];
-                                return media_exts.iter().any(|ext| path.ends_with(ext));
-                            }
-                        }
-                        false
-                    })
-                } else {
-                    false
-                }
-            });
 
-            let default_domain = if has_media {
-                crate::backend::get_setting_or(db, "artifact_media_domain", "computer").await
-            } else {
-                crate::backend::get_setting_or(db, "artifact_default_domain", "chat").await
-            };
-            println!(
-                "🎯 ARTIFACT-FALLBACK: No keyword match, but artifacts present (media={}). Routing to default domain '{}'",
-                has_media, default_domain
-            );
-            Some(default_domain)
-        }
-        None => None,
-    };
+    let fast_path_domain =
+        resolve_fast_path_domain(db, &clean_query, &history, has_artifacts).await;
 
     if let Some(domain) = fast_path_domain {
         println!(
@@ -1684,73 +1688,6 @@ pub async fn orchestrate_request<'a>(
         .await;
     }
 
-    if let Some((follow_up_response, details)) =
-        resolve_screenshot_follow_up(db, conversation_id, &clean_query).await
-    {
-        record_event(
-            db,
-            run_id,
-            &mut event_sequence,
-            "computer_follow_up_resolved",
-            "completed",
-            Some("computer"),
-            None,
-            Some("os_tool"),
-            None,
-            Some("Resolved screenshot follow-up from the latest assistant attachment."),
-            Some(&details),
-        )
-        .await;
-        if let Some(run_id) = run_id {
-            let _ = crate::backend::finish_execution_run(
-                db,
-                run_id,
-                "completed",
-                Some(&follow_up_response),
-                None,
-            )
-            .await;
-        }
-        return follow_up_response;
-    }
-
-    if discovery::looks_like_planner_request(&clean_query) {
-        let native_plan = build_native_workflow_plan(&clean_query);
-        record_event(
-            db,
-            run_id,
-            &mut event_sequence,
-            "native_workflow_plan_completed",
-            "completed",
-            Some("orchestrator"),
-            Some(&clean_query),
-            None,
-            None,
-            Some("Generated workflow plan natively before orchestration routing."),
-            Some(&native_plan),
-        )
-        .await;
-
-        if let Some(run_id) = run_id {
-            let _ = crate::backend::finish_execution_run(
-                db,
-                run_id,
-                "completed",
-                Some(&native_plan),
-                None,
-            )
-            .await;
-        }
-
-        return native_plan;
-    }
-
-    if let Some(native_response) =
-        try_native_computer_shortcut(db, run_id, &mut event_sequence, &clean_query).await
-    {
-        return native_response;
-    }
-
     let decision = match decide_orchestration(
         db,
         all_agents,
@@ -1758,13 +1695,20 @@ pub async fn orchestrate_request<'a>(
         &history,
         &enriched_memory_context,
         ollama_client,
+        fast_path_domain.as_deref(),
         has_artifacts,
     )
     .await
     {
         Ok(decision) => decision,
         Err(err) => {
-            let heuristic = heuristic_decision(db, &clean_query, has_artifacts).await;
+            println!(
+                "⚠️  ORCHESTRATOR: Model routing unavailable, falling back to heuristic routing: {}",
+                err
+            );
+            let heuristic =
+                heuristic_decision(db, &clean_query, fast_path_domain.as_deref(), has_artifacts)
+                    .await;
             if let Some(friendly_error) = user_facing_runtime_error(&err) {
                 if heuristic
                     .domain
@@ -1944,37 +1888,6 @@ pub async fn orchestrate_request<'a>(
         }
 
         return direct_response;
-    }
-
-    if discovery::looks_like_planner_request(&clean_query) {
-        let native_plan = build_native_workflow_plan(&clean_query);
-        record_event(
-            db,
-            run_id,
-            &mut event_sequence,
-            "native_workflow_plan_completed",
-            "completed",
-            Some("orchestrator"),
-            Some(&clean_query),
-            None,
-            None,
-            Some("Generated workflow plan natively without waiting on the master planner."),
-            Some(&native_plan),
-        )
-        .await;
-
-        if let Some(run_id) = run_id {
-            let _ = crate::backend::finish_execution_run(
-                db,
-                run_id,
-                "completed",
-                Some(&native_plan),
-                None,
-            )
-            .await;
-        }
-
-        return native_plan;
     }
 
     let macro_tasks = if matches!(decision.route, OrchestrationRoute::SingleDomain) {

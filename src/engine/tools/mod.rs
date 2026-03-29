@@ -644,17 +644,13 @@ fn generate_csv(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_j
 fn generate_xlsx(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_json::Value]) -> Result<String, String> {
     let filename = format!("{}.xlsx", prefix);
     let path = dir.join(&filename);
-    let path_str = path.to_string_lossy();
-    
-    // In rust_xlsxwriter 0.7.0, Workbook::new takes a filename
-    let mut workbook = rust_xlsxwriter::Workbook::new(&path_str);
+    let mut workbook = rust_xlsxwriter::Workbook::new();
     let worksheet = workbook.add_worksheet();
 
-    // Formatting - Using simpler formatting for compatibility
-    let header_format = rust_xlsxwriter::Format::new().set_bold();
-
     for (i, h) in headers.iter().enumerate() {
-        worksheet.write_string(0, i as u16, h, &rust_xlsxwriter::Format::new()).map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(0, i as u16, h)
+            .map_err(|e| e.to_string())?;
     }
 
     for (r, row) in data.iter().enumerate() {
@@ -662,11 +658,13 @@ fn generate_xlsx(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_
             let val = row.get(h).map(|v| {
                 if v.is_string() { v.as_str().unwrap().to_string() } else { v.to_string() }
             }).unwrap_or_default();
-            worksheet.write_string((r + 1) as u32, c as u16, &val, &rust_xlsxwriter::Format::new()).map_err(|e| e.to_string())?;
+            worksheet
+                .write_string((r + 1) as u32, c as u16, &val)
+                .map_err(|e| e.to_string())?;
         }
     }
 
-    workbook.close().map_err(|e| e.to_string())?;
+    workbook.save(&path).map_err(|e| e.to_string())?;
     Ok(filename)
 }
 

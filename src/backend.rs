@@ -52,6 +52,13 @@ pub struct ComputerSupervisionState {
     pub session_started_at: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RuntimeRegistryStatus {
+    pub status: String,
+    pub refreshed_at: Option<String>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
 pub struct ToolTestCase {
     pub id: i64,
@@ -342,6 +349,7 @@ pub async fn add_agent(
     .bind(id).bind(name).bind(description).bind("").bind(model).bind(domain).bind("1.0.0").bind("")
     .execute(&db.pool)
     .await?;
+    refresh_runtime_registry(db).await;
     Ok(id)
 }
 
@@ -358,6 +366,7 @@ pub async fn add_tool(
     .bind(id).bind(name).bind(description).bind("").bind(language).bind("").bind(None::<String>).bind("standard").bind("1.0.0")
     .execute(&db.pool)
     .await?;
+    refresh_runtime_registry(db).await;
     Ok(id)
 }
 
@@ -368,6 +377,7 @@ pub async fn update_agent(db: &Database, agent: AgentInfo) -> anyhow::Result<()>
     .bind(agent.name).bind(agent.description).bind(agent.instructions).bind(agent.model).bind(agent.domain).bind(agent.version).bind(agent.code).bind(agent.id)
     .execute(&db.pool)
     .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
 }
 
@@ -466,7 +476,34 @@ pub async fn update_tool(db: &Database, tool: ToolInfo) -> anyhow::Result<()> {
     .bind(tool.id)
     .execute(&db.pool)
     .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
+}
+
+pub async fn refresh_runtime_registry_now(db: &Database) -> anyhow::Result<()> {
+    match crate::engine::utils::discovery::prepare_runtime_env(db).await {
+        Ok(_) => {
+            let refreshed_at = chrono::Utc::now().to_rfc3339();
+            set_setting(db, "runtime_registry_status", "live").await?;
+            set_setting(db, "runtime_registry_refreshed_at", &refreshed_at).await?;
+            set_setting(db, "runtime_registry_error", "").await?;
+            Ok(())
+        }
+        Err(err) => {
+            let refreshed_at = chrono::Utc::now().to_rfc3339();
+            let message = err.to_string();
+            let _ = set_setting(db, "runtime_registry_status", "error").await;
+            let _ = set_setting(db, "runtime_registry_refreshed_at", &refreshed_at).await;
+            let _ = set_setting(db, "runtime_registry_error", &message).await;
+            Err(err)
+        }
+    }
+}
+
+async fn refresh_runtime_registry(db: &Database) {
+    if let Err(err) = refresh_runtime_registry_now(db).await {
+        println!("Warning: failed to refresh runtime registry after DB change: {}", err);
+    }
 }
 
 // ── SUPERVISOR CRUD ──
@@ -533,6 +570,7 @@ pub async fn add_supervisor(
     .bind(false).bind(None::<String>).bind(None::<i64>).bind(0).bind(false).bind("detailed").bind(false).bind(None::<String>)
     .execute(&db.pool)
     .await?;
+    refresh_runtime_registry(db).await;
     Ok(id)
 }
 
@@ -554,6 +592,7 @@ pub async fn update_supervisor(
     .bind(supervisor.id)
     .execute(&db.pool)
     .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
 }
 
@@ -562,6 +601,7 @@ pub async fn delete_supervisor(db: &Database, id: i64) -> anyhow::Result<()> {
         .bind(id)
         .execute(&db.pool)
         .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
 }
 
@@ -626,6 +666,7 @@ pub async fn link_agent_to_supervisor(
     .bind(agent_id)
     .execute(&db.pool)
     .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
 }
 
@@ -639,6 +680,7 @@ pub async fn unlink_agent_from_supervisor(
         .bind(agent_id)
         .execute(&db.pool)
         .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
 }
 
@@ -665,6 +707,7 @@ pub async fn add_planner(
     .bind(id).bind(name).bind(description).bind(domain).bind(model).bind("1.0.0").bind("").bind("")
     .execute(&db.pool)
     .await?;
+    refresh_runtime_registry(db).await;
     Ok(id)
 }
 
@@ -676,6 +719,7 @@ pub async fn update_planner(db: &Database, planner: crate::db::Planner) -> anyho
     .bind(planner.domain).bind(planner.version).bind(planner.code).bind(planner.id)
     .execute(&db.pool)
     .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
 }
 
@@ -684,6 +728,7 @@ pub async fn delete_planner(db: &Database, id: i64) -> anyhow::Result<()> {
         .bind(id)
         .execute(&db.pool)
         .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
 }
 
@@ -695,6 +740,7 @@ pub async fn add_tool_to_agent(db: &Database, agent_id: i64, tool_id: i64) -> an
         .bind(tool_id)
         .execute(&db.pool)
         .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
 }
 
@@ -708,6 +754,7 @@ pub async fn remove_tool_from_agent(
         .bind(tool_id)
         .execute(&db.pool)
         .await?;
+    refresh_runtime_registry(db).await;
     Ok(())
 }
 
@@ -2300,6 +2347,18 @@ pub async fn resolve_model_name(
 
 pub async fn get_setting_i64(db: &Database, key: &str, default: i64) -> i64 {
     get_setting(db, key).await.parse::<i64>().unwrap_or(default)
+}
+
+pub async fn get_runtime_registry_status(db: &Database) -> RuntimeRegistryStatus {
+    let status = get_setting_or(db, "runtime_registry_status", "unknown").await;
+    let refreshed_at = get_setting_or(db, "runtime_registry_refreshed_at", "").await;
+    let error = get_setting_or(db, "runtime_registry_error", "").await;
+
+    RuntimeRegistryStatus {
+        status,
+        refreshed_at: (!refreshed_at.trim().is_empty()).then_some(refreshed_at),
+        error: (!error.trim().is_empty()).then_some(error),
+    }
 }
 
 fn parse_allowlist(raw: &str) -> Vec<String> {

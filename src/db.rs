@@ -131,6 +131,23 @@ impl Database {
         println!("🏗️  Staging tools to runtime environment...");
         if let Err(e) = crate::engine::utils::discovery::prepare_runtime_env(&database).await {
             println!("⚠️  Tool runtime staging failed: {}", e);
+            let _ = crate::backend::set_setting(&database, "runtime_registry_status", "error").await;
+            let _ = crate::backend::set_setting(
+                &database,
+                "runtime_registry_refreshed_at",
+                &chrono::Utc::now().to_rfc3339(),
+            )
+            .await;
+            let _ = crate::backend::set_setting(&database, "runtime_registry_error", &e.to_string()).await;
+        } else {
+            let _ = crate::backend::set_setting(&database, "runtime_registry_status", "live").await;
+            let _ = crate::backend::set_setting(
+                &database,
+                "runtime_registry_refreshed_at",
+                &chrono::Utc::now().to_rfc3339(),
+            )
+            .await;
+            let _ = crate::backend::set_setting(&database, "runtime_registry_error", "").await;
         }
 
         println!("✨ Database initialization complete.");
@@ -139,13 +156,48 @@ impl Database {
 
     async fn seed_all(&self) -> anyhow::Result<()> {
         println!("🌱 Initializing v10 Database Environment...");
-        //   self.seed_agents().await?;
-        //  self.seed_tools().await?;
-        // self.seed_agent_tools().await?;
-        // self.seed_supervisors().await?; // This now handles system supervisors too
-        // self.seed_planners().await?;
+        self.ensure_core_registry_seeded().await?;
         self.ensure_setting_defaults().await?;
         self.backfill_ids().await?;
+        Ok(())
+    }
+
+    async fn ensure_core_registry_seeded(&self) -> anyhow::Result<()> {
+        let agents_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agents")
+            .fetch_one(&self.pool)
+            .await?;
+        if agents_count.0 == 0 {
+            self.seed_agents().await?;
+        }
+
+        let tools_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tools")
+            .fetch_one(&self.pool)
+            .await?;
+        if tools_count.0 == 0 {
+            self.seed_tools().await?;
+        }
+
+        let agent_tools_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agent_tools")
+            .fetch_one(&self.pool)
+            .await?;
+        if agent_tools_count.0 == 0 {
+            self.seed_agent_tools().await?;
+        }
+
+        let supervisors_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM supervisors")
+            .fetch_one(&self.pool)
+            .await?;
+        if supervisors_count.0 == 0 {
+            self.seed_supervisors().await?;
+        }
+
+        let planners_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM planners")
+            .fetch_one(&self.pool)
+            .await?;
+        if planners_count.0 == 0 {
+            self.seed_planners().await?;
+        }
+
         Ok(())
     }
 
@@ -186,6 +238,9 @@ impl Database {
             ),
             ("artifact_default_domain", "chat"),
             ("artifact_media_domain", "computer"),
+            ("runtime_registry_status", "unknown"),
+            ("runtime_registry_refreshed_at", ""),
+            ("runtime_registry_error", ""),
         ];
 
         for (key, value) in defaults {
