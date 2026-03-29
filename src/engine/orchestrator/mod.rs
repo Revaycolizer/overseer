@@ -102,13 +102,25 @@ fn infer_native_computer_domain(query: &str) -> Option<String> {
             && (lower.contains("pc")
                 || lower.contains("computer")
                 || lower.contains("app")
+                || lower.contains("calculator")
+                || lower.contains("terminal")
+                || lower.contains("console")
+                || lower.contains("shell")
+                || lower.contains("notepad")
                 || lower.contains("discord")
                 || lower.contains("chrome")
                 || lower.contains("browser")
                 || lower.contains("vscode")
                 || lower.contains("visual studio code")
                 || lower.contains("spotify")
-                || lower.contains("explorer"));
+                || lower.contains("explorer")
+                || lower.contains("downloads")
+                || lower.contains("documents")
+                || lower.contains("pictures")
+                || lower.contains("videos")
+                || lower.contains("music")
+                || lower.contains("desktop")
+                || lower.contains("media"));
 
     if launch_request {
         return Some("computer".to_string());
@@ -144,6 +156,32 @@ fn infer_native_computer_domain(query: &str) -> Option<String> {
             || lower.contains("ok")
             || lower.contains("submit"));
     if selector_control_request {
+        return Some("computer".to_string());
+    }
+
+    let screenshot_request = lower.contains("screenshot")
+        || lower.contains("screen shot")
+        || lower.contains("capture screen")
+        || lower.contains("capture the screen");
+    if screenshot_request {
+        return Some("computer".to_string());
+    }
+
+    let process_list_request = lower.contains("what is running")
+        || lower.contains("what's running")
+        || lower.contains("whats running")
+        || lower.contains("process list")
+        || lower.contains("active processes");
+    if process_list_request {
+        return Some("computer".to_string());
+    }
+
+    let clipboard_request = lower.contains("clipboard")
+        || lower.contains("copy to")
+        || lower.contains("copy this")
+        || lower.contains("paste from")
+        || lower.contains("paste this");
+    if clipboard_request {
         return Some("computer".to_string());
     }
 
@@ -208,7 +246,18 @@ fn is_native_computer_fast_path_request(query: &str, domain: &str) -> bool {
             || lower.contains("element")
             || lower.contains("control"));
 
-    process_request || file_search_request || browser_state_request || selector_typing_request
+    let screenshot_request = lower.contains("screenshot")
+        || lower.contains("screen shot")
+        || lower.contains("capture screen")
+        || lower.contains("capture the screen");
+
+    let clipboard_request = lower.contains("clipboard")
+        || lower.contains("copy to")
+        || lower.contains("copy this")
+        || lower.contains("paste from")
+        || lower.contains("paste this");
+
+    process_request || file_search_request || browser_state_request || selector_typing_request || screenshot_request || clipboard_request
 }
 
 fn extract_workflow_plan_subject(query: &str) -> String {
@@ -459,6 +508,25 @@ fn render_native_os_tool_response(raw: &str) -> String {
             } else {
                 format!("{}: {}", prefix, selector)
             }
+        }
+        "clipboard_read" => {
+            let text = value
+                .get("text")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .trim();
+            if text.is_empty() {
+                "Clipboard is empty.".to_string()
+            } else {
+                format!("Read from clipboard:\n\n{}", text)
+            }
+        }
+        "clipboard_write" => {
+            let count = value
+                .get("characters")
+                .and_then(|value| value.as_i64())
+                .unwrap_or_default();
+            format!("Copied {} character(s) to the clipboard.", count)
         }
         _ => value
             .get("summary")

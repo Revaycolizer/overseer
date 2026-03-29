@@ -1049,7 +1049,7 @@ async fn search_workspace_files_fast(query: &str) -> Option<Vec<serde_json::Valu
 }
 
 fn infer_os_tool_action(input: &serde_json::Value) -> String {
-    let explicit = read_string_field(input, &["action", "command", "mode"])
+    let explicit = read_string_field(input, &["action", "command", "mode", "query"])
         .or_else(|| read_string_field(input, &["input"]))
         .unwrap_or_else(|| stringify_tool_input(input));
     let lower = explicit.trim().to_lowercase();
@@ -1133,7 +1133,15 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
 
     if matches!(lower.as_str(), "open_file" | "open document" | "open path")
         || (lower.contains("open")
-            && (lower.contains("file") || lower.contains("document") || lower.contains("path")))
+            && (lower.contains("file")
+                || lower.contains("document")
+                || lower.contains("path")
+                || lower.contains("downloads")
+                || lower.contains("documents")
+                || lower.contains("pictures")
+                || lower.contains("videos")
+                || lower.contains("music")
+                || lower.contains("desktop")))
     {
         return "open_file".to_string();
     }
@@ -1252,12 +1260,17 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
         || lower.starts_with("start app ")
         || lower.starts_with("start application ")
         || lower.starts_with("start program ")
-        || ((lower.contains("open ") || lower.contains("start "))
+        || ((lower.contains("open ") || lower.contains("start ") || lower.contains("launch "))
             && (lower.contains("pc")
                 || lower.contains("computer")
                 || lower.contains("app")
                 || lower.contains("application")
                 || lower.contains("program")
+                || lower.contains("calculator")
+                || lower.contains("terminal")
+                || lower.contains("console")
+                || lower.contains("shell")
+                || lower.contains("notepad")
                 || lower.contains("discord")
                 || lower.contains("chrome")
                 || lower.contains("spotify")
@@ -1330,6 +1343,25 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
                 return Some(raw[raw.len() - rest.len()..].trim().to_string());
             }
             if let Some(rest) = lower.strip_prefix("focus control ") {
+                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+            }
+        }
+        "open_file" => {
+            if let Some(rest) = lower.strip_prefix("open ") {
+                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+            }
+            if let Some(rest) = lower.strip_prefix("launch ") {
+                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+            }
+        }
+        "launch" => {
+            if let Some(rest) = lower.strip_prefix("launch ") {
+                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+            }
+            if let Some(rest) = lower.strip_prefix("open ") {
+                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+            }
+            if let Some(rest) = lower.strip_prefix("start ") {
                 return Some(raw[raw.len() - rest.len()..].trim().to_string());
             }
         }
@@ -2800,10 +2832,128 @@ $windows = @(Get-Process |
 }
 
 #[cfg(not(windows))]
+async fn capture_linux_screenshot_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    let mut temp_path = std::env::temp_dir();
+    temp_path.push(format!("overseer_capture_{}.png", uuid::Uuid::new_v4()));
+    let path_str = temp_path.to_string_lossy().to_string();
+
+    let mut command_args = vec![
+        ("scrot", vec![path_str.clone()]),
+        ("gnome-screenshot", vec!["-f".to_string(), path_str.clone()]),
+        ("import", vec!["-window".to_string(), "root".to_string(), path_str.clone()]),
+    ];
+
+    let mut captured = false;
+    for (cmd, args) in command_args {
+        if Command::new(cmd).arg("--version").output().await.is_ok() {
+            let output = Command::new(cmd)
+                .args(args)
+                .output()
+                .await
+                .map_err(|e| DynamicToolError::ExecutionFailed {
+                    tool: tool_name.to_string(),
+                    details: e.to_string(),
+                })?;
+            if output.status.success() {
+                captured = true;
+                break;
+            }
+        }
+    }
+
+    if !captured {
+        return Err(DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: "No supported Linux screenshot utility found (tried scrot, gnome-screenshot, import).".to_string(),
+        });
+    }
+
+    let mut width = 1920;
+    let mut height = 1080;
+    if let Ok(output) = Command::new("xdpyinfo").output().await {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if line.contains("dimensions:") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let dims: Vec<&str> = parts[1].split('x').collect();
+                    if dims.len() >= 2 {
+                        width = dims[0].parse().unwrap_or(1920);
+                        height = dims[1].parse().unwrap_or(1080);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(json!({
+        "action": "screenshot",
+        "path": path_str,
+        "width": width,
+        "height": height,
+        "summary": format!("Captured a Linux desktop screenshot at {}x{}.", width, height)
+    }).to_string())
+}
+
+#[cfg(not(windows))]
+async fn capture_macos_screenshot_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    let mut temp_path = std::env::temp_dir();
+    temp_path.push(format!("overseer_capture_{}.png", uuid::Uuid::new_v4()));
+    let path_str = temp_path.to_string_lossy().to_string();
+
+    // Use macOS screencapture utility (-x for no sound)
+    let output = Command::new("screencapture")
+        .arg("-x")
+        .arg(&path_str)
+        .output()
+        .await
+        .map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: format!("Failed to run screencapture: {}", e),
+        })?;
+
+    if !output.status.success() {
+        return Err(DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        });
+    }
+
+    // Get resolution via system_profiler
+    let mut width = 1440;
+    let mut height = 900;
+    if let Ok(res_out) = Command::new("system_profiler").arg("SPDisplaysDataType").output().await {
+        let stdout = String::from_utf8_lossy(&res_out.stdout);
+        for line in stdout.lines() {
+            if line.contains("Resolution:") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let dims: Vec<&str> = parts[1].split('x').collect();
+                    if dims.len() >= 2 {
+                        width = dims[0].parse().unwrap_or(1440);
+                        height = dims[1].parse().unwrap_or(900);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(json!({
+        "action": "screenshot",
+        "path": path_str,
+        "width": width,
+        "height": height,
+        "summary": format!("Captured a macOS desktop screenshot at {}x{}.", width, height)
+    }).to_string())
+}
+
+#[cfg(not(windows))]
 async fn capture_windows_screenshot_json(tool_name: &str) -> Result<String, DynamicToolError> {
-    Err(DynamicToolError::NativeNotImplemented(
-        tool_name.to_string(),
-    ))
+    if cfg!(target_os = "macos") {
+        capture_macos_screenshot_json(tool_name).await
+    } else {
+        capture_linux_screenshot_json(tool_name).await
+    }
 }
 
 #[cfg(not(windows))]
@@ -2997,28 +3147,129 @@ async fn windows_find_files_json(
 }
 
 #[cfg(not(windows))]
-async fn windows_read_file_json(tool_name: &str, _path: &str) -> Result<String, DynamicToolError> {
-    Err(DynamicToolError::ExecutionFailed {
-        tool: tool_name.to_string(),
-        details: "Native file read is currently implemented for Windows only.".to_string(),
-    })
+async fn windows_read_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
+    let content = tokio::fs::read_to_string(path)
+        .await
+        .map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: format!("Failed to read file '{}': {}", path, e),
+        })?;
+
+    let preview = if content.len() > 2000 {
+        format!("{}...", &content[..2000])
+    } else {
+        content.clone()
+    };
+
+    Ok(json!({
+        "action": "read_file",
+        "path": path,
+        "content_length": content.len(),
+        "preview": preview,
+        "summary": format!("Successfully read file '{}'. Captured {} bytes.", path, content.len())
+    }).to_string())
 }
 
 #[cfg(not(windows))]
-async fn windows_open_file_json(tool_name: &str, _path: &str) -> Result<String, DynamicToolError> {
-    Err(DynamicToolError::ExecutionFailed {
-        tool: tool_name.to_string(),
-        details: "Native file open is currently implemented for Windows only.".to_string(),
-    })
+async fn windows_open_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
+    let cmd = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let status = Command::new(cmd)
+        .arg(path)
+        .status()
+        .await
+        .map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: format!("Failed to launch {} for '{}': {}", cmd, path, e),
+        })?;
+
+    if !status.success() {
+        return Err(DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: format!("{} failed with status {} for '{}'.", cmd, status, path),
+        });
+    }
+
+    Ok(json!({
+        "action": "open_file",
+        "path": path,
+        "success": true,
+        "summary": format!("Launched '{}' using {}.", path, cmd)
+    }).to_string())
 }
 
 #[cfg(not(windows))]
 async fn windows_browser_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
-    Err(DynamicToolError::ExecutionFailed {
-        tool: tool_name.to_string(),
-        details: "Native browser state inspection is currently implemented for Windows only."
-            .to_string(),
-    })
+    if cfg!(target_os = "macos") {
+        return macos_browser_state_json(tool_name).await;
+    }
+    
+    let output = Command::new("wmctrl")
+        .arg("-l")
+        .output()
+        .await
+        .map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: format!("Failed to run wmctrl: {}", e),
+        })?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut browser_windows = Vec::new();
+    
+    let browser_keywords = ["chrome", "firefox", "chromium", "brave", "edge", "safari", "opera", "vivaldi"];
+
+    for line in stdout.lines() {
+        let lower = line.to_lowercase();
+        if browser_keywords.iter().any(|&k| lower.contains(k)) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            let title = if parts.len() >= 4 { parts[3..].join(" ") } else { line.to_string() };
+            browser_windows.push(json!({
+                "title": title,
+                "ProcessName": parts.get(2).unwrap_or(&"unknown"),
+                "Id": parts.first().unwrap_or(&"0")
+            }));
+        }
+    }
+
+    Ok(json!({
+        "action": "browser_state",
+        "browser_windows": browser_windows,
+        "summary": format!("Detected {} browser window(s) on Linux.", browser_windows.len())
+    }).to_string())
+}
+
+#[cfg(not(windows))]
+async fn macos_browser_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    // macOS AppleScript to identify browser windows specifically
+    let script = "tell application \"System Events\" to get name of every window of (every process whose background only is false and (name contains \"Chrome\" or name contains \"Firefox\" or name contains \"Safari\" or name contains \"Edge\" or name contains \"Brave\"))";
+    
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .await
+        .map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: format!("Failed to run osascript for browser state: {}", e),
+        })?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let mut browser_windows = Vec::new();
+
+    for name in stdout.split(", ") {
+        if !name.is_empty() && name != "missing value" {
+            browser_windows.push(json!({
+                "title": name,
+                "ProcessName": "unknown",
+                "Id": "0"
+            }));
+        }
+    }
+
+    Ok(json!({
+        "action": "browser_state",
+        "browser_windows": browser_windows,
+        "summary": format!("Detected {} browser window(s) on macOS.", browser_windows.len())
+    }).to_string())
 }
 
 #[cfg(not(windows))]
@@ -3026,11 +3277,11 @@ async fn windows_accessibility_state_json(
     tool_name: &str,
     _input: &serde_json::Value,
 ) -> Result<String, DynamicToolError> {
-    Err(DynamicToolError::ExecutionFailed {
-        tool: tool_name.to_string(),
-        details: "Native accessibility inspection is currently implemented for Windows only."
-            .to_string(),
-    })
+    Ok(json!({
+        "action": "inspect_accessibility",
+        "focused_element": null,
+        "summary": "Native accessibility inspection is not supported on Linux. Consider using browser tools."
+    }).to_string())
 }
 
 #[cfg(not(windows))]
@@ -3041,13 +3292,69 @@ async fn windows_uia_interaction_json(
 ) -> Result<String, DynamicToolError> {
     Err(DynamicToolError::ExecutionFailed {
         tool: tool_name.to_string(),
-        details: "Native UI Automation interaction is currently implemented for Windows only."
-            .to_string(),
+        details: "Native UI Automation interaction is not supported on Linux.".to_string(),
     })
 }
 
 #[cfg(not(windows))]
+async fn macos_desktop_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    // Get frontmost application name
+    let active_app_out = Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
+        .output()
+        .await
+        .map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: format!("Failed to run osascript for active app: {}", e),
+        })?;
+    let active_title = String::from_utf8_lossy(&active_app_out.stdout).trim().to_string();
+
+    // Get list of window titles for all visible processes
+    let windows_out = Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to get name of every window of (every process whose background only is false)")
+        .output()
+        .await
+        .map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: format!("Failed to run osascript for windows: {}", e),
+        })?;
+    let windows_raw = String::from_utf8_lossy(&windows_out.stdout).trim().to_string();
+    
+    // AppleScript returns a comma-separated list like "App1: WindowA, App1: WindowB, App2: WindowC"
+    let visible_windows: Vec<serde_json::Value> = windows_raw
+        .split(", ")
+        .take(12)
+        .filter(|s| !s.is_empty() && *s != "missing value")
+        .map(|name| {
+            json!({
+                "ProcessName": "unknown",
+                "Id": "0",
+                "MainWindowTitle": name
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "action": "list_windows",
+        "visible_windows": visible_windows,
+        "active_title": active_title,
+        "summary": format!("macOS desktop reported. Active app: {}. Detected {} window(s).", active_title, visible_windows.len())
+    }).to_string())
+}
+
+#[cfg(not(windows))]
 async fn windows_desktop_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
+    if cfg!(target_os = "macos") {
+        macos_desktop_state_json(tool_name).await
+    } else {
+        linux_desktop_state_json(tool_name).await
+    }
+}
+
+#[cfg(not(windows))]
+async fn linux_desktop_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     // Get active window title using xprop
     let active_window_id = run_command_simple("xprop -root _NET_ACTIVE_WINDOW", tool_name).await?;
     let mut active_title = String::new();
@@ -3091,11 +3398,11 @@ async fn windows_desktop_state_json(tool_name: &str) -> Result<String, DynamicTo
         .collect();
 
     Ok(json!({
-        "active_window_title": active_title,
-        "active_pid": 0,
-        "visible_windows": visible_windows
-    })
-    .to_string())
+        "action": "list_windows",
+        "visible_windows": visible_windows,
+        "active_title": active_title,
+        "summary": format!("Linux desktop reported. Active window: {}. Detected {} window(s).", active_title, visible_windows.len())
+    }).to_string())
 }
 
 #[cfg(not(windows))]
