@@ -7,6 +7,7 @@ use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::process::Stdio;
 use tokio::process::Command;
 
 use crate::engine::utils::discovery::{build_python_command, get_tool_executable_path, ToolInfo};
@@ -193,8 +194,14 @@ async fn call_native_builtin_tool(
     args: &serde_json::Value,
 ) -> Result<Option<String>, DynamicToolError> {
     let output = match info.name.as_str() {
+        "clipboard_read" => Some(native_clipboard_read().await?),
+        "clipboard_write" => Some(native_clipboard_write(args).await?),
         "http_request" => Some(native_http_request(args).await?),
+        "web_extract" => Some(native_web_extract(args).await?),
+        "web_links" => Some(native_web_links(args).await?),
+        "web_browse" => Some(native_stealth_browse(args).await?),
         "stealth_browse" => Some(native_stealth_browse(args).await?),
+        "web_search" => Some(native_stealth_search(args).await?),
         "stealth_search" => Some(native_stealth_search(args).await?),
         "app_launcher" => Some(native_app_launcher(args).await?),
         _ => None,
@@ -523,6 +530,359 @@ async fn native_app_launcher(args: &serde_json::Value) -> Result<String, Dynamic
         })?;
 
     Ok(format!("Launched '{}'.", app))
+}
+
+async fn native_clipboard_read() -> Result<String, DynamicToolError> {
+    #[cfg(windows)]
+    {
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", "Get-Clipboard"])
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|err| DynamicToolError::ExecutionFailed {
+                tool: "clipboard_read".to_string(),
+                details: err.to_string(),
+            })?;
+
+        if !output.status.success() {
+            return Err(DynamicToolError::ExecutionFailed {
+                tool: "clipboard_read".to_string(),
+                details: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            });
+        }
+
+        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok(json!({
+            "action": "clipboard_read",
+            "text": text,
+        })
+        .to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("pbpaste")
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|err| DynamicToolError::ExecutionFailed {
+                tool: "clipboard_read".to_string(),
+                details: err.to_string(),
+            })?;
+
+        if !output.status.success() {
+            return Err(DynamicToolError::ExecutionFailed {
+                tool: "clipboard_read".to_string(),
+                details: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            });
+        }
+
+        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok(json!({
+            "action": "clipboard_read",
+            "text": text,
+        })
+        .to_string());
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let candidates = [
+            ("wl-paste", vec!["-n"]),
+            ("xclip", vec!["-o", "-selection", "clipboard"]),
+            ("xsel", vec!["--clipboard", "--output"]),
+        ];
+
+        for (cmd, args) in candidates {
+            let mut command = Command::new(cmd);
+            command.args(args).kill_on_drop(true);
+            if let Ok(output) = command.output().await {
+                if output.status.success() {
+                    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    return Ok(json!({
+                        "action": "clipboard_read",
+                        "text": text,
+                    })
+                    .to_string());
+                }
+            }
+        }
+
+        Err(DynamicToolError::ExecutionFailed {
+            tool: "clipboard_read".to_string(),
+            details: "No supported clipboard reader found (tried wl-paste, xclip, xsel)."
+                .to_string(),
+        })
+    }
+}
+
+async fn native_clipboard_write(args: &serde_json::Value) -> Result<String, DynamicToolError> {
+    let text = stringify_tool_input(args);
+    if text.trim().is_empty() {
+        return Err(DynamicToolError::ExecutionFailed {
+            tool: "clipboard_write".to_string(),
+            details: "clipboard_write requires text input.".to_string(),
+        });
+    }
+
+    #[cfg(windows)]
+    {
+        let escaped = text.replace('\'', "''");
+        let output = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!("Set-Clipboard -Value '{}'", escaped),
+            ])
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|err| DynamicToolError::ExecutionFailed {
+                tool: "clipboard_write".to_string(),
+                details: err.to_string(),
+            })?;
+
+        if !output.status.success() {
+            return Err(DynamicToolError::ExecutionFailed {
+                tool: "clipboard_write".to_string(),
+                details: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            });
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let mut child = Command::new("pbcopy")
+            .stdin(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|err| DynamicToolError::ExecutionFailed {
+                tool: "clipboard_write".to_string(),
+                details: err.to_string(),
+            })?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            use tokio::io::AsyncWriteExt;
+            stdin
+                .write_all(text.as_bytes())
+                .await
+                .map_err(|err| DynamicToolError::ExecutionFailed {
+                    tool: "clipboard_write".to_string(),
+                    details: err.to_string(),
+                })?;
+        }
+
+        let status = child.wait().await.map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "clipboard_write".to_string(),
+            details: err.to_string(),
+        })?;
+
+        if !status.success() {
+            return Err(DynamicToolError::ExecutionFailed {
+                tool: "clipboard_write".to_string(),
+                details: "pbcopy failed.".to_string(),
+            });
+        }
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let candidates = [
+            ("wl-copy", Vec::<&str>::new()),
+            ("xclip", vec!["-selection", "clipboard"]),
+            ("xsel", vec!["--clipboard", "--input"]),
+        ];
+
+        let mut succeeded = false;
+        for (cmd, args) in candidates {
+            let spawned = Command::new(cmd)
+                .args(args)
+                .stdin(Stdio::piped())
+                .kill_on_drop(true)
+                .spawn();
+
+            let Ok(mut child) = spawned else {
+                continue;
+            };
+
+            if let Some(mut stdin) = child.stdin.take() {
+                use tokio::io::AsyncWriteExt;
+                if stdin.write_all(text.as_bytes()).await.is_err() {
+                    continue;
+                }
+            }
+
+            if let Ok(status) = child.wait().await {
+                if status.success() {
+                    succeeded = true;
+                    break;
+                }
+            }
+        }
+
+        if !succeeded {
+            return Err(DynamicToolError::ExecutionFailed {
+                tool: "clipboard_write".to_string(),
+                details: "No supported clipboard writer found (tried wl-copy, xclip, xsel)."
+                    .to_string(),
+            });
+        }
+    }
+
+    Ok(json!({
+        "action": "clipboard_write",
+        "written": true,
+        "characters": text.chars().count(),
+    })
+    .to_string())
+}
+
+async fn native_web_extract(args: &serde_json::Value) -> Result<String, DynamicToolError> {
+    let mut url = stringify_tool_input(args);
+    if url.starts_with("//") {
+        url = format!("https:{}", url);
+    }
+
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err(DynamicToolError::ExecutionFailed {
+            tool: "web_extract".to_string(),
+            details: "web_extract requires a full http:// or https:// URL.".to_string(),
+        });
+    }
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent("Mozilla/5.0 Overseer/0.1.3")
+        .build()
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "web_extract".to_string(),
+            details: err.to_string(),
+        })?;
+
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "web_extract".to_string(),
+            details: err.to_string(),
+        })?;
+
+    let final_url = response.url().to_string();
+    let status = response.status().as_u16();
+    let body = response
+        .text()
+        .await
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "web_extract".to_string(),
+            details: err.to_string(),
+        })?;
+
+    let title = extract_html_title(&body).unwrap_or_else(|| "Untitled page".to_string());
+    let content = truncate_for_tool(clean_text_content(&body), 6000);
+
+    Ok(json!({
+        "action": "web_extract",
+        "url": final_url,
+        "status": status,
+        "title": title,
+        "content": content,
+    })
+    .to_string())
+}
+
+async fn native_web_links(args: &serde_json::Value) -> Result<String, DynamicToolError> {
+    let mut url = stringify_tool_input(args);
+    if url.starts_with("//") {
+        url = format!("https:{}", url);
+    }
+
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err(DynamicToolError::ExecutionFailed {
+            tool: "web_links".to_string(),
+            details: "web_links requires a full http:// or https:// URL.".to_string(),
+        });
+    }
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent("Mozilla/5.0 Overseer/0.1.3")
+        .build()
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "web_links".to_string(),
+            details: err.to_string(),
+        })?;
+
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "web_links".to_string(),
+            details: err.to_string(),
+        })?;
+
+    let final_url = response.url().to_string();
+    let body = response
+        .text()
+        .await
+        .map_err(|err| DynamicToolError::ExecutionFailed {
+            tool: "web_links".to_string(),
+            details: err.to_string(),
+        })?;
+
+    let link_re = Regex::new(
+        r#"(?is)<a[^>]+href=["'](?P<href>[^"']+)["'][^>]*>(?P<label>.*?)</a>"#,
+    )
+    .unwrap();
+    let tag_re = Regex::new(r"(?is)<[^>]+>").unwrap();
+    let base_url = reqwest::Url::parse(&final_url).ok();
+
+    let mut seen = std::collections::HashSet::new();
+    let mut links = Vec::new();
+    for cap in link_re.captures_iter(&body) {
+        if links.len() >= 40 {
+            break;
+        }
+
+        let href_raw = cap.name("href").map(|m| m.as_str().trim()).unwrap_or("");
+        if href_raw.is_empty()
+            || href_raw.starts_with('#')
+            || href_raw.starts_with("javascript:")
+            || href_raw.starts_with("mailto:")
+        {
+            continue;
+        }
+
+        let href = if let Some(base) = &base_url {
+            base.join(href_raw)
+                .map(|u| u.to_string())
+                .unwrap_or_else(|_| href_raw.to_string())
+        } else {
+            href_raw.to_string()
+        };
+
+        if !seen.insert(href.clone()) {
+            continue;
+        }
+
+        let label_html = cap.name("label").map(|m| m.as_str()).unwrap_or("");
+        let label = truncate_for_tool(clean_text_content(&tag_re.replace_all(label_html, " ")), 160);
+        links.push(json!({
+            "label": label,
+            "url": href,
+        }));
+    }
+
+    Ok(json!({
+        "action": "web_links",
+        "url": final_url,
+        "links": links,
+    })
+    .to_string())
 }
 
 fn read_string_field(input: &serde_json::Value, keys: &[&str]) -> Option<String> {
@@ -887,10 +1247,17 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
     if matches!(lower.as_str(), "launch" | "open_app" | "start_app")
         || lower.starts_with("launch ")
         || lower.starts_with("open app ")
+        || lower.starts_with("open application ")
+        || lower.starts_with("open program ")
         || lower.starts_with("start app ")
+        || lower.starts_with("start application ")
+        || lower.starts_with("start program ")
         || ((lower.contains("open ") || lower.contains("start "))
             && (lower.contains("pc")
                 || lower.contains("computer")
+                || lower.contains("app")
+                || lower.contains("application")
+                || lower.contains("program")
                 || lower.contains("discord")
                 || lower.contains("chrome")
                 || lower.contains("spotify")
@@ -902,7 +1269,12 @@ fn infer_os_tool_action(input: &serde_json::Value) -> String {
     }
 
     if matches!(lower.as_str(), "open_url" | "browse" | "navigate")
-        || lower.starts_with("open ")
+        || lower.contains("open website")
+        || lower.contains("open url")
+        || lower.contains("open link")
+        || lower.starts_with("open http://")
+        || lower.starts_with("open https://")
+        || lower.contains("visit ")
         || lower.starts_with("browse ")
         || lower.starts_with("navigate ")
         || lower.starts_with("http://")
@@ -975,8 +1347,20 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
             if lower.starts_with("open app ") {
                 return Some(raw["open app ".len()..].trim().to_string());
             }
+            if lower.starts_with("open application ") {
+                return Some(raw["open application ".len()..].trim().to_string());
+            }
+            if lower.starts_with("open program ") {
+                return Some(raw["open program ".len()..].trim().to_string());
+            }
             if lower.starts_with("start app ") {
                 return Some(raw["start app ".len()..].trim().to_string());
+            }
+            if lower.starts_with("start application ") {
+                return Some(raw["start application ".len()..].trim().to_string());
+            }
+            if lower.starts_with("start program ") {
+                return Some(raw["start program ".len()..].trim().to_string());
             }
             if let Some(index) = lower.find("open ") {
                 let rest = raw[index + "open ".len()..].trim();
@@ -1017,12 +1401,27 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
                 return Some(raw);
             }
             if let Some(rest) = raw.strip_prefix("open ") {
+                let trimmed = rest.trim();
+                if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                    return Some(trimmed.to_string());
+                }
+            }
+            if let Some(rest) = raw.strip_prefix("open url ") {
+                return Some(rest.trim().to_string());
+            }
+            if let Some(rest) = raw.strip_prefix("open website ") {
+                return Some(rest.trim().to_string());
+            }
+            if let Some(rest) = raw.strip_prefix("open link ") {
                 return Some(rest.trim().to_string());
             }
             if let Some(rest) = raw.strip_prefix("browse ") {
                 return Some(rest.trim().to_string());
             }
             if let Some(rest) = raw.strip_prefix("navigate ") {
+                return Some(rest.trim().to_string());
+            }
+            if let Some(rest) = raw.strip_prefix("visit ") {
                 return Some(rest.trim().to_string());
             }
         }
@@ -3385,6 +3784,14 @@ mod tests {
             "launch"
         );
         assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"open application Discord"})),
+            "launch"
+        );
+        assert_eq!(
+            infer_os_tool_action(&serde_json::json!({"input":"open https://openai.com"})),
+            "open_url"
+        );
+        assert_eq!(
             infer_os_tool_action(&serde_json::json!({"input":"focus element Save"})),
             "focus_element"
         );
@@ -3418,6 +3825,20 @@ mod tests {
                 "launch"
             ),
             Some("discord".to_string())
+        );
+        assert_eq!(
+            extract_os_tool_target(
+                &serde_json::json!({"input":"open application Discord"}),
+                "launch"
+            ),
+            Some("Discord".to_string())
+        );
+        assert_eq!(
+            extract_os_tool_target(
+                &serde_json::json!({"input":"open website https://openai.com"}),
+                "open_url"
+            ),
+            Some("https://openai.com".to_string())
         );
         assert_eq!(
             build_uia_selector_object(&serde_json::json!({"name":"Save","control_type":"Button"})),
