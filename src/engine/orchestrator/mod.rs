@@ -211,6 +211,83 @@ fn is_native_computer_fast_path_request(query: &str, domain: &str) -> bool {
     process_request || file_search_request || browser_state_request || selector_typing_request
 }
 
+fn extract_workflow_plan_subject(query: &str) -> String {
+    let trimmed = query.trim().trim_end_matches('.').trim();
+    let lower = trimmed.to_lowercase();
+
+    let prefixes = [
+        "create a workflow plan for ",
+        "create workflow plan for ",
+        "plan a workflow for ",
+        "create a plan for ",
+        "plan for ",
+    ];
+
+    for prefix in prefixes {
+        if lower.starts_with(prefix) {
+            return trimmed[prefix.len()..].trim().to_string();
+        }
+    }
+
+    trimmed.to_string()
+}
+
+fn build_native_workflow_plan(query: &str) -> String {
+    let subject = extract_workflow_plan_subject(query);
+    let lower = query.to_lowercase();
+    let cadence = if lower.contains("daily") {
+        "Daily"
+    } else if lower.contains("weekly") {
+        "Weekly"
+    } else if lower.contains("hourly") {
+        "Hourly"
+    } else {
+        "Scheduled"
+    };
+
+    let monitoring = lower.contains("monitor") || lower.contains("monitoring");
+    let traceability = lower.contains("traceability") || lower.contains("trace");
+
+    let mut response = String::new();
+    response.push_str("Workflow plan ready.\n\n");
+    response.push_str(&format!("Scope: {}\n", subject));
+    response.push_str(&format!("Cadence: {}\n\n", cadence));
+    response.push_str("Proposed steps:\n");
+    response.push_str("1. Define the target and success condition.\n");
+    if monitoring {
+        response.push_str(
+            "2. Fetch the website or endpoint on the chosen schedule and capture status, latency, and key content markers.\n",
+        );
+        response.push_str(
+            "3. Compare the latest result against the previous successful run to detect changes, failures, or degraded performance.\n",
+        );
+        response.push_str(
+            "4. Store the run result as an artifact so later runs and reviewers can inspect the evidence.\n",
+        );
+        response.push_str(
+            "5. If the check fails or content changes unexpectedly, create a blocked work item and alert the operator.\n",
+        );
+    } else {
+        response.push_str("2. Execute the first task step and capture the output as an artifact.\n");
+        response.push_str("3. Validate the result before continuing to the next step.\n");
+        response.push_str("4. Hand off the artifact or create a work item for the next actor.\n");
+        response.push_str("5. Mark the run done or blocked with a clear reason.\n");
+    }
+
+    if traceability {
+        response.push_str("\nTraceability layer:\n");
+        response.push_str("- Record each run with a start time, finish time, status, and summary.\n");
+        response.push_str("- Attach evidence artifacts for every important step.\n");
+        response.push_str("- Keep failure reasons explicit so retries and handoffs are easy.\n");
+    }
+
+    response.push_str("\nRecommended outputs:\n");
+    response.push_str("- Run summary\n");
+    response.push_str("- Evidence artifacts\n");
+    response.push_str("- Work item for follow-up if blocked\n");
+    response
+}
+
 async fn heuristic_decision(
     db: &crate::db::Database,
     query: &str,
@@ -1423,6 +1500,37 @@ pub async fn orchestrate_request<'a>(
         }
 
         return direct_response;
+    }
+
+    if discovery::looks_like_planner_request(&clean_query) {
+        let native_plan = build_native_workflow_plan(&clean_query);
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "native_workflow_plan_completed",
+            "completed",
+            Some("orchestrator"),
+            Some(&clean_query),
+            None,
+            None,
+            Some("Generated workflow plan natively without waiting on the master planner."),
+            Some(&native_plan),
+        )
+        .await;
+
+        if let Some(run_id) = run_id {
+            let _ = crate::backend::finish_execution_run(
+                db,
+                run_id,
+                "completed",
+                Some(&native_plan),
+                None,
+            )
+            .await;
+        }
+
+        return native_plan;
     }
 
     let macro_tasks = if matches!(decision.route, OrchestrationRoute::SingleDomain) {

@@ -71,6 +71,36 @@ async fn log_event(
     }
 }
 
+async fn ensure_native_computer_tools(
+    db: &crate::db::Database,
+    domain: &str,
+    tools: &mut Vec<crate::engine::utils::discovery::ToolInfo>,
+) {
+    if !matches!(domain, "computer" | "desktop") {
+        return;
+    }
+
+    let mut need_names = Vec::new();
+    if !tools.iter().any(|tool| tool.name == "os_tool") {
+        need_names.push("os_tool");
+    }
+    if !tools.iter().any(|tool| tool.name == "vision_analysis") {
+        need_names.push("vision_analysis");
+    }
+
+    if need_names.is_empty() {
+        return;
+    }
+
+    if let Ok(all_tools) = crate::backend::get_tools(db).await {
+        for needed in need_names {
+            if let Some(tool) = all_tools.iter().find(|tool| tool.name == needed) {
+                tools.push(tool.clone());
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ToolGateDecision {
     allowed: bool,
@@ -1528,9 +1558,10 @@ pub async fn dispatch_domain(
     )
     .await;
 
-    let tools = crate::backend::get_supervisor_tools(db, s.id)
+    let mut tools = crate::backend::get_supervisor_tools(db, s.id)
         .await
         .unwrap_or_default();
+    ensure_native_computer_tools(db, domain, &mut tools).await;
 
     if is_native_screenshot_request(query, step, domain) {
         if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
