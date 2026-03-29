@@ -441,6 +441,57 @@ impl Database {
             "".to_string(),
             "// Native Implementation".to_string(),
         ));
+        tools_data.push((
+            "web_search".to_string(),
+            "Search the web and return structured results with titles, URLs, and snippets."
+                .to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
+        tools_data.push((
+            "web_browse".to_string(),
+            "Fetch and clean webpage content from a URL for reading and extraction.".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
+        tools_data.push((
+            "app_launcher".to_string(),
+            "Launch or focus a local desktop application.".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
+        tools_data.push((
+            "web_extract".to_string(),
+            "Fetch a web page and return structured cleaned content with title and status."
+                .to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
+        tools_data.push((
+            "web_links".to_string(),
+            "Fetch a web page and extract a structured list of links from it.".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
+        tools_data.push((
+            "clipboard_read".to_string(),
+            "Read text from the system clipboard.".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
+        tools_data.push((
+            "clipboard_write".to_string(),
+            "Write text to the system clipboard.".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
 
         let mut tx = self.pool.begin().await?;
         for (name, desc, lang, path, code) in tools_data {
@@ -477,15 +528,32 @@ impl Database {
             ("stealth", "stealth_search"),
             ("stealth", "stealth_browse"),
             ("stealth", "http_request"),
+            ("stealth", "web_search"),
+            ("stealth", "web_browse"),
+            ("stealth", "web_extract"),
+            ("stealth", "web_links"),
             ("web_supervisor", "browser_automation"),
             ("web_supervisor", "ui_automation"),
+            ("web_supervisor", "web_search"),
+            ("web_supervisor", "web_browse"),
+            ("web_supervisor", "web_extract"),
+            ("web_supervisor", "web_links"),
             ("orchestrator", "os_tool"),
             ("orchestrator", "ui_automation"),
             ("orchestrator", "browser_automation"),
+            ("orchestrator", "app_launcher"),
+            ("orchestrator", "clipboard_read"),
+            ("orchestrator", "clipboard_write"),
             ("chat", "charting"),
             ("computer", "os_tool"),
             ("computer", "vision_analysis"),
             ("computer", "charting"),
+            ("computer", "app_launcher"),
+            ("computer", "clipboard_read"),
+            ("computer", "clipboard_write"),
+            ("desktop", "app_launcher"),
+            ("desktop", "clipboard_read"),
+            ("desktop", "clipboard_write"),
         ];
 
         for (domain, tool_name) in mappings {
