@@ -47,6 +47,37 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let has_active_work_item = selected_work_item().is_some();
     let db_for_send = db.clone();
     let db_for_stop = db.clone();
+    let db_for_computer_state = db.clone();
+    let mut computer_state_resource = use_resource(move || {
+        let db = db_for_computer_state.clone();
+        async move { backend::get_computer_supervision_state(&db).await }
+    });
+
+    let computer_state = computer_state_resource.read().cloned();
+    let supervision_mode = computer_state
+        .as_ref()
+        .map(|state| state.supervision_mode.clone())
+        .unwrap_or_else(|| "approval_required".to_string());
+    let session_state = computer_state
+        .as_ref()
+        .map(|state| state.session_state.clone())
+        .unwrap_or_else(|| "idle".to_string());
+    let approval_state = computer_state
+        .as_ref()
+        .map(|state| state.approval_state.clone())
+        .unwrap_or_else(|| "idle".to_string());
+    let pending_action = computer_state
+        .as_ref()
+        .map(|state| state.pending_action.clone())
+        .unwrap_or_default();
+    let session_label = match session_state.as_str() {
+        "approval_session" => "Approval session",
+        "observing" => "Observe mode",
+        "trusted_session" => "Trusted session",
+        "paused" => "Paused",
+        "emergency_stopped" => "Emergency stop",
+        _ => "No active session",
+    };
 
     use_future(move || {
         let mut animated_placeholder = animated_placeholder;
@@ -106,6 +137,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         if val.trim().is_empty() || is_thinking() {
             return;
         }
+        is_thinking.set(true);
         input_text.set(String::new());
         let attachments = pending_attachments();
         pending_attachments.set(vec![]);
@@ -162,6 +194,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         id
                     }
                     Err(_) => {
+                        is_thinking.set(false);
                         active_request_task_inner.set(None);
                         return;
                     }
@@ -211,6 +244,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                 messages_inner.restart();
                 active_request_task_inner.set(None);
             } else {
+                is_thinking.set(false);
                 visible_messages_inner
                     .write()
                     .retain(|message| message.id != optimistic_id);
@@ -346,6 +380,87 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         }
                     }
                 }
+                div { class: "mt-3 flex flex-wrap items-center gap-2 px-1",
+                    div { class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 shadow-sm",
+                        MaterialIcon { name: "policy", size: 14 }
+                        span { class: "font-bold text-slate-500", "Mode" }
+                        select {
+                            class: "border-0 bg-transparent pr-5 text-[11px] font-semibold text-slate-700 outline-none",
+                            value: "{supervision_mode}",
+                            onchange: {
+                                let db = db.clone();
+                                let mut computer_state_resource = computer_state_resource.clone();
+                                move |evt| {
+                                    let db = db.clone();
+                                    let mut computer_state_resource = computer_state_resource.clone();
+                                    let value = evt.value();
+                                    spawn(async move {
+                                        let _ = backend::set_setting(
+                                            &db,
+                                            "computer_supervision_mode",
+                                            &value,
+                                        )
+                                        .await;
+                                        computer_state_resource.restart();
+                                    });
+                                }
+                            },
+                            option { value: "approval_required", "Approval Required" }
+                            option { value: "observe_only", "Observe Only" }
+                            option { value: "session_trusted", "Trusted Session" }
+                            option { value: "trusted_auto_run", "Trusted Auto-Run" }
+                        }
+                    }
+                    div { class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 shadow-sm",
+                        MaterialIcon { name: "verified_user", size: 14 }
+                        span { class: "font-semibold text-slate-700", "{session_label}" }
+                        if approval_state == "pending" {
+                            span { class: "rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-amber-700",
+                                "Pending approval"
+                            }
+                        }
+                    }
+                    if approval_state == "pending" && !pending_action.trim().is_empty() {
+                        div { class: "flex items-center gap-2 min-w-full rounded-2xl border border-amber-200 bg-amber-50/80 px-3 py-3 text-[11px] text-amber-900 shadow-sm",
+                            MaterialIcon { name: "fact_check", size: 16, color: MaterialIconColor::Custom("#b45309".into()) }
+                            p { class: "flex-1 leading-relaxed break-words", "{pending_action}" }
+                            button {
+                                class: "inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700 transition-all",
+                                onclick: {
+                                    let db = db.clone();
+                                    let mut computer_state_resource = computer_state_resource.clone();
+                                    move |_| {
+                                        let db = db.clone();
+                                        let mut computer_state_resource = computer_state_resource.clone();
+                                        spawn(async move {
+                                            let _ = backend::approve_pending_computer_action(&db).await;
+                                            computer_state_resource.restart();
+                                        });
+                                    }
+                                },
+                                MaterialIcon { name: "task_alt", size: 14, color: MaterialIconColor::Light }
+                                "Approve"
+                            }
+                            button {
+                                class: "inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 font-bold text-red-600 hover:bg-red-50 transition-all",
+                                onclick: {
+                                    let db = db.clone();
+                                    let mut computer_state_resource = computer_state_resource.clone();
+                                    move |_| {
+                                        let db = db.clone();
+                                        let mut computer_state_resource = computer_state_resource.clone();
+                                        spawn(async move {
+                                            let _ = backend::reject_pending_computer_action(&db).await;
+                                            computer_state_resource.restart();
+                                        });
+                                    }
+                                },
+                                MaterialIcon { name: "cancel", size: 14, color: MaterialIconColor::Custom("#dc2626".into()) }
+                                "Reject"
+                            }
+                        }
+                    }
+                }
                 div { class: "mt-3 flex items-center justify-between gap-3 px-1 text-[11px] text-slate-500",
                     div { class: "flex items-center gap-2 min-w-0",
                         MaterialIcon { name: "radar", size: 14 }
@@ -354,6 +469,8 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                                 "Your next message will include the active work item as structured coordination context."
                             } else if selected_artifact_count > 0 {
                                 "Your next message will include {selected_artifact_count} selected artifact(s) as structured context."
+                            } else if matches!(supervision_mode.as_str(), "approval_required" | "observe_only" | "session_trusted" | "trusted_auto_run") {
+                                "Desktop sessions will start automatically when a computer task needs them."
                             } else if is_thinking() {
                                 "Overseer is processing the current request."
                             } else if selected_conversation_id().is_some() {
