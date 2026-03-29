@@ -1369,6 +1369,29 @@ pub async fn finish_execution_run(
     Ok(())
 }
 
+pub async fn cancel_latest_execution_run_for_conversation(
+    db: &Database,
+    conversation_id: i64,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE execution_runs
+         SET status = 'cancelled',
+             error_message = COALESCE(error_message, 'Cancelled by user.'),
+             finished_at = CURRENT_TIMESTAMP
+         WHERE id = (
+             SELECT id
+             FROM execution_runs
+             WHERE conversation_id = ? AND status = 'running'
+             ORDER BY created_at DESC
+             LIMIT 1
+         )",
+    )
+    .bind(conversation_id)
+    .execute(&db.pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn log_execution_event(
     db: &Database,
     run_id: i64,

@@ -216,6 +216,16 @@ async fn heuristic_decision(
     query: &str,
     has_artifacts: bool,
 ) -> OrchestrationDecision {
+    if discovery::looks_like_planner_request(query) {
+        return OrchestrationDecision {
+            route: OrchestrationRoute::MultiStep,
+            domain: None,
+            personality_mode: "orchestrator".to_string(),
+            reason: "Workflow/planning request should go through multi-step orchestration."
+                .to_string(),
+        };
+    }
+
     let lower = query.to_lowercase();
     // Phase 2: Orchestration Generalization
     let inferred_domain = discovery::discover_fast_path_domain(db, query, has_artifacts).await;
@@ -687,6 +697,12 @@ async fn decide_orchestration(
 
     if matches!(heuristic.route, OrchestrationRoute::DirectChat)
         && (query.len() < 40 || is_greeting)
+    {
+        return Ok(heuristic);
+    }
+
+    if matches!(heuristic.route, OrchestrationRoute::MultiStep)
+        && discovery::looks_like_planner_request(query)
     {
         return Ok(heuristic);
     }

@@ -3,6 +3,7 @@ use crate::routes::conversations::helpers::build_query_with_context;
 use crate::state::use_global_state;
 use base64::{engine::general_purpose, Engine as _};
 use dioxus::prelude::*;
+use dioxus::prelude::dioxus_core::Task;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 #[derive(Props, Clone, PartialEq)]
@@ -29,6 +30,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let mut input_text = use_signal(|| String::new());
     let mut pending_attachments = use_signal(|| Vec::<(String, String, Vec<u8>)>::new());
     let mut is_thinking = props.is_thinking;
+    let mut active_request_task = use_signal(|| None::<Task>);
     let mut animated_placeholder =
         use_signal(|| "Type anything to start a new conversation...".to_string());
 
@@ -43,6 +45,8 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let mut starter_prompt = props.starter_prompt;
     let selected_artifact_count = selected_artifacts().len();
     let has_active_work_item = selected_work_item().is_some();
+    let db_for_send = db.clone();
+    let db_for_stop = db.clone();
 
     use_future(move || {
         let mut animated_placeholder = animated_placeholder;
@@ -111,13 +115,14 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         let query_with_artifacts =
             build_query_with_context(&val, &artifacts_for_prompt, work_item_for_prompt.as_ref());
 
-        let db_inner = db.clone();
+        let db_inner = db_for_send.clone();
         let agent_inner = agent_system.clone();
         let mut messages_inner = messages_resource.clone();
         let mut visible_messages_inner = visible_messages;
         let mut conversations_inner = conversations_resource.clone();
         let conv_id = selected_conversation_id();
         let mut selected_conversation_id_inner = selected_conversation_id.clone();
+        let mut active_request_task_inner = active_request_task;
         let query = val.clone();
         let optimistic_id = -chrono::Utc::now().timestamp_micros();
 
@@ -135,7 +140,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
             });
         }
 
-        spawn(async move {
+        let task = spawn(async move {
             let mut created_new_conversation = false;
             let conversation_id = if let Some(id) = conv_id {
                 id
@@ -156,7 +161,10 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         }]);
                         id
                     }
-                    Err(_) => return,
+                    Err(_) => {
+                        active_request_task_inner.set(None);
+                        return;
+                    }
                 }
             };
 
@@ -201,12 +209,31 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                     backend::add_message(&db_inner, conversation_id, "assistant", &response, false)
                         .await;
                 messages_inner.restart();
+                active_request_task_inner.set(None);
             } else {
                 visible_messages_inner
                     .write()
                     .retain(|message| message.id != optimistic_id);
+                active_request_task_inner.set(None);
             }
         });
+        active_request_task.set(Some(task));
+    });
+
+    let stop = use_callback(move |()| {
+        if let Some(task) = active_request_task.take() {
+            task.cancel();
+        }
+        is_thinking.set(false);
+
+        if let Some(conversation_id) = selected_conversation_id() {
+            let db = db_for_stop.clone();
+            spawn(async move {
+                let _ =
+                    backend::cancel_latest_execution_run_for_conversation(&db, conversation_id)
+                        .await;
+            });
+        }
     });
 
     rsx! {
@@ -293,18 +320,26 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                             }
                         }
                         button {
-                            disabled: input_text().trim().is_empty() || is_thinking(),
+                            disabled: input_text().trim().is_empty() && !is_thinking(),
                             class: format!(
                                 "size-11 flex shrink-0 items-center justify-center rounded-xl transition-all duration-150 {}",
-                                if input_text().trim().is_empty() || is_thinking() {
+                                if is_thinking() {
+                                    "bg-red-500 text-white shadow-lg shadow-red-500/20 hover:-translate-y-0.5 hover:bg-red-600"
+                                } else if input_text().trim().is_empty() {
                                     "cursor-not-allowed bg-slate-200 text-slate-400 shadow-none"
                                 } else {
                                     "bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:-translate-y-0.5 hover:bg-blue-700"
                                 }
                             ),
-                            onclick: move |_| send.call(()),
+                            onclick: move |_| {
+                                if is_thinking() {
+                                    stop.call(());
+                                } else {
+                                    send.call(());
+                                }
+                            },
                             if is_thinking() {
-                                div { class: "size-5 border-2 border-current border-t-transparent rounded-full animate-spin" }
+                                MaterialIcon { name: "stop", color: MaterialIconColor::Light, size: 24 }
                             } else {
                                 MaterialIcon { name: "arrow_upward", color: MaterialIconColor::Light, size: 24 }
                             }

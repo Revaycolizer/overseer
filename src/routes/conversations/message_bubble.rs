@@ -619,7 +619,7 @@ pub fn ThinkingBubble() -> Element {
                             span { class: "size-2 bg-blue-400 rounded-full animate-bounce", style: "animation-delay: 300ms;" }
                         }
                         span { class: "text-slate-400 text-xs ml-2",
-                            "Processing your request..."
+                            "Analyzing and routing..."
                         }
                     }
                 }

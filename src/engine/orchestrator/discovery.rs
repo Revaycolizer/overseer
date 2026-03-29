@@ -1,11 +1,32 @@
 use crate::db::Database;
 
+pub(crate) fn looks_like_planner_request(query: &str) -> bool {
+    let lower = query.to_lowercase();
+
+    lower.contains("workflow")
+        || lower.contains("traceability")
+        || lower.starts_with("plan ")
+        || lower.contains(" plan for ")
+        || lower.contains("create a plan")
+        || lower.contains("create a workflow plan")
+        || lower.contains("monitoring task")
+}
+
+fn keyword_score(keyword: &str) -> usize {
+    keyword.len() + (keyword.split_whitespace().count() * 100)
+}
+
 pub async fn discover_fast_path_domain(
     db: &Database,
     query: &str,
     has_artifacts: bool,
 ) -> Option<String> {
     let lower_query = query.to_lowercase();
+
+    // Planner-shaped prompts should stay out of broad supervisor fast paths.
+    if looks_like_planner_request(&lower_query) {
+        return None;
+    }
 
     // 1. Fetch all supervisors that have any routing keywords defined
     let supervisors = match sqlx::query_as::<_, crate::db::Supervisor>(
@@ -24,55 +45,99 @@ pub async fn discover_fast_path_domain(
         }
     };
 
+    let mut best_standard_match: Option<(String, usize, i32)> = None;
+
     // 2. Standard keyword pass (skip artifact-sensitive supervisors when artifacts are present)
-    for s in &supervisors {
-        if has_artifacts && s.skip_fast_path_if_artifacts {
+    for supervisor in &supervisors {
+        if has_artifacts && supervisor.skip_fast_path_if_artifacts {
             continue;
         }
 
-        if let Some(ref keywords_str) = s.fast_path_keywords {
-            for k_raw in keywords_str.split(',') {
-                let k = k_raw.trim();
-                if k.is_empty() {
+        if let Some(ref keywords_str) = supervisor.fast_path_keywords {
+            for keyword_raw in keywords_str.split(',') {
+                let keyword = keyword_raw.trim();
+                if keyword.is_empty() {
                     continue;
                 }
 
-                let pattern = format!(r"(?i)\b{}\b", regex::escape(k));
+                let pattern = format!(r"(?i)\b{}\b", regex::escape(keyword));
                 if let Ok(re) = regex::Regex::new(&pattern) {
                     if re.is_match(&lower_query) {
-                        println!(
-                            "🎯 FAST-PATH: Query matched keyword '{}' for domain '{}'",
-                            k, s.domain
-                        );
-                        return Some(s.domain.clone());
+                        let score = keyword_score(keyword);
+                        let should_replace = best_standard_match
+                            .as_ref()
+                            .map(|(_, best_score, best_priority)| {
+                                score > *best_score
+                                    || (score == *best_score
+                                        && supervisor.routing_priority > *best_priority)
+                            })
+                            .unwrap_or(true);
+
+                        if should_replace {
+                            best_standard_match = Some((
+                                supervisor.domain.clone(),
+                                score,
+                                supervisor.routing_priority,
+                            ));
+                        }
                     }
                 }
             }
         }
     }
 
+    if let Some((domain, _, _)) = best_standard_match {
+        println!(
+            "FAST-PATH: Query matched best keyword cluster for domain '{}'",
+            domain
+        );
+        return Some(domain);
+    }
+
     // 3. Artifact-aware keyword pass: only runs when the user has attached artifacts
     if has_artifacts {
-        for s in &supervisors {
-            if let Some(ref artifact_keywords_str) = s.artifact_fast_path_keywords {
-                for k_raw in artifact_keywords_str.split(',') {
-                    let k = k_raw.trim();
-                    if k.is_empty() {
+        let mut best_artifact_match: Option<(String, usize, i32)> = None;
+
+        for supervisor in &supervisors {
+            if let Some(ref artifact_keywords_str) = supervisor.artifact_fast_path_keywords {
+                for keyword_raw in artifact_keywords_str.split(',') {
+                    let keyword = keyword_raw.trim();
+                    if keyword.is_empty() {
                         continue;
                     }
 
-                    let pattern = format!(r"(?i)\b{}\b", regex::escape(k));
+                    let pattern = format!(r"(?i)\b{}\b", regex::escape(keyword));
                     if let Ok(re) = regex::Regex::new(&pattern) {
                         if re.is_match(&lower_query) {
-                            println!(
-                                "🎯 ARTIFACT-FAST-PATH: Query matched artifact keyword '{}' for domain '{}' (artifacts present)",
-                                k, s.domain
-                            );
-                            return Some(s.domain.clone());
+                            let score = keyword_score(keyword);
+                            let should_replace = best_artifact_match
+                                .as_ref()
+                                .map(|(_, best_score, best_priority)| {
+                                    score > *best_score
+                                        || (score == *best_score
+                                            && supervisor.routing_priority > *best_priority)
+                                })
+                                .unwrap_or(true);
+
+                            if should_replace {
+                                best_artifact_match = Some((
+                                    supervisor.domain.clone(),
+                                    score,
+                                    supervisor.routing_priority,
+                                ));
+                            }
                         }
                     }
                 }
             }
+        }
+
+        if let Some((domain, _, _)) = best_artifact_match {
+            println!(
+                "ARTIFACT-FAST-PATH: Query matched best artifact keyword cluster for domain '{}' (artifacts present)",
+                domain
+            );
+            return Some(domain);
         }
     }
 
@@ -81,6 +146,21 @@ pub async fn discover_fast_path_domain(
 
 #[cfg(test)]
 mod tests {
+    use super::looks_like_planner_request;
+
+    #[test]
+    fn planner_like_requests_are_detected() {
+        assert!(looks_like_planner_request(
+            "Create a workflow plan for a daily website monitoring task with traceability."
+        ));
+        assert!(looks_like_planner_request(
+            "Plan a monitoring task with traceability"
+        ));
+        assert!(!looks_like_planner_request(
+            "Take a screenshot of my desktop"
+        ));
+    }
+
     #[test]
     fn computer_requests_fall_back_to_computer_domain() {
         let lower_query = "take a screenshot of my desktop".to_string();
