@@ -2415,12 +2415,186 @@ async fn windows_process_list_json(tool_name: &str) -> Result<String, DynamicToo
 #[cfg(not(windows))]
 async fn windows_find_files_json(
     tool_name: &str,
-    _query: &str,
+    query: &str,
 ) -> Result<String, DynamicToolError> {
-    Err(DynamicToolError::ExecutionFailed {
-        tool: tool_name.to_string(),
-        details: "Native file search is currently implemented for Windows only.".to_string(),
+    if let Some(results) = search_workspace_files_fast(query).await {
+        let cwd = std::env::current_dir()
+            .ok()
+            .map(|path| path.to_string_lossy().to_string())
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        return Ok(json!({
+            "action": "find_files",
+            "query": query,
+            "roots": cwd,
+            "source": "workspace_fast_path",
+            "results": results,
+        })
+        .to_string());
+    }
+
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut roots = vec![std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))];
+    for candidate in [
+        format!("{}/Desktop", home),
+        format!("{}/Documents", home),
+        format!("{}/Downloads", home),
+        format!("{}/OneDrive", home),
+    ] {
+        let path = std::path::PathBuf::from(candidate);
+        if path.exists() {
+            roots.push(path);
+        }
+    }
+    roots.sort();
+    roots.dedup();
+
+    let lower_query = query.to_lowercase();
+    let mut tokens: Vec<String> = lower_query
+        .split(|c: char| c.is_whitespace() || matches!(c, '?' | '.' | ',' | ':' | ';' | '\\' | '/'))
+        .filter(|token| {
+            token.len() >= 3
+                && !matches!(
+                    *token,
+                    "find" | "path" | "file" | "files" | "pc" | "computer" | "my" | "the" | "in"
+                )
+        })
+        .map(|token| token.to_string())
+        .collect();
+
+    if tokens.is_empty() {
+        tokens.push(lower_query.clone());
+    }
+
+    let mut file_lines = Vec::new();
+    if Command::new("rg")
+        .arg("--version")
+        .output()
+        .await
+        .is_ok()
+    {
+        let mut cmd = Command::new("rg");
+        cmd.arg("--files");
+        for root in &roots {
+            cmd.arg(root);
+        }
+
+        if let Ok(output) = cmd.output().await {
+            file_lines.extend(
+                String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .map(|line| line.to_string()),
+            );
+        }
+    }
+
+    if file_lines.is_empty() {
+        let mut cmd = Command::new("find");
+        for root in &roots {
+            cmd.arg(root);
+        }
+        cmd.args(["-type", "f"]);
+
+        let output = cmd.output().await.map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: e.to_string(),
+        })?;
+
+        file_lines.extend(
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(|line| line.to_string()),
+        );
+    }
+
+    let mut results = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for line in file_lines {
+        let path = line.trim();
+        if path.is_empty() {
+            continue;
+        }
+
+        let normalized = path.to_lowercase();
+        if !seen.insert(normalized.clone()) {
+            continue;
+        }
+
+        let name = std::path::Path::new(path)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(path)
+            .to_string();
+        let name_lower = name.to_lowercase();
+
+        let matched = tokens
+            .iter()
+            .any(|token| name_lower.contains(token) || normalized.contains(token));
+        if !matched {
+            continue;
+        }
+
+        let mut score = 0;
+        if name_lower == lower_query {
+            score += 200;
+        }
+        for token in &tokens {
+            if name_lower == *token {
+                score += 80;
+            }
+            if name_lower.contains(token) {
+                score += 30;
+            }
+            if normalized.contains(token) {
+                score += 10;
+            }
+        }
+        if normalized.contains("/overseer/src/") {
+            score += 40;
+        }
+        if normalized.contains("/desktop/") {
+            score += 5;
+        }
+
+        let directory = std::path::Path::new(path)
+            .parent()
+            .map(|value| value.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let extension = std::path::Path::new(path)
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| format!(".{}", value))
+            .unwrap_or_default();
+
+        results.push(json!({
+            "name": name,
+            "path": path,
+            "directory": directory,
+            "extension": extension,
+            "score": score
+        }));
+    }
+
+    results.sort_by(|a, b| {
+        let score_a = a.get("score").and_then(|value| value.as_i64()).unwrap_or(0);
+        let score_b = b.get("score").and_then(|value| value.as_i64()).unwrap_or(0);
+        score_b.cmp(&score_a).then_with(|| {
+            a.get("path")
+                .and_then(|value| value.as_str())
+                .cmp(&b.get("path").and_then(|value| value.as_str()))
+        })
+    });
+    results.truncate(20);
+
+    Ok(json!({
+        "action": "find_files",
+        "query": query,
+        "roots": roots.into_iter().map(|path| path.to_string_lossy().to_string()).collect::<Vec<_>>(),
+        "source": "unix_native_search",
+        "results": results,
     })
+    .to_string())
 }
 
 #[cfg(not(windows))]
