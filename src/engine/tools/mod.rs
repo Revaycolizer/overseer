@@ -2449,6 +2449,31 @@ async fn windows_browser_state_json(tool_name: &str) -> Result<String, DynamicTo
 }
 
 #[cfg(not(windows))]
+async fn windows_accessibility_state_json(
+    tool_name: &str,
+    _input: &serde_json::Value,
+) -> Result<String, DynamicToolError> {
+    Err(DynamicToolError::ExecutionFailed {
+        tool: tool_name.to_string(),
+        details: "Native accessibility inspection is currently implemented for Windows only."
+            .to_string(),
+    })
+}
+
+#[cfg(not(windows))]
+async fn windows_uia_interaction_json(
+    tool_name: &str,
+    _action: &str,
+    _input: &serde_json::Value,
+) -> Result<String, DynamicToolError> {
+    Err(DynamicToolError::ExecutionFailed {
+        tool: tool_name.to_string(),
+        details: "Native UI Automation interaction is currently implemented for Windows only."
+            .to_string(),
+    })
+}
+
+#[cfg(not(windows))]
 async fn windows_desktop_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     // Get active window title using xprop
     let active_window_id = run_command_simple("xprop -root _NET_ACTIVE_WINDOW", tool_name).await?;

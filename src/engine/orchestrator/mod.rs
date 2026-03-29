@@ -1047,13 +1047,48 @@ pub async fn orchestrate_request<'a>(
     {
         Some(domain) => Some(domain),
         None if has_artifacts => {
-            // No keyword matched, but artifacts are present (likely a follow-up question about attached files).
-            // Fall back to a DB-configurable default domain so the agent retains file context.
-            let default_domain =
-                crate::backend::get_setting_or(db, "artifact_default_domain", "chat").await;
+            // No keyword matched, but artifacts are present.
+            // Check if any attached files are media (images, PDFs, audio, video)
+            // to decide whether to route to a vision-capable domain or chat.
+            let has_media = history.iter().any(|msg| {
+                if let rig::completion::Message::User { content } = msg {
+                    content.iter().any(|item| {
+                        if let rig::message::UserContent::Image(_) = item {
+                            return true;
+                        }
+                        if let rig::message::UserContent::Text(text) = item {
+                            let lower = text.text.to_lowercase();
+                            if lower.contains("[attached image:") {
+                                return true;
+                            }
+                            // Check for media file extensions in attachment paths
+                            if let Some(path_start) = lower.find("path: ") {
+                                let path_rest = &lower[path_start + 6..];
+                                let path = path_rest.trim_end_matches(|c: char| c == ')' || c == ']');
+                                let media_exts = [
+                                    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg",
+                                    ".ico", ".tiff", ".tif", ".heic", ".heif", ".avif",
+                                    ".pdf", ".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a",
+                                    ".mp4", ".mkv", ".avi", ".mov", ".webm",
+                                ];
+                                return media_exts.iter().any(|ext| path.ends_with(ext));
+                            }
+                        }
+                        false
+                    })
+                } else {
+                    false
+                }
+            });
+
+            let default_domain = if has_media {
+                crate::backend::get_setting_or(db, "artifact_media_domain", "computer").await
+            } else {
+                crate::backend::get_setting_or(db, "artifact_default_domain", "chat").await
+            };
             println!(
-                "🎯 ARTIFACT-FALLBACK: No keyword match, but artifacts present. Routing to default domain '{}'",
-                default_domain
+                "🎯 ARTIFACT-FALLBACK: No keyword match, but artifacts present (media={}). Routing to default domain '{}'",
+                has_media, default_domain
             );
             Some(default_domain)
         }

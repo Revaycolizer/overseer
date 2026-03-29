@@ -185,6 +185,7 @@ impl Database {
                 "ATTACHED ARTIFACTS (the user explicitly selected these as context — use them to answer):",
             ),
             ("artifact_default_domain", "chat"),
+            ("artifact_media_domain", "computer"),
         ];
 
         for (key, value) in defaults {
@@ -602,8 +603,8 @@ impl Database {
                 .await?;
 
             // Fresh insert with v11 metadata
-            sqlx::query("INSERT INTO supervisors (id, name, description, instructions, model, domain, version, fast_path_keywords, routing_priority, skip_fast_path_if_artifacts, artifact_fast_path_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                .bind(id).bind(name).bind(desc).bind(inst).bind(model).bind(domain).bind("1.0.0").bind(keywords).bind(priority).bind(skip_fast_path).bind(artifact_keywords)
+            sqlx::query("INSERT INTO supervisors (id, name, description, instructions, model, domain, version, code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(id).bind(name).bind(desc).bind(inst).bind(model).bind(domain).bind("1.0.0").bind(None::<String>).bind(false).bind(keywords).bind(None::<i64>).bind(priority).bind(false).bind("detailed").bind(skip_fast_path).bind(artifact_keywords)
                 .execute(&mut *tx).await?;
 
             // Auto-link agents based on domain

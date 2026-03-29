@@ -1996,7 +1996,10 @@ pub async fn dispatch_domain(
     };
 
     // Fix 4: Extract file attachment content from history and inject it into the prompt
+    // Supports: text/code files (read content), images (metadata + vision hint),
+    // PDFs (pdftotext extraction), audio/video (metadata description)
     let mut attachment_content = String::new();
+    let mut has_media_attachment = false;
     for msg in &history {
         if let Message::User { content } = msg {
             for item in content.iter() {
@@ -2010,25 +2013,189 @@ pub async fn dispatch_domain(
                             // Extract file path from the marker
                             if let Some(path_start) = trimmed.find("Path: ") {
                                 let path_rest = &trimmed[path_start + 6..];
-                                let path = path_rest.trim_end_matches(|c| c == ')' || c == ']');
-                                // Try to read the file content
-                                match std::fs::read_to_string(path) {
-                                    Ok(content) if !content.trim().is_empty() => {
-                                        let truncated = if content.len() > 8000 {
-                                            format!(
-                                                "{}\n... [truncated, {} total chars]",
-                                                &content[..8000],
-                                                content.len()
-                                            )
-                                        } else {
-                                            content
-                                        };
-                                        attachment_content.push_str(&format!(
-                                            "\n--- FILE: {} ---\n{}\n--- END FILE ---\n",
-                                            path, truncated
-                                        ));
+                                let path =
+                                    path_rest.trim_end_matches(|c| c == ')' || c == ']');
+                                let ext = std::path::Path::new(path)
+                                    .extension()
+                                    .and_then(|e| e.to_str())
+                                    .unwrap_or("")
+                                    .to_lowercase();
+
+                                let file_context = match ext.as_str() {
+                                    // Text/code files: read content directly
+                                    "rs" | "py" | "js" | "ts" | "jsx" | "tsx" | "go"
+                                    | "java" | "c" | "cpp" | "h" | "hpp" | "cs" | "rb"
+                                    | "php" | "swift" | "kt" | "scala" | "r" | "sql"
+                                    | "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat"
+                                    | "cmd" | "txt" | "md" | "markdown" | "rst"
+                                    | "json" | "yaml" | "yml" | "toml" | "xml" | "html"
+                                    | "htm" | "css" | "scss" | "sass" | "less" | "csv"
+                                    | "tsv" | "log" | "cfg" | "ini" | "env" | "conf"
+                                    | "config" | "lock" | "makefile" | "dockerfile"
+                                    | "gitignore" | "editorconfig" | "vue" | "svelte"
+                                    | "astro" | "prisma" | "graphql" | "proto" | "tf"
+                                    | "hcl" | "nix" | "zig" | "asm" | "s" | "dart"
+                                    | "lua" | "ex" | "exs" | "erl" | "hs" | "ml"
+                                    | "clj" | "lisp" | "el" | "vim" | "diff" | "patch" => {
+                                        match std::fs::read_to_string(path) {
+                                            Ok(content) if !content.trim().is_empty() => {
+                                                let truncated = if content.len() > 8000 {
+                                                    format!(
+                                                        "{}\n... [truncated, {} total chars]",
+                                                        &content[..8000],
+                                                        content.len()
+                                                    )
+                                                } else {
+                                                    content
+                                                };
+                                                Some(format!(
+                                                    "\n--- FILE: {} ---\n{}\n--- END FILE ---\n",
+                                                    path, truncated
+                                                ))
+                                            }
+                                            _ => None,
+                                        }
                                     }
-                                    _ => {}
+
+                                    // Image files: provide metadata + vision routing hint
+                                    "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp"
+                                    | "svg" | "ico" | "tiff" | "tif" | "heic" | "heif"
+                                    | "avif" => {
+                                        has_media_attachment = true;
+                                        let metadata = std::fs::metadata(path).ok();
+                                        let size_str = metadata
+                                            .map(|m| {
+                                                let bytes = m.len();
+                                                if bytes > 1_048_576 {
+                                                    format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+                                                } else {
+                                                    format!("{:.1} KB", bytes as f64 / 1024.0)
+                                                }
+                                            })
+                                            .unwrap_or_else(|| "unknown size".to_string());
+                                        Some(format!(
+                                            "\n--- IMAGE: {} ({}, {}) ---\n\
+                                             [This is an image file attached by the user. \
+                                             Describe what you know about this file type and \
+                                             acknowledge that you have access to this image at the path above. \
+                                             If the user asks about its contents, use vision tools if available.]\n\
+                                             --- END IMAGE ---\n",
+                                            path, ext.to_uppercase(), size_str
+                                        ))
+                                    }
+
+                                    // PDF files: try pdftotext extraction
+                                    "pdf" => {
+                                        has_media_attachment = true;
+                                        let pdf_text = std::process::Command::new("pdftotext")
+                                            .args([path, "-"])
+                                            .output()
+                                            .ok()
+                                            .filter(|o| o.status.success())
+                                            .map(|o| String::from_utf8_lossy(&o.stdout).to_string());
+
+                                        if let Some(text) = pdf_text {
+                                            let truncated = if text.len() > 8000 {
+                                                format!(
+                                                    "{}\n... [truncated, {} total chars]",
+                                                    &text[..8000],
+                                                    text.len()
+                                                )
+                                            } else {
+                                                text
+                                            };
+                                            Some(format!(
+                                                "\n--- PDF: {} ---\n{}\n--- END PDF ---\n",
+                                                path, truncated
+                                            ))
+                                        } else {
+                                            let size_str = std::fs::metadata(path)
+                                                .ok()
+                                                .map(|m| format!("{:.1} KB", m.len() as f64 / 1024.0))
+                                                .unwrap_or_else(|| "unknown size".to_string());
+                                            Some(format!(
+                                                "\n--- PDF: {} ({}) ---\n\
+                                                 [PDF document attached. Text extraction unavailable \
+                                                 (install `poppler-utils` for pdftotext support). \
+                                                 The user may be asking about this document.]\n\
+                                                 --- END PDF ---\n",
+                                                path, size_str
+                                            ))
+                                        }
+                                    }
+
+                                    // Audio files: provide metadata
+                                    "mp3" | "wav" | "flac" | "ogg" | "aac" | "m4a"
+                                    | "wma" | "opus" | "aiff" => {
+                                        has_media_attachment = true;
+                                        let size_str = std::fs::metadata(path)
+                                            .ok()
+                                            .map(|m| format!("{:.1} MB", m.len() as f64 / 1_048_576.0))
+                                            .unwrap_or_else(|| "unknown size".to_string());
+                                        Some(format!(
+                                            "\n--- AUDIO: {} ({}, {}) ---\n\
+                                             [Audio file attached by the user. \
+                                             If asked about its contents, note that audio transcription \
+                                             requires specialized tools.]\n\
+                                             --- END AUDIO ---\n",
+                                            path, ext.to_uppercase(), size_str
+                                        ))
+                                    }
+
+                                    // Video files: provide metadata
+                                    "mp4" | "mkv" | "avi" | "mov" | "webm" | "wmv"
+                                    | "flv" | "m4v" | "3gp" => {
+                                        has_media_attachment = true;
+                                        let size_str = std::fs::metadata(path)
+                                            .ok()
+                                            .map(|m| format!("{:.1} MB", m.len() as f64 / 1_048_576.0))
+                                            .unwrap_or_else(|| "unknown size".to_string());
+                                        Some(format!(
+                                            "\n--- VIDEO: {} ({}, {}) ---\n\
+                                             [Video file attached by the user. \
+                                             If asked about its contents, note that video analysis \
+                                             requires specialized tools.]\n\
+                                             --- END VIDEO ---\n",
+                                            path, ext.to_uppercase(), size_str
+                                        ))
+                                    }
+
+                                    // Unknown extension: try reading as text, fall back to metadata
+                                    _ => {
+                                        match std::fs::read_to_string(path) {
+                                            Ok(content) if !content.trim().is_empty() && content.is_ascii() => {
+                                                let truncated = if content.len() > 8000 {
+                                                    format!(
+                                                        "{}\n... [truncated, {} total chars]",
+                                                        &content[..8000],
+                                                        content.len()
+                                                    )
+                                                } else {
+                                                    content
+                                                };
+                                                Some(format!(
+                                                    "\n--- FILE: {} ---\n{}\n--- END FILE ---\n",
+                                                    path, truncated
+                                                ))
+                                            }
+                                            _ => {
+                                                let size_str = std::fs::metadata(path)
+                                                    .ok()
+                                                    .map(|m| format!("{:.1} KB", m.len() as f64 / 1024.0))
+                                                    .unwrap_or_else(|| "unknown size".to_string());
+                                                Some(format!(
+                                                    "\n--- FILE: {} (.{}, {}) ---\n\
+                                                     [Binary or unrecognized file attached by the user.]\n\
+                                                     --- END FILE ---\n",
+                                                    path, ext, size_str
+                                                ))
+                                            }
+                                        }
+                                    }
+                                };
+
+                                if let Some(ctx) = file_context {
+                                    attachment_content.push_str(&ctx);
                                 }
                             }
                         }
@@ -2044,7 +2211,15 @@ pub async fn dispatch_domain(
             "artifact_context_header",
             "ATTACHED ARTIFACTS (the user explicitly selected these as context — use them to answer):",
         ).await;
-        format!("{}\n{}\n\n", header, attachment_content)
+        let media_hint = if has_media_attachment {
+            "\nMEDIA NOTE: The attached files include media (images/PDFs/audio/video). \
+             For images, use the `vision_analysis` tool if available to inspect the visual content. \
+             For PDFs, the extracted text is included above if extraction was successful. \
+             Always acknowledge the attached files and answer based on them.\n"
+        } else {
+            ""
+        };
+        format!("{}\n{}{}\n\n", header, attachment_content, media_hint)
     } else {
         String::new()
     };
