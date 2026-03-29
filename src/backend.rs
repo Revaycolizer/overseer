@@ -502,7 +502,10 @@ pub async fn refresh_runtime_registry_now(db: &Database) -> anyhow::Result<()> {
 
 async fn refresh_runtime_registry(db: &Database) {
     if let Err(err) = refresh_runtime_registry_now(db).await {
-        println!("Warning: failed to refresh runtime registry after DB change: {}", err);
+        println!(
+            "Warning: failed to refresh runtime registry after DB change: {}",
+            err
+        );
     }
 }
 
@@ -851,7 +854,9 @@ pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result
     let mut messages = Vec::new();
     for r in rows {
         let message_id: i64 = r.get("id");
-        let attachments = attachments_by_message.remove(&message_id).unwrap_or_default();
+        let attachments = attachments_by_message
+            .remove(&message_id)
+            .unwrap_or_default();
 
         messages.push(Message {
             id: message_id,

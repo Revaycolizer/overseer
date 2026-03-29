@@ -100,47 +100,47 @@ impl AgentSystem {
 
                 // Reuse attachments already hydrated by get_messages instead of re-querying them.
                 for att in m.attachments {
-                        if att.content_type.starts_with("image/") {
-                            // Read the file from disk and encode as base64 for vision models
-                            match std::fs::read(&att.file_path) {
-                                Ok(bytes) if !bytes.is_empty() => {
-                                    use base64::{engine::general_purpose, Engine as _};
-                                    let b64 = general_purpose::STANDARD.encode(&bytes);
-                                    let media_type = match att.content_type.as_str() {
-                                        "image/png" => Some(rig::message::ImageMediaType::PNG),
-                                        "image/webp" => Some(rig::message::ImageMediaType::WEBP),
-                                        "image/gif" => Some(rig::message::ImageMediaType::GIF),
-                                        _ => Some(rig::message::ImageMediaType::JPEG), // default JPEG
-                                    };
-                                    contents.push(rig::message::UserContent::Image(
-                                        rig::completion::message::Image {
-                                            data: rig::message::DocumentSourceKind::Base64(b64),
-                                            media_type,
-                                            detail: None,
-                                            additional_params: None,
-                                        },
-                                    ));
-                                }
-                                Ok(_) => {
-                                    contents.push(rig::message::UserContent::text(format!(
-                                        "\n[Attached Image: {} — file appears empty]",
-                                        att.filename
-                                    )));
-                                }
-                                Err(e) => {
-                                    contents.push(rig::message::UserContent::text(format!(
-                                        "\n[Attached Image: {} — could not read: {}]",
-                                        att.filename, e
-                                    )));
-                                }
+                    if att.content_type.starts_with("image/") {
+                        // Read the file from disk and encode as base64 for vision models
+                        match std::fs::read(&att.file_path) {
+                            Ok(bytes) if !bytes.is_empty() => {
+                                use base64::{engine::general_purpose, Engine as _};
+                                let b64 = general_purpose::STANDARD.encode(&bytes);
+                                let media_type = match att.content_type.as_str() {
+                                    "image/png" => Some(rig::message::ImageMediaType::PNG),
+                                    "image/webp" => Some(rig::message::ImageMediaType::WEBP),
+                                    "image/gif" => Some(rig::message::ImageMediaType::GIF),
+                                    _ => Some(rig::message::ImageMediaType::JPEG), // default JPEG
+                                };
+                                contents.push(rig::message::UserContent::Image(
+                                    rig::completion::message::Image {
+                                        data: rig::message::DocumentSourceKind::Base64(b64),
+                                        media_type,
+                                        detail: None,
+                                        additional_params: None,
+                                    },
+                                ));
                             }
-                        } else {
-                            // Non-image: include as a text description so the model knows about it
-                            contents.push(rig::message::UserContent::text(format!(
-                                "\n[Attached File: {} (Path: {})]",
-                                att.filename, att.file_path
-                            )));
+                            Ok(_) => {
+                                contents.push(rig::message::UserContent::text(format!(
+                                    "\n[Attached Image: {} — file appears empty]",
+                                    att.filename
+                                )));
+                            }
+                            Err(e) => {
+                                contents.push(rig::message::UserContent::text(format!(
+                                    "\n[Attached Image: {} — could not read: {}]",
+                                    att.filename, e
+                                )));
+                            }
                         }
+                    } else {
+                        // Non-image: include as a text description so the model knows about it
+                        contents.push(rig::message::UserContent::text(format!(
+                            "\n[Attached File: {} (Path: {})]",
+                            att.filename, att.file_path
+                        )));
+                    }
                 }
 
                 history.push(rig::completion::Message::User {

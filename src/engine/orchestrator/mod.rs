@@ -257,7 +257,12 @@ fn is_native_computer_fast_path_request(query: &str, domain: &str) -> bool {
         || lower.contains("paste from")
         || lower.contains("paste this");
 
-    process_request || file_search_request || browser_state_request || selector_typing_request || screenshot_request || clipboard_request
+    process_request
+        || file_search_request
+        || browser_state_request
+        || selector_typing_request
+        || screenshot_request
+        || clipboard_request
 }
 
 fn extract_workflow_plan_subject(query: &str) -> String {
@@ -317,7 +322,8 @@ fn build_native_workflow_plan(query: &str) -> String {
             "5. If the check fails or content changes unexpectedly, create a blocked work item and alert the operator.\n",
         );
     } else {
-        response.push_str("2. Execute the first task step and capture the output as an artifact.\n");
+        response
+            .push_str("2. Execute the first task step and capture the output as an artifact.\n");
         response.push_str("3. Validate the result before continuing to the next step.\n");
         response.push_str("4. Hand off the artifact or create a work item for the next actor.\n");
         response.push_str("5. Mark the run done or blocked with a clear reason.\n");
@@ -325,7 +331,8 @@ fn build_native_workflow_plan(query: &str) -> String {
 
     if traceability {
         response.push_str("\nTraceability layer:\n");
-        response.push_str("- Record each run with a start time, finish time, status, and summary.\n");
+        response
+            .push_str("- Record each run with a start time, finish time, status, and summary.\n");
         response.push_str("- Attach evidence artifacts for every important step.\n");
         response.push_str("- Keep failure reasons explicit so retries and handoffs are easy.\n");
     }
@@ -621,8 +628,9 @@ async fn try_native_computer_shortcut(
     .await;
 
     if let Some(run_id) = run_id {
-        let _ = crate::backend::finish_execution_run(db, run_id, "completed", Some(&rendered), None)
-            .await;
+        let _ =
+            crate::backend::finish_execution_run(db, run_id, "completed", Some(&rendered), None)
+                .await;
     }
 
     Some(rendered)
@@ -1165,7 +1173,8 @@ async fn decide_orchestration(
         }
     }
 
-    let heuristic = heuristic_decision(db, query, precomputed_fast_path_domain, has_artifacts).await;
+    let heuristic =
+        heuristic_decision(db, query, precomputed_fast_path_domain, has_artifacts).await;
     let is_greeting = ["hi", "hello", "hey", "how are you", "who are you"]
         .iter()
         .any(|&g| query.to_lowercase().starts_with(g));
@@ -1597,7 +1606,6 @@ pub async fn orchestrate_request<'a>(
     {
         return native_response;
     }
-
 
     let fast_path_domain =
         resolve_fast_path_domain(db, &clean_query, &history, has_artifacts).await;
@@ -2765,9 +2773,9 @@ pub async fn orchestrate_request<'a>(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_native_workflow_plan, classify_screenshot_follow_up,
-        infer_native_computer_domain, is_native_computer_fast_path_request,
-        render_native_os_tool_response, should_bypass_final_synthesizer, ScreenshotFollowUpIntent,
+        build_native_workflow_plan, classify_screenshot_follow_up, infer_native_computer_domain,
+        is_native_computer_fast_path_request, render_native_os_tool_response,
+        should_bypass_final_synthesizer, ScreenshotFollowUpIntent,
     };
 
     #[test]

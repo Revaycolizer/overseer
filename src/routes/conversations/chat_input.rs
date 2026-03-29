@@ -2,8 +2,8 @@ use crate::backend;
 use crate::routes::conversations::helpers::build_query_with_context;
 use crate::state::use_global_state;
 use base64::{engine::general_purpose, Engine as _};
-use dioxus::prelude::*;
 use dioxus::prelude::dioxus_core::Task;
+use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 #[derive(Props, Clone, PartialEq)]
@@ -263,9 +263,8 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         if let Some(conversation_id) = selected_conversation_id() {
             let db = db_for_stop.clone();
             spawn(async move {
-                let _ =
-                    backend::cancel_latest_execution_run_for_conversation(&db, conversation_id)
-                        .await;
+                let _ = backend::cancel_latest_execution_run_for_conversation(&db, conversation_id)
+                    .await;
             });
         }
     });

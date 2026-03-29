@@ -131,14 +131,17 @@ impl Database {
         println!("🏗️  Staging tools to runtime environment...");
         if let Err(e) = crate::engine::utils::discovery::prepare_runtime_env(&database).await {
             println!("⚠️  Tool runtime staging failed: {}", e);
-            let _ = crate::backend::set_setting(&database, "runtime_registry_status", "error").await;
+            let _ =
+                crate::backend::set_setting(&database, "runtime_registry_status", "error").await;
             let _ = crate::backend::set_setting(
                 &database,
                 "runtime_registry_refreshed_at",
                 &chrono::Utc::now().to_rfc3339(),
             )
             .await;
-            let _ = crate::backend::set_setting(&database, "runtime_registry_error", &e.to_string()).await;
+            let _ =
+                crate::backend::set_setting(&database, "runtime_registry_error", &e.to_string())
+                    .await;
         } else {
             let _ = crate::backend::set_setting(&database, "runtime_registry_status", "live").await;
             let _ = crate::backend::set_setting(
@@ -549,7 +552,8 @@ impl Database {
         ));
         tools_data.push((
             "document_writer".to_string(),
-            "Generate CSV, Excel (XLSX), Word (DOCX), and beautiful PDF reports in parallel.".to_string(),
+            "Generate CSV, Excel (XLSX), Word (DOCX), and beautiful PDF reports in parallel."
+                .to_string(),
             "rust".to_string(),
             "".to_string(),
             "// Native Implementation".to_string(),

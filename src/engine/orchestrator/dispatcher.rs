@@ -2044,8 +2044,7 @@ pub async fn dispatch_domain(
                             // Extract file path from the marker
                             if let Some(path_start) = trimmed.find("Path: ") {
                                 let path_rest = &trimmed[path_start + 6..];
-                                let path =
-                                    path_rest.trim_end_matches(|c| c == ')' || c == ']');
+                                let path = path_rest.trim_end_matches(|c| c == ')' || c == ']');
                                 let ext = std::path::Path::new(path)
                                     .extension()
                                     .and_then(|e| e.to_str())
@@ -2054,44 +2053,40 @@ pub async fn dispatch_domain(
 
                                 let file_context = match ext.as_str() {
                                     // Text/code files: read content directly
-                                    "rs" | "py" | "js" | "ts" | "jsx" | "tsx" | "go"
-                                    | "java" | "c" | "cpp" | "h" | "hpp" | "cs" | "rb"
-                                    | "php" | "swift" | "kt" | "scala" | "r" | "sql"
-                                    | "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat"
-                                    | "cmd" | "txt" | "md" | "markdown" | "rst"
-                                    | "json" | "yaml" | "yml" | "toml" | "xml" | "html"
-                                    | "htm" | "css" | "scss" | "sass" | "less" | "csv"
-                                    | "tsv" | "log" | "cfg" | "ini" | "env" | "conf"
+                                    "rs" | "py" | "js" | "ts" | "jsx" | "tsx" | "go" | "java"
+                                    | "c" | "cpp" | "h" | "hpp" | "cs" | "rb" | "php" | "swift"
+                                    | "kt" | "scala" | "r" | "sql" | "sh" | "bash" | "zsh"
+                                    | "fish" | "ps1" | "bat" | "cmd" | "txt" | "md"
+                                    | "markdown" | "rst" | "json" | "yaml" | "yml" | "toml"
+                                    | "xml" | "html" | "htm" | "css" | "scss" | "sass" | "less"
+                                    | "csv" | "tsv" | "log" | "cfg" | "ini" | "env" | "conf"
                                     | "config" | "lock" | "makefile" | "dockerfile"
-                                    | "gitignore" | "editorconfig" | "vue" | "svelte"
-                                    | "astro" | "prisma" | "graphql" | "proto" | "tf"
-                                    | "hcl" | "nix" | "zig" | "asm" | "s" | "dart"
-                                    | "lua" | "ex" | "exs" | "erl" | "hs" | "ml"
-                                    | "clj" | "lisp" | "el" | "vim" | "diff" | "patch" => {
-                                        match std::fs::read_to_string(path) {
-                                            Ok(content) if !content.trim().is_empty() => {
-                                                let truncated = if content.len() > 8000 {
-                                                    format!(
-                                                        "{}\n... [truncated, {} total chars]",
-                                                        &content[..8000],
-                                                        content.len()
-                                                    )
-                                                } else {
-                                                    content
-                                                };
-                                                Some(format!(
-                                                    "\n--- FILE: {} ---\n{}\n--- END FILE ---\n",
-                                                    path, truncated
-                                                ))
-                                            }
-                                            _ => None,
+                                    | "gitignore" | "editorconfig" | "vue" | "svelte" | "astro"
+                                    | "prisma" | "graphql" | "proto" | "tf" | "hcl" | "nix"
+                                    | "zig" | "asm" | "s" | "dart" | "lua" | "ex" | "exs"
+                                    | "erl" | "hs" | "ml" | "clj" | "lisp" | "el" | "vim"
+                                    | "diff" | "patch" => match std::fs::read_to_string(path) {
+                                        Ok(content) if !content.trim().is_empty() => {
+                                            let truncated = if content.len() > 8000 {
+                                                format!(
+                                                    "{}\n... [truncated, {} total chars]",
+                                                    &content[..8000],
+                                                    content.len()
+                                                )
+                                            } else {
+                                                content
+                                            };
+                                            Some(format!(
+                                                "\n--- FILE: {} ---\n{}\n--- END FILE ---\n",
+                                                path, truncated
+                                            ))
                                         }
-                                    }
+                                        _ => None,
+                                    },
 
                                     // Image files: provide metadata + vision routing hint
-                                    "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp"
-                                    | "svg" | "ico" | "tiff" | "tif" | "heic" | "heif"
-                                    | "avif" => {
+                                    "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "svg"
+                                    | "ico" | "tiff" | "tif" | "heic" | "heif" | "avif" => {
                                         has_media_attachment = true;
                                         let metadata = std::fs::metadata(path).ok();
                                         let size_str = metadata
@@ -2123,7 +2118,9 @@ pub async fn dispatch_domain(
                                             .output()
                                             .ok()
                                             .filter(|o| o.status.success())
-                                            .map(|o| String::from_utf8_lossy(&o.stdout).to_string());
+                                            .map(|o| {
+                                                String::from_utf8_lossy(&o.stdout).to_string()
+                                            });
 
                                         if let Some(text) = pdf_text {
                                             let truncated = if text.len() > 8000 {
@@ -2142,7 +2139,9 @@ pub async fn dispatch_domain(
                                         } else {
                                             let size_str = std::fs::metadata(path)
                                                 .ok()
-                                                .map(|m| format!("{:.1} KB", m.len() as f64 / 1024.0))
+                                                .map(|m| {
+                                                    format!("{:.1} KB", m.len() as f64 / 1024.0)
+                                                })
                                                 .unwrap_or_else(|| "unknown size".to_string());
                                             Some(format!(
                                                 "\n--- PDF: {} ({}) ---\n\
@@ -2156,12 +2155,14 @@ pub async fn dispatch_domain(
                                     }
 
                                     // Audio files: provide metadata
-                                    "mp3" | "wav" | "flac" | "ogg" | "aac" | "m4a"
-                                    | "wma" | "opus" | "aiff" => {
+                                    "mp3" | "wav" | "flac" | "ogg" | "aac" | "m4a" | "wma"
+                                    | "opus" | "aiff" => {
                                         has_media_attachment = true;
                                         let size_str = std::fs::metadata(path)
                                             .ok()
-                                            .map(|m| format!("{:.1} MB", m.len() as f64 / 1_048_576.0))
+                                            .map(|m| {
+                                                format!("{:.1} MB", m.len() as f64 / 1_048_576.0)
+                                            })
                                             .unwrap_or_else(|| "unknown size".to_string());
                                         Some(format!(
                                             "\n--- AUDIO: {} ({}, {}) ---\n\
@@ -2174,12 +2175,14 @@ pub async fn dispatch_domain(
                                     }
 
                                     // Video files: provide metadata
-                                    "mp4" | "mkv" | "avi" | "mov" | "webm" | "wmv"
-                                    | "flv" | "m4v" | "3gp" => {
+                                    "mp4" | "mkv" | "avi" | "mov" | "webm" | "wmv" | "flv"
+                                    | "m4v" | "3gp" => {
                                         has_media_attachment = true;
                                         let size_str = std::fs::metadata(path)
                                             .ok()
-                                            .map(|m| format!("{:.1} MB", m.len() as f64 / 1_048_576.0))
+                                            .map(|m| {
+                                                format!("{:.1} MB", m.len() as f64 / 1_048_576.0)
+                                            })
                                             .unwrap_or_else(|| "unknown size".to_string());
                                         Some(format!(
                                             "\n--- VIDEO: {} ({}, {}) ---\n\
@@ -2187,42 +2190,46 @@ pub async fn dispatch_domain(
                                              If asked about its contents, note that video analysis \
                                              requires specialized tools.]\n\
                                              --- END VIDEO ---\n",
-                                            path, ext.to_uppercase(), size_str
+                                            path,
+                                            ext.to_uppercase(),
+                                            size_str
                                         ))
                                     }
 
                                     // Unknown extension: try reading as text, fall back to metadata
-                                    _ => {
-                                        match std::fs::read_to_string(path) {
-                                            Ok(content) if !content.trim().is_empty() && content.is_ascii() => {
-                                                let truncated = if content.len() > 8000 {
-                                                    format!(
-                                                        "{}\n... [truncated, {} total chars]",
-                                                        &content[..8000],
-                                                        content.len()
-                                                    )
-                                                } else {
-                                                    content
-                                                };
-                                                Some(format!(
-                                                    "\n--- FILE: {} ---\n{}\n--- END FILE ---\n",
-                                                    path, truncated
-                                                ))
-                                            }
-                                            _ => {
-                                                let size_str = std::fs::metadata(path)
-                                                    .ok()
-                                                    .map(|m| format!("{:.1} KB", m.len() as f64 / 1024.0))
-                                                    .unwrap_or_else(|| "unknown size".to_string());
-                                                Some(format!(
+                                    _ => match std::fs::read_to_string(path) {
+                                        Ok(content)
+                                            if !content.trim().is_empty() && content.is_ascii() =>
+                                        {
+                                            let truncated = if content.len() > 8000 {
+                                                format!(
+                                                    "{}\n... [truncated, {} total chars]",
+                                                    &content[..8000],
+                                                    content.len()
+                                                )
+                                            } else {
+                                                content
+                                            };
+                                            Some(format!(
+                                                "\n--- FILE: {} ---\n{}\n--- END FILE ---\n",
+                                                path, truncated
+                                            ))
+                                        }
+                                        _ => {
+                                            let size_str = std::fs::metadata(path)
+                                                .ok()
+                                                .map(|m| {
+                                                    format!("{:.1} KB", m.len() as f64 / 1024.0)
+                                                })
+                                                .unwrap_or_else(|| "unknown size".to_string());
+                                            Some(format!(
                                                     "\n--- FILE: {} (.{}, {}) ---\n\
                                                      [Binary or unrecognized file attached by the user.]\n\
                                                      --- END FILE ---\n",
                                                     path, ext, size_str
                                                 ))
-                                            }
                                         }
-                                    }
+                                    },
                                 };
 
                                 if let Some(ctx) = file_context {

@@ -29,6 +29,243 @@ fn parse_work_item_runtime_metadata(work_item: &backend::WorkItem) -> WorkItemRu
         .unwrap_or_default()
 }
 
+fn set_selected_work_item_runtime(
+    mut selected_work_item: Signal<Option<backend::WorkItem>>,
+    work_item_id: i64,
+    status: &str,
+    metadata_json: Option<String>,
+) {
+    if let Some(mut current) = selected_work_item() {
+        if current.id == work_item_id {
+            current.status = status.to_string();
+            current.metadata_json = metadata_json;
+            selected_work_item.set(Some(current));
+        }
+    }
+}
+
+fn build_work_item_runtime_metadata(
+    latest_run_id: Option<i64>,
+    latest_run_status: Option<String>,
+    latest_artifact_ids: Vec<i64>,
+    latest_response_excerpt: String,
+    last_executed_at: String,
+) -> String {
+    serde_json::json!({
+        "latest_run_id": latest_run_id,
+        "latest_run_status": latest_run_status,
+        "latest_artifact_ids": latest_artifact_ids,
+        "latest_response_excerpt": latest_response_excerpt.chars().take(220).collect::<String>(),
+        "last_executed_at": last_executed_at,
+    })
+    .to_string()
+}
+
+fn update_work_item_manual_status(
+    db: std::sync::Arc<crate::db::Database>,
+    work_item: backend::WorkItem,
+    status: String,
+    selected_work_item: Signal<Option<backend::WorkItem>>,
+    mut work_items_resource: Resource<Vec<backend::WorkItem>>,
+) {
+    spawn(async move {
+        let now = chrono::Utc::now().naive_utc().to_string();
+        let note = match status.as_str() {
+            "blocked" => "Marked blocked manually from the workspace.",
+            "done" => "Marked done manually from the workspace.",
+            "queued" => "Queued again from the workspace.",
+            "in_progress" => "Marked in progress manually from the workspace.",
+            _ => "Status updated manually from the workspace.",
+        };
+        let metadata_json = build_work_item_runtime_metadata(
+            None,
+            Some(status.clone()),
+            vec![],
+            note.to_string(),
+            now,
+        );
+        let _ = backend::update_work_item_runtime(&db, work_item.id, &status, Some(&metadata_json))
+            .await;
+        set_selected_work_item_runtime(
+            selected_work_item,
+            work_item.id,
+            &status,
+            Some(metadata_json),
+        );
+        work_items_resource.restart();
+    });
+}
+
+fn run_work_item_now(
+    db: std::sync::Arc<crate::db::Database>,
+    agent_system: std::sync::Arc<crate::engine::system::AgentSystem>,
+    work_item: backend::WorkItem,
+    mut messages_resource: Resource<Vec<backend::Message>>,
+    mut visible_messages: Signal<Vec<backend::Message>>,
+    mut selected_work_item: Signal<Option<backend::WorkItem>>,
+    mut is_thinking: Signal<bool>,
+    mut work_items_resource: Resource<Vec<backend::WorkItem>>,
+    mut execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
+    mut artifacts_resource: Resource<Vec<backend::Artifact>>,
+    mut selected_execution_run_id: Signal<Option<i64>>,
+) {
+    let optimistic_id = -chrono::Utc::now().timestamp_micros();
+    visible_messages.with_mut(|messages| {
+        messages.push(backend::Message {
+            id: optimistic_id,
+            conversation_id: work_item.conversation_id,
+            role: "user".to_string(),
+            content: work_item.prompt.clone(),
+            created_at: chrono::Utc::now().naive_utc(),
+            attachments: vec![],
+            hide_evidence: false,
+        });
+    });
+
+    spawn(async move {
+        selected_work_item.set(Some(work_item.clone()));
+        let in_progress_metadata = build_work_item_runtime_metadata(
+            None,
+            Some("running".to_string()),
+            vec![],
+            "Work item execution started.".to_string(),
+            chrono::Utc::now().naive_utc().to_string(),
+        );
+        let _ = backend::update_work_item_runtime(
+            &db,
+            work_item.id,
+            "in_progress",
+            Some(&in_progress_metadata),
+        )
+        .await;
+        set_selected_work_item_runtime(
+            selected_work_item,
+            work_item.id,
+            "in_progress",
+            Some(in_progress_metadata),
+        );
+        work_items_resource.restart();
+
+        let source_artifact_ids = work_item
+            .source_artifact_ids_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<Vec<i64>>(json).ok())
+            .unwrap_or_default();
+        let source_artifacts = backend::get_artifacts_by_ids(&db, &source_artifact_ids)
+            .await
+            .unwrap_or_default();
+        let query =
+            build_query_with_context(&work_item.prompt, &source_artifacts, Some(&work_item));
+
+        let add_user =
+            backend::add_message(&db, work_item.conversation_id, "user", &query, false).await;
+
+        if let Err(err) = add_user {
+            visible_messages
+                .write()
+                .retain(|message| message.id != optimistic_id);
+            let metadata_json = build_work_item_runtime_metadata(
+                None,
+                Some("failed".to_string()),
+                vec![],
+                format!("Failed to queue the work item prompt: {err}"),
+                chrono::Utc::now().naive_utc().to_string(),
+            );
+            let _ = backend::update_work_item_runtime(
+                &db,
+                work_item.id,
+                "blocked",
+                Some(&metadata_json),
+            )
+            .await;
+            set_selected_work_item_runtime(
+                selected_work_item,
+                work_item.id,
+                "blocked",
+                Some(metadata_json),
+            );
+            work_items_resource.restart();
+            return;
+        }
+
+        messages_resource.restart();
+        is_thinking.set(true);
+        let response = agent_system
+            .orchestrate(&db, work_item.conversation_id, &query)
+            .await;
+        is_thinking.set(false);
+
+        let _ = backend::add_message(
+            &db,
+            work_item.conversation_id,
+            "assistant",
+            &response,
+            false,
+        )
+        .await;
+        messages_resource.restart();
+
+        let latest_run =
+            backend::get_latest_execution_run_for_conversation(&db, work_item.conversation_id)
+                .await
+                .ok()
+                .flatten();
+        let (status, metadata_json, latest_run_id) = if let Some(run) = latest_run {
+            let latest_artifacts = backend::get_artifacts_for_execution_run(&db, run.id)
+                .await
+                .unwrap_or_default();
+            let work_status = if run.status == "completed" {
+                "done"
+            } else {
+                "blocked"
+            };
+            let excerpt = run
+                .error_message
+                .clone()
+                .filter(|value: &String| !value.trim().is_empty())
+                .or_else(|| {
+                    run.final_response
+                        .clone()
+                        .filter(|value: &String| !value.trim().is_empty())
+                })
+                .unwrap_or_else(|| response.clone());
+            let metadata_json = build_work_item_runtime_metadata(
+                Some(run.id),
+                Some(run.status.clone()),
+                latest_artifacts
+                    .iter()
+                    .map(|artifact| artifact.id)
+                    .collect::<Vec<_>>(),
+                excerpt,
+                run.finished_at
+                    .map(|finished: chrono::NaiveDateTime| finished.to_string())
+                    .unwrap_or_else(|| run.started_at.to_string()),
+            );
+            (work_status.to_string(), Some(metadata_json), Some(run.id))
+        } else {
+            let metadata_json = build_work_item_runtime_metadata(
+                None,
+                Some("missing_run".to_string()),
+                vec![],
+                response.clone(),
+                chrono::Utc::now().naive_utc().to_string(),
+            );
+            ("blocked".to_string(), Some(metadata_json), None)
+        };
+
+        let _ =
+            backend::update_work_item_runtime(&db, work_item.id, &status, metadata_json.as_deref())
+                .await;
+        set_selected_work_item_runtime(selected_work_item, work_item.id, &status, metadata_json);
+        if let Some(run_id) = latest_run_id {
+            selected_execution_run_id.set(Some(run_id));
+        }
+        work_items_resource.restart();
+        execution_runs_resource.restart();
+        artifacts_resource.restart();
+    });
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum WorkspaceSessionRef {
     Artifact(i64),
@@ -61,6 +298,7 @@ pub fn Conversations() -> Element {
     let global_state = crate::state::use_global_state();
     let global_read = global_state.read();
     let db = global_read.db.clone();
+    let agent_system = global_read.agent_system.clone();
     drop(global_read);
 
     let db_for_conv = db.clone();
@@ -391,6 +629,10 @@ pub fn Conversations() -> Element {
                                     div { class: "max-w-3xl mx-auto",
                                         WorkspaceSessionDeck {
                                             db: db.clone(),
+                                            agent_system: agent_system.clone(),
+                                            messages_resource: messages_resource.clone(),
+                                            visible_messages: visible_messages,
+                                            is_thinking: is_thinking,
                                             sessions: workspace_sessions(),
                                             sessions_signal: workspace_sessions,
                                             active_session_key: active_workspace_session_key,
@@ -400,6 +642,9 @@ pub fn Conversations() -> Element {
                                             selected_work_item: selected_work_item,
                                             starter_prompt: starter_prompt,
                                             work_items_resource: work_items_resource.clone(),
+                                            execution_runs_resource: execution_runs_resource.clone(),
+                                            artifacts_resource: artifacts_resource.clone(),
+                                            selected_execution_run_id: selected_execution_run_id,
                                             on_open: move |path: String| {
                                                 spawn(async move {
                                                     let _ = backend::open_local_path(&path).await;
@@ -458,6 +703,7 @@ pub fn Conversations() -> Element {
                             }
                             WorkboardPanel {
                                 db: db.clone(),
+                                agent_system: agent_system.clone(),
                                 messages_resource: messages_resource.clone(),
                                 visible_messages: visible_messages,
                                 work_items: work_items,
@@ -465,6 +711,9 @@ pub fn Conversations() -> Element {
                                 is_thinking: is_thinking,
                                 starter_prompt: starter_prompt,
                                 work_items_resource: work_items_resource.clone(),
+                                execution_runs_resource: execution_runs_resource.clone(),
+                                artifacts_resource: artifacts_resource.clone(),
+                                selected_execution_run_id: selected_execution_run_id,
                             }
                             div { class: "flex-1 min-h-0",
                                 ExecutionTracePanel {
@@ -618,6 +867,10 @@ fn status_tone(status: &str) -> &'static str {
 #[component]
 fn WorkspaceSessionDeck(
     db: std::sync::Arc<crate::db::Database>,
+    agent_system: std::sync::Arc<crate::engine::system::AgentSystem>,
+    messages_resource: Resource<Vec<backend::Message>>,
+    visible_messages: Signal<Vec<backend::Message>>,
+    is_thinking: Signal<bool>,
     sessions: Vec<WorkspaceSessionRef>,
     sessions_signal: Signal<Vec<WorkspaceSessionRef>>,
     active_session_key: Signal<Option<String>>,
@@ -627,6 +880,9 @@ fn WorkspaceSessionDeck(
     selected_work_item: Signal<Option<backend::WorkItem>>,
     starter_prompt: Signal<Option<String>>,
     work_items_resource: Resource<Vec<backend::WorkItem>>,
+    execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
+    artifacts_resource: Resource<Vec<backend::Artifact>>,
+    selected_execution_run_id: Signal<Option<i64>>,
     on_open: EventHandler<String>,
 ) -> Element {
     let active_key = active_session_key().or_else(|| sessions.first().map(workspace_session_key));
@@ -688,9 +944,18 @@ fn WorkspaceSessionDeck(
                         if let Some(work_item) = work_items.iter().find(|work_item| work_item.id == work_item_id).cloned() {
                             rsx! {
                                 WorkItemWorkspacePanel {
+                                    db: db.clone(),
+                                    agent_system: agent_system.clone(),
                                     work_item: work_item,
+                                    messages_resource: messages_resource.clone(),
+                                    visible_messages: visible_messages,
                                     selected_work_item: selected_work_item,
+                                    is_thinking: is_thinking,
                                     starter_prompt: starter_prompt,
+                                    work_items_resource: work_items_resource.clone(),
+                                    execution_runs_resource: execution_runs_resource.clone(),
+                                    artifacts_resource: artifacts_resource.clone(),
+                                    selected_execution_run_id: selected_execution_run_id,
                                 }
                             }
                         } else {
@@ -778,11 +1043,26 @@ fn WorkspaceSessionTab(
 
 #[component]
 fn WorkItemWorkspacePanel(
+    db: std::sync::Arc<crate::db::Database>,
+    agent_system: std::sync::Arc<crate::engine::system::AgentSystem>,
     work_item: backend::WorkItem,
+    messages_resource: Resource<Vec<backend::Message>>,
+    visible_messages: Signal<Vec<backend::Message>>,
     selected_work_item: Signal<Option<backend::WorkItem>>,
+    is_thinking: Signal<bool>,
     starter_prompt: Signal<Option<String>>,
+    work_items_resource: Resource<Vec<backend::WorkItem>>,
+    execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
+    artifacts_resource: Resource<Vec<backend::Artifact>>,
+    selected_execution_run_id: Signal<Option<i64>>,
 ) -> Element {
     let runtime_metadata = parse_work_item_runtime_metadata(&work_item);
+    let latest_artifact_count = runtime_metadata
+        .latest_artifact_ids
+        .as_ref()
+        .map(|artifacts| artifacts.len())
+        .unwrap_or(0);
+    let can_retry = matches!(work_item.status.as_str(), "blocked" | "done" | "queued");
 
     rsx! {
         div { class: "rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 shadow-sm space-y-4",
@@ -822,6 +1102,17 @@ fn WorkItemWorkspacePanel(
                         }
                     }
                     p { class: "text-sm text-slate-700 whitespace-pre-wrap break-words", "{excerpt}" }
+                    div { class: "flex flex-wrap items-center gap-2 text-[10px] font-semibold text-slate-400",
+                        if let Some(run_id) = runtime_metadata.latest_run_id {
+                            span { "Run #{run_id}" }
+                        }
+                        if latest_artifact_count > 0 {
+                            span { "{latest_artifact_count} artifact(s)" }
+                        }
+                        if let Some(last_executed_at) = runtime_metadata.last_executed_at.filter(|value| !value.trim().is_empty()) {
+                            span { "{last_executed_at}" }
+                        }
+                    }
                 }
             }
 
@@ -839,6 +1130,47 @@ fn WorkItemWorkspacePanel(
                     "Use in Composer"
                 }
                 button {
+                    class: format!(
+                        "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all {}",
+                        if is_thinking() {
+                            "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+                        } else {
+                            "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                        }
+                    ),
+                    disabled: is_thinking(),
+                    onclick: {
+                        let db = db.clone();
+                        let agent_system = agent_system.clone();
+                        let work_item = work_item.clone();
+                        let mut messages_resource = messages_resource.clone();
+                        let mut visible_messages = visible_messages;
+                        let mut selected_work_item = selected_work_item;
+                        let mut is_thinking = is_thinking;
+                        let mut work_items_resource = work_items_resource.clone();
+                        let mut execution_runs_resource = execution_runs_resource.clone();
+                        let mut artifacts_resource = artifacts_resource.clone();
+                        let mut selected_execution_run_id = selected_execution_run_id;
+                        move |_| {
+                            run_work_item_now(
+                                db.clone(),
+                                agent_system.clone(),
+                                work_item.clone(),
+                                messages_resource.clone(),
+                                visible_messages,
+                                selected_work_item,
+                                is_thinking,
+                                work_items_resource.clone(),
+                                execution_runs_resource.clone(),
+                                artifacts_resource.clone(),
+                                selected_execution_run_id,
+                            );
+                        }
+                    },
+                    MaterialIcon { name: if is_thinking() { "hourglass_top" } else if can_retry { "replay" } else { "smart_toy" }, size: 14 }
+                    if is_thinking() { "Running" } else if can_retry { "Retry" } else { "Run Now" }
+                }
+                button {
                     class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 hover:border-blue-200 hover:text-blue-700 transition-all",
                     onclick: {
                         let prompt = work_item.prompt.clone();
@@ -846,6 +1178,46 @@ fn WorkItemWorkspacePanel(
                     },
                     MaterialIcon { name: "content_copy", size: 14 }
                     "Copy Prompt"
+                }
+                button {
+                    class: "inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-amber-800 hover:bg-amber-100 transition-all",
+                    onclick: {
+                        let db = db.clone();
+                        let work_item = work_item.clone();
+                        let mut selected_work_item = selected_work_item;
+                        let mut work_items_resource = work_items_resource.clone();
+                        move |_| {
+                            update_work_item_manual_status(
+                                db.clone(),
+                                work_item.clone(),
+                                "blocked".to_string(),
+                                selected_work_item,
+                                work_items_resource.clone(),
+                            );
+                        }
+                    },
+                    MaterialIcon { name: "pause_circle", size: 14 }
+                    "Mark Blocked"
+                }
+                button {
+                    class: "inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700 hover:bg-emerald-100 transition-all",
+                    onclick: {
+                        let db = db.clone();
+                        let work_item = work_item.clone();
+                        let mut selected_work_item = selected_work_item;
+                        let mut work_items_resource = work_items_resource.clone();
+                        move |_| {
+                            update_work_item_manual_status(
+                                db.clone(),
+                                work_item.clone(),
+                                "done".to_string(),
+                                selected_work_item,
+                                work_items_resource.clone(),
+                            );
+                        }
+                    },
+                    MaterialIcon { name: "task_alt", size: 14 }
+                    "Mark Done"
                 }
             }
         }
@@ -1522,6 +1894,7 @@ fn artifact_surface_definition<'a>(
 #[component]
 fn WorkboardPanel(
     db: std::sync::Arc<crate::db::Database>,
+    agent_system: std::sync::Arc<crate::engine::system::AgentSystem>,
     messages_resource: Resource<Vec<backend::Message>>,
     visible_messages: Signal<Vec<backend::Message>>,
     work_items: Vec<backend::WorkItem>,
@@ -1529,10 +1902,10 @@ fn WorkboardPanel(
     is_thinking: Signal<bool>,
     starter_prompt: Signal<Option<String>>,
     work_items_resource: Resource<Vec<backend::WorkItem>>,
+    execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
+    artifacts_resource: Resource<Vec<backend::Artifact>>,
+    selected_execution_run_id: Signal<Option<i64>>,
 ) -> Element {
-    let global_state = crate::state::use_global_state();
-    let agent_system = global_state.read().agent_system.clone();
-
     rsx! {
         div { class: "border-l border-slate-200 border-b border-slate-200 bg-white/95 backdrop-blur-sm",
             div { class: "px-5 py-4 space-y-3",
@@ -1559,6 +1932,9 @@ fn WorkboardPanel(
                                 is_thinking: is_thinking,
                                 starter_prompt: starter_prompt,
                                 work_items_resource: work_items_resource.clone(),
+                                execution_runs_resource: execution_runs_resource.clone(),
+                                artifacts_resource: artifacts_resource.clone(),
+                                selected_execution_run_id: selected_execution_run_id,
                             }
                         }
                     }
@@ -1579,6 +1955,9 @@ fn WorkItemCard(
     is_thinking: Signal<bool>,
     starter_prompt: Signal<Option<String>>,
     work_items_resource: Resource<Vec<backend::WorkItem>>,
+    execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
+    artifacts_resource: Resource<Vec<backend::Artifact>>,
+    selected_execution_run_id: Signal<Option<i64>>,
 ) -> Element {
     let is_selected = selected_work_item()
         .as_ref()
@@ -1701,138 +2080,32 @@ fn WorkItemCard(
                         let db = db.clone();
                         let agent_system = agent_system.clone();
                         let work_item = work_item.clone();
-                        let mut messages_resource = messages_resource.clone();
-                        let mut visible_messages = visible_messages;
-                        let mut selected_work_item = selected_work_item;
-                        let mut is_thinking = is_thinking;
-                        let mut work_items_resource = work_items_resource.clone();
+                        let messages_resource = messages_resource.clone();
+                        let visible_messages = visible_messages;
+                        let selected_work_item = selected_work_item;
+                        let is_thinking = is_thinking;
+                        let work_items_resource = work_items_resource.clone();
+                        let execution_runs_resource = execution_runs_resource.clone();
+                        let artifacts_resource = artifacts_resource.clone();
+                        let selected_execution_run_id = selected_execution_run_id;
                         move |_| {
-                            let db = db.clone();
-                            let agent_system = agent_system.clone();
-                            let work_item = work_item.clone();
-                            let mut messages_resource = messages_resource.clone();
-                            let mut visible_messages = visible_messages;
-                            let mut selected_work_item = selected_work_item;
-                            let mut is_thinking = is_thinking;
-                            let mut work_items_resource = work_items_resource.clone();
-                            let optimistic_id = -chrono::Utc::now().timestamp_micros();
-                            visible_messages.with_mut(|messages| {
-                                messages.push(backend::Message {
-                                    id: optimistic_id,
-                                    conversation_id: work_item.conversation_id,
-                                    role: "user".to_string(),
-                                    content: work_item.prompt.clone(),
-                                    created_at: chrono::Utc::now().naive_utc(),
-                                    attachments: vec![],
-                                    hide_evidence: false,
-                                });
-                            });
-                            spawn(async move {
-                                selected_work_item.set(Some(work_item.clone()));
-                                let _ = backend::update_work_item_status(&db, work_item.id, "in_progress").await;
-                                work_items_resource.restart();
-                                let source_artifact_ids = work_item
-                                    .source_artifact_ids_json
-                                    .as_deref()
-                                    .and_then(|json| serde_json::from_str::<Vec<i64>>(json).ok())
-                                    .unwrap_or_default();
-                                let source_artifacts = backend::get_artifacts_by_ids(&db, &source_artifact_ids)
-                                    .await
-                                    .unwrap_or_default();
-                                let query = build_query_with_context(
-                                    &work_item.prompt,
-                                    &source_artifacts,
-                                    Some(&work_item),
-                                );
-
-                                let add_user = backend::add_message(
-                                    &db,
-                                    work_item.conversation_id,
-                                    "user",
-                                    &query,
-                                    false,
-                                )
-                                .await;
-
-                                if add_user.is_err() {
-                                    visible_messages.write().retain(|message| message.id != optimistic_id);
-                                    let _ = backend::update_work_item_status(&db, work_item.id, "blocked").await;
-                                    work_items_resource.restart();
-                                    return;
-                                }
-
-                                messages_resource.restart();
-                                is_thinking.set(true);
-                                let response = agent_system
-                                    .orchestrate(&db, work_item.conversation_id, &query)
-                                    .await;
-                                is_thinking.set(false);
-
-                                let _ = backend::add_message(
-                                    &db,
-                                    work_item.conversation_id,
-                                    "assistant",
-                                    &response,
-                                    false,
-                                )
-                                .await;
-                                messages_resource.restart();
-
-                                let latest_run = backend::get_latest_execution_run_for_conversation(
-                                    &db,
-                                    work_item.conversation_id,
-                                )
-                                .await
-                                .ok()
-                                .flatten();
-                                let (status, metadata_json) = if let Some(run) = latest_run {
-                                    let latest_artifacts = backend::get_artifacts_for_execution_run(&db, run.id)
-                                        .await
-                                        .unwrap_or_default();
-                                    let work_status = if run.status == "completed" {
-                                        "done"
-                                    } else {
-                                        "blocked"
-                                    };
-                                    let excerpt = run
-                                        .final_response
-                                        .clone()
-                                        .filter(|value: &String| !value.trim().is_empty())
-                                        .unwrap_or_else(|| response.clone());
-                                    let metadata = serde_json::json!({
-                                        "latest_run_id": run.id,
-                                        "latest_run_status": run.status,
-                                        "latest_artifact_ids": latest_artifacts.iter().map(|artifact| artifact.id).collect::<Vec<_>>(),
-                                        "latest_response_excerpt": excerpt.chars().take(220).collect::<String>(),
-                                        "last_executed_at": run
-                                            .finished_at
-                                            .map(|finished: chrono::NaiveDateTime| finished.to_string())
-                                            .unwrap_or_else(|| run.started_at.to_string()),
-                                    });
-                                    (work_status, Some(metadata.to_string()))
-                                } else {
-                                    ("blocked", None)
-                                };
-                                let _ = backend::update_work_item_runtime(
-                                    &db,
-                                    work_item.id,
-                                    status,
-                                    metadata_json.as_deref(),
-                                )
-                                .await;
-                                if let Some(mut current) = selected_work_item() {
-                                    if current.id == work_item.id {
-                                        current.status = status.to_string();
-                                        current.metadata_json = metadata_json.clone();
-                                        selected_work_item.set(Some(current));
-                                    }
-                                }
-                                work_items_resource.restart();
-                            });
+                            run_work_item_now(
+                                db.clone(),
+                                agent_system.clone(),
+                                work_item.clone(),
+                                messages_resource.clone(),
+                                visible_messages,
+                                selected_work_item,
+                                is_thinking,
+                                work_items_resource.clone(),
+                                execution_runs_resource.clone(),
+                                artifacts_resource.clone(),
+                                selected_execution_run_id,
+                            );
                         }
                     },
-                    MaterialIcon { name: if is_thinking() { "hourglass_top" } else { "smart_toy" }, size: 14 }
-                    if is_thinking() { "Running" } else { "Run Now" }
+                    MaterialIcon { name: if is_thinking() { "hourglass_top" } else if matches!(work_item.status.as_str(), "blocked" | "done" | "queued") { "replay" } else { "smart_toy" }, size: 14 }
+                    if is_thinking() { "Running" } else if matches!(work_item.status.as_str(), "blocked" | "done" | "queued") { "Retry" } else { "Run Now" }
                 }
 
                 for status in ["queued", "in_progress", "done", "blocked"] {
@@ -1847,26 +2120,18 @@ fn WorkItemCard(
                         ),
                         onclick: {
                             let db = db.clone();
-                            let work_item_id = work_item.id;
+                            let work_item = work_item.clone();
                             let status = status.to_string();
-                            let mut work_items_resource = work_items_resource.clone();
-                            let mut selected_work_item = selected_work_item;
+                            let work_items_resource = work_items_resource.clone();
+                            let selected_work_item = selected_work_item;
                             move |_| {
-                                let db = db.clone();
-                                let status = status.clone();
-                                let mut work_items_resource = work_items_resource.clone();
-                                let mut selected_work_item = selected_work_item;
-                                spawn(async move {
-                                    if backend::update_work_item_status(&db, work_item_id, &status).await.is_ok() {
-                                        if let Some(mut current) = selected_work_item() {
-                                            if current.id == work_item_id {
-                                                current.status = status.clone();
-                                                selected_work_item.set(Some(current));
-                                            }
-                                        }
-                                        work_items_resource.restart();
-                                    }
-                                });
+                                update_work_item_manual_status(
+                                    db.clone(),
+                                    work_item.clone(),
+                                    status.clone(),
+                                    selected_work_item,
+                                    work_items_resource.clone(),
+                                );
                             }
                         },
                         "{prettify_token(status)}"

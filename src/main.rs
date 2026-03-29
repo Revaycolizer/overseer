@@ -44,7 +44,7 @@ enum Route {
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
-const ICON_PNG: Asset =  asset!("/assets/overseer.png");
+const ICON_PNG: Asset = asset!("/assets/overseer.png");
 
 const PRISM_CSS: Asset = asset!("/assets/prism/prism-tomorrow.min.css");
 const PRISM_BUNDLE_JS: Asset = asset!("/assets/prism/prism-bundle.min.js");

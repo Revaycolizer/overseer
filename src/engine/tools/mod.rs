@@ -547,7 +547,8 @@ async fn native_document_writer(args: &serde_json::Value) -> Result<String, Dyna
         return Ok("No data provided to write.".to_string());
     }
 
-    let base_filename = input.get("filename")
+    let base_filename = input
+        .get("filename")
         .and_then(|f| f.as_str())
         .unwrap_or("overseer_export")
         .replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
@@ -576,27 +577,57 @@ async fn native_document_writer(args: &serde_json::Value) -> Result<String, Dyna
     let results: Vec<Result<String, String>> = rayon::join(
         || {
             rayon::join(
-                || generate_csv(&export_dir_cloned, &file_prefix_cloned, &headers_cloned, &data_cloned),
-                || generate_xlsx(&export_dir_cloned, &file_prefix_cloned, &headers_cloned, &data_cloned)
+                || {
+                    generate_csv(
+                        &export_dir_cloned,
+                        &file_prefix_cloned,
+                        &headers_cloned,
+                        &data_cloned,
+                    )
+                },
+                || {
+                    generate_xlsx(
+                        &export_dir_cloned,
+                        &file_prefix_cloned,
+                        &headers_cloned,
+                        &data_cloned,
+                    )
+                },
             )
         },
         || {
             rayon::join(
-                || generate_docx(&export_dir_cloned, &file_prefix_cloned, &headers_cloned, &data_cloned),
-                || generate_pdf(&export_dir_cloned, &file_prefix_cloned, &headers_cloned, &data_cloned)
+                || {
+                    generate_docx(
+                        &export_dir_cloned,
+                        &file_prefix_cloned,
+                        &headers_cloned,
+                        &data_cloned,
+                    )
+                },
+                || {
+                    generate_pdf(
+                        &export_dir_cloned,
+                        &file_prefix_cloned,
+                        &headers_cloned,
+                        &data_cloned,
+                    )
+                },
             )
-        }
-    ).into_results();
+        },
+    )
+    .into_results();
 
-    let mut response = format!("Successfully generated native documents in parallel using Rayon:\n\n");
+    let mut response =
+        format!("Successfully generated native documents in parallel using Rayon:\n\n");
     let mut success_count = 0;
-    
+
     for res in results {
         match res {
             Ok(path) => {
                 response.push_str(&format!("✅ [Download /assets/exports/{}]\n", path));
                 success_count += 1;
-            },
+            }
             Err(e) => response.push_str(&format!("❌ Error: {}\n", e)),
         }
     }
@@ -616,13 +647,23 @@ trait JoinExt {
     fn into_results(self) -> Vec<Result<String, String>>;
 }
 
-impl JoinExt for ((Result<String, String>, Result<String, String>), (Result<String, String>, Result<String, String>)) {
+impl JoinExt
+    for (
+        (Result<String, String>, Result<String, String>),
+        (Result<String, String>, Result<String, String>),
+    )
+{
     fn into_results(self) -> Vec<Result<String, String>> {
-        vec![self.0.0, self.0.1, self.1.0, self.1.1]
+        vec![self.0 .0, self.0 .1, self.1 .0, self.1 .1]
     }
 }
 
-fn generate_csv(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_json::Value]) -> Result<String, String> {
+fn generate_csv(
+    dir: &PathBuf,
+    prefix: &str,
+    headers: &[String],
+    data: &[serde_json::Value],
+) -> Result<String, String> {
     let filename = format!("{}.csv", prefix);
     let path = dir.join(&filename);
     let mut wtr = csv::Writer::from_path(&path).map_err(|e| e.to_string())?;
@@ -631,9 +672,17 @@ fn generate_csv(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_j
     for row in data {
         let mut record = Vec::new();
         for h in headers {
-            record.push(row.get(h).map(|v| {
-                if v.is_string() { v.as_str().unwrap().to_string() } else { v.to_string() }
-            }).unwrap_or_default());
+            record.push(
+                row.get(h)
+                    .map(|v| {
+                        if v.is_string() {
+                            v.as_str().unwrap().to_string()
+                        } else {
+                            v.to_string()
+                        }
+                    })
+                    .unwrap_or_default(),
+            );
         }
         wtr.write_record(&record).map_err(|e| e.to_string())?;
     }
@@ -641,7 +690,12 @@ fn generate_csv(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_j
     Ok(filename)
 }
 
-fn generate_xlsx(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_json::Value]) -> Result<String, String> {
+fn generate_xlsx(
+    dir: &PathBuf,
+    prefix: &str,
+    headers: &[String],
+    data: &[serde_json::Value],
+) -> Result<String, String> {
     let filename = format!("{}.xlsx", prefix);
     let path = dir.join(&filename);
     let mut workbook = rust_xlsxwriter::Workbook::new();
@@ -655,9 +709,16 @@ fn generate_xlsx(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_
 
     for (r, row) in data.iter().enumerate() {
         for (c, h) in headers.iter().enumerate() {
-            let val = row.get(h).map(|v| {
-                if v.is_string() { v.as_str().unwrap().to_string() } else { v.to_string() }
-            }).unwrap_or_default();
+            let val = row
+                .get(h)
+                .map(|v| {
+                    if v.is_string() {
+                        v.as_str().unwrap().to_string()
+                    } else {
+                        v.to_string()
+                    }
+                })
+                .unwrap_or_default();
             worksheet
                 .write_string((r + 1) as u32, c as u16, &val)
                 .map_err(|e| e.to_string())?;
@@ -668,20 +729,34 @@ fn generate_xlsx(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_
     Ok(filename)
 }
 
-fn generate_docx(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_json::Value]) -> Result<String, String> {
+fn generate_docx(
+    dir: &PathBuf,
+    prefix: &str,
+    headers: &[String],
+    data: &[serde_json::Value],
+) -> Result<String, String> {
     let filename = format!("{}.docx", prefix);
     let path = dir.join(&filename);
     use docx_rs::*;
 
     let mut doc = Docx::new();
-    doc = doc.add_paragraph(Paragraph::new().add_run(Run::new().add_text(format!("Export: {}", prefix)).size(24).bold()));
+    doc = doc.add_paragraph(
+        Paragraph::new().add_run(
+            Run::new()
+                .add_text(format!("Export: {}", prefix))
+                .size(24)
+                .bold(),
+        ),
+    );
 
     let mut table = Table::new(vec![]);
-    
+
     // Header row
     let mut cells = Vec::new();
     for h in headers {
-        cells.push(TableCell::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h).bold())));
+        cells.push(
+            TableCell::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h).bold())),
+        );
     }
     table = table.add_row(TableRow::new(cells));
 
@@ -689,10 +764,19 @@ fn generate_docx(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_
     for row in data {
         let mut row_cells = Vec::new();
         for h in headers {
-            let val = row.get(h).map(|v| {
-                if v.is_string() { v.as_str().unwrap().to_string() } else { v.to_string() }
-            }).unwrap_or_default();
-            row_cells.push(TableCell::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(val))));
+            let val = row
+                .get(h)
+                .map(|v| {
+                    if v.is_string() {
+                        v.as_str().unwrap().to_string()
+                    } else {
+                        v.to_string()
+                    }
+                })
+                .unwrap_or_default();
+            row_cells.push(
+                TableCell::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(val))),
+            );
         }
         table = table.add_row(TableRow::new(row_cells));
     }
@@ -701,30 +785,35 @@ fn generate_docx(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_
 
     let file = std::fs::File::create(&path).map_err(|e| e.to_string())?;
     doc.build().pack(file).map_err(|e| e.to_string())?;
-    
+
     Ok(filename)
 }
 
-fn generate_pdf(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_json::Value]) -> Result<String, String> {
+fn generate_pdf(
+    dir: &PathBuf,
+    prefix: &str,
+    headers: &[String],
+    data: &[serde_json::Value],
+) -> Result<String, String> {
     let filename = format!("{}.pdf", prefix);
     let path = dir.join(&filename);
-    
+
     // Find a fallback font
     let font_paths = [
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         "/usr/share/fonts/TTF/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "assets/fonts/Roboto-Regular.ttf"
+        "assets/fonts/Roboto-Regular.ttf",
     ];
-    
+
     let mut font_family = None;
     for fp in font_paths {
         if std::path::Path::new(fp).exists() {
             // strip -Regular.ttf for genpdf search
             let base = fp.replace("-Regular.ttf", "");
             if let Ok(family) = genpdf::fonts::from_files(base, "Roboto", None) {
-                 font_family = Some(family);
-                 break;
+                font_family = Some(family);
+                break;
             }
         }
     }
@@ -737,7 +826,10 @@ fn generate_pdf(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_j
     decorator.set_margins(10);
     doc.set_page_decorator(decorator);
 
-    doc.push(genpdf::elements::Text::new(format!("Overseer Export: {}", prefix)).styled(genpdf::style::Style::new().with_font_size(18).bold()));
+    doc.push(
+        genpdf::elements::Text::new(format!("Overseer Export: {}", prefix))
+            .styled(genpdf::style::Style::new().with_font_size(18).bold()),
+    );
     doc.push(genpdf::elements::Break::new(1.0));
 
     let mut table = genpdf::elements::TableLayout::new(vec![1; headers.len()]);
@@ -746,17 +838,28 @@ fn generate_pdf(dir: &PathBuf, prefix: &str, headers: &[String], data: &[serde_j
     // Headers
     let mut header_row = table.row();
     for h in headers {
-        header_row.push_element(genpdf::elements::Text::new(h).styled(genpdf::style::Style::new().bold()));
+        header_row.push_element(
+            genpdf::elements::Text::new(h).styled(genpdf::style::Style::new().bold()),
+        );
     }
-    header_row.push().map_err(|e: genpdf::error::Error| e.to_string())?;
+    header_row
+        .push()
+        .map_err(|e: genpdf::error::Error| e.to_string())?;
 
     // Data
     for row in data {
         let mut r = table.row();
         for h in headers {
-            let val = row.get(h).map(|v| {
-                if v.is_string() { v.as_str().unwrap().to_string() } else { v.to_string() }
-            }).unwrap_or_default();
+            let val = row
+                .get(h)
+                .map(|v| {
+                    if v.is_string() {
+                        v.as_str().unwrap().to_string()
+                    } else {
+                        v.to_string()
+                    }
+                })
+                .unwrap_or_default();
             r.push_element(genpdf::elements::Text::new(val));
         }
         r.push().map_err(|e| e.to_string())?;
@@ -900,19 +1003,21 @@ async fn native_clipboard_write(args: &serde_json::Value) -> Result<String, Dyna
 
         if let Some(mut stdin) = child.stdin.take() {
             use tokio::io::AsyncWriteExt;
-            stdin
-                .write_all(text.as_bytes())
-                .await
-                .map_err(|err| DynamicToolError::ExecutionFailed {
+            stdin.write_all(text.as_bytes()).await.map_err(|err| {
+                DynamicToolError::ExecutionFailed {
                     tool: "clipboard_write".to_string(),
                     details: err.to_string(),
-                })?;
+                }
+            })?;
         }
 
-        let status = child.wait().await.map_err(|err| DynamicToolError::ExecutionFailed {
-            tool: "clipboard_write".to_string(),
-            details: err.to_string(),
-        })?;
+        let status = child
+            .wait()
+            .await
+            .map_err(|err| DynamicToolError::ExecutionFailed {
+                tool: "clipboard_write".to_string(),
+                details: err.to_string(),
+            })?;
 
         if !status.success() {
             return Err(DynamicToolError::ExecutionFailed {
@@ -997,14 +1102,15 @@ async fn native_web_extract(args: &serde_json::Value) -> Result<String, DynamicT
             details: err.to_string(),
         })?;
 
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|err| DynamicToolError::ExecutionFailed {
-            tool: "web_extract".to_string(),
-            details: err.to_string(),
-        })?;
+    let response =
+        client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|err| DynamicToolError::ExecutionFailed {
+                tool: "web_extract".to_string(),
+                details: err.to_string(),
+            })?;
 
     let final_url = response.url().to_string();
     let status = response.status().as_u16();
@@ -1052,14 +1158,15 @@ async fn native_web_links(args: &serde_json::Value) -> Result<String, DynamicToo
             details: err.to_string(),
         })?;
 
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|err| DynamicToolError::ExecutionFailed {
-            tool: "web_links".to_string(),
-            details: err.to_string(),
-        })?;
+    let response =
+        client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|err| DynamicToolError::ExecutionFailed {
+                tool: "web_links".to_string(),
+                details: err.to_string(),
+            })?;
 
     let final_url = response.url().to_string();
     let body = response
@@ -1070,10 +1177,8 @@ async fn native_web_links(args: &serde_json::Value) -> Result<String, DynamicToo
             details: err.to_string(),
         })?;
 
-    let link_re = Regex::new(
-        r#"(?is)<a[^>]+href=["'](?P<href>[^"']+)["'][^>]*>(?P<label>.*?)</a>"#,
-    )
-    .unwrap();
+    let link_re =
+        Regex::new(r#"(?is)<a[^>]+href=["'](?P<href>[^"']+)["'][^>]*>(?P<label>.*?)</a>"#).unwrap();
     let tag_re = Regex::new(r"(?is)<[^>]+>").unwrap();
     let base_url = reqwest::Url::parse(&final_url).ok();
 
@@ -1106,7 +1211,10 @@ async fn native_web_links(args: &serde_json::Value) -> Result<String, DynamicToo
         }
 
         let label_html = cap.name("label").map(|m| m.as_str()).unwrap_or("");
-        let label = truncate_for_tool(clean_text_content(&tag_re.replace_all(label_html, " ")), 160);
+        let label = truncate_for_tool(
+            clean_text_content(&tag_re.replace_all(label_html, " ")),
+            160,
+        );
         links.push(json!({
             "label": label,
             "url": href,
@@ -3084,20 +3192,21 @@ async fn capture_linux_screenshot_json(tool_name: &str) -> Result<String, Dynami
     let mut command_args = vec![
         ("scrot", vec![path_str.clone()]),
         ("gnome-screenshot", vec!["-f".to_string(), path_str.clone()]),
-        ("import", vec!["-window".to_string(), "root".to_string(), path_str.clone()]),
+        (
+            "import",
+            vec!["-window".to_string(), "root".to_string(), path_str.clone()],
+        ),
     ];
 
     let mut captured = false;
     for (cmd, args) in command_args {
         if Command::new(cmd).arg("--version").output().await.is_ok() {
-            let output = Command::new(cmd)
-                .args(args)
-                .output()
-                .await
-                .map_err(|e| DynamicToolError::ExecutionFailed {
+            let output = Command::new(cmd).args(args).output().await.map_err(|e| {
+                DynamicToolError::ExecutionFailed {
                     tool: tool_name.to_string(),
                     details: e.to_string(),
-                })?;
+                }
+            })?;
             if output.status.success() {
                 captured = true;
                 break;
@@ -3136,7 +3245,8 @@ async fn capture_linux_screenshot_json(tool_name: &str) -> Result<String, Dynami
         "width": width,
         "height": height,
         "summary": format!("Captured a Linux desktop screenshot at {}x{}.", width, height)
-    }).to_string())
+    })
+    .to_string())
 }
 
 #[cfg(not(windows))]
@@ -3166,7 +3276,11 @@ async fn capture_macos_screenshot_json(tool_name: &str) -> Result<String, Dynami
     // Get resolution via system_profiler
     let mut width = 1440;
     let mut height = 900;
-    if let Ok(res_out) = Command::new("system_profiler").arg("SPDisplaysDataType").output().await {
+    if let Ok(res_out) = Command::new("system_profiler")
+        .arg("SPDisplaysDataType")
+        .output()
+        .await
+    {
         let stdout = String::from_utf8_lossy(&res_out.stdout);
         for line in stdout.lines() {
             if line.contains("Resolution:") {
@@ -3188,7 +3302,8 @@ async fn capture_macos_screenshot_json(tool_name: &str) -> Result<String, Dynami
         "width": width,
         "height": height,
         "summary": format!("Captured a macOS desktop screenshot at {}x{}.", width, height)
-    }).to_string())
+    })
+    .to_string())
 }
 
 #[cfg(not(windows))]
@@ -3206,10 +3321,7 @@ async fn windows_process_list_json(tool_name: &str) -> Result<String, DynamicToo
 }
 
 #[cfg(not(windows))]
-async fn windows_find_files_json(
-    tool_name: &str,
-    query: &str,
-) -> Result<String, DynamicToolError> {
+async fn windows_find_files_json(tool_name: &str, query: &str) -> Result<String, DynamicToolError> {
     if let Some(results) = search_workspace_files_fast(query).await {
         let cwd = std::env::current_dir()
             .ok()
@@ -3261,12 +3373,7 @@ async fn windows_find_files_json(
     }
 
     let mut file_lines = Vec::new();
-    if Command::new("rg")
-        .arg("--version")
-        .output()
-        .await
-        .is_ok()
-    {
+    if Command::new("rg").arg("--version").output().await.is_ok() {
         let mut cmd = Command::new("rg");
         cmd.arg("--files");
         for root in &roots {
@@ -3289,10 +3396,13 @@ async fn windows_find_files_json(
         }
         cmd.args(["-type", "f"]);
 
-        let output = cmd.output().await.map_err(|e| DynamicToolError::ExecutionFailed {
-            tool: tool_name.to_string(),
-            details: e.to_string(),
-        })?;
+        let output = cmd
+            .output()
+            .await
+            .map_err(|e| DynamicToolError::ExecutionFailed {
+                tool: tool_name.to_string(),
+                details: e.to_string(),
+            })?;
 
         file_lines.extend(
             String::from_utf8_lossy(&output.stdout)
@@ -3392,12 +3502,13 @@ async fn windows_find_files_json(
 
 #[cfg(not(windows))]
 async fn windows_read_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
-    let content = tokio::fs::read_to_string(path)
-        .await
-        .map_err(|e| DynamicToolError::ExecutionFailed {
-            tool: tool_name.to_string(),
-            details: format!("Failed to read file '{}': {}", path, e),
-        })?;
+    let content =
+        tokio::fs::read_to_string(path)
+            .await
+            .map_err(|e| DynamicToolError::ExecutionFailed {
+                tool: tool_name.to_string(),
+                details: format!("Failed to read file '{}': {}", path, e),
+            })?;
 
     let preview = if content.len() > 2000 {
         format!("{}...", &content[..2000])
@@ -3411,20 +3522,28 @@ async fn windows_read_file_json(tool_name: &str, path: &str) -> Result<String, D
         "content_length": content.len(),
         "preview": preview,
         "summary": format!("Successfully read file '{}'. Captured {} bytes.", path, content.len())
-    }).to_string())
+    })
+    .to_string())
 }
 
 #[cfg(not(windows))]
 async fn windows_open_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
     let mut target_path = path.to_string();
-    
+
     // Smart resolution for well-known Linux folders if the path doesn't exist directly
     if !cfg!(target_os = "macos") && !std::path::Path::new(&target_path).exists() {
         let lower = target_path.to_lowercase();
         let well_known = [
-            "downloads", "documents", "pictures", "videos", "music", "desktop", "templates", "public"
+            "downloads",
+            "documents",
+            "pictures",
+            "videos",
+            "music",
+            "desktop",
+            "templates",
+            "public",
         ];
-        
+
         if well_known.iter().any(|&f| lower == f) {
             if let Ok(home) = std::env::var("HOME") {
                 let capitalized = format!("{}{}", &lower[0..1].to_uppercase(), &lower[1..]);
@@ -3436,7 +3555,11 @@ async fn windows_open_file_json(tool_name: &str, path: &str) -> Result<String, D
         }
     }
 
-    let cmd = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let cmd = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
     let status = Command::new(cmd)
         .arg(&target_path)
         .status()
@@ -3449,7 +3572,10 @@ async fn windows_open_file_json(tool_name: &str, path: &str) -> Result<String, D
     if !status.success() {
         return Err(DynamicToolError::ExecutionFailed {
             tool: tool_name.to_string(),
-            details: format!("{} failed with status {} for '{}'.", cmd, status, target_path),
+            details: format!(
+                "{} failed with status {} for '{}'.",
+                cmd, status, target_path
+            ),
         });
     }
 
@@ -3458,7 +3584,8 @@ async fn windows_open_file_json(tool_name: &str, path: &str) -> Result<String, D
         "path": target_path,
         "success": true,
         "summary": format!("Launched '{}' using {}.", target_path, cmd)
-    }).to_string())
+    })
+    .to_string())
 }
 
 #[cfg(not(windows))]
@@ -3466,7 +3593,7 @@ async fn windows_browser_state_json(tool_name: &str) -> Result<String, DynamicTo
     if cfg!(target_os = "macos") {
         return macos_browser_state_json(tool_name).await;
     }
-    
+
     let output = Command::new("wmctrl")
         .arg("-l")
         .output()
@@ -3478,14 +3605,20 @@ async fn windows_browser_state_json(tool_name: &str) -> Result<String, DynamicTo
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut browser_windows = Vec::new();
-    
-    let browser_keywords = ["chrome", "firefox", "chromium", "brave", "edge", "safari", "opera", "vivaldi"];
+
+    let browser_keywords = [
+        "chrome", "firefox", "chromium", "brave", "edge", "safari", "opera", "vivaldi",
+    ];
 
     for line in stdout.lines() {
         let lower = line.to_lowercase();
         if browser_keywords.iter().any(|&k| lower.contains(k)) {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            let title = if parts.len() >= 4 { parts[3..].join(" ") } else { line.to_string() };
+            let title = if parts.len() >= 4 {
+                parts[3..].join(" ")
+            } else {
+                line.to_string()
+            };
             browser_windows.push(json!({
                 "title": title,
                 "ProcessName": parts.get(2).unwrap_or(&"unknown"),
@@ -3498,14 +3631,15 @@ async fn windows_browser_state_json(tool_name: &str) -> Result<String, DynamicTo
         "action": "browser_state",
         "browser_windows": browser_windows,
         "summary": format!("Detected {} browser window(s) on Linux.", browser_windows.len())
-    }).to_string())
+    })
+    .to_string())
 }
 
 #[cfg(not(windows))]
 async fn macos_browser_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     // macOS AppleScript to identify browser windows specifically
     let script = "tell application \"System Events\" to get name of every window of (every process whose background only is false and (name contains \"Chrome\" or name contains \"Firefox\" or name contains \"Safari\" or name contains \"Edge\" or name contains \"Brave\"))";
-    
+
     let output = Command::new("osascript")
         .arg("-e")
         .arg(script)
@@ -3533,7 +3667,8 @@ async fn macos_browser_state_json(tool_name: &str) -> Result<String, DynamicTool
         "action": "browser_state",
         "browser_windows": browser_windows,
         "summary": format!("Detected {} browser window(s) on macOS.", browser_windows.len())
-    }).to_string())
+    })
+    .to_string())
 }
 
 #[cfg(not(windows))]
@@ -3572,7 +3707,9 @@ async fn macos_desktop_state_json(tool_name: &str) -> Result<String, DynamicTool
             tool: tool_name.to_string(),
             details: format!("Failed to run osascript for active app: {}", e),
         })?;
-    let active_title = String::from_utf8_lossy(&active_app_out.stdout).trim().to_string();
+    let active_title = String::from_utf8_lossy(&active_app_out.stdout)
+        .trim()
+        .to_string();
 
     // Get list of window titles for all visible processes
     let windows_out = Command::new("osascript")
@@ -3584,8 +3721,10 @@ async fn macos_desktop_state_json(tool_name: &str) -> Result<String, DynamicTool
             tool: tool_name.to_string(),
             details: format!("Failed to run osascript for windows: {}", e),
         })?;
-    let windows_raw = String::from_utf8_lossy(&windows_out.stdout).trim().to_string();
-    
+    let windows_raw = String::from_utf8_lossy(&windows_out.stdout)
+        .trim()
+        .to_string();
+
     // AppleScript returns a comma-separated list like "App1: WindowA, App1: WindowB, App2: WindowC"
     let visible_windows: Vec<serde_json::Value> = windows_raw
         .split(", ")
@@ -3704,7 +3843,7 @@ async fn find_linux_desktop_file(app_name: &str) -> Option<String> {
             } else {
                 PathBuf::from("/tmp") // Should not happen on Linux
             }
-        }
+        },
     ];
 
     let lower_name = app_name.to_lowercase();
@@ -3716,7 +3855,7 @@ async fn find_linux_desktop_file(app_name: &str) -> Option<String> {
                 if file_name.ends_with(".desktop") {
                     // Quick check: does the filename contain the app name?
                     if file_name.contains(&lower_name) {
-                         return Some(entry.file_name().to_string_lossy().to_string());
+                        return Some(entry.file_name().to_string_lossy().to_string());
                     }
 
                     // Deep check: read the file to see if the 'Name=' field matches
@@ -3894,7 +4033,7 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
                 } else {
                     // Linux Smart Launch
                     let mut launched = false;
-                    
+
                     // 1. Try direct command execution if it's potentially a binary path
                     if let Ok(mut child) = Command::new(&app).spawn() {
                         launched = true;
