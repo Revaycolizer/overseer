@@ -20,7 +20,7 @@ use std::time::Duration;
 use tokio::time::{sleep, timeout};
 
 use crate::engine::tools::StructuredPerceptionTool;
-use crate::engine::utils::discovery::AgentInfo;
+use crate::engine::utils::discovery::{AgentInfo, ToolInfo};
 
 fn should_bypass_final_synthesizer(domains: &[String]) -> bool {
     !domains.is_empty()
@@ -286,6 +286,261 @@ fn build_native_workflow_plan(query: &str) -> String {
     response.push_str("- Evidence artifacts\n");
     response.push_str("- Work item for follow-up if blocked\n");
     response
+}
+
+fn render_native_os_tool_response(raw: &str) -> String {
+    let value: serde_json::Value =
+        serde_json::from_str(raw).unwrap_or_else(|_| serde_json::json!({}));
+    let action = value
+        .get("action")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+
+    match action {
+        "screenshot" => {
+            let width = value
+                .get("width")
+                .and_then(|value| value.as_i64())
+                .unwrap_or_default();
+            let height = value
+                .get("height")
+                .and_then(|value| value.as_i64())
+                .unwrap_or_default();
+            let path = value
+                .get("path")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+
+            let mut response = String::new();
+            if width > 0 && height > 0 {
+                response.push_str(&format!(
+                    "Captured a desktop screenshot at {}x{}.\n\nScreenshot dimensions: {}x{}.",
+                    width, height, width, height
+                ));
+            } else {
+                response.push_str("Captured a desktop screenshot.");
+            }
+
+            if !path.is_empty() {
+                response.push_str("\n\nScreenshot attached below.");
+                response.push_str(&format!("\n[[ATTACH_IMAGE:{}]]", path));
+            }
+
+            response
+        }
+        "launch" => {
+            let app = value
+                .get("app")
+                .or_else(|| value.get("target"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("requested app")
+                .trim();
+            format!("Opened {}.", app)
+        }
+        "list_processes" => {
+            let total = value
+                .get("total_processes")
+                .and_then(|value| value.as_i64())
+                .unwrap_or_default();
+            let background = value
+                .get("background_count")
+                .and_then(|value| value.as_i64())
+                .unwrap_or_default();
+            let top = value
+                .get("top_processes")
+                .and_then(|value| value.as_array())
+                .cloned()
+                .unwrap_or_default();
+
+            let mut response = format!(
+                "Current processes captured. Total: {}. Background: {}.",
+                total, background
+            );
+
+            if !top.is_empty() {
+                response.push_str("\n\nTop active processes:");
+                for process in top.iter().take(8) {
+                    let name = process
+                        .get("ProcessName")
+                        .or_else(|| process.get("comm"))
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("unknown");
+                    response.push_str(&format!("\n- {}", name));
+                }
+            }
+
+            response
+        }
+        "find_files" => {
+            let results = value
+                .get("results")
+                .and_then(|value| value.as_array())
+                .cloned()
+                .unwrap_or_default();
+            if results.is_empty() {
+                return "No matching files found.".to_string();
+            }
+
+            let mut response = format!("Found {} matching file(s).", results.len());
+            for result in results.iter().take(8) {
+                if let Some(path) = result.as_str() {
+                    response.push_str(&format!("\n- {}", path));
+                } else if let Some(path) = result.get("path").and_then(|value| value.as_str()) {
+                    response.push_str(&format!("\n- {}", path));
+                }
+            }
+            response
+        }
+        "browser_state" => {
+            let windows = value
+                .get("browser_windows")
+                .or_else(|| value.get("visible_windows"))
+                .and_then(|value| value.as_array())
+                .cloned()
+                .unwrap_or_default();
+            if windows.is_empty() {
+                return "No browser windows detected.".to_string();
+            }
+
+            let mut response = format!("Detected {} browser window(s).", windows.len());
+            for window in windows.iter().take(6) {
+                let title = window
+                    .get("title")
+                    .or_else(|| window.get("MainWindowTitle"))
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("Untitled window");
+                response.push_str(&format!("\n- {}", title));
+            }
+            response
+        }
+        "inspect_accessibility" => {
+            let focused = value
+                .get("focused_element")
+                .and_then(|value| value.as_object())
+                .cloned()
+                .unwrap_or_default();
+            if focused.is_empty() {
+                return "Accessibility tree inspected for the current window.".to_string();
+            }
+
+            let name = focused
+                .get("name")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unnamed");
+            let control_type = focused
+                .get("control_type")
+                .and_then(|value| value.as_str())
+                .unwrap_or("control");
+            format!(
+                "Accessibility tree inspected. Focused element: {} ({})",
+                name, control_type
+            )
+        }
+        "focus_element" | "invoke_element" | "type_text" => {
+            if let Some(error) = value.get("error").and_then(|value| value.as_str()) {
+                return format!("Action blocked: {}", error);
+            }
+
+            let selector = value
+                .get("selector")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .trim();
+            let prefix = match action {
+                "focus_element" => "Focused requested control",
+                "invoke_element" => "Invoked requested control",
+                "type_text" => "Entered text into requested control",
+                _ => "Completed native desktop action",
+            };
+            if selector.is_empty() {
+                prefix.to_string()
+            } else {
+                format!("{}: {}", prefix, selector)
+            }
+        }
+        _ => value
+            .get("summary")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| raw.to_string()),
+    }
+}
+
+async fn try_native_computer_shortcut(
+    db: &crate::db::Database,
+    run_id: Option<i64>,
+    event_sequence: &mut i64,
+    query: &str,
+) -> Option<String> {
+    if infer_native_computer_domain(query).is_none()
+        && !is_native_computer_fast_path_request(query, "computer")
+    {
+        return None;
+    }
+
+    let tool = crate::backend::get_tools(db)
+        .await
+        .ok()
+        .and_then(|tools| tools.into_iter().find(|tool| tool.name == "os_tool"))
+        .unwrap_or_else(|| ToolInfo {
+            id: 0,
+            name: "os_tool".to_string(),
+            description: "Native system access".to_string(),
+            code: "// Native Implementation".to_string(),
+            language: "rust".to_string(),
+            script_path: None,
+            required_intent: None,
+            safety_level: "standard".to_string(),
+            version: "1.0.0".to_string(),
+        });
+
+    let input_json = serde_json::json!({ "query": query });
+
+    record_event(
+        db,
+        run_id,
+        event_sequence,
+        "native_computer_shortcut_started",
+        "running",
+        Some("computer"),
+        Some(query),
+        Some("os_tool"),
+        None,
+        Some("Handling native computer request without waiting on planner or supervisor."),
+        Some(&input_json.to_string()),
+    )
+    .await;
+
+    let raw = match crate::engine::tools::call_dynamic_tool(&tool, input_json).await {
+        Ok(raw) => raw,
+        Err(_) => return None,
+    };
+
+    let rendered = render_native_os_tool_response(&raw);
+
+    record_event(
+        db,
+        run_id,
+        event_sequence,
+        "native_computer_shortcut_completed",
+        "completed",
+        Some("computer"),
+        Some(query),
+        Some("os_tool"),
+        None,
+        Some("Completed native computer shortcut."),
+        Some(&raw),
+    )
+    .await;
+
+    if let Some(run_id) = run_id {
+        let _ = crate::backend::finish_execution_run(db, run_id, "completed", Some(&rendered), None)
+            .await;
+    }
+
+    Some(rendered)
 }
 
 async fn heuristic_decision(
@@ -1133,6 +1388,73 @@ pub async fn orchestrate_request<'a>(
         }
     }
 
+    if let Some((follow_up_response, details)) =
+        resolve_screenshot_follow_up(db, conversation_id, &clean_query).await
+    {
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "computer_follow_up_resolved",
+            "completed",
+            Some("computer"),
+            None,
+            Some("os_tool"),
+            None,
+            Some("Resolved screenshot follow-up from the latest assistant attachment."),
+            Some(&details),
+        )
+        .await;
+        if let Some(run_id) = run_id {
+            let _ = crate::backend::finish_execution_run(
+                db,
+                run_id,
+                "completed",
+                Some(&follow_up_response),
+                None,
+            )
+            .await;
+        }
+        return follow_up_response;
+    }
+
+    if discovery::looks_like_planner_request(&clean_query) {
+        let native_plan = build_native_workflow_plan(&clean_query);
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "native_workflow_plan_completed",
+            "completed",
+            Some("orchestrator"),
+            Some(&clean_query),
+            None,
+            None,
+            Some("Generated workflow plan natively before fast-path routing."),
+            Some(&native_plan),
+        )
+        .await;
+
+        if let Some(run_id) = run_id {
+            let _ = crate::backend::finish_execution_run(
+                db,
+                run_id,
+                "completed",
+                Some(&native_plan),
+                None,
+            )
+            .await;
+        }
+
+        return native_plan;
+    }
+
+    if let Some(native_response) =
+        try_native_computer_shortcut(db, run_id, &mut event_sequence, &clean_query).await
+    {
+        return native_response;
+    }
+
     // Determine the fast-path domain, or fall back to artifact default domain for follow-up messages
     let fast_path_domain = match discovery::discover_fast_path_domain(
         db,
@@ -1305,6 +1627,43 @@ pub async fn orchestrate_request<'a>(
             .await;
         }
         return follow_up_response;
+    }
+
+    if discovery::looks_like_planner_request(&clean_query) {
+        let native_plan = build_native_workflow_plan(&clean_query);
+        record_event(
+            db,
+            run_id,
+            &mut event_sequence,
+            "native_workflow_plan_completed",
+            "completed",
+            Some("orchestrator"),
+            Some(&clean_query),
+            None,
+            None,
+            Some("Generated workflow plan natively before orchestration routing."),
+            Some(&native_plan),
+        )
+        .await;
+
+        if let Some(run_id) = run_id {
+            let _ = crate::backend::finish_execution_run(
+                db,
+                run_id,
+                "completed",
+                Some(&native_plan),
+                None,
+            )
+            .await;
+        }
+
+        return native_plan;
+    }
+
+    if let Some(native_response) =
+        try_native_computer_shortcut(db, run_id, &mut event_sequence, &clean_query).await
+    {
+        return native_response;
     }
 
     let decision = match decide_orchestration(
@@ -2408,9 +2767,9 @@ pub async fn orchestrate_request<'a>(
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_screenshot_follow_up, infer_native_computer_domain,
-        is_native_computer_fast_path_request, should_bypass_final_synthesizer,
-        ScreenshotFollowUpIntent,
+        build_native_workflow_plan, classify_screenshot_follow_up,
+        infer_native_computer_domain, is_native_computer_fast_path_request,
+        render_native_os_tool_response, should_bypass_final_synthesizer, ScreenshotFollowUpIntent,
     };
 
     #[test]
@@ -2490,5 +2849,24 @@ mod tests {
             "Write me a poem about the ocean",
             "chat"
         ));
+    }
+
+    #[test]
+    fn workflow_plan_requests_render_natively() {
+        let response = build_native_workflow_plan(
+            "Create a workflow plan for a daily website monitoring task with traceability.",
+        );
+        assert!(response.contains("Workflow plan ready."));
+        assert!(response.contains("Traceability layer:"));
+        assert!(response.contains("Daily"));
+    }
+
+    #[test]
+    fn native_screenshot_payload_renders_as_chat_ready_response() {
+        let response = render_native_os_tool_response(
+            r#"{"action":"screenshot","path":"C:\\temp\\capture.png","width":1536,"height":864}"#,
+        );
+        assert!(response.contains("Captured a desktop screenshot at 1536x864."));
+        assert!(response.contains("[[ATTACH_IMAGE:C:\\temp\\capture.png]]"));
     }
 }
