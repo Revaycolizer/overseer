@@ -711,9 +711,12 @@ async fn decide_orchestration(
                  Return JSON only with this shape:\n\
                  {{\"route\":\"direct_chat|single_domain|multi_step\",\"domain\":\"chat|web|stealth|desktop|computer|office|vision|neontune|null\",\"personality_mode\":\"assistant|analyst|operator|vision|orchestrator\",\"reason\":\"short explanation\"}}\n\
                  Rules:\n\
-                 - direct_chat: use when the request can be answered conversationally without tools or execution.\n\
+                 - direct_chat: use when the request can be answered conversationally WITHOUT tools or execution.\n\
                  - single_domain: use when one domain should handle the request.\n\
                  - multi_step: use when the request needs planning across steps or domains.\n\
+                 - stealth: REQUIRED for research, documentation search, checking versions, looking up facts, or any 'how to' questions that require current info.\n\
+                 - web: ONLY for complex browser automation, clicking, filling forms, or interactive website tasks.\n\
+                 - desktop: ONLY for local OS manipulation, terminal commands (via computer domain if linked), or native apps.\n\
                  - Prefer direct_chat for simple Q&A.\n\
                  - Prefer single_domain when one supervisor should own execution.\n\
                  - Use multi_step for compound or ambiguous tasks.",
