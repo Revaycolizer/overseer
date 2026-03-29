@@ -3452,6 +3452,55 @@ async fn run_command_simple(cmd: &str, tool_name: &str) -> Result<String, Dynami
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+#[cfg(not(windows))]
+async fn find_linux_desktop_file(app_name: &str) -> Option<String> {
+    if cfg!(target_os = "macos") {
+        return None;
+    }
+
+    let search_paths = vec![
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
+        #[cfg(not(windows))]
+        {
+            if let Ok(home) = std::env::var("HOME") {
+                PathBuf::from(home).join(".local/share/applications")
+            } else {
+                PathBuf::from("/tmp") // Should not happen on Linux
+            }
+        }
+    ];
+
+    let lower_name = app_name.to_lowercase();
+
+    for path in search_paths {
+        if let Ok(mut entries) = tokio::fs::read_dir(&path).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let file_name = entry.file_name().to_string_lossy().to_lowercase();
+                if file_name.ends_with(".desktop") {
+                    // Quick check: does the filename contain the app name?
+                    if file_name.contains(&lower_name) {
+                         return Some(entry.file_name().to_string_lossy().to_string());
+                    }
+
+                    // Deep check: read the file to see if the 'Name=' field matches
+                    if let Ok(content) = tokio::fs::read_to_string(entry.path()).await {
+                        for line in content.lines() {
+                            if line.to_lowercase().starts_with("name=") {
+                                let name_val = line[5..].trim().to_lowercase();
+                                if name_val == lower_name {
+                                    return Some(entry.file_name().to_string_lossy().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolError> {
     let input = object_tool_input(args);
     let action = infer_os_tool_action(&input);
@@ -3504,10 +3553,66 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
             }
             #[cfg(not(windows))]
             {
-                Err(DynamicToolError::ExecutionFailed {
-                    tool: "os_tool".to_string(),
-                    details: "Window focus is currently implemented for Windows only.".to_string(),
-                })
+                if cfg!(target_os = "macos") {
+                    let target = extract_os_tool_target(&input, "focus").ok_or_else(|| {
+                        DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: "Focus action requires a target window title.".to_string(),
+                        }
+                    })?;
+                    // macOS AppleScript focus
+                    let script = format!("tell application \"{}\" to activate", target);
+                    let status = Command::new("osascript")
+                        .arg("-e")
+                        .arg(&script)
+                        .status()
+                        .await
+                        .map_err(|e| DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("Failed to focus {} via AppleScript: {}", target, e),
+                        })?;
+                    if !status.success() {
+                        return Err(DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("osascript failed to focus '{}'.", target),
+                        });
+                    }
+                    return Ok(json!({
+                        "action": "focus",
+                        "target": target,
+                        "success": true,
+                        "summary": format!("Focused Mac app '{}' using AppleScript.", target)
+                    }).to_string());
+                } else {
+                    let target = extract_os_tool_target(&input, "focus").ok_or_else(|| {
+                        DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: "Focus action requires a target window title.".to_string(),
+                        }
+                    })?;
+                    // Linux focus using wmctrl
+                    let status = Command::new("wmctrl")
+                        .arg("-a")
+                        .arg(&target)
+                        .status()
+                        .await
+                        .map_err(|e| DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("Failed to run wmctrl for {}: {}", target, e),
+                        })?;
+                    if status.success() {
+                        return Ok(json!({
+                            "action": "focus",
+                            "target": target,
+                            "success": true,
+                            "summary": format!("Focused window matching '{}' using wmctrl.", target)
+                        }).to_string());
+                    }
+                    return Err(DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("wmctrl could not find or focus a window matching '{}'.", target),
+                    });
+                }
             }
         }
         "focus_element" => windows_uia_interaction_json("os_tool", "focus_element", &input).await,
@@ -3521,12 +3626,67 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
                     details: "Launch action requires an app or command.".to_string(),
                 }
             })?;
-            let escaped = escape_powershell_single_quoted(&app);
-            let script = format!(
-                "Start-Process '{app}'; [pscustomobject]@{{ action='launch'; app='{app}'; ok=$true }} | ConvertTo-Json -Compress",
-                app = escaped
-            );
-            run_powershell_hidden(&script, "os_tool").await
+
+            #[cfg(windows)]
+            {
+                let escaped = escape_powershell_single_quoted(&app);
+                let script = format!(
+                    "Start-Process '{app}'; [pscustomobject]@{{ action='launch'; app='{app}'; ok=$true }} | ConvertTo-Json -Compress",
+                    app = escaped
+                );
+                run_powershell_hidden(&script, "os_tool").await
+            }
+
+            #[cfg(not(windows))]
+            {
+                if cfg!(target_os = "macos") {
+                    let status = Command::new("open")
+                        .arg("-a")
+                        .arg(&app)
+                        .status()
+                        .await
+                        .map_err(|e| DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("Failed to launch Mac app {} using open -a: {}", app, e),
+                        })?;
+                    if !status.success() {
+                        return Err(DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("'open -a' failed to launch Mac app '{}'.", app),
+                        });
+                    }
+                } else {
+                    // Linux Smart Launch
+                    let mut launched = false;
+                    
+                    // 1. Try direct command execution if it's potentially a binary path
+                    if let Ok(mut child) = Command::new(&app).spawn() {
+                        launched = true;
+                    }
+
+                    // 2. Try common Linux apps by name (fuzzy) or .desktop files
+                    if !launched {
+                        if let Some(desktop_file) = find_linux_desktop_file(&app).await {
+                             if Command::new("gtk-launch").arg(&desktop_file).spawn().is_ok() {
+                                 launched = true;
+                             }
+                        }
+                    }
+
+                    // 3. Fallback to generic open tool
+                    if !launched {
+                        let _ = Command::new("xdg-open").arg(&app).spawn();
+                        launched = true; // Best effort
+                    }
+                }
+
+                Ok(json!({
+                    "action": "launch",
+                    "app": app,
+                    "success": true,
+                    "summary": format!("Submitted launch request for '{}' on {}.", app, if cfg!(target_os = "macos") { "macOS" } else { "Linux" })
+                }).to_string())
+            }
         }
         "open_url" => {
             let url = extract_os_tool_target(&input, "open_url").ok_or_else(|| {
@@ -3541,12 +3701,41 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
                     details: "Open URL only supports full http:// or https:// links.".to_string(),
                 });
             }
-            let escaped = escape_powershell_single_quoted(&url);
-            let script = format!(
-                "Start-Process '{url}'; [pscustomobject]@{{ action='open_url'; url='{url}'; ok=$true }} | ConvertTo-Json -Compress",
-                url = escaped
-            );
-            run_powershell_hidden(&script, "os_tool").await
+
+            #[cfg(windows)]
+            {
+                let escaped = escape_powershell_single_quoted(&url);
+                let script = format!(
+                    "Start-Process '{url}'; [pscustomobject]@{{ action='open_url'; url='{url}'; ok=$true }} | ConvertTo-Json -Compress",
+                    url = escaped
+                );
+                run_powershell_hidden(&script, "os_tool").await
+            }
+
+            #[cfg(not(windows))]
+            {
+                let cmd = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+                let status = Command::new(cmd)
+                    .arg(&url)
+                    .status()
+                    .await
+                    .map_err(|e| DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("Failed to open URL using {}: {}", cmd, e),
+                    })?;
+                if !status.success() {
+                    return Err(DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("{} failed with status {} for URL: {}.", cmd, status, url),
+                    });
+                }
+                Ok(json!({
+                    "action": "open_url",
+                    "url": url,
+                    "success": true,
+                    "summary": format!("Opened URL '{}' using {}.", url, cmd)
+                }).to_string())
+            }
         }
         "click" | "double_click" | "right_click" => {
             if action == "click" && selector_present && extract_coordinates(&input).is_none() {
