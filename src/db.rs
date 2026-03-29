@@ -492,6 +492,13 @@ impl Database {
             "".to_string(),
             "// Native Implementation".to_string(),
         ));
+        tools_data.push((
+            "document_writer".to_string(),
+            "Generate CSV, Excel (XLSX), Word (DOCX), and beautiful PDF reports in parallel.".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
 
         let mut tx = self.pool.begin().await?;
         for (name, desc, lang, path, code) in tools_data {
@@ -554,6 +561,9 @@ impl Database {
             ("desktop", "app_launcher"),
             ("desktop", "clipboard_read"),
             ("desktop", "clipboard_write"),
+            ("office", "document_writer"),
+            ("computer", "document_writer"),
+            ("desktop", "document_writer"),
         ];
 
         for (domain, tool_name) in mappings {
