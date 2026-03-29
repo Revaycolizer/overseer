@@ -4,6 +4,8 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -69,28 +71,60 @@ struct OllamaTagsResponse {
     models: Vec<OllamaModel>,
 }
 
+struct AvailableModelsCache {
+    fetched_at: Instant,
+    models: Vec<String>,
+}
+
+static AVAILABLE_MODELS_CACHE: OnceLock<Mutex<Option<AvailableModelsCache>>> = OnceLock::new();
+const AVAILABLE_MODELS_CACHE_TTL: Duration = Duration::from_secs(8);
+
 pub async fn get_available_models() -> Vec<String> {
+    let cache = AVAILABLE_MODELS_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = cache.lock() {
+        if let Some(entry) = guard.as_ref() {
+            if entry.fetched_at.elapsed() < AVAILABLE_MODELS_CACHE_TTL {
+                return entry.models.clone();
+            }
+        }
+    }
+
     let client = reqwest::Client::new();
-    match client.get("http://localhost:11434/api/tags").send().await {
+    let models = match client.get("http://localhost:11434/api/tags").send().await {
         Ok(resp) => {
             if let Ok(json) = resp.json::<serde_json::Value>().await {
                 if let Some(models) = json["models"].as_array() {
-                    return models
+                    models
                         .iter()
                         .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-                        .collect();
+                        .collect()
+                } else {
+                    vec![
+                        "llama3:latest".to_string(),
+                        "qwen2.5:7b-instruct".to_string(),
+                    ]
                 }
+            } else {
+                vec![
+                    "llama3:latest".to_string(),
+                    "qwen2.5:7b-instruct".to_string(),
+                ]
             }
-            vec![
-                "llama3:latest".to_string(),
-                "qwen2.5:7b-instruct".to_string(),
-            ]
         }
         Err(_) => vec![
             "llama3:latest".to_string(),
             "qwen2.5:7b-instruct".to_string(),
         ],
+    };
+
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some(AvailableModelsCache {
+            fetched_at: Instant::now(),
+            models: models.clone(),
+        });
     }
+
+    models
 }
 
 async fn try_get_available_models() -> Result<Vec<String>, String> {
@@ -222,19 +256,24 @@ pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
     .fetch_all(&db.pool)
     .await?;
 
+    let tool_rows = sqlx::query(
+        "SELECT at.agent_id, t.name
+         FROM agent_tools at
+         JOIN tools t ON t.id = at.tool_id",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+
+    let mut tools_by_agent: HashMap<i64, Vec<String>> = HashMap::new();
+    for row in tool_rows {
+        let agent_id: i64 = row.get("agent_id");
+        let tool_name: String = row.get("name");
+        tools_by_agent.entry(agent_id).or_default().push(tool_name);
+    }
+
     let mut agents = Vec::new();
     for r in rows {
         let agent_id: i64 = r.get("id");
-
-        // Fetch tools for this agent
-        let tools_rows = sqlx::query(
-            "SELECT t.name FROM tools t 
-             JOIN agent_tools at ON t.id = at.tool_id 
-             WHERE at.agent_id = ?",
-        )
-        .bind(agent_id)
-        .fetch_all(&db.pool)
-        .await?;
 
         let domain: String = r.get::<Option<String>, _>("domain").unwrap_or_default();
 
@@ -251,7 +290,7 @@ pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
             domain: domain.clone(),
             version: r.get::<Option<String>, _>("version").unwrap_or_default(),
             code: r.get("code"),
-            tools: tools_rows.into_iter().map(|t| t.get("name")).collect(),
+            tools: tools_by_agent.remove(&agent_id).unwrap_or_default(),
             source_files: vec![],
         });
     }
@@ -738,15 +777,34 @@ pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result
     .fetch_all(&db.pool)
     .await?;
 
+    let attachment_rows = sqlx::query_as::<_, Attachment>(
+        "SELECT
+            a.id,
+            a.message_id,
+            a.filename,
+            a.file_path,
+            a.content_type,
+            a.size
+         FROM attachments a
+         JOIN messages m ON m.id = a.message_id
+         WHERE m.conversation_id = ?",
+    )
+    .bind(conversation_id)
+    .fetch_all(&db.pool)
+    .await?;
+
+    let mut attachments_by_message: HashMap<i64, Vec<Attachment>> = HashMap::new();
+    for attachment in attachment_rows {
+        attachments_by_message
+            .entry(attachment.message_id)
+            .or_default()
+            .push(attachment);
+    }
+
     let mut messages = Vec::new();
     for r in rows {
         let message_id: i64 = r.get("id");
-        let attachments = sqlx::query_as::<_, Attachment>(
-            "SELECT id, message_id, filename, file_path, content_type, size FROM attachments WHERE message_id = ?"
-        )
-        .bind(message_id)
-        .fetch_all(&db.pool)
-        .await?;
+        let attachments = attachments_by_message.remove(&message_id).unwrap_or_default();
 
         messages.push(Message {
             id: message_id,

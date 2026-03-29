@@ -1,8 +1,6 @@
 use rig::client::{CompletionClient, Nothing};
 use rig::completion::Prompt;
 use rig::providers::ollama;
-use std::collections::HashMap;
-use std::sync::Arc;
 
 use crate::db::Database;
 use crate::engine::orchestrator::orchestrate_request;
@@ -100,9 +98,8 @@ impl AgentSystem {
                 };
                 let mut contents = vec![rig::message::UserContent::text(content_text)];
 
-                // Fetch attachments for this message and encode images as proper multimodal content
-                if let Ok(attachments) = crate::backend::get_attachments(db, m.id).await {
-                    for att in attachments {
+                // Reuse attachments already hydrated by get_messages instead of re-querying them.
+                for att in m.attachments {
                         if att.content_type.starts_with("image/") {
                             // Read the file from disk and encode as base64 for vision models
                             match std::fs::read(&att.file_path) {
@@ -144,7 +141,6 @@ impl AgentSystem {
                                 att.filename, att.file_path
                             )));
                         }
-                    }
                 }
 
                 history.push(rig::completion::Message::User {
