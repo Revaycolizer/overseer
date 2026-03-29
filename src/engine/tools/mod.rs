@@ -1317,7 +1317,6 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
             "app",
             "application",
             "url",
-            "query",
             "filename",
             "name",
             "path",
@@ -1326,7 +1325,7 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
         return Some(value);
     }
 
-    let raw = read_string_field(input, &["input"])?;
+    let raw = read_string_field(input, &["query", "input"])?;
     let lower = raw.to_lowercase();
 
     match action {
@@ -1346,23 +1345,32 @@ fn extract_os_tool_target(input: &serde_json::Value, action: &str) -> Option<Str
                 return Some(raw[raw.len() - rest.len()..].trim().to_string());
             }
         }
-        "open_file" => {
-            if let Some(rest) = lower.strip_prefix("open ") {
-                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+        "open_file" | "launch" => {
+            let mut res: Option<String> = None;
+            for prefix in ["open ", "launch ", "start "] {
+                if let Some(rest) = lower.strip_prefix(prefix) {
+                    res = Some(raw[raw.len() - rest.len()..].to_string());
+                    break;
+                }
             }
-            if let Some(rest) = lower.strip_prefix("launch ") {
-                return Some(raw[raw.len() - rest.len()..].trim().to_string());
-            }
-        }
-        "launch" => {
-            if let Some(rest) = lower.strip_prefix("launch ") {
-                return Some(raw[raw.len() - rest.len()..].trim().to_string());
-            }
-            if let Some(rest) = lower.strip_prefix("open ") {
-                return Some(raw[raw.len() - rest.len()..].trim().to_string());
-            }
-            if let Some(rest) = lower.strip_prefix("start ") {
-                return Some(raw[raw.len() - rest.len()..].trim().to_string());
+            if let Some(target) = res {
+                let mut clean = target.trim().to_string();
+                let lower_clean = clean.to_lowercase();
+                for suffix in [
+                    " file",
+                    " folder",
+                    " app",
+                    " application",
+                    " directory",
+                    " program",
+                    " windows",
+                ] {
+                    if lower_clean.ends_with(suffix) {
+                        clean = clean[..clean.len() - suffix.len()].trim().to_string();
+                        break;
+                    }
+                }
+                return Some(clean);
             }
         }
         "invoke_element" => {
@@ -3172,28 +3180,48 @@ async fn windows_read_file_json(tool_name: &str, path: &str) -> Result<String, D
 
 #[cfg(not(windows))]
 async fn windows_open_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
+    let mut target_path = path.to_string();
+    
+    // Smart resolution for well-known Linux folders if the path doesn't exist directly
+    if !cfg!(target_os = "macos") && !std::path::Path::new(&target_path).exists() {
+        let lower = target_path.to_lowercase();
+        let well_known = [
+            "downloads", "documents", "pictures", "videos", "music", "desktop", "templates", "public"
+        ];
+        
+        if well_known.iter().any(|&f| lower == f) {
+            if let Ok(home) = std::env::var("HOME") {
+                let capitalized = format!("{}{}", &lower[0..1].to_uppercase(), &lower[1..]);
+                let home_path = std::path::PathBuf::from(home).join(&capitalized);
+                if home_path.exists() {
+                    target_path = home_path.to_string_lossy().to_string();
+                }
+            }
+        }
+    }
+
     let cmd = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
     let status = Command::new(cmd)
-        .arg(path)
+        .arg(&target_path)
         .status()
         .await
         .map_err(|e| DynamicToolError::ExecutionFailed {
             tool: tool_name.to_string(),
-            details: format!("Failed to launch {} for '{}': {}", cmd, path, e),
+            details: format!("Failed to launch {} for '{}': {}", cmd, target_path, e),
         })?;
 
     if !status.success() {
         return Err(DynamicToolError::ExecutionFailed {
             tool: tool_name.to_string(),
-            details: format!("{} failed with status {} for '{}'.", cmd, status, path),
+            details: format!("{} failed with status {} for '{}'.", cmd, status, target_path),
         });
     }
 
     Ok(json!({
         "action": "open_file",
-        "path": path,
+        "path": target_path,
         "success": true,
-        "summary": format!("Launched '{}' using {}.", path, cmd)
+        "summary": format!("Launched '{}' using {}.", target_path, cmd)
     }).to_string())
 }
 

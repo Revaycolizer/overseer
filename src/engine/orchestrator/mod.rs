@@ -583,7 +583,24 @@ async fn try_native_computer_shortcut(
 
     let raw = match crate::engine::tools::call_dynamic_tool(&tool, input_json).await {
         Ok(raw) => raw,
-        Err(_) => return None,
+        Err(e) => {
+            let error_msg = format!("Native shortcut failed: {}", e);
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "native_computer_shortcut_failed",
+                "failed",
+                Some("computer"),
+                Some(query),
+                Some("os_tool"),
+                None,
+                Some(&error_msg),
+                None,
+            )
+            .await;
+            return Some(error_msg);
+        }
     };
 
     let rendered = render_native_os_tool_response(&raw);
