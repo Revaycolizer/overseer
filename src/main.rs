@@ -46,6 +46,12 @@ const HEADER_SVG: Asset = asset!("/assets/header.svg");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const ICON_PNG: &str = "/assets/overseer.png";
 
+const PRISM_CSS: Asset = asset!("/assets/prism/prism-tomorrow.min.css");
+const PRISM_JS: Asset = asset!("/assets/prism/prism.min.js");
+const PRISM_PYTHON: Asset = asset!("/assets/prism/prism-python.min.js");
+const PRISM_RUST: Asset = asset!("/assets/prism/prism-rust.min.js");
+const PRISM_MARKDOWN: Asset = asset!("/assets/prism/prism-markdown.min.js");
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     println!("📍 Overseer launched with args: {:?}", args);
@@ -95,11 +101,11 @@ fn App() -> Element {
         document::Stylesheet { href: TAILWIND_CSS }
 
         // PrismJS for Syntax Highlighting
-        document::Link { rel: "stylesheet", href: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" }
-        document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" }
-        document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js" }
-        document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js" }
-        document::Script { src: "https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js" }
+        document::Link { rel: "stylesheet", href: PRISM_CSS }
+        document::Script { src: PRISM_JS }
+        document::Script { src: PRISM_PYTHON }
+        document::Script { src: PRISM_RUST }
+        document::Script { src: PRISM_MARKDOWN }
 
         document::Script {
             {r#"
