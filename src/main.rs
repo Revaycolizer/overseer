@@ -44,13 +44,10 @@ enum Route {
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
-const ICON_PNG: &str = "/assets/overseer.png";
+const ICON_PNG: Asset =  asset!("/assets/overseer.png");
 
 const PRISM_CSS: Asset = asset!("/assets/prism/prism-tomorrow.min.css");
-const PRISM_JS: Asset = asset!("/assets/prism/prism.min.js");
-const PRISM_PYTHON: Asset = asset!("/assets/prism/prism-python.min.js");
-const PRISM_RUST: Asset = asset!("/assets/prism/prism-rust.min.js");
-const PRISM_MARKDOWN: Asset = asset!("/assets/prism/prism-markdown.min.js");
+const PRISM_BUNDLE_JS: Asset = asset!("/assets/prism/prism-bundle.min.js");
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -102,10 +99,7 @@ fn App() -> Element {
 
         // PrismJS for Syntax Highlighting
         document::Link { rel: "stylesheet", href: PRISM_CSS }
-        document::Script { src: PRISM_JS }
-        document::Script { src: PRISM_PYTHON }
-        document::Script { src: PRISM_RUST }
-        document::Script { src: PRISM_MARKDOWN }
+        document::Script { src: PRISM_BUNDLE_JS }
 
         document::Script {
             {r#"
