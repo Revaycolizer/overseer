@@ -972,6 +972,17 @@ fn is_native_browser_state_request(query: &str, step: &str, domain: &str) -> boo
         || (combined.contains("browser") && combined.contains("open"))
 }
 
+fn is_native_document_request(query: &str, _step: &str, domain: &str) -> bool {
+    if domain != "office" {
+        return false;
+    }
+    let lower = query.to_lowercase();
+    lower.contains("generate") || lower.contains("create") || lower.contains("write") 
+        || lower.contains("export") || lower.contains("report")
+        || lower.contains(".docx") || lower.contains(".pdf") || lower.contains(".xlsx") || lower.contains(".csv")
+        || lower.contains("word") || lower.contains("excel") || lower.contains("document")
+}
+
 fn is_native_accessibility_request(query: &str, step: &str, domain: &str) -> bool {
     if !matches!(domain, "computer" | "desktop") {
         return false;
@@ -1377,6 +1388,36 @@ fn parse_file_search_payload(payload: &str) -> (Vec<String>, Vec<String>, String
         vec!["Local file search completed.".to_string()],
         Vec::new(),
         "Local file search completed.".to_string(),
+    )
+}
+
+fn parse_document_writer_payload(payload: &str) -> (Vec<String>, Vec<String>, String) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
+        let mut evidence = Vec::new();
+        let mut artifacts = Vec::new();
+        let message = value
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Document generation completed.");
+
+        if let Some(items) = value.get("artifacts").and_then(|a| a.as_array()) {
+            for item in items {
+                let path = item.get("path").and_then(|p| p.as_str()).unwrap_or("");
+                let label = item.get("label").and_then(|l| l.as_str()).unwrap_or("Export");
+                if !path.is_empty() {
+                    evidence.push(format!("{}: {}", label, path));
+                    artifacts.push(path.to_string());
+                }
+            }
+        }
+
+        return (evidence, artifacts, message.to_string());
+    }
+
+    (
+        vec!["Document generation completed.".to_string()],
+        Vec::new(),
+        "Document generation completed.".to_string(),
     )
 }
 
@@ -1844,6 +1885,57 @@ pub async fn dispatch_domain(
                 summary,
                 evidence,
                 Vec::new(),
+                true,
+                s.hide_evidence,
+                raw,
+            ));
+        }
+    }
+
+    if is_native_document_request(query, step, domain) {
+        if let Some(tool) = tools.iter().find(|tool| tool.name == "document_writer") {
+            let input_json = serde_json::json!({ "filename": "overseer_report", "data": [ { "Task": step, "Status": "Completed", "Query": query } ] });
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_started",
+                "running",
+                Some(domain),
+                Some(step),
+                Some("document_writer"),
+                None,
+                Some("Using native document generation fast path."),
+                Some(&input_json.to_string()),
+            )
+            .await;
+
+            let raw = crate::engine::tools::call_dynamic_tool(tool, input_json.clone())
+                .await
+                .map_err(|err| format!("Native document generation failed: {}", err))?;
+
+            let (evidence, artifacts, summary) = parse_document_writer_payload(&raw);
+
+            record_event(
+                db,
+                run_id,
+                event_sequence,
+                "tool_completed",
+                "completed",
+                Some(domain),
+                Some(step),
+                Some("document_writer"),
+                None,
+                Some(&summary),
+                Some(&raw),
+            )
+            .await;
+
+            return Ok(SupervisorExecutionResult::completed(
+                summary,
+                evidence,
+                artifacts,
                 true,
                 s.hide_evidence,
                 raw,
