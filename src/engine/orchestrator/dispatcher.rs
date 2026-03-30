@@ -101,6 +101,24 @@ async fn ensure_native_computer_tools(
     }
 }
 
+async fn ensure_native_office_tools(
+    db: &crate::db::Database,
+    query: &str,
+    tools: &mut Vec<crate::engine::utils::discovery::ToolInfo>,
+) {
+    if !is_native_document_request(query, "", "office") {
+        return;
+    }
+
+    if !tools.iter().any(|tool| tool.name == "document_writer") {
+        if let Ok(all_tools) = crate::backend::get_tools(db).await {
+            if let Some(tool) = all_tools.iter().find(|tool| tool.name == "document_writer") {
+                tools.push(tool.clone());
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ToolGateDecision {
     allowed: bool,
@@ -973,14 +991,21 @@ fn is_native_browser_state_request(query: &str, step: &str, domain: &str) -> boo
 }
 
 fn is_native_document_request(query: &str, _step: &str, domain: &str) -> bool {
-    if domain != "office" {
-        return false;
-    }
     let lower = query.to_lowercase();
-    lower.contains("generate") || lower.contains("create") || lower.contains("write") 
+    let has_doc_keywords = lower.contains("generate") || lower.contains("create") || lower.contains("write") 
         || lower.contains("export") || lower.contains("report")
         || lower.contains(".docx") || lower.contains(".pdf") || lower.contains(".xlsx") || lower.contains(".csv")
-        || lower.contains("word") || lower.contains("excel") || lower.contains("document")
+        || lower.contains("word") || lower.contains("excel") || lower.contains("document");
+    
+    if domain == "office" {
+        return has_doc_keywords;
+    }
+    
+    // Fallback: If not in office domain, only trigger if it's very clearly a document request
+    let is_explicit = (lower.contains("pdf") || lower.contains("word") || lower.contains("docx") || lower.contains("excel")) 
+        && (lower.contains("generate") || lower.contains("create") || lower.contains("export") || lower.contains("save as"));
+        
+    is_explicit
 }
 
 fn is_native_accessibility_request(query: &str, step: &str, domain: &str) -> bool {
@@ -1603,6 +1628,7 @@ pub async fn dispatch_domain(
         .await
         .unwrap_or_default();
     ensure_native_computer_tools(db, domain, &mut tools).await;
+    ensure_native_office_tools(db, query, &mut tools).await;
 
     if is_native_screenshot_request(query, step, domain) {
         if let Some(os_tool) = tools.iter().find(|tool| tool.name == "os_tool") {
