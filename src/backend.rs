@@ -900,7 +900,7 @@ fn is_image_file_path(path: &std::path::Path) -> bool {
     )
 }
 
-fn extract_local_image_paths_from_content(content: &str) -> Vec<std::path::PathBuf> {
+fn extract_local_file_paths_from_content(content: &str) -> Vec<std::path::PathBuf> {
     fn normalize_candidate(line: &str) -> Option<&str> {
         let trimmed = line
             .trim()
@@ -914,7 +914,27 @@ fn extract_local_image_paths_from_content(content: &str) -> Vec<std::path::PathB
             return None;
         }
 
-        Some(trimmed)
+        // Expanded detection for non-image artifacts
+        let lower = trimmed.to_lowercase();
+        let is_file = lower.ends_with(".pdf")
+            || lower.ends_with(".docx")
+            || lower.ends_with(".doc")
+            || lower.ends_with(".xlsx")
+            || lower.ends_with(".xls")
+            || lower.ends_with(".csv")
+            || lower.ends_with(".zip")
+            || lower.ends_with(".json")
+            || lower.ends_with(".txt")
+            || lower.ends_with(".png")
+            || lower.ends_with(".jpg")
+            || lower.ends_with(".jpeg")
+            || lower.ends_with(".webp");
+
+        if is_file {
+            Some(trimmed)
+        } else {
+            None
+        }
     }
 
     fn extract_markdown_image_target(line: &str) -> Option<String> {
@@ -925,15 +945,19 @@ fn extract_local_image_paths_from_content(content: &str) -> Vec<std::path::PathB
 
     fn extract_attach_marker_target(line: &str) -> Option<String> {
         let trimmed = line.trim();
-        let target = trimmed
-            .strip_prefix("[[ATTACH_IMAGE:")
-            .and_then(|value| value.strip_suffix("]]"))?;
-        let clean = target.trim();
-        if clean.is_empty() {
-            None
-        } else {
-            Some(clean.to_string())
+        let markers = ["[[ATTACH_IMAGE:", "[[ATTACH_FILE:"];
+        for prefix in markers {
+            if let Some(start) = trimmed.find(prefix) {
+                let rest = &trimmed[start + prefix.len()..];
+                if let Some(end) = rest.find("]]") {
+                    let target = rest[..end].trim();
+                    if !target.is_empty() {
+                        return Some(target.to_string());
+                    }
+                }
+            }
         }
+        None
     }
 
     let mut paths = Vec::new();
@@ -957,15 +981,18 @@ fn extract_local_image_paths_from_content(content: &str) -> Vec<std::path::PathB
         let candidate = candidate
             .strip_prefix("file:///")
             .or_else(|| candidate.strip_prefix("file://"))
-            .unwrap_or(&candidate);
-        let candidate = candidate.replace('/', std::path::MAIN_SEPARATOR_STR);
-        let path = std::path::PathBuf::from(candidate);
+            .unwrap_or(&candidate)
+            .replace('/', std::path::MAIN_SEPARATOR_STR);
 
-        if path.is_absolute()
-            && is_image_file_path(&path)
-            && path.exists()
-            && seen.insert(path.clone())
-        {
+        let path = std::path::PathBuf::from(candidate);
+        let exists = if path.is_absolute() {
+            path.exists()
+        } else {
+            // Check relative to project root
+            std::fs::metadata(&path).is_ok()
+        };
+
+        if exists && seen.insert(path.clone()) {
             paths.push(path);
         }
     }
@@ -973,23 +1000,23 @@ fn extract_local_image_paths_from_content(content: &str) -> Vec<std::path::PathB
     paths
 }
 
-async fn attach_assistant_images_from_content(
+async fn attach_assistant_files_from_content(
     db: &Database,
     message_id: i64,
     content: &str,
 ) -> anyhow::Result<()> {
-    let image_paths = extract_local_image_paths_from_content(content);
-    if image_paths.is_empty() {
+    let file_paths = extract_local_file_paths_from_content(content);
+    if file_paths.is_empty() {
         return Ok(());
     }
 
     std::fs::create_dir_all("overseer_files")?;
 
-    for path in image_paths {
+    for path in file_paths {
         let original_name = path
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or("assistant-image.png");
+            .unwrap_or("assistant-file");
         let stored_name = format!("assistant-{}-{}", message_id, original_name);
         let stored_path = std::path::Path::new("overseer_files").join(&stored_name);
 
@@ -1041,7 +1068,7 @@ pub async fn add_message(
         .await?;
 
     if role == "assistant" {
-        let _ = attach_assistant_images_from_content(db, id, content).await;
+        let _ = attach_assistant_files_from_content(db, id, content).await;
     }
 
     Ok(id)

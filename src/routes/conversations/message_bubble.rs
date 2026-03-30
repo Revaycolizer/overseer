@@ -352,21 +352,15 @@ fn parse_markdown_text(text: &str) -> Vec<MarkdownSegment> {
 
 #[component]
 fn AttachmentPreview(att: backend::Attachment) -> Element {
-    if !att.content_type.starts_with("image/") {
-        return rsx! {
-            div { class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 shadow-sm",
-                MaterialIcon { name: "insert_drive_file", size: 16 }
-                "{att.filename}"
-            }
-        };
-    }
-
     let file_path = att.file_path.clone();
     let content_type = att.content_type.clone();
     let filename = att.filename.clone();
-    let image_data = use_resource(move || {
-        let file_path = file_path.clone();
-        let content_type = content_type.clone();
+
+    let file_path_clone = file_path.clone();
+    let content_type_clone = content_type.clone();
+    let asset_data = use_resource(move || {
+        let file_path = file_path_clone.clone();
+        let content_type = content_type_clone.clone();
         async move {
             match std::fs::read(&file_path) {
                 Ok(bytes) if !bytes.is_empty() => Some(format!(
@@ -379,28 +373,84 @@ fn AttachmentPreview(att: backend::Attachment) -> Element {
         }
     });
 
-    match image_data().flatten() {
-        Some(src) => rsx! {
-            div { class: "space-y-2",
-                a {
-                    href: "{src}",
-                    target: "_blank",
-                    class: "block group w-fit",
-                    img {
-                        src: "{src}",
-                        alt: "{filename}",
-                        class: "rounded-2xl border border-slate-200 shadow-sm max-w-full h-auto block bg-white"
+    let is_image = content_type.starts_with("image/");
+    let icon_name = if is_image {
+        "image"
+    } else if content_type.contains("pdf") {
+        "picture_as_pdf"
+    } else if content_type.contains("spreadsheet")
+        || content_type.contains("excel")
+        || filename.ends_with(".xlsx")
+        || filename.ends_with(".xls")
+        || filename.ends_with(".csv")
+    {
+        "table_view"
+    } else if content_type.contains("word")
+        || filename.ends_with(".docx")
+        || filename.ends_with(".doc")
+    {
+        "description"
+    } else {
+        "insert_drive_file"
+    };
+
+    let icon_color = if icon_name == "picture_as_pdf" {
+        "text-red-500"
+    } else if icon_name == "table_view" {
+        "text-emerald-600"
+    } else if icon_name == "description" {
+        "text-blue-600"
+    } else {
+        "text-slate-400"
+    };
+
+    match asset_data().flatten() {
+        Some(src) => {
+            if is_image {
+                rsx! {
+                    div { class: "space-y-2",
+                        a {
+                            href: "{src}",
+                            target: "_blank",
+                            class: "block group w-fit",
+                            img {
+                                src: "{src}",
+                                alt: "{filename}",
+                                class: "rounded-2xl border border-slate-200 shadow-sm max-w-full h-auto block bg-white"
+                            }
+                        }
+                        div { class: "text-[10px] font-semibold text-slate-500 px-1 break-all",
+                            "{filename}"
+                        }
                     }
                 }
-                div { class: "text-[10px] font-semibold text-slate-500 px-1 break-all",
-                    "{filename}"
+            } else {
+                rsx! {
+                    a {
+                        href: "{src}",
+                        download: "{filename}",
+                        class: "inline-flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[12px] font-bold text-slate-700 shadow-sm hover:shadow-md hover:border-blue-200 hover:bg-blue-50/30 transition-all group",
+                        div { class: "size-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-white transition-colors",
+                            MaterialIcon {
+                                name: "{icon_name}",
+                                size: 20,
+                                color: MaterialIconColor::Custom(icon_color.to_string())
+                            }
+                        }
+                        div { class: "flex flex-col gap-0.5",
+                            span { class: "line-clamp-1", "{filename}" }
+                            span { class: "text-[9px] text-slate-400 uppercase tracking-tighter font-black",
+                                "Click to Download"
+                            }
+                        }
+                    }
                 }
             }
-        },
+        }
         None => rsx! {
             div { class: "space-y-2",
                 div { class: "rounded-2xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-sm",
-                    "Image preview unavailable."
+                    "File preview unavailable."
                 }
                 div { class: "text-[10px] font-semibold text-slate-500 px-1 break-all",
                     "{filename}"

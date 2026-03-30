@@ -854,6 +854,14 @@ impl SupervisorExecutionResult {
                             || lower.ends_with(".svg"))
                     {
                         format!("![Artifact]({})", item)
+                    } else if (lower.ends_with(".pdf")
+                        || lower.ends_with(".docx")
+                        || lower.ends_with(".xlsx")
+                        || lower.ends_with(".csv"))
+                        && (item.contains('/') || item.contains('\\'))
+                    {
+                        // Internal local file markers for the UI to show as file cards
+                        format!("[[ATTACH_FILE:{}]]", item)
                     } else {
                         formatted
                     }

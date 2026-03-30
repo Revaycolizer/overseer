@@ -91,10 +91,10 @@ pub fn clean_content(content: &str) -> String {
             if trimmed == "ARTIFACT_CONTEXT:" || trimmed == "WORK_ITEM_CONTEXT:" {
                 return false;
             }
-            !((trimmed.starts_with("[[ATTACH_IMAGE:")
-                || trimmed.starts_with("[[ARTIFACT_REF:")
-                || trimmed.starts_with("[[WORK_ITEM_REF:"))
-                && trimmed.ends_with("]]"))
+            !(trimmed.contains("[[ATTACH_IMAGE:")
+                || trimmed.contains("[[ATTACH_FILE:")
+                || trimmed.contains("[[ARTIFACT_REF:")
+                || trimmed.contains("[[WORK_ITEM_REF:"))
         })
         .collect::<Vec<_>>()
         .join("\n");
