@@ -1318,7 +1318,8 @@ pub async fn dispatch_domain(
             return Ok(SupervisorExecutionResult::completed(
                 summary,
                 evidence,
-                artifacts,
+                Vec::new(),
+                Vec::new(),
                 true,
                 s.hide_evidence,
                 raw,
@@ -1370,6 +1371,7 @@ pub async fn dispatch_domain(
             return Ok(SupervisorExecutionResult::completed(
                 summary,
                 evidence,
+                Vec::new(),
                 Vec::new(),
                 true,
                 s.hide_evidence,
@@ -1423,6 +1425,7 @@ pub async fn dispatch_domain(
                             summary,
                             evidence,
                             blocked_error,
+                            Vec::new(),
                             payload.to_string(),
                         ));
                     }
@@ -1450,6 +1453,7 @@ pub async fn dispatch_domain(
             return Ok(SupervisorExecutionResult::completed(
                 summary,
                 evidence,
+                Vec::new(),
                 Vec::new(),
                 verified,
                 s.hide_evidence,
@@ -1503,6 +1507,7 @@ pub async fn dispatch_domain(
                 summary,
                 evidence,
                 Vec::new(),
+                Vec::new(),
                 true,
                 s.hide_evidence,
                 raw,
@@ -1555,6 +1560,7 @@ pub async fn dispatch_domain(
                 summary,
                 evidence,
                 Vec::new(),
+                Vec::new(),
                 true,
                 s.hide_evidence,
                 raw,
@@ -1605,7 +1611,8 @@ pub async fn dispatch_domain(
             return Ok(SupervisorExecutionResult::completed(
                 summary,
                 evidence,
-                artifacts,
+                Vec::new(),
+                Vec::new(),
                 true,
                 s.hide_evidence,
                 raw,
@@ -1657,7 +1664,8 @@ pub async fn dispatch_domain(
             return Ok(SupervisorExecutionResult::completed(
                 summary,
                 evidence,
-                artifacts,
+                Vec::new(),
+                Vec::new(),
                 true,
                 s.hide_evidence,
                 raw,
@@ -1710,6 +1718,7 @@ pub async fn dispatch_domain(
                 summary,
                 evidence,
                 Vec::new(),
+                Vec::new(),
                 true,
                 s.hide_evidence,
                 raw,
@@ -1717,6 +1726,7 @@ pub async fn dispatch_domain(
         }
     }
 
+    let has_charting_tool = tools.iter().any(|t| t.name == "charting");
     let agent = AgentBuilder::new(ollama_client.completion_model(&supervisor_model))
         .preamble(s.instructions.as_deref().unwrap_or(""))
         .build();
@@ -1732,7 +1742,7 @@ pub async fn dispatch_domain(
         
         let format_instruction = if s.response_format == "json" {
             "If you are returning a FINAL answer, respond ONLY with JSON:\n\
-             {\"status\":\"completed|unverified|failed\",\"summary\":\"concise overview\",\"evidence\":[...results...],\"artifacts\":[],\"verified\":true|false}"
+             {\"status\":\"completed|unverified|failed\",\"summary\":\"concise overview\",\"evidence\":[...],\"charts\":[{\"chart_type\":\"bar|line|pie\",\"title\":\"...\",\"labels\":[\"A\",\"B\"],\"data\":[10,20]}],\"artifacts\":[],\"verified\":true|false}"
         } else {
             "If you are returning a FINAL answer, provide a clear, concise summary in Markdown."
         };
@@ -1741,14 +1751,11 @@ pub async fn dispatch_domain(
             "AVAILABLE TOOLS:\n{}\n\n\
              To use a tool, respond ONLY with JSON: {{\"tool\": \"tool_name\", \"input\": {{...}}}}\n\
              {}\n\
-             EVIDENCE RULE: If stealth_search returned results, copy each result object as-is into the 'evidence' array as JSON objects with 'title', 'url', and 'snippet' fields.\n\
              SAFETY: Prefer lower-risk tools first.\n\
              Never claim completion without evidence.\n\n",
             list, format_instruction
         )
     };
-
-    let has_charting_tool = tools.iter().any(|t| t.name == "charting");
     let clean_context = sanitize_context(memory_context);
     let clean_plan = sanitize_context(plan_history);
     let monitoring_hint = monitoring_strategy_hint(query, step, &tools)
@@ -2097,6 +2104,7 @@ pub async fn dispatch_domain(
     let mut last_tool_signature: Option<String> = None;
     let mut repeated_tool_calls = 0usize;
     let mut tool_progress_signatures = HashSet::new();
+    let mut last_chart: Option<String> = None;
     let mut iteration_budget = base_iterations;
     const MAX_SVG_RETRIES: usize = 2;
     const MAX_IDENTICAL_TOOL_CALLS: usize = 3;
@@ -2298,6 +2306,7 @@ pub async fn dispatch_domain(
                     final_response = Some(SupervisorExecutionResult::failed(
                         "Supervisor entered a repeated tool-call loop.".to_string(),
                         loop_error,
+                        Vec::new(),
                         trimmed.to_string(),
                     ));
                     break;
@@ -2444,15 +2453,22 @@ pub async fn dispatch_domain(
                     && (tool_result.starts_with("---CHART_SVG---")
                         || tool_result.starts_with("---CHART_HTML---"))
                 {
-                    final_response = Some(SupervisorExecutionResult::completed(
-                        "Generated a chart artifact.".to_string(),
-                        vec!["Charting tool completed successfully.".to_string()],
-                        vec!["chart".to_string()],
-                        true,
-                        s.hide_evidence,
-                        tool_result,
-                    ));
-                    break;
+                    last_chart = Some(tool_result.clone());
+                    if s.response_format != "json" {
+                        final_response = Some(SupervisorExecutionResult::completed(
+                            "Generated a chart artifact.".to_string(),
+                            vec!["Charting tool completed successfully.".to_string()],
+                            vec!["chart".to_string()],
+                            vec![super::response::ChartPart {
+                                chart_type: if tool_result.starts_with("---CHART_SVG---") { "svg".to_string() } else { "html".to_string() },
+                                value: tool_result,
+                            }],
+                            true,
+                            s.hide_evidence,
+                            "Charting tool result used directly.".to_string(),
+                        ));
+                        break;
+                    }
                 }
 
                 current_prompt = format!(
@@ -2490,13 +2506,25 @@ pub async fn dispatch_domain(
             final_response = Some(SupervisorExecutionResult::failed(
                 "Chart generation failed.".to_string(),
                 "Model wrote manual SVG instead of using the charting tool.".to_string(),
+                Vec::new(),
                 response.clone(),
             ));
             break;
         }
 
         let processed = post_process_for_domain(domain, response);
-        final_response = Some(parse_supervisor_result(processed, s.hide_evidence));
+        let mut res = parse_supervisor_result(processed, s.hide_evidence);
+        
+        // Auto-attach last chart if referenced but missing content
+        if let Some(chart) = last_chart {
+            if res.raw_response.contains("---CHART_SVG---") && !res.raw_response.contains("<svg") {
+                res.raw_response = format!("{}\n\n{}", res.raw_response, chart);
+            } else if res.raw_response.contains("---CHART_HTML---") && !res.raw_response.contains("<div") {
+                res.raw_response = format!("{}\n\n{}", res.raw_response, chart);
+            }
+        }
+        
+        final_response = Some(res);
         break;
     }
 
@@ -2508,6 +2536,7 @@ pub async fn dispatch_domain(
                 iteration,
                 hard_iteration_cap
             ),
+            Vec::new(),
             String::new(),
         )
     }))
@@ -2609,6 +2638,7 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
         return SupervisorExecutionResult::failed(
             "Empty response from supervisor.".to_string(),
             "Empty response.".to_string(),
+            Vec::new(),
             cleaned,
         );
     }
@@ -2618,6 +2648,7 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
             "Generated a chart artifact.".to_string(),
             vec!["Charting tool returned a chart artifact.".to_string()],
             vec!["chart".to_string()],
+            Vec::new(),
             true,
             hide_evidence,
             cleaned,
@@ -2678,6 +2709,34 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
+            let charts = value
+                .get("charts")
+                .and_then(|v| v.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| {
+                            let chart_type = item.get("chart_type").and_then(|v| v.as_str()).unwrap_or("svg").to_string();
+                            let value = if chart_type == "svg" || chart_type == "html" {
+                                item.get("value").and_then(|v| v.as_str()).unwrap_or("").to_string()
+                            } else {
+                                // For bar, line, pie, etc., the whole item is the data
+                                item.to_string()
+                            };
+                            
+                            if value.is_empty() && (chart_type == "svg" || chart_type == "html") {
+                                None
+                            } else {
+                                Some(crate::engine::orchestrator::response::ChartPart {
+                                    chart_type,
+                                    value,
+                                })
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
             let verified = value
                 .get("verified")
                 .and_then(|v| v.as_bool())
@@ -2691,7 +2750,8 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
                 status,
                 summary,
                 evidence,
-                artifacts,
+                artifacts: Vec::new(),
+                charts,
                 verified,
                 hide_evidence,
                 error,
@@ -2737,6 +2797,7 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
         summary,
         evidence,
         artifacts: Vec::new(),
+        charts: Vec::new(),
         verified: false,
         hide_evidence,
         error: None,
@@ -2779,6 +2840,11 @@ fn clean_stealth_output(response: String) -> String {
 }
 
 fn post_process_agent_response(response: String) -> String {
+    let trimmed = response.trim();
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        return response;
+    }
+
     if let Some(pos) = response
         .find("---CHART_SVG---")
         .or_else(|| response.find("---CHART_HTML---"))
@@ -2927,6 +2993,7 @@ mod tests {
                 format!("<img src='{}'>", screenshot_path.display()),
             ],
             vec![screenshot_path.to_string_lossy().to_string()],
+            Vec::new(),
             true,
             false,
             format!(

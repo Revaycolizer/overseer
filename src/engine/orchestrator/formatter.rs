@@ -55,5 +55,8 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
         }
     }
 
+    // 5. Append charts from intermediate result
+    structured.charts.extend(res.charts.clone());
+
     structured
 }

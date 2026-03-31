@@ -10,6 +10,8 @@ pub struct SupervisorExecutionResult {
     #[serde(default)]
     pub artifacts: Vec<String>,
     #[serde(default)]
+    pub charts: Vec<super::response::ChartPart>,
+    #[serde(default)]
     pub verified: bool,
     #[serde(default)]
     pub hide_evidence: bool,
@@ -22,6 +24,7 @@ impl SupervisorExecutionResult {
         summary: String,
         evidence: Vec<String>,
         artifacts: Vec<String>,
+        charts: Vec<super::response::ChartPart>,
         verified: bool,
         hide_evidence: bool,
         raw_response: String,
@@ -31,6 +34,7 @@ impl SupervisorExecutionResult {
             summary,
             evidence,
             artifacts,
+            charts,
             verified,
             hide_evidence,
             error: None,
@@ -38,12 +42,18 @@ impl SupervisorExecutionResult {
         }
     }
 
-    pub fn failed(summary: String, error: String, raw_response: String) -> Self {
+    pub fn failed(
+        summary: String,
+        error: String,
+        charts: Vec<super::response::ChartPart>,
+        raw_response: String,
+    ) -> Self {
         Self {
             status: "failed".to_string(),
             summary,
             evidence: Vec::new(),
             artifacts: Vec::new(),
+            charts,
             verified: false,
             hide_evidence: false,
             error: Some(error),
@@ -55,6 +65,7 @@ impl SupervisorExecutionResult {
         summary: String,
         evidence: Vec<String>,
         error: String,
+        charts: Vec<super::response::ChartPart>,
         raw_response: String,
     ) -> Self {
         Self {
@@ -62,6 +73,7 @@ impl SupervisorExecutionResult {
             summary,
             evidence,
             artifacts: Vec::new(),
+            charts,
             verified: false,
             hide_evidence: false,
             error: Some(error),

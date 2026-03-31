@@ -3,7 +3,7 @@ pub use crate::engine::orchestrator::response::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VizKind { Svg, Html, Asset, Search }
+pub enum VizKind { Svg, Html, Asset, Search, Data }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VizBlock { pub kind: VizKind, pub payload: String }

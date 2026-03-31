@@ -301,6 +301,7 @@ pub async fn verify_execution_grounding(
                         summary: "Grounding verification failed.".to_string(),
                         evidence: Vec::new(),
                         artifacts: Vec::new(),
+                        charts: Vec::new(),
                         verified: false,
                         hide_evidence: false,
                         error: Some(ga_response.clone()),
