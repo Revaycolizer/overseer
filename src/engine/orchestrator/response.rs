@@ -29,10 +29,17 @@ pub struct SourcePart {
     pub description: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ChartPart {
-    pub chart_type: String, // svg, html, asset
-    pub value: String,      // payload
+    pub chart_type: String, // svg, html, asset, bar, line, pie
+    #[serde(default)]
+    pub value: Option<String>, // payload for legacy
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub labels: Option<Vec<String>>,
+    #[serde(default)]
+    pub data: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

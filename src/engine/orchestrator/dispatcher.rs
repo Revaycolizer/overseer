@@ -2461,7 +2461,8 @@ pub async fn dispatch_domain(
                             vec!["chart".to_string()],
                             vec![super::response::ChartPart {
                                 chart_type: if tool_result.starts_with("---CHART_SVG---") { "svg".to_string() } else { "html".to_string() },
-                                value: tool_result,
+                                value: Some(tool_result),
+                                ..Default::default()
                             }],
                             true,
                             s.hide_evidence,
@@ -2729,7 +2730,8 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
                             } else {
                                 Some(crate::engine::orchestrator::response::ChartPart {
                                     chart_type,
-                                    value,
+                                    value: Some(value),
+                                    ..Default::default()
                                 })
                             }
                         })

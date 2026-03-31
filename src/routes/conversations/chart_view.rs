@@ -110,11 +110,13 @@ fn BarChart(data: ChartData) -> Element {
                         let height = (val / max_val * 100.0) as f32;
                         let label = data.labels.get(i).cloned().unwrap_or_default();
                         rsx! {
-                            div { class: "relative flex-1 group flex flex-col items-center",
-                                // Bar
+                            div { class: "relative h-full flex-1 group flex flex-col items-center",
+                                // Proportional Spacer (top)
+                                div { style: "flex-grow: {max_val - val}" }
+                                // Proportional Bar (bottom)
                                 div { 
                                     class: "w-full bg-gradient-to-t from-blue-500 to-indigo-400 rounded-t-lg transition-all duration-300 hover:from-blue-600 hover:to-indigo-500 shadow-sm",
-                                    style: "height: {height}%",
+                                    style: "flex-grow: {val}",
                                     title: "{val}"
                                 }
                                 // Tooltip

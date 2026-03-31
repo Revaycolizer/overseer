@@ -37,10 +37,35 @@ pub fn StructuredView(res: StructuredResponse, hide_evidence: bool) -> Element {
                 }
             }
             for chart in &res.charts {
-                ChartBlock { block: VizBlock {
-                    kind: match chart.chart_type.as_str() { "svg" => VizKind::Svg, "html" => VizKind::Html, _ => VizKind::Asset },
-                    payload: chart.value.clone(),
-                }, hide_evidence }
+                {
+                    let kind = match chart.chart_type.as_str() {
+                        "svg" => VizKind::Svg,
+                        "html" => VizKind::Html,
+                        "bar" | "line" | "pie" | "donut" => VizKind::Data,
+                        _ => VizKind::Asset,
+                    };
+                    
+                    let payload = if kind == VizKind::Data {
+                        serde_json::json!({
+                            "chart_type": chart.chart_type,
+                            "title": chart.title,
+                            "labels": chart.labels.clone().unwrap_or_default(),
+                            "data": chart.data.clone().unwrap_or_default(),
+                        }).to_string()
+                    } else {
+                        chart.value.clone().unwrap_or_default()
+                    };
+
+                    rsx! {
+                        ChartBlock { 
+                            block: VizBlock {
+                                kind,
+                                payload,
+                            }, 
+                            hide_evidence 
+                        }
+                    }
+                }
             }
             for unk in &res.unknown {
                 UnknownRenderer { part: unk.clone() }
