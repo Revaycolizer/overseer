@@ -5,6 +5,7 @@ use crate::engine::orchestrator::planner::MacroTask;
 use crate::engine::tools::StructuredPerceptionTool;
 use rig::completion::Message;
 use rig::providers::ollama;
+use crate::engine::orchestrator::response::StructuredResponse;
 
 pub async fn execute_macro_tasks(
     db: &Database,
@@ -21,6 +22,7 @@ pub async fn execute_macro_tasks(
     model_timeout_ms: u64,
 ) -> String {
     let mut master_response = StructuredResponse::new();
+    let mut plan_history = String::new();
     let mut browser_pid: Option<i32> = None;
 
     for (task_idx, macro_task) in macro_tasks.iter().enumerate() {

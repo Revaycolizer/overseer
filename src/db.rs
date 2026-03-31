@@ -94,17 +94,38 @@ impl Database {
             .await
             .context("failed to relax SQLite synchronous mode for migrations")?;
 
-        if let Err(error) = sqlx::migrate!("./migrations").run(&pool).await {
-            if try_reconcile_known_migration_checksum(&pool, &error)
+        if cfg!(debug_assertions) {
+            println!("🔍 Development mode detected: Using filesystem migrations from ./migrations");
+            let migrator = sqlx::migrate::Migrator::new(std::path::Path::new("./migrations"))
                 .await
-                .context("failed while attempting to reconcile known migration checksums")?
-            {
-                sqlx::migrate!("./migrations")
-                    .run(&pool)
+                .context("failed to create filesystem migrator for development")?;
+            
+            if let Err(error) = migrator.run(&pool).await {
+                if try_reconcile_known_migration_checksum(&pool, &error)
                     .await
-                    .context("failed while applying database migrations after reconciliation")?;
-            } else {
-                return Err(error).context("failed while applying database migrations");
+                    .context("failed while attempting to reconcile known migration checksums")?
+                {
+                    migrator.run(&pool)
+                        .await
+                        .context("failed while applying developer migrations after reconciliation")?;
+                } else {
+                    return Err(error).context("failed while applying developer database migrations");
+                }
+            }
+        } else {
+            // Production/Release mode: Use embedded migrations for a portable binary
+            if let Err(error) = sqlx::migrate!("./migrations").run(&pool).await {
+                if try_reconcile_known_migration_checksum(&pool, &error)
+                    .await
+                    .context("failed while attempting to reconcile known migration checksums")?
+                {
+                    sqlx::migrate!("./migrations")
+                        .run(&pool)
+                        .await
+                        .context("failed while applying production migrations after reconciliation")?;
+                } else {
+                    return Err(error).context("failed while applying production database migrations");
+                }
             }
         }
 
