@@ -14,6 +14,12 @@ pub struct AgentInfo {
     pub version: String,
     pub code: Option<String>,
     pub source_files: Vec<String>,
+    #[serde(default = "default_response_format")]
+    pub response_format: String,
+}
+
+fn default_response_format() -> String {
+    "json".to_string()
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow, PartialEq)]

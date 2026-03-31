@@ -1207,7 +1207,7 @@ pub async fn dispatch_domain(
     _browser_pid: &mut Option<i32>,
 ) -> Result<SupervisorExecutionResult, String> {
     let supervisor = sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords FROM supervisors WHERE domain = ?"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords, response_format FROM supervisors WHERE domain = ?"
     )
     .bind(domain)
     .fetch_optional(&db.pool)
@@ -1238,6 +1238,7 @@ pub async fn dispatch_domain(
                 version: "1.0.0".to_string(),
                 code: None,
                 source_files: Vec::new(),
+                response_format: "json".to_string(),
             })
     };
 
@@ -1728,16 +1729,22 @@ pub async fn dispatch_domain(
             .map(|t| format!("- {} [{}]: {}", t.name, t.safety_level, t.description))
             .collect::<Vec<_>>()
             .join("\n");
+        
+        let format_instruction = if s.response_format == "json" {
+            "If you are returning a FINAL answer, respond ONLY with JSON:\n\
+             {\"status\":\"completed|unverified|failed\",\"summary\":\"concise overview\",\"evidence\":[...results...],\"artifacts\":[],\"verified\":true|false}"
+        } else {
+            "If you are returning a FINAL answer, provide a clear, concise summary in Markdown."
+        };
+
         format!(
             "AVAILABLE TOOLS:\n{}\n\n\
              To use a tool, respond ONLY with JSON: {{\"tool\": \"tool_name\", \"input\": {{...}}}}\n\
-             If you are returning a FINAL answer, respond ONLY with JSON:\n\
-              {{\"status\":\"completed|unverified|failed\",\"summary\":\"concise overview\",\"evidence\":[...results...],\"artifacts\":[],\"verified\":true|false}}\n\
+             {}\n\
              EVIDENCE RULE: If stealth_search returned results, copy each result object as-is into the 'evidence' array as JSON objects with 'title', 'url', and 'snippet' fields.\n\
              SAFETY: Prefer lower-risk tools first.\n\
-             When you call charting, its result (starting with ---CHART_SVG---) MUST be your COMPLETE final response.\n\
              Never claim completion without evidence.\n\n",
-            list
+            list, format_instruction
         )
     };
 
@@ -2023,13 +2030,19 @@ pub async fn dispatch_domain(
         String::new()
     };
 
+    let command_instruction = if s.response_format == "json" {
+        "Final answers must use the structured JSON result schema."
+    } else {
+        "Final answers must be a concise Markdown summary."
+    };
+
     let mut initial_prompt = format!(
         "GOAL: {}\n\
          TASK: {}\n\n\
          {}{}{}CONTEXT:\n{}\n\n\
          PROGRESS:\n{}\n\n\
-         COMMAND: Execute the task using tools if necessary. Final answers must use the structured JSON result schema.{}{}",
-        query, step, artifact_section, file_section, tool_descriptions, remaining_context, clean_plan, monitoring_hint, computer_hint
+         COMMAND: Execute the task using tools if necessary. {}{}{}",
+        query, step, artifact_section, file_section, tool_descriptions, remaining_context, clean_plan, command_instruction, monitoring_hint, computer_hint
     );
 
     if domain == "chat" {
@@ -2039,22 +2052,6 @@ pub async fn dispatch_domain(
     if domain == "stealth" {
         // No hard-coded logic needed, instructions are in DB
     }
-
-    let s = match sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords FROM supervisors WHERE domain = ?"
-    )
-    .bind(domain)
-    .fetch_optional(&db.pool)
-    .await {
-        Ok(Some(s)) => s,
-        _ => {
-            return Ok(SupervisorExecutionResult::failed(
-                "Execution failed.".to_string(),
-                format!("Domain supervisor '{}' not found in database.", domain),
-                String::new(),
-            ));
-        }
-    };
 
     record_event(
         db,

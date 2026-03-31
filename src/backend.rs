@@ -258,7 +258,7 @@ pub async fn get_runtime_health(db: &Database) -> RuntimeHealth {
 pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code FROM agents"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, response_format FROM agents"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -299,6 +299,7 @@ pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
             code: r.get("code"),
             tools: tools_by_agent.remove(&agent_id).unwrap_or_default(),
             source_files: vec![],
+            response_format: r.get::<Option<String>, _>("response_format").unwrap_or_else(|| "json".to_string()),
         });
     }
 
@@ -344,9 +345,9 @@ pub async fn add_agent(
     let id = db.next_id().await;
     let model = resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
     sqlx::query(
-        "INSERT INTO agents (id, name, description, instructions, model, domain, version, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO agents (id, name, description, instructions, model, domain, version, code, response_format) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(id).bind(name).bind(description).bind("").bind(model).bind(domain).bind("1.0.0").bind("")
+    .bind(id).bind(name).bind(description).bind("").bind(model).bind(domain).bind("1.0.0").bind("").bind("json")
     .execute(&db.pool)
     .await?;
     refresh_runtime_registry(db).await;
@@ -372,9 +373,9 @@ pub async fn add_tool(
 
 pub async fn update_agent(db: &Database, agent: AgentInfo) -> anyhow::Result<()> {
     sqlx::query(
-        "UPDATE agents SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        "UPDATE agents SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ?, response_format = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     )
-    .bind(agent.name).bind(agent.description).bind(agent.instructions).bind(agent.model).bind(agent.domain).bind(agent.version).bind(agent.code).bind(agent.id)
+    .bind(agent.name).bind(agent.description).bind(agent.instructions).bind(agent.model).bind(agent.domain).bind(agent.version).bind(agent.code).bind(agent.response_format).bind(agent.id)
     .execute(&db.pool)
     .await?;
     refresh_runtime_registry(db).await;
@@ -513,7 +514,7 @@ async fn refresh_runtime_registry(db: &Database) {
 
 pub async fn get_supervisors(db: &Database) -> anyhow::Result<Vec<crate::db::Supervisor>> {
     let rows = sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords FROM supervisors"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords, response_format FROM supervisors"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -567,10 +568,10 @@ pub async fn add_supervisor(
     let id = db.next_id().await;
     let model = resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
     sqlx::query(
-        "INSERT INTO supervisors (id, name, description, domain, model, version, instructions, code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO supervisors (id, name, description, domain, model, version, instructions, code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords, response_format) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(id).bind(name).bind(description).bind(domain).bind(model).bind("1.0.0").bind("").bind("")
-    .bind(false).bind(None::<String>).bind(None::<i64>).bind(0).bind(false).bind("detailed").bind(false).bind(None::<String>)
+    .bind(false).bind(None::<String>).bind(None::<i64>).bind(0).bind(false).bind("detailed").bind(false).bind(None::<String>).bind("json")
     .execute(&db.pool)
     .await?;
     refresh_runtime_registry(db).await;
@@ -582,7 +583,7 @@ pub async fn update_supervisor(
     supervisor: crate::db::Supervisor,
 ) -> anyhow::Result<()> {
     sqlx::query(
-        "UPDATE supervisors SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ?, bypass_synthesizer = ?, fast_path_keywords = ?, verification_agent_id = ?, routing_priority = ?, hide_evidence = ?, report_style = ?, skip_fast_path_if_artifacts = ?, artifact_fast_path_keywords = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        "UPDATE supervisors SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ?, bypass_synthesizer = ?, fast_path_keywords = ?, verification_agent_id = ?, routing_priority = ?, hide_evidence = ?, report_style = ?, skip_fast_path_if_artifacts = ?, artifact_fast_path_keywords = ?, response_format = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     )
     .bind(supervisor.name).bind(supervisor.description).bind(supervisor.instructions).bind(supervisor.model)
     .bind(supervisor.domain).bind(supervisor.version).bind(supervisor.code)
@@ -592,6 +593,7 @@ pub async fn update_supervisor(
     .bind(supervisor.report_style)
     .bind(supervisor.skip_fast_path_if_artifacts)
     .bind(supervisor.artifact_fast_path_keywords)
+    .bind(supervisor.response_format)
     .bind(supervisor.id)
     .execute(&db.pool)
     .await?;
@@ -614,7 +616,7 @@ pub async fn get_supervisor_agents(
 ) -> anyhow::Result<Vec<AgentInfo>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT a.id, a.name, a.description, a.instructions, a.model, a.domain, a.version, CAST(a.code AS TEXT) as code 
+        "SELECT a.id, a.name, a.description, a.instructions, a.model, a.domain, a.version, CAST(a.code AS TEXT) as code, a.response_format 
          FROM agents a
          JOIN supervisor_agents sa ON a.id = sa.agent_id
          WHERE sa.supervisor_id = ?"
@@ -650,6 +652,7 @@ pub async fn get_supervisor_agents(
             code: r.get("code"),
             tools: tools_rows.into_iter().map(|t| t.get("name")).collect(),
             source_files: vec![],
+            response_format: r.get::<Option<String>, _>("response_format").unwrap_or_else(|| "json".to_string()),
         });
     }
     Ok(agents)
@@ -689,7 +692,7 @@ pub async fn unlink_agent_from_supervisor(
 
 pub async fn get_planners(db: &Database) -> anyhow::Result<Vec<crate::db::Planner>> {
     let rows = sqlx::query_as::<_, crate::db::Planner>(
-        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code FROM planners ORDER BY name ASC"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, response_format FROM planners ORDER BY name ASC"
     )
     .fetch_all(&db.pool)
     .await?;
@@ -705,9 +708,9 @@ pub async fn add_planner(
     let id = db.next_id().await;
     let model = resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
     sqlx::query(
-        "INSERT INTO planners (id, name, description, domain, model, version, instructions, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO planners (id, name, description, domain, model, version, instructions, code, response_format) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(id).bind(name).bind(description).bind(domain).bind(model).bind("1.0.0").bind("").bind("")
+    .bind(id).bind(name).bind(description).bind(domain).bind(model).bind("1.0.0").bind("").bind("").bind("json")
     .execute(&db.pool)
     .await?;
     refresh_runtime_registry(db).await;
@@ -716,10 +719,10 @@ pub async fn add_planner(
 
 pub async fn update_planner(db: &Database, planner: crate::db::Planner) -> anyhow::Result<()> {
     sqlx::query(
-        "UPDATE planners SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ? WHERE id = ?"
+        "UPDATE planners SET name = ?, description = ?, instructions = ?, model = ?, domain = ?, version = ?, code = ?, response_format = ? WHERE id = ?"
     )
     .bind(planner.name).bind(planner.description).bind(planner.instructions).bind(planner.model)
-    .bind(planner.domain).bind(planner.version).bind(planner.code).bind(planner.id)
+    .bind(planner.domain).bind(planner.version).bind(planner.code).bind(planner.response_format).bind(planner.id)
     .execute(&db.pool)
     .await?;
     refresh_runtime_registry(db).await;
@@ -1094,7 +1097,7 @@ pub async fn add_message(
 pub async fn get_agent_by_domain(db: &Database, domain: &str) -> anyhow::Result<Option<AgentInfo>> {
     use sqlx::Row;
     let r = sqlx::query(
-        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code FROM agents WHERE domain = ? LIMIT 1"
+        "SELECT id, name, description, instructions, model, domain, version, CAST(code AS TEXT) as code, response_format FROM agents WHERE domain = ? LIMIT 1"
     )
     .bind(domain)
     .fetch_optional(&db.pool)
@@ -1122,9 +1125,10 @@ pub async fn get_agent_by_domain(db: &Database, domain: &str) -> anyhow::Result<
             model: r.get::<Option<String>, _>("model").unwrap_or_default(),
             domain: r.get::<Option<String>, _>("domain").unwrap_or_default(),
             version: r.get::<Option<String>, _>("version").unwrap_or_default(),
-            code: r.get("code"),
             tools: tools_rows.into_iter().map(|t| t.get("name")).collect(),
+            code: r.get("code"),
             source_files: vec![],
+            response_format: r.get::<Option<String>, _>("response_format").unwrap_or_else(|| "json".to_string()),
         }))
     } else {
         Ok(None)

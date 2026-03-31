@@ -28,6 +28,7 @@ pub async fn handle_direct_chat(
             version: "1.0.0".to_string(),
             code: None,
             source_files: Vec::new(),
+            response_format: "json".to_string(),
         });
 
     let chat_model = crate::backend::resolve_model_name(

@@ -36,6 +36,7 @@ pub struct Supervisor {
     #[sqlx(default)]
     pub skip_fast_path_if_artifacts: bool,
     pub artifact_fast_path_keywords: Option<String>,
+    pub response_format: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
@@ -55,6 +56,7 @@ pub struct Planner {
     pub domain: String,
     pub version: Option<String>,
     pub code: Option<String>,
+    pub response_format: String,
 }
 
 impl PartialEq for Database {
