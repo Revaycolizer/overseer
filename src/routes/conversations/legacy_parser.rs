@@ -5,7 +5,6 @@ pub fn parse_content(text: &str) -> (Option<String>, Vec<VizBlock>) {
     let mut viz_blocks = Vec::new();
 
     let markers = [
-        ("---CHART_SVG---", VizKind::Svg),
         ("---CHART_HTML---", VizKind::Html),
         ("---CHART_ASSET---", VizKind::Asset),
         ("---SEARCH_RESULTS---", VizKind::Search),

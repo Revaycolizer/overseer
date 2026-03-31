@@ -41,6 +41,7 @@ pub fn StructuredView(res: StructuredResponse, hide_evidence: bool) -> Element {
                     let kind = match chart.chart_type.as_str() {
                         "svg" => VizKind::Svg,
                         "html" => VizKind::Html,
+                        "bar" | "line" | "pie" | "donut" => VizKind::Data,
                         _ => VizKind::Asset,
                     };
                     

@@ -177,12 +177,15 @@ async fn call_dynamic_tool_logic(
                         ))
                     })?;
 
-                charting::generate_chart_svg(req).map_err(|details| {
+                // Validate that we CAN render it, but return the structured JSON data as the result
+                charting::generate_chart_svg(req.clone()).map_err(|details| {
                     DynamicToolError::ExecutionFailed {
                         tool: info.name.clone(),
                         details,
                     }
-                })
+                })?;
+
+                Ok(serde_json::to_string(&req).unwrap_or(input_str))
             }
             _ => Err(DynamicToolError::NativeNotImplemented(info.name.clone())),
         },

@@ -2449,26 +2449,27 @@ pub async fn dispatch_domain(
                 )
                 .await;
 
-                if tool_name == "charting"
-                    && (tool_result.starts_with("---CHART_SVG---")
-                        || tool_result.starts_with("---CHART_HTML---"))
-                {
-                    last_chart = Some(tool_result.clone());
-                    if s.response_format != "json" {
-                        final_response = Some(SupervisorExecutionResult::completed(
-                            "Generated a chart artifact.".to_string(),
-                            vec!["Charting tool completed successfully.".to_string()],
-                            vec!["chart".to_string()],
-                            vec![super::response::ChartPart {
-                                chart_type: if tool_result.starts_with("---CHART_SVG---") { "svg".to_string() } else { "html".to_string() },
-                                value: Some(tool_result),
-                                ..Default::default()
-                            }],
-                            true,
-                            s.hide_evidence,
-                            "Charting tool result used directly.".to_string(),
-                        ));
-                        break;
+                if tool_name == "charting" {
+                    if let Ok(req) = serde_json::from_str::<crate::engine::tools::charting::ChartRequest>(&tool_result) {
+                        last_chart = Some(tool_result.clone());
+                        if s.response_format != "json" {
+                            final_response = Some(SupervisorExecutionResult::completed(
+                                format!("Generated a {} chart: {}", req.chart_type, req.title),
+                                vec![format!("Charting tool completed for {}.", req.title)],
+                                vec!["chart".to_string()],
+                                vec![super::response::ChartPart {
+                                    chart_type: req.chart_type.clone(),
+                                    title: Some(req.title.clone()),
+                                    labels: Some(req.labels.clone()),
+                                    data: Some(req.data.clone()),
+                                    ..Default::default()
+                                }],
+                                true,
+                                s.hide_evidence,
+                                "Charting tool result used directly.".to_string(),
+                            ));
+                            break;
+                        }
                     }
                 }
 
@@ -2721,20 +2722,7 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
                             
                             let (final_type, final_value) = match chart_type.as_str() {
                                 "bar" | "line" | "pie" | "donut" => {
-                                    let req_data = item.clone();
-                                    let req_res: Result<crate::engine::tools::charting::ChartRequest, _> = serde_json::from_value(req_data);
-                                    
-                                    if let Ok(mut req) = req_res {
-                                        if chart_type == "donut" { req.chart_type = "pie".to_string(); }
-                                        match crate::engine::tools::charting::generate_chart_svg(req) {
-                                            Ok(svg) => {
-                                                ("svg".to_string(), svg.replace("---CHART_SVG---\n", ""))
-                                            },
-                                            Err(_) => (chart_type, item.to_string())
-                                        }
-                                    } else {
-                                        (chart_type, item.to_string())
-                                    }
+                                    (chart_type, item.to_string())
                                 },
                                 _ => {
                                     let val = item.get("value").and_then(|v| v.as_str()).unwrap_or_else(|| {

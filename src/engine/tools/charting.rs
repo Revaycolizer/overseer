@@ -6,7 +6,7 @@ use charming::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChartRequest {
     pub chart_type: String, // "bar", "line", "pie"
     pub title: String,
@@ -42,7 +42,7 @@ pub fn generate_chart_svg(req: ChartRequest) -> Result<String, String> {
         _ => return Err(format!("Unsupported chart type: {}", req.chart_type)),
     }?;
 
-    Ok(format!("---CHART_SVG---\n{}", svg))
+    Ok(svg)
 }
 
 fn make_renderer() -> ImageRenderer {
@@ -190,7 +190,6 @@ mod tests {
             data: vec![10.0, 20.0, 15.0],
         };
         let result = generate_chart_svg(req).unwrap();
-        assert!(result.starts_with("---CHART_SVG---"));
         assert!(result.contains("<svg"));
     }
 
@@ -203,7 +202,6 @@ mod tests {
             data: vec![1.8, 2.7, 3.0],
         };
         let result = generate_chart_svg(req).unwrap();
-        assert!(result.starts_with("---CHART_SVG---"));
         assert!(result.contains("<svg"));
     }
 
@@ -220,7 +218,6 @@ mod tests {
             data: vec![45.0, 30.0, 25.0],
         };
         let result = generate_chart_svg(req).unwrap();
-        assert!(result.starts_with("---CHART_SVG---"));
         assert!(result.contains("<svg"));
     }
 }
