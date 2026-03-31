@@ -1,7 +1,10 @@
 use crate::backend;
 use dioxus::prelude::document::eval;
 use serde::Serialize;
-
+pub struct ParsedMessage {
+    pub display_text: String,
+    pub attachments: Vec<String>, // or a richer type
+}
 #[derive(Debug, Clone, Serialize)]
 struct ArtifactReferencePayload {
     id: i64,
@@ -83,6 +86,41 @@ pub fn build_query_with_context(
     }
 }
 
+pub fn parse_message(content: &str) -> ParsedMessage {
+    let mut attachments = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(inner) = trimmed.strip_prefix("[[ATTACH_FILE:")
+            .and_then(|s| s.strip_suffix("]]"))
+        {
+            attachments.push(inner.to_string());
+        } else if let Some(inner) = trimmed.strip_prefix("[[ATTACH_IMAGE:")
+            .and_then(|s| s.strip_suffix("]]"))
+        {
+            attachments.push(inner.to_string());
+        }
+    }
+
+    ParsedMessage {
+        display_text: clean_content(content),
+        attachments,
+    }
+}
+
+pub fn extract_agent_attachments(content: &str) -> Vec<String> {
+    content
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            trimmed
+                .strip_prefix("[[ATTACH_FILE:")
+                .and_then(|s| s.strip_suffix("]]"))
+                .map(|path| path.to_string())
+        })
+        .collect()
+}
+
 pub fn clean_content(content: &str) -> String {
     let without_attach_markers = content
         .lines()
@@ -91,6 +129,7 @@ pub fn clean_content(content: &str) -> String {
             if trimmed == "ARTIFACT_CONTEXT:" || trimmed == "WORK_ITEM_CONTEXT:" {
                 return false;
             }
+            // Strip any line that contains an internal attachment or reference marker
             !(trimmed.contains("[[ATTACH_IMAGE:")
                 || trimmed.contains("[[ATTACH_FILE:")
                 || trimmed.contains("[[ARTIFACT_REF:")
@@ -223,6 +262,13 @@ mod tests {
         let content = r#"{"tool": "charting", "input": {}}"#;
         let cleaned = clean_content(content);
         assert!(cleaned.contains("Agent sent a tool call incorrectly"));
+    }
+
+    #[test]
+    fn test_bulleted_attach_markers_are_hidden() {
+        let content = "**Artifacts**:\n- [[ATTACH_FILE:assets/exports/report.csv]]";
+        let cleaned = clean_content(content);
+        assert_eq!(cleaned, "**Artifacts**:");
     }
 
     #[test]

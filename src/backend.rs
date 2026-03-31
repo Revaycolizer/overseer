@@ -1013,19 +1013,36 @@ async fn attach_assistant_files_from_content(
     std::fs::create_dir_all("overseer_files")?;
 
     for path in file_paths {
-        let original_name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("assistant-file");
-        let stored_name = format!("assistant-{}-{}", message_id, original_name);
-        let stored_path = std::path::Path::new("overseer_files").join(&stored_name);
+        let is_already_asset = path.starts_with("assets/") || path.starts_with("./assets/");
+        
+        let (stored_name, file_path_for_db) = if is_already_asset {
+            let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
+            // For assets, we reference them directly using the /assets/ URL scheme
+            let rel_path = path.to_string_lossy().replace('\\', "/");
+            let asset_path = if rel_path.starts_with("./") {
+                format!("/{}", &rel_path[2..])
+            } else if !rel_path.starts_with("/") {
+                format!("/{}", rel_path)
+            } else {
+                rel_path
+            };
+            (filename.to_string(), asset_path)
+        } else {
+            let original_name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("assistant-file");
+            let stored_name = format!("assistant-{}-{}", message_id, original_name);
+            let stored_path = std::path::Path::new("overseer_files").join(&stored_name);
 
-        if stored_path != path {
-            let _ = std::fs::copy(&path, &stored_path)?;
-        }
+            if stored_path != path {
+                let _ = std::fs::copy(&path, &stored_path)?;
+            }
+            (stored_name, stored_path.display().to_string())
+        };
 
-        let metadata = std::fs::metadata(&stored_path)?;
-        let content_type = mime_guess::from_path(&stored_path)
+        let metadata = std::fs::metadata(&path).ok();
+        let content_type = mime_guess::from_path(&path)
             .first_or_octet_stream()
             .essence_str()
             .to_string();
@@ -1034,9 +1051,9 @@ async fn attach_assistant_files_from_content(
             db,
             message_id,
             &stored_name,
-            &stored_path.display().to_string(),
+            &file_path_for_db,
             &content_type,
-            metadata.len() as i64,
+            metadata.map(|m| m.len() as i64).unwrap_or(0),
         )
         .await?;
     }

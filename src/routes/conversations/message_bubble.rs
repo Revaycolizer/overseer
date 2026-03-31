@@ -358,20 +358,28 @@ fn AttachmentPreview(att: backend::Attachment) -> Element {
 
     let file_path_clone = file_path.clone();
     let content_type_clone = content_type.clone();
-    let asset_data = use_resource(move || {
-        let file_path = file_path_clone.clone();
-        let content_type = content_type_clone.clone();
-        async move {
-            match std::fs::read(&file_path) {
-                Ok(bytes) if !bytes.is_empty() => Some(format!(
-                    "data:{};base64,{}",
-                    content_type,
-                    general_purpose::STANDARD.encode(bytes)
-                )),
-                _ => None,
+    let is_asset = file_path.starts_with("/assets/");
+    let asset_data = if is_asset {
+        use_resource(move || {
+            let file_path = file_path_clone.clone();
+            async move { Some(file_path) }
+        })
+    } else {
+        use_resource(move || {
+            let file_path = file_path_clone.clone();
+            let content_type = content_type_clone.clone();
+            async move {
+                match std::fs::read(&file_path) {
+                    Ok(bytes) if !bytes.is_empty() => Some(format!(
+                        "data:{};base64,{}",
+                        content_type,
+                        general_purpose::STANDARD.encode(bytes)
+                    )),
+                    _ => None,
+                }
             }
-        }
-    });
+        })
+    };
 
     let is_image = content_type.starts_with("image/");
     let icon_name = if is_image {
