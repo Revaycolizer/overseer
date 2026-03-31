@@ -1,7 +1,8 @@
 // src/routes/conversations/conversations.rs
 use super::chat_input::ChatInput;
 use super::helpers::{build_query_with_context, copy_to_clipboard};
-use super::message_bubble::{MessageBubble, ThinkingBubble};
+use super::message_bubble::MessageBubble;
+use super::thinking_bubble::ThinkingBubble;
 use super::sidebar::Sidebar;
 use crate::backend;
 use crate::routes::execution_trace::ExecutionTracePanel;

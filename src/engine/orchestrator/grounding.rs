@@ -1,5 +1,5 @@
 use crate::db::Database;
-use crate::engine::orchestrator::dispatcher::SupervisorExecutionResult;
+use crate::engine::orchestrator::result::SupervisorExecutionResult;
 use crate::engine::utils::discovery::AgentInfo;
 use rig::client::CompletionClient;
 use rig::completion::Prompt;

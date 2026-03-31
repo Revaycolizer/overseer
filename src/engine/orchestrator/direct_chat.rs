@@ -1,0 +1,85 @@
+use crate::db::Database;
+use crate::engine::orchestrator::*;
+use crate::engine::orchestrator::event_logger::record_event;
+use rig::providers::ollama;
+
+pub async fn handle_direct_chat(
+    db: &Database,
+    run_id: Option<i64>,
+    event_sequence: &mut i64,
+    ollama_client: &ollama::Client,
+    all_agents: &[AgentInfo],
+    clean_query: &str,
+    enriched_memory_context: &str,
+    decision_details: &str,
+) -> String {
+    let chat_info = all_agents
+        .iter()
+        .find(|a| a.domain == "chat")
+        .cloned()
+        .unwrap_or_else(|| AgentInfo {
+            id: 0,
+            name: "Chat Assistant".to_string(),
+            description: "Direct chat fallback".to_string(),
+            tools: Vec::new(),
+            instructions: "You are a concise, helpful assistant. Answer directly and clearly without using tools unless explicitly required.".to_string(),
+            model: "qwen2.5:7b-instruct".to_string(),
+            domain: "chat".to_string(),
+            version: "1.0.0".to_string(),
+            code: None,
+            source_files: Vec::new(),
+        });
+
+    let chat_model = crate::backend::resolve_model_name(
+        db,
+        Some(&chat_info.model),
+        "default_chat_model",
+        "qwen2.5:7b-instruct",
+    )
+    .await;
+
+    let chat_agent = ChatAgent::new(ollama_client, &chat_model, &chat_info.instructions);
+    let direct_context = if enriched_memory_context.is_empty() {
+        "No recent context.".to_string()
+    } else {
+        enriched_memory_context.to_string()
+    };
+
+    record_event(
+        db,
+        run_id,
+        event_sequence,
+        "direct_chat_started",
+        "running",
+        Some("chat"),
+        Some(clean_query),
+        None,
+        Some(&chat_model),
+        Some("Routing request directly to chat agent."),
+        Some(decision_details),
+    )
+    .await;
+
+    let direct_response = chat_agent.answer(clean_query, &direct_context).await;
+
+    record_event(
+        db,
+        run_id,
+        event_sequence,
+        "direct_chat_completed",
+        "completed",
+        Some("chat"),
+        Some(clean_query),
+        None,
+        Some(&chat_model),
+        Some("Direct chat completed."),
+        None,
+    )
+    .await;
+
+    if let Some(rid) = run_id {
+        let _ = crate::backend::finish_execution_run(db, rid, "completed", Some(&direct_response), None).await;
+    }
+
+    direct_response
+}

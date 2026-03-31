@@ -1,0 +1,9 @@
+pub use crate::engine::orchestrator::response::{
+    StructuredResponse, MessagePart, SourcePart, ChartPart, UnknownPart
+};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VizKind { Svg, Html, Asset, Search }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VizBlock { pub kind: VizKind, pub payload: String }

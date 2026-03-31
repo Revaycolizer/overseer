@@ -1309,7 +1309,7 @@ pub struct Message {
     pub attachments: Vec<Attachment>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq, Default)]
 pub struct Attachment {
     pub id: i64,
     pub message_id: i64,
