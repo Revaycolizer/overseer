@@ -2718,19 +2718,38 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
                         .iter()
                         .filter_map(|item| {
                             let chart_type = item.get("chart_type").and_then(|v| v.as_str()).unwrap_or("svg").to_string();
-                            let value = if chart_type == "svg" || chart_type == "html" {
-                                item.get("value").and_then(|v| v.as_str()).unwrap_or("").to_string()
-                            } else {
-                                // For bar, line, pie, etc., the whole item is the data
-                                item.to_string()
+                            
+                            let (final_type, final_value) = match chart_type.as_str() {
+                                "bar" | "line" | "pie" | "donut" => {
+                                    let req_data = item.clone();
+                                    let req_res: Result<crate::engine::tools::charting::ChartRequest, _> = serde_json::from_value(req_data);
+                                    
+                                    if let Ok(mut req) = req_res {
+                                        if chart_type == "donut" { req.chart_type = "pie".to_string(); }
+                                        match crate::engine::tools::charting::generate_chart_svg(req) {
+                                            Ok(svg) => {
+                                                ("svg".to_string(), svg.replace("---CHART_SVG---\n", ""))
+                                            },
+                                            Err(_) => (chart_type, item.to_string())
+                                        }
+                                    } else {
+                                        (chart_type, item.to_string())
+                                    }
+                                },
+                                _ => {
+                                    let val = item.get("value").and_then(|v| v.as_str()).unwrap_or_else(|| {
+                                        if item.is_string() { item.as_str().unwrap() } else { "" }
+                                    }).to_string();
+                                    (chart_type, val)
+                                }
                             };
                             
-                            if value.is_empty() && (chart_type == "svg" || chart_type == "html") {
+                            if final_value.is_empty() && (final_type == "svg" || final_type == "html") {
                                 None
                             } else {
                                 Some(crate::engine::orchestrator::response::ChartPart {
-                                    chart_type,
-                                    value: Some(value),
+                                    chart_type: final_type,
+                                    value: Some(final_value),
                                     ..Default::default()
                                 })
                             }
