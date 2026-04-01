@@ -5,57 +5,62 @@ use crate::engine::orchestrator::utils::format_helpers::{normalize_summary, extr
 pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredResponse {
     let mut structured = StructuredResponse::new();
     let final_summary = normalize_summary(&res.summary);
+    
+    structured.status = res.verified;
 
     // Main message
     if !final_summary.is_empty() {
         structured.messages.push(MessagePart {
             message: final_summary,
-            role: "assistant".to_string(),
+            role: "agent".to_string(),
         });
     }
 
-    // Sources (evidence)
+    // 2. Evidence -> Sources
     for e in &res.evidence {
-        if is_html_noise(e) { continue; }
-        if let Ok(value) = serde_json::from_str::<serde_json::Value>(e) {
-            if let Some(obj) = value.as_object() {
-                let url = obj.get("url").and_then(|u| u.as_str()).unwrap_or("");
-                let title = obj.get("title").and_then(|t| t.as_str()).unwrap_or("Source");
-                let snippet = obj.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
-                if !url.is_empty() {
-                    structured.sources.push(SourcePart {
-                        source: title.to_string(),
-                        link: url.to_string(),
-                        description: snippet.to_string(),
-                    });
-                }
-            }
+        if is_html_noise(e) {
+            continue;
+        }
+        
+        // Try to parse as JSON if it's already structured evidence
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(e) {
+            let desc = v.get("description").or(v.get("summary")).and_then(|v| v.as_str()).unwrap_or(e);
+            let link = v.get("link").or(v.get("url")).and_then(|v| v.as_str()).unwrap_or("");
+            let source = v.get("source").or(v.get("title")).and_then(|v| v.as_str()).unwrap_or("Tool Output");
+            
+            structured.sources.push(SourcePart {
+                source: source.to_string(),
+                link: link.to_string(),
+                description: desc.to_string(),
+            });
+            continue;
+        }
+
+        // Fallback: If it's a plain string, wrap it as a description
+        if !e.trim().is_empty() {
+            structured.sources.push(SourcePart {
+                source: "Evidence".to_string(),
+                link: "".to_string(),
+                description: e.clone(),
+            });
         }
     }
 
-    // Artifacts & Attachments
+    // 3. Artifacts
     for a in &res.artifacts {
         if let Some(path) = extract_artifact_path(a) {
-            if path.contains("assets/") || path.contains("/") || path.contains("\\") {
-                structured.attachments.push(path);
-            } else {
-                structured.artifacts.push(path);
-            }
-        } else {
-            structured.artifacts.push(a.to_string());
+            structured.artifacts.push(path);
         }
     }
 
-    // Screenshots from evidence (legacy support)
-    for e in &res.evidence {
-        if let Some(path) = extract_artifact_path(e) {
-            if !structured.attachments.contains(&path) {
-                structured.attachments.push(path);
-            }
+    // 4. Attachments (Legacy/Additional)
+    for a in &res.artifacts {
+        if a.contains("assets/") || a.contains("./assets") {
+             structured.attachments.push(a.clone());
         }
     }
 
-    // 5. Append charts from intermediate result
+    // 5. Append charts from intermediate result (Data-driven)
     structured.charts.extend(res.charts.clone());
 
     structured

@@ -3,24 +3,128 @@ use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
 use crate::engine::orchestrator::core::response::ChartPart;
 
 pub fn parse_supervisor_result(raw: String, hide_evidence: bool) -> SupervisorExecutionResult {
-    if let Ok(value) = serde_json::from_str::<Value>(&raw) {
-        if let Some(final_obj) = value.get("final") {
-            let summary = final_obj.get("summary").and_then(|v| v.as_str()).unwrap_or("Task completed.").to_string();
-            let mut evidence = Vec::new();
-            if let Some(e) = final_obj.get("evidence").and_then(|v| v.as_array()) {
-                evidence = e.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect();
+    let mut merged_value = serde_json::Map::new();
+    let mut summary = String::new();
+    let mut json_found = false;
+    
+    // O(n) Single-pass Mixed Content Parser
+    let mut brace_count = 0;
+    let mut json_start = None;
+    let chars: Vec<char> = raw.chars().collect();
+    
+    for (i, &c) in chars.iter().enumerate() {
+        if c == '{' {
+            if brace_count == 0 { json_start = Some(i); }
+            brace_count += 1;
+        } else if c == '}' {
+            if brace_count > 0 {
+                brace_count -= 1;
+                if brace_count == 0 {
+                    if let Some(start) = json_start {
+                        let potential: String = chars[start..=i].iter().collect();
+                        if let Ok(val) = serde_json::from_str::<Value>(&potential) {
+                            json_found = true;
+                            let target = val.get("final").unwrap_or(&val);
+                            if let Some(obj) = target.as_object() {
+                                // HEURISTIC: If it's a direct chart object at root
+                                if obj.contains_key("chart_type") && (obj.contains_key("labels") || obj.contains_key("data")) {
+                                    let arr = merged_value.entry("charts".to_string()).or_insert(Value::Array(Vec::new())).as_array_mut().unwrap();
+                                    arr.push(target.clone());
+                                }
+
+                                for (k, v) in obj {
+                                    match k.as_str() {
+                                        "charts" | "evidence" | "evidences" | "artifacts" | "attachments" => {
+                                            let entry = merged_value.entry(k.clone()).or_insert(Value::Array(Vec::new()));
+                                            if let Some(arr) = entry.as_array_mut() {
+                                                if let Some(new_arr) = v.as_array() { arr.extend(new_arr.clone()); }
+                                                else { arr.push(v.clone()); }
+                                            }
+                                        },
+                                        "status" | "verified" => { merged_value.insert(k.clone(), v.clone()); },
+                                        _ => {
+                                            // Handle summaries inside JSON - we append them to our main summary
+                                            if k == "summary" || k == "message" {
+                                                if let Some(s) = v.as_str() {
+                                                    if !summary.is_empty() { summary.push_str("\n\n"); }
+                                                    summary.push_str(s);
+                                                }
+                                            } else if !merged_value.contains_key(k) {
+                                                merged_value.insert(k.clone(), v.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            let mut artifacts = Vec::new();
-            if let Some(a) = final_obj.get("artifacts").and_then(|v| v.as_array()) {
-                artifacts = a.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect();
-            }
-            
-            return SupervisorExecutionResult::completed(summary, evidence, artifacts, vec![], true, hide_evidence, raw);
+        } else if brace_count == 0 {
+            summary.push(c);
         }
     }
+
+    // 2. Cleanup summary (strip markdown noise)
+    summary = summary.replace("```json", "").replace("```", "").trim().to_string();
+
+    if json_found || !summary.is_empty() {
+        return extract_result_from_value(Value::Object(merged_value), summary, raw.clone(), hide_evidence);
+    }
     
-    // Fallback for plain text
-    SupervisorExecutionResult::completed(raw.clone(), vec![], vec![], vec![], true, hide_evidence, raw)
+    SupervisorExecutionResult::completed(raw.trim().to_string(), vec![], vec![], vec![], true, hide_evidence, raw)
+}
+
+fn extract_result_from_value(value: Value, summary: String, raw: String, hide_evidence: bool) -> SupervisorExecutionResult {
+    let target = value.get("final").unwrap_or(&value);
+    
+    let mut evidence = Vec::new();
+    if let Some(e) = target.get("evidence").or(target.get("evidences")).and_then(|v| v.as_array()) {
+        evidence = e.iter().filter_map(|v| {
+            if let Some(s) = v.as_str() { Some(s.to_string()) }
+            else if let Some(obj) = v.as_object() {
+                obj.get("description").or(obj.get("title")).and_then(|v| v.as_str()).map(|s| s.to_string())
+            } else { None }
+        }).collect();
+    }
+
+    let mut final_summary = summary;
+    if final_summary.trim().is_empty() {
+        if let Some(c) = target.get("charts").and_then(|v| v.as_array()).and_then(|a| a.first()) {
+            let ctype = c.get("chart_type").and_then(|v| v.as_str()).unwrap_or("chart");
+            let title = c.get("title").and_then(|v| v.as_str()).unwrap_or("Data visualization");
+            final_summary = format!("Generated a {} chart: {}", ctype, title);
+        } else if let Some(ctype) = target.get("chart_type").and_then(|v| v.as_str()) {
+             let title = target.get("title").and_then(|v| v.as_str()).unwrap_or("Data visualization");
+             final_summary = format!("Generated a {} chart: {}", ctype, title);
+        } else {
+            final_summary = "Task completed.".to_string();
+        }
+    }
+
+    let mut artifacts = Vec::new();
+    if let Some(a) = target.get("artifacts").or(target.get("attachments")).and_then(|v| v.as_array()) {
+        artifacts = a.iter().filter_map(|v| {
+            if let Some(s) = v.as_str() { Some(s.to_string()) }
+            else if let Some(path) = v.get("path").and_then(|v| v.as_str()) { Some(path.to_string()) }
+            else { None }
+        }).collect();
+    }
+
+    let mut charts = Vec::new();
+    if let Some(c) = target.get("charts") {
+        if let Some(arr) = c.as_array() {
+            charts = arr.iter().filter_map(|v| serde_json::from_value::<ChartPart>(v.clone()).ok()).collect();
+        } else if let Ok(single) = serde_json::from_value::<ChartPart>(c.clone()) {
+            charts.push(single);
+        }
+    }
+
+    let verified = target.get("status").and_then(|v| v.as_bool())
+        .or_else(|| target.get("verified").and_then(|v| v.as_bool()))
+        .unwrap_or(true);
+
+    SupervisorExecutionResult::completed(final_summary.trim().to_string(), evidence, artifacts, charts, verified, hide_evidence, raw)
 }
 
 pub fn user_facing_runtime_error(details: &str) -> Option<String> {

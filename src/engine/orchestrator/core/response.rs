@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StructuredResponse {
     #[serde(default)]
+    pub status: bool,
+    #[serde(default)]
     pub artifacts: Vec<String>,
     #[serde(default)]
     pub messages: Vec<MessagePart>,
@@ -52,6 +54,7 @@ pub struct UnknownPart {
 impl StructuredResponse {
     pub fn new() -> Self {
         Self {
+            status: true,
             artifacts: Vec::new(),
             messages: Vec::new(),
             sources: Vec::new(),
@@ -62,15 +65,41 @@ impl StructuredResponse {
     }
 
     pub fn merge(&mut self, other: StructuredResponse) {
-        self.artifacts.extend(other.artifacts);
-        self.messages.extend(other.messages);
-        self.sources.extend(other.sources);
-        self.attachments.extend(other.attachments);
-        self.charts.extend(other.charts);
-        self.unknown.extend(other.unknown);
+        self.status = self.status && other.status;
         
-        // Remove duplicates where sensible
-        self.attachments.dedup();
-        self.artifacts.dedup();
+        // Add unique artifacts
+        for a in other.artifacts {
+            if !self.artifacts.contains(&a) { self.artifacts.push(a); }
+        }
+
+        // Add unique messages
+        for m in other.messages {
+            if !self.messages.iter().any(|existing| existing.message == m.message) {
+                self.messages.push(m);
+            }
+        }
+
+        // Add unique sources
+        for s in other.sources {
+            if !self.sources.iter().any(|existing| existing.description == s.description) {
+                self.sources.push(s);
+            }
+        }
+
+        // Add unique attachments
+        for a in other.attachments {
+            if !self.attachments.contains(&a) { self.attachments.push(a); }
+        }
+
+        // Add unique charts (deduplicate by title and type)
+        for c in other.charts {
+            if !self.charts.iter().any(|existing| existing.title == c.title && existing.chart_type == c.chart_type) {
+                self.charts.push(c);
+            }
+        }
+
+        for u in other.unknown {
+            self.unknown.push(u);
+        }
     }
 }

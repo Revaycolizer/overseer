@@ -75,32 +75,65 @@ pub async fn dispatch_domain(
 
     let tool_list = tools.iter().map(|t| format!("- {}: {}", t.name, t.description)).collect::<Vec<_>>().join("\n");
     let mut current_prompt = format!(
-        "GOAL: {}\nTASK: {}\nTOOLS:\n{}\nCONTEXT:\n{}\nPLAN:\n{}\n\nRespond with tool JSON or FINAL goal JSON.",
+        "GOAL: {}\n\
+         TASK: {}\n\n\
+         TOOLS:\n{}\n\n\
+         CONTEXT:\n{}\n\n\
+         PLAN:\n{}\n\n\
+         COMMAND: Execute the task. Respond with a single JSON block: either a tool call or your final response.",
         query, step, tool_list, memory_context, plan_history
     );
 
+    println!(
+        "Dispatching supervisor '{}' using model '{:?}'",
+        s.name, s.model
+    );
+ 
     let mut last_chart = None;
-    for _ in 0..10 {
+    for iteration in 0..10 {
+        println!("Supervisor iteration {}/10", iteration + 1);
         let response = agent.prompt(&current_prompt).await.map_err(|e| e.to_string())?;
         let trimmed = response.trim();
 
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(trimmed) {
-            if let Some(tname) = json.get("tool").and_then(|v| v.as_str()) {
-                let tool = tools.iter().find(|t| t.name == tname).ok_or_else(|| format!("Tool {} missing", tname))?;
-                let input = json.get("input").unwrap_or(&serde_json::Value::Null).clone();
-                let output = crate::engine::tools::call_dynamic_tool(tool, input).await.map_err(|e| e.to_string())?;
-                if tname == "charting" { last_chart = Some(output.clone()); }
-                current_prompt = format!("{}\n\n[RESULT for '{}': {}]", current_prompt, tname, output);
-                continue;
+        // Robust tool extraction: find the last { } block
+        let tool_json_str = if let Some(start) = trimmed.rfind('{') {
+            if let Some(end) = trimmed.rfind('}') {
+                if end > start {
+                    Some(&trimmed[start..=end])
+                } else { None }
+            } else { None }
+        } else { None };
+
+        if let Some(json_str) = tool_json_str {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if let Some(tname) = json.get("tool").and_then(|v| v.as_str()) {
+                    let tool = tools.iter().find(|t| t.name == tname).ok_or_else(|| format!("Tool {} missing", tname))?;
+                    let input = json.get("input").unwrap_or(&serde_json::Value::Null).clone();
+                    let output = crate::engine::tools::call_dynamic_tool(tool, input).await.map_err(|e| e.to_string())?;
+                    
+                    if tname == "charting" { last_chart = Some(output.clone()); }
+                    
+                    current_prompt = format!(
+                        "{}\n\n[RESULT for '{}': {}]\n\nNext: Call another tool (JSON) or provide your final answer using the structured JSON schema.",
+                        current_prompt, tname, output
+                    );
+                    continue;
+                }
             }
         }
 
         let mut res = parse_supervisor_result(trimmed.to_string(), s.hide_evidence);
-        if let Some(chart) = last_chart {
-            if res.raw_response.contains("---CHART_SVG---") {
-                res.raw_response = format!("{}\n\n{}", res.raw_response, chart);
+        
+        // Data-driven chart injection (NO markers)
+        // Deduplicate: Only inject if the model didn't already include it in its JSON
+        if let Some(json_str) = last_chart {
+            if let Ok(injected) = serde_json::from_str::<crate::engine::orchestrator::core::response::ChartPart>(&json_str) {
+                if !res.charts.iter().any(|existing| existing.title == injected.title && existing.chart_type == injected.chart_type) {
+                    res.charts.push(injected);
+                }
             }
         }
+        
         return Ok(res);
     }
 
