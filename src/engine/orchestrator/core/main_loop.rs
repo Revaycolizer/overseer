@@ -1,5 +1,10 @@
 use crate::db::Database;
-use crate::engine::orchestrator::*;
+use crate::engine::orchestrator::core::{direct_chat, executor, event_logger};
+use crate::engine::orchestrator::planning::{master::MasterPlanner, decisions::*, planner_utils};
+use crate::engine::orchestrator::discovery::discovery;
+use crate::engine::utils::discovery::AgentInfo;
+use crate::engine::orchestrator::utils::{context_helpers::*, artifact_utils::*};
+use crate::engine::orchestrator::native::native_checks::*;
 use crate::engine::tools::StructuredPerceptionTool;
 use rig::providers::ollama;
 use rig::completion::Message;
@@ -48,7 +53,11 @@ pub async fn orchestrate_request(
         let synthetic = serde_json::json!([{"domain": decision.domain.unwrap_or_else(|| "chat".to_string()), "task": clean_query}]).to_string();
         planner_utils::sanitize_plan(&synthetic, &clean_query)
     } else {
-        match timeout(Duration::from_millis(90000), master_planner.plan(&clean_query)).await {
+        // Dynamic Agent Discovery
+        let http_client = reqwest::Client::new();
+        let discovered_agents = discovery::discover_semantic_agents(db, &http_client, &clean_query, 8).await;
+        
+        match timeout(Duration::from_millis(90000), master_planner.plan(ollama_client, &clean_query, discovered_agents)).await {
             Ok(plan) => planner_utils::sanitize_plan(&plan, &clean_query),
             Err(_) => return "Planner timed out.".to_string(),
         }

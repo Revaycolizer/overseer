@@ -1,6 +1,7 @@
 use crate::db::Database;
-use crate::engine::orchestrator::*;
-use crate::engine::orchestrator::event_logger::record_event;
+use crate::engine::utils::discovery::AgentInfo;
+use crate::engine::orchestrator::discovery::dynamic::ChatAgent;
+use crate::engine::orchestrator::core::event_logger::record_event;
 use rig::providers::ollama;
 
 pub async fn handle_direct_chat(

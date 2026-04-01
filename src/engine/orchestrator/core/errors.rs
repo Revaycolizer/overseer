@@ -1,3 +1,13 @@
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum OrchestratorError {
+    DatabaseError(String),
+    ModelError(String),
+    Timeout,
+    MaxIterationsReached,
+    AgentNotFound(String),
+    ToolError(String),
+}
+
 pub fn user_facing_runtime_error(details: &str) -> Option<String> {
     let lower = details.to_lowercase();
     let ollama_related = lower.contains("localhost:11434") || lower.contains("/api/chat") || lower.contains("/api/generate") || lower.contains("/api/embed") || lower.contains("ollama");

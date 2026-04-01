@@ -144,6 +144,47 @@ pub async fn discover_fast_path_domain(
     None
 }
 
+pub async fn discover_semantic_agents(
+    db: &Database,
+    client: &reqwest::Client,
+    query: &str,
+    limit: usize,
+) -> Vec<crate::db::Supervisor> {
+    #[cfg(feature = "memory")]
+    {
+        match db.search_agents_semantically(client, query, limit).await {
+            Ok(domains) => {
+                let mut valid_supervisors = Vec::new();
+                for domain in domains {
+                    if let Ok(Some(s)) = sqlx::query_as::<_, crate::db::Supervisor>(
+                        "SELECT * FROM supervisors WHERE domain = ?"
+                    )
+                    .bind(domain)
+                    .fetch_optional(&db.pool)
+                    .await {
+                        valid_supervisors.push(s);
+                    }
+                }
+                if !valid_supervisors.is_empty() {
+                    return valid_supervisors;
+                }
+            }
+            Err(e) => {
+                eprintln!("Semantic discovery failed: {}. Falling back to all supervisors.", e);
+            }
+        }
+    }
+
+    // Fallback or if memory feature is disabled: return all with some priority
+    sqlx::query_as::<_, crate::db::Supervisor>(
+        "SELECT * FROM supervisors ORDER BY routing_priority DESC LIMIT ?"
+    )
+    .bind(limit as i64)
+    .fetch_all(&db.pool)
+    .await
+    .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::looks_like_planner_request;

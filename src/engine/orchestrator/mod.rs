@@ -1,40 +1,27 @@
+pub mod core;
+pub mod planning;
 pub mod discovery;
-pub mod result;
-pub mod response;
-pub mod formatter;
-pub mod format_helpers;
-mod dispatcher;
-pub mod dynamic;
-pub mod grounding;
+pub mod utils;
+pub mod native;
 pub mod guardrails;
-pub mod master;
-mod planner;
-pub mod native_checks;
-pub mod native_render;
-pub mod native_shortcut;
-pub mod artifact_utils;
-pub mod event_logger;
-pub mod context_helpers;
-pub mod errors;
-pub mod decisions;
-pub mod main_loop;
-pub mod direct_chat;
-pub mod executor;
-pub mod planner_utils;
+pub mod dispatch;
 
-pub use dynamic::{ChatAgent, OverseerAgent, VisionGeneralAgent};
-pub use master::MasterPlanner;
-pub use planner::MacroTask;
-pub use main_loop::orchestrate_request;
-pub use native_shortcut::try_native_computer_shortcut;
+// Re-exports for backward compatibility and convenience
+pub use core::main_loop::orchestrate_request;
+pub use core::result::SupervisorExecutionResult;
+pub use core::direct_chat;
+pub use core::executor;
+pub use core::response::{StructuredResponse, MessagePart, SourcePart, ChartPart, UnknownPart};
+pub use planning::master::MasterPlanner;
+pub use planning::planner::MacroTask;
+pub use crate::engine::utils::discovery::{AgentInfo, ToolInfo};
+pub use discovery::dynamic::{ChatAgent, OverseerAgent, VisionGeneralAgent};
+pub use native::native_shortcut::try_native_computer_shortcut;
+pub use dispatch::dispatch_domain;
 
-use native_checks::*;
-use native_render::*;
-use artifact_utils::*;
-use event_logger::*;
-use context_helpers::*;
-use errors::*;
-use decisions::*;
+// Specific commonly used types
+pub use planning::decisions::{OrchestrationDecision, OrchestrationRoute};
+pub use core::errors::OrchestratorError;
 
 use rig::{
     client::CompletionClient,
@@ -46,7 +33,6 @@ use std::time::Duration;
 use tokio::time::{sleep, timeout};
 
 use crate::engine::tools::StructuredPerceptionTool;
-use crate::engine::utils::discovery::{AgentInfo, ToolInfo};
 
 // Orchestration Logic Modularization - Overseer Core Orchestrator
 // All primary functions moved to specialized sub-modules for maintainability and scalability.

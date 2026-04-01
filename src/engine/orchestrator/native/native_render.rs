@@ -1,5 +1,5 @@
 use serde_json::Value;
-use super::response::{StructuredResponse, MessagePart};
+use crate::engine::orchestrator::core::response::{StructuredResponse, MessagePart, UnknownPart};
 
 pub fn render_native_os_tool_response(raw: &str) -> String {
     let value: Value = serde_json::from_str(raw).unwrap_or_else(|_| serde_json::json!({}));
@@ -30,7 +30,7 @@ pub fn render_native_os_tool_response(raw: &str) -> String {
             let total = value.get("total_processes").and_then(|v| v.as_i64()).unwrap_or_default();
             let msg = format!("Current processes captured. Total: {}.", total);
             structured.messages.push(MessagePart { message: msg, role: "assistant".to_string() });
-            structured.unknown.push(super::response::UnknownPart { data: value.clone(), kind: "text".to_string() });
+            structured.unknown.push(UnknownPart { data: value.clone(), kind: "text".to_string() });
         }
         _ => {
             let summary = value.get("summary").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| raw.to_string());

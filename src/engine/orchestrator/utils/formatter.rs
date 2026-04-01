@@ -1,6 +1,6 @@
-use crate::engine::orchestrator::result::SupervisorExecutionResult;
-use super::response::{StructuredResponse, MessagePart, SourcePart};
-use super::format_helpers::{normalize_summary, extract_artifact_path, is_html_noise};
+use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
+use crate::engine::orchestrator::core::response::{StructuredResponse, MessagePart, SourcePart};
+use crate::engine::orchestrator::utils::format_helpers::{normalize_summary, extract_artifact_path, is_html_noise};
 
 pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredResponse {
     let mut structured = StructuredResponse::new();

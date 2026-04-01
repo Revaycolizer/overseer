@@ -1,4 +1,4 @@
-use crate::engine::orchestrator::planner::MacroTask;
+use crate::engine::orchestrator::planning::planner::MacroTask;
 
 pub fn build_native_workflow_plan(query: &str) -> String {
     let lower = query.to_lowercase();

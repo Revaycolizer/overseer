@@ -1,7 +1,7 @@
 use crate::engine::utils::discovery::ToolInfo;
-use crate::engine::orchestrator::record_event;
-use crate::engine::orchestrator::native_render::render_native_os_tool_response;
-use crate::engine::orchestrator::native_checks::{infer_native_computer_domain, is_native_computer_fast_path_request};
+use crate::engine::orchestrator::core::event_logger::record_event;
+use crate::engine::orchestrator::native::native_render::render_native_os_tool_response;
+use crate::engine::orchestrator::native::native_checks::{infer_native_computer_domain, is_native_computer_fast_path_request};
 
 pub async fn try_native_computer_shortcut(
     db: &crate::db::Database,

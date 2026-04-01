@@ -1,11 +1,11 @@
 use crate::db::Database;
-use crate::engine::orchestrator::*;
-use crate::engine::orchestrator::event_logger::record_event;
-use crate::engine::orchestrator::planner::MacroTask;
+use crate::engine::orchestrator::core::{event_logger::record_event, response::StructuredResponse, response::MessagePart};
+use crate::engine::orchestrator::planning::planner::MacroTask;
+use crate::engine::utils::discovery::AgentInfo;
+use crate::engine::orchestrator::dispatch;
 use crate::engine::tools::StructuredPerceptionTool;
 use rig::completion::Message;
 use rig::providers::ollama;
-use crate::engine::orchestrator::response::StructuredResponse;
 
 pub async fn execute_macro_tasks(
     db: &Database,
@@ -69,7 +69,7 @@ pub async fn execute_macro_tasks(
             )
             .await;
 
-            match dispatcher::dispatch_domain(
+            match dispatch::dispatch_domain(
                 db,
                 run_id,
                 event_sequence,
@@ -78,20 +78,16 @@ pub async fn execute_macro_tasks(
                 step,
                 clean_query,
                 history.to_vec(),
-                memories,
                 &plan_history,
                 memories,
-                &macro_task.task,
-                perception_tool,
                 ollama_client,
                 model_timeout_ms,
-                &mut browser_pid,
             )
             .await
             {
                 Ok(r) => {
-                    let supervisor_result = r.clone();
-                    let step_structured = crate::engine::orchestrator::formatter::format_supervisor_result(&supervisor_result);
+                    let supervisor_result: crate::engine::orchestrator::core::result::SupervisorExecutionResult = r;
+                    let step_structured = crate::engine::orchestrator::utils::formatter::format_supervisor_result(&supervisor_result);
                     master_response.merge(step_structured);
                     
                     let display = supervisor_result.display_text();
@@ -114,7 +110,7 @@ pub async fn execute_macro_tasks(
                 }
                 Err(e) => {
                     let error_msg = format!("Task failed: {}", e);
-                    master_response.messages.push(crate::engine::orchestrator::response::MessagePart {
+                    master_response.messages.push(MessagePart {
                         message: format!("❌ ERROR: {}", error_msg),
                         role: "assistant".to_string(),
                     });

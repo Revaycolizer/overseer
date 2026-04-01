@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::engine::orchestrator::formatter::format_supervisor_result;
+use crate::engine::orchestrator::utils::formatter::format_supervisor_result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupervisorExecutionResult {

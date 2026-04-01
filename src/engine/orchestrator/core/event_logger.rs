@@ -1,6 +1,6 @@
 use crate::db::Database;
 use serde_json::json;
-use crate::engine::orchestrator::artifact_utils::*;
+use crate::engine::orchestrator::utils::artifact_utils::*;
 
 pub async fn record_event(
     db: &Database,

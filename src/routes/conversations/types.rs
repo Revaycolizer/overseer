@@ -1,4 +1,4 @@
-pub use crate::engine::orchestrator::response::{
+pub use crate::engine::orchestrator::{
     StructuredResponse, MessagePart, SourcePart, ChartPart, UnknownPart
 };
 
