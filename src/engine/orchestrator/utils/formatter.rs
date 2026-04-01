@@ -6,7 +6,7 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
     let mut structured = StructuredResponse::new();
     let final_summary = normalize_summary(&res.summary);
     
-    structured.status = res.verified;
+    structured.status = res.status.clone();
 
     // Main message
     // Main message

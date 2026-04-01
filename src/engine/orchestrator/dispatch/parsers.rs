@@ -123,9 +123,18 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
         }
     }
 
-    let verified = target.get("status").and_then(|v| v.as_bool())
-        .or_else(|| target.get("verified").and_then(|v| v.as_bool()))
-        .unwrap_or(true);
+    let verified = if let Some(v) = target.get("status").or_else(|| target.get("verified")) {
+        if let Some(b) = v.as_bool() {
+            b
+        } else if let Some(s) = v.as_str() {
+            let lower = s.to_lowercase();
+            lower == "completed" || lower == "done" || lower == "success" || lower == "verified"
+        } else {
+            true
+        }
+    } else {
+        true
+    };
 
     SupervisorExecutionResult::completed(final_summary.trim().to_string(), evidence, artifacts, charts, verified, hide_evidence, raw)
 }

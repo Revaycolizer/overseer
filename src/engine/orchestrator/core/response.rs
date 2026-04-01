@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StructuredResponse {
     #[serde(default)]
-    pub status: bool,
+    pub status: String,
     #[serde(default)]
     pub artifacts: Vec<String>,
     #[serde(default)]
@@ -54,7 +54,7 @@ pub struct UnknownPart {
 impl StructuredResponse {
     pub fn new() -> Self {
         Self {
-            status: true,
+            status: "completed".to_string(),
             artifacts: Vec::new(),
             messages: Vec::new(),
             sources: Vec::new(),
@@ -65,7 +65,9 @@ impl StructuredResponse {
     }
 
     pub fn merge(&mut self, other: StructuredResponse) {
-        self.status = self.status && other.status;
+        if other.status == "failed" || other.status == "error" {
+            self.status = "failed".to_string();
+        }
         
         // Add unique artifacts
         for a in other.artifacts {
