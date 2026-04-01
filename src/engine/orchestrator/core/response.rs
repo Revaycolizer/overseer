@@ -72,11 +72,20 @@ impl StructuredResponse {
             if !self.artifacts.contains(&a) { self.artifacts.push(a); }
         }
 
-        // Add unique messages
         for m in other.messages {
-            if !self.messages.iter().any(|existing| existing.message == m.message) {
-                self.messages.push(m);
+            let m_trimmed = m.message.trim();
+            if m_trimmed.is_empty() { continue; }
+            
+            // 1. If an existing message already contains the new one, skip the new one.
+            if self.messages.iter().any(|e| e.message.trim().contains(m_trimmed)) {
+                continue;
             }
+
+            // 2. Remove any existing messages that are contained within (or equal to) the new one.
+            self.messages.retain(|e| !m_trimmed.contains(e.message.trim()));
+
+            // 3. Add the new comprehensive message.
+            self.messages.push(m);
         }
 
         // Add unique sources

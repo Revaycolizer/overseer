@@ -9,11 +9,18 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
     structured.status = res.verified;
 
     // Main message
+    // Main message
     if !final_summary.is_empty() {
-        structured.messages.push(MessagePart {
-            message: final_summary,
-            role: "agent".to_string(),
-        });
+        let is_generic = final_summary == "Task completed." || final_summary == "Done." || final_summary == "Finished.";
+        
+        // Skip generic summary if we have better content coming (charts, etc.)
+        // or if it's already redundant.
+        if !is_generic || (res.charts.is_empty() && res.artifacts.is_empty()) {
+            structured.messages.push(MessagePart {
+                message: final_summary,
+                role: "agent".to_string(),
+            });
+        }
     }
 
     // 2. Evidence -> Sources

@@ -46,8 +46,11 @@ pub fn parse_supervisor_result(raw: String, hide_evidence: bool) -> SupervisorEx
                                             // Handle summaries inside JSON - we append them to our main summary
                                             if k == "summary" || k == "message" {
                                                 if let Some(s) = v.as_str() {
-                                                    if !summary.is_empty() { summary.push_str("\n\n"); }
-                                                    summary.push_str(s);
+                                                    let trimmed_s = s.trim();
+                                                    if !trimmed_s.is_empty() && !summary.contains(trimmed_s) {
+                                                        if !summary.is_empty() { summary.push_str("\n\n"); }
+                                                        summary.push_str(trimmed_s);
+                                                    }
                                                 }
                                             } else if !merged_value.contains_key(k) {
                                                 merged_value.insert(k.clone(), v.clone());
