@@ -1318,7 +1318,7 @@ pub async fn dispatch_domain(
             return Ok(SupervisorExecutionResult::completed(
                 summary,
                 evidence,
-                Vec::new(),
+                artifacts,
                 Vec::new(),
                 true,
                 s.hide_evidence,
@@ -1611,7 +1611,7 @@ pub async fn dispatch_domain(
             return Ok(SupervisorExecutionResult::completed(
                 summary,
                 evidence,
-                Vec::new(),
+                artifacts,
                 Vec::new(),
                 true,
                 s.hide_evidence,
@@ -1664,7 +1664,7 @@ pub async fn dispatch_domain(
             return Ok(SupervisorExecutionResult::completed(
                 summary,
                 evidence,
-                Vec::new(),
+                artifacts,
                 Vec::new(),
                 true,
                 s.hide_evidence,
@@ -2695,22 +2695,33 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            let artifacts = value
-                .get("artifacts")
-                .and_then(|v| v.as_array())
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|item| {
-                            if item.is_string() {
-                                item.as_str().map(|s| s.to_string())
-                            } else {
-                                Some(item.to_string())
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
+            let mut artifacts = Vec::new();
+            
+            // Collect from "artifacts" array
+            if let Some(items) = value.get("artifacts").and_then(|v| v.as_array()) {
+                for item in items {
+                    if let Some(path) = item.as_str() {
+                        artifacts.push(path.to_string());
+                    } else if let Some(path) = item.get("path").and_then(|p| p.as_str()) {
+                        artifacts.push(path.to_string());
+                    }
+                }
+            }
+            
+            // Collect from "attachments" array (as requested by user)
+            if let Some(items) = value.get("attachments").and_then(|v| v.as_array()) {
+                for item in items {
+                    if let Some(path) = item.as_str() {
+                        if !artifacts.contains(&path.to_string()) {
+                            artifacts.push(path.to_string());
+                        }
+                    } else if let Some(path) = item.get("path").and_then(|p| p.as_str()) {
+                        if !artifacts.contains(&path.to_string()) {
+                            artifacts.push(path.to_string());
+                        }
+                    }
+                }
+            }
             let charts = value
                 .get("charts")
                 .and_then(|v| v.as_array())
@@ -2759,7 +2770,7 @@ pub fn parse_supervisor_result(cleaned: String, hide_evidence: bool) -> Supervis
                 status,
                 summary,
                 evidence,
-                artifacts: Vec::new(),
+                artifacts,
                 charts,
                 verified,
                 hide_evidence,
