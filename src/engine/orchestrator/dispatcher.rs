@@ -1751,8 +1751,11 @@ pub async fn dispatch_domain(
             "AVAILABLE TOOLS:\n{}\n\n\
              To use a tool, respond ONLY with JSON: {{\"tool\": \"tool_name\", \"input\": {{...}}}}\n\
              {}\n\
-             SAFETY: Prefer lower-risk tools first.\n\
-             Never claim completion without evidence.\n\n",
+             SAFETY: Prefer lower-risk tools first.\n\n\
+             ═══ BEHAVIORAL RULES ═══\n\
+             1. KNOWLEDGE FIRST: If the user asks for static, general knowledge (e.g., capitals, common facts, history), answer immediately from your internal knowledge WITHOUT using tools.\n\
+             2. DYNAMIC RESEARCH: Use research tools ONLY for specialized, dynamic, or recent information that changes over time (News, latest releases, scraping, etc.).\n\
+             3. EVIDENCE SUPPRESSION: Include the 'evidence' JSON field ONLY if the user explicitly requested 'sources', 'links', 'citations', 'evidence', or 'verification'. Otherwise, return an empty array for 'evidence'.\n\n",
             list, format_instruction
         )
     };
