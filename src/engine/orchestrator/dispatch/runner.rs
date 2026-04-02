@@ -86,7 +86,18 @@ pub async fn dispatch_domain(
          You are an autonomous agent performing a specific task as part of a larger multi-step plan. \
          Use the GOAL and EXECUTION_HISTORY to ensure your output is consistent with what has already been accomplished. \
          Execute the CURRENT_TASK. Respond with a single JSON block: either a tool call or your final response. \
-         Your final response 'summary' MUST follow the requested REPORTING_STYLE.",
+         \n\n\
+         == TOOL CALL SCHEMA ==\n\
+         When you need to use a tool, you MUST output ONLY this precise JSON structure:\n\
+         {{\n\
+             \"tool\": \"tool_name\",\n\
+             \"input\": {{\n\
+                 \"key\": \"value\"\n\
+             }}\n\
+         }}\n\
+         \n\
+         Your final response 'summary' MUST follow the requested REPORTING_STYLE.\n\
+         If closing without using another tool, output the final JSON with 'status' and 'summary'.",
         query, step, tool_list, memory_context, style, plan_history
     );
 
@@ -120,7 +131,7 @@ pub async fn dispatch_domain(
                             let potential: String = chars[start..=i].iter().collect();
                             // If it has a tool-calling field at root, treat as tool call
                             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&potential) {
-                                let has_tool = json.get("tool").or(json.get("task")).or(json.get("action")).is_some();
+                                let has_tool = json.get("tool").or(json.get("tool_call")).is_some();
                                 if has_tool {
                                     tool_json_str = Some(potential);
                                     break;
@@ -135,18 +146,20 @@ pub async fn dispatch_domain(
         if let Some(json_str) = tool_json_str {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
                 // Support multiple synonyms for tool name and input
-                let tname = json.get("tool")
-                    .or_else(|| json.get("task"))
-                    .or_else(|| json.get("action"))
-                    .and_then(|v| v.as_str());
+                let mut tname = json.get("tool").and_then(|v| v.as_str());
+                let mut input = json.get("input").unwrap_or(&serde_json::Value::Null).clone();
+                
+                if tname.is_none() {
+                    if let Some(tc) = json.get("tool_call") {
+                        tname = tc.get("name").or(tc.get("function")).and_then(|v| v.as_str());
+                        if let Some(ni) = tc.get("arguments").or(tc.get("input")) {
+                            input = ni.clone();
+                        }
+                    }
+                }
                 
                 if let Some(tname) = tname {
                     let tool = tools.iter().find(|t| t.name == tname).ok_or_else(|| format!("Tool {} missing", tname))?;
-                    
-                    let input = json.get("input")
-                        .or_else(|| json.get("query"))
-                        .or_else(|| json.get("data"))
-                        .unwrap_or(&serde_json::Value::Null).clone();
                         
                     println!("🛠️ EXECUTING TOOL: {} with input: {}", tname, input);
                     let output = crate::engine::tools::call_dynamic_tool(tool, input).await.map_err(|e| e.to_string())?;

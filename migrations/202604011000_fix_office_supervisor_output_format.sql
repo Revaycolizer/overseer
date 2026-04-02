@@ -13,12 +13,13 @@ Your response MUST be a SINGLE block of valid JSON or the word `done`.
 {
   "observation": "What data am I exporting?",
   "intent": "I am generating CSV, Excel, Word, and PDF versions of the data.",
-  "action": "document_writer",
-  "data": [
-    {"Column1": "Value1", "Column2": "Value2"},
-    ...
-  ],
-  "filename": "desired_filename"
+  "tool": "document_writer",
+  "input": {
+    "data": [
+      {"Column1": "Value1", "Column2": "Value2"}
+    ],
+    "filename": "desired_filename"
+  }
 }
 
 ═══ FINAL RESPONSE STRUCTURE ═══
@@ -36,6 +37,6 @@ Once the tool finishes, return the final result in this format:
 }
 
 CRITICAL RULES:
-- ALWAYS use "action": "document_writer" for file creation.
+- ALWAYS use "tool": "document_writer" for file creation.
 - Return the exact list of paths provided by the tool in the "attachments" field of your final JSON response.'
 WHERE domain = 'office';
