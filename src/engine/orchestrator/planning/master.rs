@@ -38,10 +38,10 @@ impl MasterPlanner {
 
         let coordination_rules = r#"
 ═══ COORDINATION RULES ═══
-1. MULTI-STEP PLANNING: If a task requires information gathering (e.g. "Research malaria") before an action (e.g. "Generate a PDF"), you MUST create a 2-step plan.
+1. MULTI-STEP PLANNING: If a task requires information gathering (e.g. "Research [Topic]") before an action (e.g. "Generate a [Format]"), you MUST create a 2-step plan.
 2. STEP 1: Research/Data Gathering (usually 'stealth' or 'chat' domain).
-3. STEP 2: Execution/Output (e.g. 'office' for docs, 'computer' for UI).
-4. DATA FLOW: Explicitly state in the second task that it should use the results from the first step.
+3. STEP 2: Execution/Output (e.g. 'office' for documents, 'computer' for UI, 'chat' for summaries).
+4. DATA FLOW: Explicitly state in the second task that it should use the specific results and entities discovered in the first step.
 "#;
 
         let preamble = format!(

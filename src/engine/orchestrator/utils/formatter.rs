@@ -8,43 +8,48 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
     
     structured.status = res.status.clone();
 
-    // Main message
-    // Main message
-    let mut message = final_summary.clone();
-    let is_generic = message == "Task completed." || message == "Done." || message == "Finished." || message.is_empty();
+    // 1. Messages Strategy:
+    // If specifically provided by the supervisor, use them.
+    if !res.messages.is_empty() {
+        structured.messages.extend(res.messages.clone());
+    } else {
+        // Fallback synthesis from summary and evidence
+        let mut message = final_summary.clone();
+        let is_generic = message == "Task completed." || message == "Done." || message == "Finished." || message.is_empty();
 
-    // STYLE-AWARE PROMOTION: If message is generic but we have findings, promote them.
-    if is_generic && !res.evidence.is_empty() {
-        let findings_label = if res.report_style.as_deref() == Some("concise") {
-            "Found findings: "
-        } else {
-            "\n\n### Findings:\n"
-        };
-        
-        let mut findings_str = String::from(findings_label);
-        if res.report_style.as_deref() == Some("concise") {
-             findings_str.push_str(&res.evidence.join(", "));
-        } else {
-             for e in &res.evidence {
-                 findings_str.push_str(&format!("- {}\n", e));
-             }
+        // STYLE-AWARE PROMOTION: If message is generic but we have findings, promote them.
+        if is_generic && !res.evidence.is_empty() {
+            let findings_label = if res.report_style.as_deref() == Some("concise") {
+                "Found findings: "
+            } else {
+                "\n\n### Findings:\n"
+            };
+            
+            let mut findings_str = String::from(findings_label);
+            if res.report_style.as_deref() == Some("concise") {
+                 findings_str.push_str(&res.evidence.join(", "));
+            } else {
+                 for e in &res.evidence {
+                     findings_str.push_str(&format!("- {}\n", e));
+                 }
+            }
+            
+            if message == "Task completed." || message == "Done." || message == "Finished." {
+                message = format!("{}{}", message, findings_str);
+            } else {
+                message = findings_str;
+            }
         }
-        
-        if message == "Task completed." || message == "Done." || message == "Finished." {
-            message = format!("{}{}", message, findings_str);
-        } else {
-            message = findings_str;
-        }
-    }
 
-    if !message.is_empty() {
-        let is_generic_now = message == "Task completed." || message == "Done." || message == "Finished.";
-        // Skip generic summary if we have better content coming (charts, etc.)
-        if !is_generic_now || (res.charts.is_empty() && res.artifacts.is_empty()) {
-            structured.messages.push(MessagePart {
-                message,
-                role: "agent".to_string(),
-            });
+        if !message.is_empty() {
+            let is_generic_now = message == "Task completed." || message == "Done." || message == "Finished.";
+            // Skip generic summary if we have better content coming (charts, etc.)
+            if !is_generic_now || (res.charts.is_empty() && res.artifacts.is_empty()) {
+                structured.messages.push(MessagePart {
+                    message,
+                    role: "agent".to_string(),
+                });
+            }
         }
     }
 
@@ -54,14 +59,14 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
             continue;
         }
         
-        // Try to parse as JSON if it's already structured evidence
+        // Try to parse as JSON if it's already structured evidence (e.g. from a search tool)
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(e) {
-            let desc = v.get("description").or(v.get("summary")).and_then(|v| v.as_str()).unwrap_or(e);
-            let link = v.get("link").or(v.get("url")).and_then(|v| v.as_str()).unwrap_or("");
-            let source = v.get("source").or(v.get("title")).and_then(|v| v.as_str()).unwrap_or("Tool Output");
+            let title = v.get("title").or(v.get("source")).and_then(|v| v.as_str()).unwrap_or("Evidence");
+            let link = v.get("url").or(v.get("link")).and_then(|v| v.as_str()).unwrap_or("");
+            let desc = v.get("snippet").or(v.get("description")).or(v.get("summary")).and_then(|v| v.as_str()).unwrap_or(e);
             
             structured.sources.push(SourcePart {
-                source: source.to_string(),
+                source: title.to_string(),
                 link: link.to_string(),
                 description: desc.to_string(),
             });

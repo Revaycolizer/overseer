@@ -1,6 +1,6 @@
 use serde_json::Value;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
-use crate::engine::orchestrator::core::response::ChartPart;
+use crate::engine::orchestrator::core::response::{ChartPart, MessagePart};
 
 pub fn parse_supervisor_result(raw: String, hide_evidence: bool, report_style: Option<String>) -> SupervisorExecutionResult {
     let mut merged_value = serde_json::Map::new();
@@ -34,7 +34,7 @@ pub fn parse_supervisor_result(raw: String, hide_evidence: bool, report_style: O
 
                                 for (k, v) in obj {
                                     match k.as_str() {
-                                        "charts" | "evidence" | "evidences" | "artifacts" | "attachments" => {
+                                        "charts" | "evidence" | "evidences" | "artifacts" | "attachments" | "messages" => {
                                             let entry = merged_value.entry(k.clone()).or_insert(Value::Array(Vec::new()));
                                             if let Some(arr) = entry.as_array_mut() {
                                                 if let Some(new_arr) = v.as_array() { arr.extend(new_arr.clone()); }
@@ -75,7 +75,7 @@ pub fn parse_supervisor_result(raw: String, hide_evidence: bool, report_style: O
         return extract_result_from_value(Value::Object(merged_value), summary, raw.clone(), hide_evidence, report_style);
     }
     
-    SupervisorExecutionResult::completed(raw.trim().to_string(), vec![], vec![], vec![], true, hide_evidence, report_style, raw)
+    SupervisorExecutionResult::completed(raw.trim().to_string(), vec![], vec![], vec![], vec![], true, hide_evidence, report_style, raw)
 }
 
 fn extract_result_from_value(value: Value, summary: String, raw: String, hide_evidence: bool, report_style: Option<String>) -> SupervisorExecutionResult {
@@ -85,8 +85,8 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
     if let Some(e) = target.get("evidence").or(target.get("evidences")).and_then(|v| v.as_array()) {
         evidence = e.iter().filter_map(|v| {
             if let Some(s) = v.as_str() { Some(s.to_string()) }
-            else if let Some(obj) = v.as_object() {
-                obj.get("description").or(obj.get("title")).and_then(|v| v.as_str()).map(|s| s.to_string())
+            else if v.is_object() {
+                Some(v.to_string())
             } else { None }
         }).collect();
     }
@@ -114,6 +114,15 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
         }).collect();
     }
 
+    let mut messages = Vec::new();
+    if let Some(m) = target.get("messages") {
+        if let Some(arr) = m.as_array() {
+            messages = arr.iter().filter_map(|v| serde_json::from_value::<MessagePart>(v.clone()).ok()).collect();
+        } else if let Ok(single) = serde_json::from_value::<MessagePart>(m.clone()) {
+            messages.push(single);
+        }
+    }
+
     let mut charts = Vec::new();
     if let Some(c) = target.get("charts") {
         if let Some(arr) = c.as_array() {
@@ -136,7 +145,7 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
         true
     };
 
-    SupervisorExecutionResult::completed(final_summary.trim().to_string(), evidence, artifacts, charts, verified, hide_evidence, report_style, raw)
+    SupervisorExecutionResult::completed(final_summary.trim().to_string(), messages, evidence, artifacts, charts, verified, hide_evidence, report_style, raw)
 }
 
 pub fn user_facing_runtime_error(details: &str) -> Option<String> {

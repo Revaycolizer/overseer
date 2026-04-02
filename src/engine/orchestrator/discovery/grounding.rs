@@ -299,6 +299,7 @@ pub async fn verify_execution_grounding(
                     supervisor_result = SupervisorExecutionResult {
                         status: "failed".to_string(),
                         summary: "Grounding verification failed.".to_string(),
+                        messages: Vec::new(),
                         evidence: Vec::new(),
                         artifacts: Vec::new(),
                         charts: Vec::new(),

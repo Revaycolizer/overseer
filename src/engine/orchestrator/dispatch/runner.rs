@@ -65,7 +65,7 @@ pub async fn dispatch_domain(
         if let Some(t) = tools.iter().find(|t| t.name == "os_tool") {
             let res = crate::engine::tools::call_dynamic_tool(t, serde_json::json!({"action":"screenshot"})).await.map_err(|e| e.to_string())?;
             let (ev, art, sm) = parse_screenshot_artifact_payload(&res);
-            return Ok(SupervisorExecutionResult::completed(sm, ev, art, vec![], true, s.hide_evidence, s.report_style.clone(), res));
+            return Ok(SupervisorExecutionResult::completed(sm, vec![], ev, art, vec![], true, s.hide_evidence, s.report_style.clone(), res));
         }
     }
 
@@ -102,17 +102,38 @@ pub async fn dispatch_domain(
         let trimmed = response.trim();
         println!("DEBUG: Supervisor '{}' (iteration {}) raw response: \n---\n{}\n---", s.name, iteration + 1, trimmed);
 
-        // Robust tool extraction: find the last { } block
-        let tool_json_str = if let Some(start) = trimmed.rfind('{') {
-            if let Some(end) = trimmed.rfind('}') {
-                if end > start {
-                    Some(&trimmed[start..=end])
-                } else { None }
-            } else { None }
-        } else { None };
+        // Robust tool extraction: find the OUTERMOST { } block
+        let mut tool_json_str = None;
+        let mut brace_count = 0;
+        let mut json_start = None;
+        let chars: Vec<char> = trimmed.chars().collect();
+        
+        for (i, &c) in chars.iter().enumerate() {
+            if c == '{' {
+                if brace_count == 0 { json_start = Some(i); }
+                brace_count += 1;
+            } else if c == '}' {
+                if brace_count > 0 {
+                    brace_count -= 1;
+                    if brace_count == 0 {
+                        if let Some(start) = json_start {
+                            let potential: String = chars[start..=i].iter().collect();
+                            // If it has a tool-calling field at root, treat as tool call
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&potential) {
+                                let has_tool = json.get("tool").or(json.get("task")).or(json.get("action")).is_some();
+                                if has_tool {
+                                    tool_json_str = Some(potential);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         if let Some(json_str) = tool_json_str {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
                 // Support multiple synonyms for tool name and input
                 let tname = json.get("tool")
                     .or_else(|| json.get("task"))

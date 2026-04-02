@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
 use crate::engine::orchestrator::utils::formatter::format_supervisor_result;
+use super::response::MessagePart;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupervisorExecutionResult {
     pub status: String,
     pub summary: String,
+    #[serde(default)]
+    pub messages: Vec<MessagePart>,
     #[serde(default)]
     pub evidence: Vec<String>,
     #[serde(default)]
@@ -24,6 +27,7 @@ pub struct SupervisorExecutionResult {
 impl SupervisorExecutionResult {
     pub fn completed(
         summary: String,
+        messages: Vec<MessagePart>,
         evidence: Vec<String>,
         artifacts: Vec<String>,
         charts: Vec<super::response::ChartPart>,
@@ -35,6 +39,7 @@ impl SupervisorExecutionResult {
         Self {
             status: "completed".to_string(),
             summary,
+            messages,
             evidence,
             artifacts,
             charts,
@@ -56,6 +61,7 @@ impl SupervisorExecutionResult {
         Self {
             status: "failed".to_string(),
             summary,
+            messages: Vec::new(),
             evidence: Vec::new(),
             artifacts: Vec::new(),
             charts,
@@ -78,6 +84,7 @@ impl SupervisorExecutionResult {
         Self {
             status: "blocked".to_string(),
             summary,
+            messages: Vec::new(),
             evidence,
             artifacts: Vec::new(),
             charts,

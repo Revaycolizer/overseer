@@ -93,7 +93,16 @@ pub fn format_step_results_context(step_description: &str, summary: &str, eviden
     
     if !evidence.is_empty() {
         if !findings_content.is_empty() { findings_content.push_str("\n- ADDITIONAL_EVIDENCE: "); }
-        findings_content.push_str(&evidence.join("; "));
+        let readable_evidence: Vec<String> = evidence.iter().map(|e| {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(e) {
+                let title = v.get("title").or(v.get("source")).and_then(|v| v.as_str()).unwrap_or("Evidence");
+                let snippet = v.get("snippet").or(v.get("description")).and_then(|v| v.as_str());
+                if let Some(s) = snippet { format!("{}: {}", title, s) } else { title.to_string() }
+            } else {
+                e.clone()
+            }
+        }).collect();
+        findings_content.push_str(&readable_evidence.join("; "));
     }
 
     format!("KNOWLEDGE_FROM_PREVIOUS_STEPS:\n- STEP: {}\n- FINDINGS: {}\n", step_description, findings_content)
