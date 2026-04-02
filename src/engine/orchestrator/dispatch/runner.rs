@@ -65,7 +65,7 @@ pub async fn dispatch_domain(
         if let Some(t) = tools.iter().find(|t| t.name == "os_tool") {
             let res = crate::engine::tools::call_dynamic_tool(t, serde_json::json!({"action":"screenshot"})).await.map_err(|e| e.to_string())?;
             let (ev, art, sm) = parse_screenshot_artifact_payload(&res);
-            return Ok(SupervisorExecutionResult::completed(sm, ev, art, vec![], true, s.hide_evidence, res));
+            return Ok(SupervisorExecutionResult::completed(sm, ev, art, vec![], true, s.hide_evidence, s.report_style.clone(), res));
         }
     }
 
@@ -74,17 +74,20 @@ pub async fn dispatch_domain(
         .build();
 
     let tool_list = tools.iter().map(|t| format!("- {}: {}", t.name, t.description)).collect::<Vec<_>>().join("\n");
+    let style = s.report_style.as_deref().unwrap_or("detailed");
     let mut current_prompt = format!(
         "GOAL: {}\n\
          CURRENT_TASK: {}\n\n\
          TOOLS:\n{}\n\n\
          RELEVANT_CONTEXT:\n{}\n\n\
+         REPORTING_STYLE: {}\n\n\
          EXECUTION_HISTORY:\n{}\n\n\
          INSTRUCTIONS:\n\
          You are an autonomous agent performing a specific task as part of a larger multi-step plan. \
          Use the GOAL and EXECUTION_HISTORY to ensure your output is consistent with what has already been accomplished. \
-         Execute the CURRENT_TASK. Respond with a single JSON block: either a tool call or your final response.",
-        query, step, tool_list, memory_context, plan_history
+         Execute the CURRENT_TASK. Respond with a single JSON block: either a tool call or your final response. \
+         Your final response 'summary' MUST follow the requested REPORTING_STYLE.",
+        query, step, tool_list, memory_context, style, plan_history
     );
 
     println!(
@@ -97,6 +100,7 @@ pub async fn dispatch_domain(
         println!("Supervisor iteration {}/10", iteration + 1);
         let response = agent.prompt(&current_prompt).await.map_err(|e| e.to_string())?;
         let trimmed = response.trim();
+        println!("DEBUG: Supervisor '{}' (iteration {}) raw response: \n---\n{}\n---", s.name, iteration + 1, trimmed);
 
         // Robust tool extraction: find the last { } block
         let tool_json_str = if let Some(start) = trimmed.rfind('{') {
@@ -109,9 +113,21 @@ pub async fn dispatch_domain(
 
         if let Some(json_str) = tool_json_str {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
-                if let Some(tname) = json.get("tool").and_then(|v| v.as_str()) {
+                // Support multiple synonyms for tool name and input
+                let tname = json.get("tool")
+                    .or_else(|| json.get("task"))
+                    .or_else(|| json.get("action"))
+                    .and_then(|v| v.as_str());
+                
+                if let Some(tname) = tname {
                     let tool = tools.iter().find(|t| t.name == tname).ok_or_else(|| format!("Tool {} missing", tname))?;
-                    let input = json.get("input").unwrap_or(&serde_json::Value::Null).clone();
+                    
+                    let input = json.get("input")
+                        .or_else(|| json.get("query"))
+                        .or_else(|| json.get("data"))
+                        .unwrap_or(&serde_json::Value::Null).clone();
+                        
+                    println!("🛠️ EXECUTING TOOL: {} with input: {}", tname, input);
                     let output = crate::engine::tools::call_dynamic_tool(tool, input).await.map_err(|e| e.to_string())?;
                     
                     if tname == "charting" { last_chart = Some(output.clone()); }
@@ -125,7 +141,7 @@ pub async fn dispatch_domain(
             }
         }
 
-        let mut res = parse_supervisor_result(trimmed.to_string(), s.hide_evidence);
+        let mut res = parse_supervisor_result(trimmed.to_string(), s.hide_evidence, s.report_style.clone());
         
         // Data-driven chart injection (NO markers)
         // Deduplicate: Only inject if the model didn't already include it in its JSON
@@ -136,6 +152,8 @@ pub async fn dispatch_domain(
                 }
             }
         }
+        
+        println!("DEBUG: Parsed result for '{}': summary='{}', evidence_count={}", s.name, res.summary, res.evidence.len());
         
         return Ok(res);
     }

@@ -10,14 +10,39 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
 
     // Main message
     // Main message
-    if !final_summary.is_empty() {
-        let is_generic = final_summary == "Task completed." || final_summary == "Done." || final_summary == "Finished.";
+    let mut message = final_summary.clone();
+    let is_generic = message == "Task completed." || message == "Done." || message == "Finished." || message.is_empty();
+
+    // STYLE-AWARE PROMOTION: If message is generic but we have findings, promote them.
+    if is_generic && !res.evidence.is_empty() {
+        let findings_label = if res.report_style.as_deref() == Some("concise") {
+            "Found findings: "
+        } else {
+            "\n\n### Findings:\n"
+        };
         
+        let mut findings_str = String::from(findings_label);
+        if res.report_style.as_deref() == Some("concise") {
+             findings_str.push_str(&res.evidence.join(", "));
+        } else {
+             for e in &res.evidence {
+                 findings_str.push_str(&format!("- {}\n", e));
+             }
+        }
+        
+        if message == "Task completed." || message == "Done." || message == "Finished." {
+            message = format!("{}{}", message, findings_str);
+        } else {
+            message = findings_str;
+        }
+    }
+
+    if !message.is_empty() {
+        let is_generic_now = message == "Task completed." || message == "Done." || message == "Finished.";
         // Skip generic summary if we have better content coming (charts, etc.)
-        // or if it's already redundant.
-        if !is_generic || (res.charts.is_empty() && res.artifacts.is_empty()) {
+        if !is_generic_now || (res.charts.is_empty() && res.artifacts.is_empty()) {
             structured.messages.push(MessagePart {
-                message: final_summary,
+                message,
                 role: "agent".to_string(),
             });
         }

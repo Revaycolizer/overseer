@@ -2,7 +2,7 @@ use serde_json::Value;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
 use crate::engine::orchestrator::core::response::ChartPart;
 
-pub fn parse_supervisor_result(raw: String, hide_evidence: bool) -> SupervisorExecutionResult {
+pub fn parse_supervisor_result(raw: String, hide_evidence: bool, report_style: Option<String>) -> SupervisorExecutionResult {
     let mut merged_value = serde_json::Map::new();
     let mut summary = String::new();
     let mut json_found = false;
@@ -72,13 +72,13 @@ pub fn parse_supervisor_result(raw: String, hide_evidence: bool) -> SupervisorEx
     summary = summary.replace("```json", "").replace("```", "").trim().to_string();
 
     if json_found || !summary.is_empty() {
-        return extract_result_from_value(Value::Object(merged_value), summary, raw.clone(), hide_evidence);
+        return extract_result_from_value(Value::Object(merged_value), summary, raw.clone(), hide_evidence, report_style);
     }
     
-    SupervisorExecutionResult::completed(raw.trim().to_string(), vec![], vec![], vec![], true, hide_evidence, raw)
+    SupervisorExecutionResult::completed(raw.trim().to_string(), vec![], vec![], vec![], true, hide_evidence, report_style, raw)
 }
 
-fn extract_result_from_value(value: Value, summary: String, raw: String, hide_evidence: bool) -> SupervisorExecutionResult {
+fn extract_result_from_value(value: Value, summary: String, raw: String, hide_evidence: bool, report_style: Option<String>) -> SupervisorExecutionResult {
     let target = value.get("final").unwrap_or(&value);
     
     let mut evidence = Vec::new();
@@ -136,7 +136,7 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
         true
     };
 
-    SupervisorExecutionResult::completed(final_summary.trim().to_string(), evidence, artifacts, charts, verified, hide_evidence, raw)
+    SupervisorExecutionResult::completed(final_summary.trim().to_string(), evidence, artifacts, charts, verified, hide_evidence, report_style, raw)
 }
 
 pub fn user_facing_runtime_error(details: &str) -> Option<String> {

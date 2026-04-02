@@ -15,6 +15,8 @@ pub struct SupervisorExecutionResult {
     pub verified: bool,
     #[serde(default)]
     pub hide_evidence: bool,
+    #[serde(default)]
+    pub report_style: Option<String>,
     pub error: Option<String>,
     pub raw_response: String,
 }
@@ -27,6 +29,7 @@ impl SupervisorExecutionResult {
         charts: Vec<super::response::ChartPart>,
         verified: bool,
         hide_evidence: bool,
+        report_style: Option<String>,
         raw_response: String,
     ) -> Self {
         Self {
@@ -37,6 +40,7 @@ impl SupervisorExecutionResult {
             charts,
             verified,
             hide_evidence,
+            report_style,
             error: None,
             raw_response,
         }
@@ -47,6 +51,7 @@ impl SupervisorExecutionResult {
         error: String,
         charts: Vec<super::response::ChartPart>,
         raw_response: String,
+        report_style: Option<String>,
     ) -> Self {
         Self {
             status: "failed".to_string(),
@@ -56,6 +61,7 @@ impl SupervisorExecutionResult {
             charts,
             verified: false,
             hide_evidence: false,
+            report_style,
             error: Some(error),
             raw_response,
         }
@@ -67,6 +73,7 @@ impl SupervisorExecutionResult {
         error: String,
         charts: Vec<super::response::ChartPart>,
         raw_response: String,
+        report_style: Option<String>,
     ) -> Self {
         Self {
             status: "blocked".to_string(),
@@ -76,6 +83,7 @@ impl SupervisorExecutionResult {
             charts,
             verified: false,
             hide_evidence: false,
+            report_style,
             error: Some(error),
             raw_response,
         }

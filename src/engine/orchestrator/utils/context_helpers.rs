@@ -75,15 +75,26 @@ pub fn format_newly_created_artifacts(artifacts: &[String], step_description: &s
     format!("NEWLY CREATED ARTIFACTS:\n{}", lines.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n"))
 }
 
-pub fn format_step_results_context(step_description: &str, summary: &str) -> String {
+pub fn format_step_results_context(step_description: &str, summary: &str, evidence: &[String]) -> String {
     let t_summary = summary.trim();
-    if t_summary.is_empty() { return String::new(); }
     
-    // Skip if it's just a generic completion message
+    // Check if it's just a generic completion message
     let lower = t_summary.to_lowercase();
-    if lower == "task completed." || lower == "done." || lower == "finished." || lower == "success." {
+    let is_generic = t_summary.is_empty() || lower == "task completed." || lower == "done." || lower == "finished." || lower == "success.";
+    
+    if is_generic && evidence.is_empty() {
         return String::new();
     }
 
-    format!("KNOWLEDGE_FROM_PREVIOUS_STEPS:\n- STEP: {}\n- FINDINGS: {}\n", step_description, t_summary)
+    let mut findings_content = String::new();
+    if !is_generic {
+        findings_content.push_str(t_summary);
+    }
+    
+    if !evidence.is_empty() {
+        if !findings_content.is_empty() { findings_content.push_str("\n- ADDITIONAL_EVIDENCE: "); }
+        findings_content.push_str(&evidence.join("; "));
+    }
+
+    format!("KNOWLEDGE_FROM_PREVIOUS_STEPS:\n- STEP: {}\n- FINDINGS: {}\n", step_description, findings_content)
 }

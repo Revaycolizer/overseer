@@ -99,8 +99,9 @@ pub async fn execute_macro_tasks(
                     }
 
                     // ADDITION: Also pass textual findings (summary) as structured context
-                    let findings_ctx = format_step_results_context(step, &supervisor_result.summary);
+                    let findings_ctx = format_step_results_context(step, &supervisor_result.summary, &supervisor_result.evidence);
                     if !findings_ctx.is_empty() {
+                        println!("🧠 CONTEXT ACCUMULATED for next step: {}", findings_ctx);
                         active_memories.push_str("\n\n");
                         active_memories.push_str(&findings_ctx);
                     }
