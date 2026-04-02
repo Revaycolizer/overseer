@@ -76,11 +76,14 @@ pub async fn dispatch_domain(
     let tool_list = tools.iter().map(|t| format!("- {}: {}", t.name, t.description)).collect::<Vec<_>>().join("\n");
     let mut current_prompt = format!(
         "GOAL: {}\n\
-         TASK: {}\n\n\
+         CURRENT_TASK: {}\n\n\
          TOOLS:\n{}\n\n\
-         CONTEXT:\n{}\n\n\
-         PLAN:\n{}\n\n\
-         COMMAND: Execute the task. Respond with a single JSON block: either a tool call or your final response.",
+         RELEVANT_CONTEXT:\n{}\n\n\
+         EXECUTION_HISTORY:\n{}\n\n\
+         INSTRUCTIONS:\n\
+         You are an autonomous agent performing a specific task as part of a larger multi-step plan. \
+         Use the GOAL and EXECUTION_HISTORY to ensure your output is consistent with what has already been accomplished. \
+         Execute the CURRENT_TASK. Respond with a single JSON block: either a tool call or your final response.",
         query, step, tool_list, memory_context, plan_history
     );
 

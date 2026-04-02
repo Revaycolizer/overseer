@@ -6,6 +6,7 @@ use crate::engine::orchestrator::dispatch;
 use crate::engine::tools::StructuredPerceptionTool;
 use rig::completion::Message;
 use rig::providers::ollama;
+use crate::engine::orchestrator::utils::context_helpers::{format_newly_created_artifacts, format_step_results_context};
 
 pub async fn execute_macro_tasks(
     db: &Database,
@@ -23,6 +24,7 @@ pub async fn execute_macro_tasks(
 ) -> String {
     let mut master_response = StructuredResponse::new();
     let mut plan_history = String::new();
+    let mut active_memories = memories.to_string();
     let mut browser_pid: Option<i32> = None;
 
     for (task_idx, macro_task) in macro_tasks.iter().enumerate() {
@@ -79,7 +81,7 @@ pub async fn execute_macro_tasks(
                 clean_query,
                 history.to_vec(),
                 &plan_history,
-                memories,
+                &active_memories,
                 ollama_client,
                 model_timeout_ms,
             )
@@ -90,6 +92,19 @@ pub async fn execute_macro_tasks(
                     let step_structured = crate::engine::orchestrator::utils::formatter::format_supervisor_result(&supervisor_result);
                     master_response.merge(step_structured);
                     
+                    if !supervisor_result.artifacts.is_empty() {
+                        let new_ctx = format_newly_created_artifacts(&supervisor_result.artifacts, step);
+                        active_memories.push_str("\n\n");
+                        active_memories.push_str(&new_ctx);
+                    }
+
+                    // ADDITION: Also pass textual findings (summary) as structured context
+                    let findings_ctx = format_step_results_context(step, &supervisor_result.summary);
+                    if !findings_ctx.is_empty() {
+                        active_memories.push_str("\n\n");
+                        active_memories.push_str(&findings_ctx);
+                    }
+
                     let display = supervisor_result.display_text();
                     plan_history.push_str(&format!("\nStep {}: '{}' -> Result: {}", i + 1, step, display));
 

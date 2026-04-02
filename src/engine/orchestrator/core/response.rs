@@ -74,6 +74,11 @@ impl StructuredResponse {
             if !self.artifacts.contains(&a) { self.artifacts.push(a); }
         }
 
+        let is_generic = |m: &str| {
+            let t = m.trim().to_lowercase();
+            t == "task completed." || t == "done." || t == "finished." || t == "success."
+        };
+
         for m in other.messages {
             let m_trimmed = m.message.trim();
             if m_trimmed.is_empty() { continue; }
@@ -83,10 +88,20 @@ impl StructuredResponse {
                 continue;
             }
 
-            // 2. Remove any existing messages that are contained within (or equal to) the new one.
+            // 2. If the new message is generic and we already have a NON-generic message, skip it.
+            if is_generic(m_trimmed) && self.messages.iter().any(|e| !is_generic(e.message.trim())) {
+                continue;
+            }
+
+            // 3. If the new message is specific and we ONLY have generic ones, clear them first.
+            if !is_generic(m_trimmed) && self.messages.iter().all(|e| is_generic(e.message.trim())) {
+                self.messages.clear();
+            }
+
+            // 4. Remove any existing messages that are contained within (or equal to) the new one.
             self.messages.retain(|e| !m_trimmed.contains(e.message.trim()));
 
-            // 3. Add the new comprehensive message.
+            // 5. Add the new comprehensive message.
             self.messages.push(m);
         }
 
@@ -96,19 +111,16 @@ impl StructuredResponse {
                 self.sources.push(s);
             }
         }
-
-        // Add unique attachments
+        
+        // ... rest of the merge logic (attachments, charts, etc.)
         for a in other.attachments {
             if !self.attachments.contains(&a) { self.attachments.push(a); }
         }
-
-        // Add unique charts (deduplicate by title and type)
         for c in other.charts {
             if !self.charts.iter().any(|existing| existing.title == c.title && existing.chart_type == c.chart_type) {
                 self.charts.push(c);
             }
         }
-
         for u in other.unknown {
             self.unknown.push(u);
         }

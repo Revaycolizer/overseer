@@ -58,3 +58,32 @@ pub fn format_work_item_context(work_items: &[WorkItemReference]) -> String {
     }).collect::<Vec<_>>().join("\n");
     format!("ACTIVE WORK ITEMS:\n{}", lines)
 }
+
+pub fn format_newly_created_artifacts(artifacts: &[String], step_description: &str) -> String {
+    if artifacts.is_empty() { return String::new(); }
+    let mut lines = Vec::new();
+    for a in artifacts {
+        let (kind, ct) = crate::engine::orchestrator::utils::artifact_utils::infer_artifact_kind_and_content_type(a);
+        let label = crate::engine::orchestrator::utils::artifact_utils::infer_artifact_label(&kind, step_description, a);
+        
+        let mut p = vec![format!("Artifact [NEW]"), format!("label={}", label), format!("kind={}", kind)];
+        if let Some(c) = ct { p.push(format!("content_type={}", c)); }
+        p.push(format!("path={}", a));
+        
+        lines.push(format!("- {}", p.join(" | ")));
+    }
+    format!("NEWLY CREATED ARTIFACTS:\n{}", lines.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n"))
+}
+
+pub fn format_step_results_context(step_description: &str, summary: &str) -> String {
+    let t_summary = summary.trim();
+    if t_summary.is_empty() { return String::new(); }
+    
+    // Skip if it's just a generic completion message
+    let lower = t_summary.to_lowercase();
+    if lower == "task completed." || lower == "done." || lower == "finished." || lower == "success." {
+        return String::new();
+    }
+
+    format!("KNOWLEDGE_FROM_PREVIOUS_STEPS:\n- STEP: {}\n- FINDINGS: {}\n", step_description, t_summary)
+}
