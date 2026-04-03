@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use dioxus::document::eval;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 use crate::routes::conversations::types::{VizKind, VizBlock};
 use crate::routes::conversations::search_view::SearchBlock;
@@ -8,10 +9,6 @@ use crate::engine::tools::charting::{ChartRequest, generate_chart_svg};
 pub fn ChartBlock(block: VizBlock, hide_evidence: bool) -> Element {
     if block.kind == VizKind::Search {
         return rsx! { SearchBlock { payload: block.payload, hide_evidence: hide_evidence } };
-    }
-
-    if block.kind == VizKind::Data {
-        return rsx! { DataChart { payload: block.payload } };
     }
 
     let payload = block.payload.clone();
@@ -36,16 +33,21 @@ pub fn ChartBlock(block: VizBlock, hide_evidence: bool) -> Element {
         _ => None,
     };
 
+    let mut svg_status = use_signal(|| 0); // 0=idle, 1=saving, 2=saved, 3=err
+    let mut png_status = use_signal(|| 0);
+
     rsx! {
         div { class: "w-full space-y-2",
             div { class: "bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden",
-                if is_asset && html_from_file.read().is_none() {
+                if block.kind == VizKind::Data {
+                    DataChart { payload: block.payload.clone() }
+                } else if is_asset && html_from_file.read().is_none() {
                     div { class: "flex items-center justify-center h-[200px] text-slate-400 gap-3",
                         div { class: "size-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" }
                         "Preparing visualization..."
                     }
                 } else if block.kind == VizKind::Svg {
-                    div { class: "w-full p-4 [&>svg]:w-full [&>svg]:h-auto [&>svg]:display-block",
+                    div { class: "w-full p-4 lg:p-8 dangerous-svg-container [&>svg]:w-full [&>svg]:h-auto [&>svg]:display-block",
                         dangerous_inner_html: "{block.payload}"
                     }
                 } else if let Some(html) = iframe_html {
@@ -59,9 +61,119 @@ pub fn ChartBlock(block: VizBlock, hide_evidence: bool) -> Element {
                     MaterialIcon { name: "query_stats", size: 14, color: MaterialIconColor::Custom("text-slate-400".to_string()) }
                     span { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest", "Dynamic Insight" }
                 }
+
+                div { class: "flex items-center gap-2",
+                    // Export SVG
+                    button {
+                        class: "flex items-center gap-1.5 px-2 py-1 text-[9px] font-semibold text-slate-500 hover:bg-slate-100 rounded-lg transition-all",
+                        onclick: {
+                            let svg_raw = block.payload.clone();
+                            let is_svg = block.kind == VizKind::Svg;
+                            move |_| {
+                                let payload = svg_raw.clone();
+                                svg_status.set(1);
+                                let mut eval = eval(
+                                    r#"
+                                    let content = await (async () => {
+                                        return document.querySelector('[title="Visualization"]')?.srcdoc || document.querySelector('.dangerous-svg-container')?.innerHTML || window.last_captured_svg || "";
+                                    })();
+                                    dioxus.send(content);
+                                    "#
+                                );
+                                spawn(async move {
+                                    if let Ok(value) = eval.recv().await {
+                                        let value: serde_json::Value = value;
+                                        if let Some(json) = value.as_str() {
+                                            let final_data = if is_svg { payload.clone() } else { json.to_string() };
+                                            let _ = crate::backend::save_chart_export("chart_export".to_string(), final_data, "svg".to_string()).await;
+                                            svg_status.set(2);
+                                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                            svg_status.set(0);
+                                        }
+                                    }
+                                });
+                            }
+                        },
+                        if svg_status() == 0 {
+                            rsx! { 
+                                MaterialIcon { name: "download", size: 12, color: MaterialIconColor::Custom("text-slate-400".to_string()) }
+                                "SVG"
+                            }
+                        } else if svg_status() == 1 {
+                            rsx! { "Saving..." }
+                        } else {
+                             rsx! { "Saved! ✅" }
+                        }
+                    }
+                    
+                    // Export PNG (Capture canvas)
+                    button {
+                        class: "flex items-center gap-1.5 px-2 py-1 text-[9px] font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-all shadow-sm disabled:opacity-50",
+                        disabled: png_status() != 0,
+                        onclick: {
+                            let svg_raw = block.payload.clone();
+                            move |_| {
+                                png_status.set(1);
+                                let mut eval = eval(
+                                    r#"
+                                    async function capturePNG() {
+                                        const svgContainer = document.querySelector('.dangerous-svg-container') || document.querySelector('[title="Visualization"]');
+                                        if (!svgContainer) return null;
+                                        
+                                        const svg = svgContainer.querySelector('svg') || svgContainer;
+                                        const svgString = new XMLSerializer().serializeToString(svg);
+                                        const canvas = document.createElement('canvas');
+                                        const ctx = canvas.getContext('2d');
+                                        const img = new Image();
+                                        const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+                                        const url = URL.createObjectURL(svgBlob);
+                                        
+                                        return new Promise((resolve) => {
+                                            img.onload = () => {
+                                                canvas.width = img.width * 2; // High res
+                                                canvas.height = img.height * 2;
+                                                ctx.fillStyle = "white";
+                                                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                                URL.revokeObjectURL(url);
+                                                resolve(canvas.toDataURL('image/png'));
+                                            };
+                                            img.src = url;
+                                        });
+                                    }
+                                    const dataUrl = await capturePNG();
+                                    dioxus.send(dataUrl);
+                                    "#
+                                );
+                                spawn(async move {
+                                    if let Ok(value) = eval.recv().await {
+                                        let value: serde_json::Value = value;
+                                        if let Some(data_url) = value.as_str() {
+                                            let _ = crate::backend::save_chart_export("chart_export".to_string(), data_url.to_string(), "png".to_string()).await;
+                                            png_status.set(2);
+                                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                            png_status.set(0);
+                                        }
+                                    }
+                                });
+                            }
+                        },
+                        if png_status() == 0 {
+                            rsx! { 
+                                MaterialIcon { name: "image", size: 12, color: MaterialIconColor::Custom("text-white".to_string()) }
+                                "PNG"
+                            }
+                        } else if png_status() == 1 {
+                             rsx! { "Saving..." }
+                        } else {
+                             rsx! { "Saved! ✅" }
+                        }
+                    }
+                }
             }
         }
     }
+}
 }
 
 #[component]
@@ -88,7 +200,7 @@ fn DataChart(payload: String) -> Element {
     
     match svg_res {
         Ok(svg) => rsx! {
-            div { class: "w-full p-4 [&>svg]:w-full [&>svg]:h-[300px] [&>svg]:display-block bg-white flex items-center justify-center",
+            div { class: "w-full p-4 lg:p-8 dangerous-svg-container [&>svg]:w-full [&>svg]:h-[300px] [&>svg]:display-block bg-white flex items-center justify-center",
                 dangerous_inner_html: "{svg}"
             }
         },
