@@ -6609,6 +6609,7 @@ dependencies = [
  "csv",
  "dioxus",
  "dioxus-material-icons",
+ "dirs",
  "docx-rs",
  "enigo",
  "futures",
