@@ -94,15 +94,17 @@ pub fn ChartBlock(block: VizBlock, hide_evidence: bool) -> Element {
                                 });
                             }
                         },
-                        if svg_status() == 0 {
-                            rsx! { 
-                                MaterialIcon { name: "download", size: 12, color: MaterialIconColor::Custom("text-slate-400".to_string()) }
-                                "SVG"
+                        {
+                            if svg_status() == 0 {
+                                rsx! { 
+                                    MaterialIcon { name: "download", size: 12, color: MaterialIconColor::Custom("text-slate-400".to_string()) }
+                                    "SVG"
+                                }
+                            } else if svg_status() == 1 {
+                                rsx! { "Saving..." }
+                            } else {
+                                 rsx! { "Saved! ✅" }
                             }
-                        } else if svg_status() == 1 {
-                            rsx! { "Saving..." }
-                        } else {
-                             rsx! { "Saved! ✅" }
                         }
                     }
                     
@@ -158,22 +160,23 @@ pub fn ChartBlock(block: VizBlock, hide_evidence: bool) -> Element {
                                 });
                             }
                         },
-                        if png_status() == 0 {
-                            rsx! { 
-                                MaterialIcon { name: "image", size: 12, color: MaterialIconColor::Custom("text-white".to_string()) }
-                                "PNG"
+                        {
+                            if png_status() == 0 {
+                                rsx! { 
+                                    MaterialIcon { name: "image", size: 12, color: MaterialIconColor::Custom("text-white".to_string()) }
+                                    "PNG"
+                                }
+                            } else if png_status() == 1 {
+                                 rsx! { "Saving..." }
+                            } else {
+                                 rsx! { "Saved! ✅" }
                             }
-                        } else if png_status() == 1 {
-                             rsx! { "Saving..." }
-                        } else {
-                             rsx! { "Saved! ✅" }
                         }
                     }
                 }
             }
         }
     }
-}
 }
 
 #[component]
