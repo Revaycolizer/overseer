@@ -139,6 +139,15 @@ pub async fn dispatch_domain(
                                     tool_json_str = Some(potential);
                                     break;
                                 }
+                            } else {
+                                // Try repair during detection for robustness
+                                let repaired = repair_json_literals(&potential);
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&repaired) {
+                                    if json.get("tool").or(json.get("tool_call")).is_some() {
+                                        tool_json_str = Some(repaired);
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }

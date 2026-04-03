@@ -597,8 +597,18 @@ pub async fn update_supervisor(
     .bind(supervisor.id)
     .execute(&db.pool)
     .await?;
-    refresh_runtime_registry(db).await;
     Ok(())
+}
+
+pub async fn export_to_downloads(asset_path: &str) -> anyhow::Result<String> {
+    let args = serde_json::json!({ "path": asset_path });
+    match crate::engine::tools::native_export_asset(&args).await {
+        Ok(res) => {
+            let json: serde_json::Value = serde_json::from_str(&res)?;
+            Ok(json["message"].as_str().unwrap_or("File exported.").to_string())
+        }
+        Err(e) => Err(anyhow::anyhow!("Export failed: {}", e)),
+    }
 }
 
 pub async fn delete_supervisor(db: &Database, id: i64) -> anyhow::Result<()> {

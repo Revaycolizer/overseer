@@ -209,6 +209,7 @@ async fn call_native_builtin_tool(
         "stealth_search" => Some(native_stealth_search(args).await?),
         "app_launcher" => Some(native_app_launcher(args).await?),
         "document_writer" => Some(native_document_writer(args).await?),
+        "export_asset" => Some(native_export_asset(args).await?),
         _ => None,
     };
 
@@ -544,6 +545,56 @@ async fn native_document_writer(args: &serde_json::Value) -> Result<String, Dyna
             tool: "document_writer".to_string(),
             details: e,
         })
+}
+
+pub async fn native_export_asset(args: &serde_json::Value) -> Result<String, DynamicToolError> {
+    let input = object_tool_input(args);
+    let asset_path = input
+        .get("path")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| DynamicToolError::ExecutionFailed {
+            tool: "export_asset".to_string(),
+            details: "Missing 'path' to export.".to_string(),
+        })?;
+
+    // Normalize path: remove leading slash for std::path
+    let clean_path = asset_path.trim_start_matches('/');
+    let source = std::path::Path::new(clean_path);
+    
+    if !source.exists() {
+        return Err(DynamicToolError::ExecutionFailed {
+            tool: "export_asset".to_string(),
+            details: format!("Source asset not found: {}", clean_path),
+        });
+    }
+
+    let filename = source.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("exported_file");
+
+    let download_dir = dirs::download_dir().unwrap_or_else(|| {
+        #[cfg(not(windows))]
+        { PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())).join("Downloads") }
+        #[cfg(windows)]
+        { PathBuf::from(std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".to_string())).join("Downloads") }
+    });
+
+    if !download_dir.exists() {
+        let _ = std::fs::create_dir_all(&download_dir);
+    }
+
+    let destination = download_dir.join(filename);
+    
+    std::fs::copy(source, &destination).map_err(|e| DynamicToolError::ExecutionFailed {
+        tool: "export_asset".to_string(),
+        details: format!("Failed to copy to Downloads: {}", e),
+    })?;
+
+    Ok(json!({
+        "status": "success",
+        "message": format!("File exported to Downloads: {}", filename),
+        "destination": destination.display().to_string()
+    }).to_string())
 }
 
 
