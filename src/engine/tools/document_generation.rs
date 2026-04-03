@@ -11,17 +11,19 @@ use std::fs;
 
 // Moved from src/engine/tools/mod.rs
 pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, String> {
-    let data = args.get("data").and_then(|d| d.as_array()).ok_or_else(|| {
-        "Missing 'data' array in input. Provide { \"data\": [...], \"filename\": \"report_name\" }".to_string()
-    })?;
-
-    if data.is_empty() {
+    let data_val = args.get("data");
+    
+    if data_val.is_none() || (data_val.is_some() && data_val.unwrap().is_array() && data_val.unwrap().as_array().unwrap().is_empty()) {
         return Ok(json!({
             "status": "success",
-            "message": "No data provided to write.",
+            "message": "Tool document_writer initialized and ready. Provide a 'data' array to generate reports.",
             "artifacts": []
         }).to_string());
     }
+
+    let data = data_val.unwrap().as_array().ok_or_else(|| {
+        "Invalid 'data' format. Expected an array of objects.".to_string()
+    })?;
 
     let base_filename = args
         .get("filename")

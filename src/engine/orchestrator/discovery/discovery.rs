@@ -1,4 +1,5 @@
 use crate::db::Database;
+use crate::engine::utils::discovery::AgentInfo;
 
 pub(crate) fn looks_like_planner_request(query: &str) -> bool {
     let lower = query.to_lowercase();
@@ -149,12 +150,12 @@ pub async fn discover_semantic_agents(
     client: &reqwest::Client,
     query: &str,
     limit: usize,
-) -> Vec<crate::db::Supervisor> {
+) -> Vec<AgentInfo> {
+    let mut supervisors = Vec::new();
     #[cfg(feature = "memory")]
     {
         match db.search_agents_semantically(client, query, limit).await {
             Ok(domains) => {
-                let mut valid_supervisors = Vec::new();
                 for domain in domains {
                     if let Ok(Some(s)) = sqlx::query_as::<_, crate::db::Supervisor>(
                         "SELECT * FROM supervisors WHERE domain = ?"
@@ -162,11 +163,8 @@ pub async fn discover_semantic_agents(
                     .bind(domain)
                     .fetch_optional(&db.pool)
                     .await {
-                        valid_supervisors.push(s);
+                        supervisors.push(s);
                     }
-                }
-                if !valid_supervisors.is_empty() {
-                    return valid_supervisors;
                 }
             }
             Err(e) => {
@@ -175,14 +173,68 @@ pub async fn discover_semantic_agents(
         }
     }
 
-    // Fallback or if memory feature is disabled: return all with some priority
-    sqlx::query_as::<_, crate::db::Supervisor>(
-        "SELECT * FROM supervisors ORDER BY routing_priority DESC LIMIT ?"
-    )
-    .bind(limit as i64)
-    .fetch_all(&db.pool)
-    .await
-    .unwrap_or_default()
+    if supervisors.is_empty() {
+        // Fallback or if memory feature is disabled: return all with some priority
+        supervisors = sqlx::query_as::<_, crate::db::Supervisor>(
+            "SELECT * FROM supervisors ORDER BY routing_priority DESC LIMIT ?"
+        )
+        .bind(limit as i64)
+        .fetch_all(&db.pool)
+        .await
+        .unwrap_or_default();
+    }
+
+    let mut agents = Vec::new();
+    let mut added_domains = std::collections::HashSet::new();
+
+    // 1. Mandatory Core Supervisors (Ensure the planner always sees these)
+    let core_domains = vec!["stealth", "office", "web", "chat"];
+    for domain in core_domains {
+        if let Ok(Some(s)) = sqlx::query_as::<_, crate::db::Supervisor>(
+            "SELECT * FROM supervisors WHERE domain = ?"
+        )
+        .bind(domain)
+        .fetch_optional(&db.pool)
+        .await {
+            added_domains.insert(s.domain.clone());
+            let tools = crate::backend::get_supervisor_tools(db, s.id).await.unwrap_or_default();
+            agents.push(AgentInfo {
+                id: s.id,
+                name: s.name,
+                description: s.description.unwrap_or_default(),
+                tools: tools.into_iter().map(|t| t.name).collect(),
+                instructions: s.instructions.unwrap_or_default(),
+                model: s.model.unwrap_or_default(),
+                domain: s.domain,
+                version: s.version.unwrap_or_default(),
+                code: s.code,
+                source_files: vec![],
+                response_format: s.response_format,
+            });
+        }
+    }
+
+    // 2. Discoverer supervisors (Deduplicate against core)
+    for s in supervisors {
+        if added_domains.contains(&s.domain) { continue; }
+        added_domains.insert(s.domain.clone());
+        
+        let tools = crate::backend::get_supervisor_tools(db, s.id).await.unwrap_or_default();
+        agents.push(AgentInfo {
+            id: s.id,
+            name: s.name,
+            description: s.description.unwrap_or_default(),
+            tools: tools.into_iter().map(|t| t.name).collect(),
+            instructions: s.instructions.unwrap_or_default(),
+            model: s.model.unwrap_or_default(),
+            domain: s.domain,
+            version: s.version.unwrap_or_default(),
+            code: s.code,
+            source_files: vec![],
+            response_format: s.response_format,
+        });
+    }
+    agents
 }
 
 #[cfg(test)]

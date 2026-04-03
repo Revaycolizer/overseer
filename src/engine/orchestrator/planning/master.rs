@@ -12,7 +12,7 @@ impl MasterPlanner {
         _ollama_client: &ollama::Client,
         model: &str,
         base_instructions: &str,
-        _agents: &[AgentInfo], // Legacy, will be ignored
+        _agents: &[crate::engine::utils::discovery::AgentInfo], 
     ) -> Self {
         Self {
             model: model.to_string(),
@@ -24,33 +24,41 @@ impl MasterPlanner {
         &self,
         ollama_client: &ollama::Client,
         prompt: &str,
-        agents: Vec<crate::db::Supervisor>,
+        all_agents: Vec<crate::engine::utils::discovery::AgentInfo>,
     ) -> String {
-        let mut domains_str = String::new();
-        for (i, agent) in agents.iter().enumerate() {
-            domains_str.push_str(&format!(
-                "{}. \"{}\" - {}\n",
-                i + 1,
+        // 1. Build a dynamic Registry of Capabilities
+        let mut registry = String::new();
+        registry.push_str("Domain | Purpose | Equipped Tools\n");
+        registry.push_str("-------|---------|----------------\n");
+        
+        for agent in all_agents {
+            if agent.domain == "orchestrator" || agent.domain == "overseer" { continue; }
+            let tools = agent.tools.join(", ");
+            registry.push_str(&format!(
+                "{} | {} | [{}]\n",
                 agent.domain,
-                agent.description.as_deref().unwrap_or("No description")
+                agent.description,
+                if tools.is_empty() { "none" } else { &tools }
             ));
         }
 
         let coordination_rules = r#"
-═══ COORDINATION RULES ═══
-1. MULTI-STEP PLANNING: If a task requires information gathering (e.g. "Research [Topic]") before an action (e.g. "Generate a [Format]"), you MUST create a 2-step plan.
-2. STEP 1: Research/Data Gathering (usually 'stealth' or 'chat' domain).
-3. STEP 2: Execution/Output (e.g. 'office' for documents, 'computer' for UI, 'chat' for summaries).
-4. DATA FLOW: Explicitly state in the second task that it should use the specific results and entities discovered in the first step.
+═══ COORDINATION PROTOCOL ═══
+1. DELEGATION: Assign tasks based on the Domain Purpose and Equipped Tools in the registry.
+2. MULTI-STEP PLANNING: If a task requires research before action (like creating a PDF or Report), you MUST create a 2-step plan.
+   Step 1: Use 'stealth' or 'web' to gather evidence.
+   Step 2: Use 'office' to generate the document using the evidence from Step 1.
+3. CONTEXT PASSING: Explicitly instruct follow-up agents to use findings from specific previous tasks.
+4. DOMAIN EXPERTISE: Use 'office' ONLY for file generation. Use 'stealth' for deep research.
 "#;
 
-        let preamble = format!(
-            r#"{}\n\n{}\n\n═══ AVAILABLE DOMAINS ═══\n{}\n"#,
-            self.base_instructions, coordination_rules, domains_str
+        let final_preamble = self.base_instructions.replace(
+            "(THIS SECTION WILL BE DYNAMICALLY INJECTED AT RUNTIME)",
+            &format!("{}\n\n{}", registry, coordination_rules)
         );
 
         let agent = AgentBuilder::new(ollama_client.completion_model(&self.model))
-            .preamble(&preamble)
+            .preamble(&final_preamble)
             .default_max_turns(1)
             .build();
 

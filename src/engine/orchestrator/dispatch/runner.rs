@@ -96,8 +96,10 @@ pub async fn dispatch_domain(
              }}\n\
          }}\n\
          \n\
-         Your final response 'summary' MUST follow the requested REPORTING_STYLE.\n\
-         If closing without using another tool, output the final JSON with 'status' and 'summary'.",
+         Your final response 'summary' MUST follow the requested REPORTING_STYLE. \
+         If closing without using another tool, you MUST output a final JSON with 'status': 'completed', 'summary': \"Your overview\", and 'evidence': [\"Finding 1\", \"Finding 2\", ...]. \
+         The 'evidence' list should contain ALL specific data points, quotes, or links you discovered. \
+         DO NOT create custom root JSON keys like 'myResearchSubject': {{...}}.",
         query, step, tool_list, memory_context, style, plan_history
     );
 
@@ -107,6 +109,7 @@ pub async fn dispatch_domain(
     );
  
     let mut last_chart = None;
+    let mut last_artifacts = Vec::new();
     for iteration in 0..10 {
         println!("Supervisor iteration {}/10", iteration + 1);
         let response = agent.prompt(&current_prompt).await.map_err(|e| e.to_string())?;
@@ -166,6 +169,22 @@ pub async fn dispatch_domain(
                     
                     if tname == "charting" { last_chart = Some(output.clone()); }
                     
+                    // Sneak artifacts out of tool responses (like document_writer)
+                    if let Ok(json_res) = serde_json::from_str::<serde_json::Value>(&output) {
+                        if let Some(arts) = json_res.get("artifacts").and_then(|a| a.as_array()) {
+                            for art in arts {
+                                if let Some(path) = art.as_str() {
+                                    if !last_artifacts.contains(&path.to_string()) {
+                                        last_artifacts.push(path.to_string());
+                                    }
+                                } else if let Some(path_obj) = art.get("path").and_then(|p| p.as_str()) {
+                                    if !last_artifacts.contains(&path_obj.to_string()) {
+                                        last_artifacts.push(path_obj.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
                     current_prompt = format!(
                         "{}\n\n[RESULT for '{}': {}]\n\nNext: Call another tool (JSON) or provide your final answer using the structured JSON schema.",
                         current_prompt, tname, output
@@ -184,6 +203,13 @@ pub async fn dispatch_domain(
                 if !res.charts.iter().any(|existing| existing.title == injected.title && existing.chart_type == injected.chart_type) {
                     res.charts.push(injected);
                 }
+            }
+        }
+        
+        // Auto-inject artifacts from previous tool runs
+        for art in last_artifacts {
+            if !res.artifacts.contains(&art) {
+                res.artifacts.push(art);
             }
         }
         

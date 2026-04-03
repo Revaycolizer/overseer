@@ -90,6 +90,15 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
             } else { None }
         }).collect();
     }
+    
+    // HEURISTIC: If there are other non-standard keys at the root, promote them to evidence
+    if let Some(obj) = target.as_object() {
+        for (k, v) in obj {
+            if !matches!(k.as_str(), "status" | "summary" | "evidence" | "evidences" | "artifacts" | "attachments" | "messages" | "charts" | "verified" | "final") {
+                evidence.push(format!("{}: {}", k, v.to_string()));
+            }
+        }
+    }
 
     let mut final_summary = summary;
     if final_summary.trim().is_empty() {

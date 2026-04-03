@@ -765,6 +765,26 @@ impl Database {
                 false,
                 None,
             ),
+            (
+                "Office Supervisor",
+                "Specialized document generation and office suite automation",
+                "office",
+                "qwen2.5:7b-instruct",
+                "pdf, docx, xlsx, csv, document, report, office, excel, word, write file",
+                15,
+                true,
+                None,
+            ),
+            (
+                "Text Writer",
+                "Modular agent for reading context and writing summarized text files",
+                "text_writer",
+                "qwen2.5:7b-instruct",
+                "write, summary, report, research paper, documentation, create file",
+                12,
+                true,
+                None,
+            ),
         ];
 
         let mut tx = self.pool.begin().await?;
