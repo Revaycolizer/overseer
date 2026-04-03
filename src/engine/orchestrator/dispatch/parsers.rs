@@ -21,7 +21,9 @@ pub fn parse_supervisor_result(raw: String, hide_evidence: bool, report_style: O
                 brace_count -= 1;
                 if brace_count == 0 {
                     if let Some(start) = json_start {
-                        let potential: String = chars[start..=i].iter().collect();
+                        let potential_raw: String = chars[start..=i].iter().collect();
+                        // ROBUST REPAIR: Fix raw newlines/tabs in string literals before parsing
+                        let potential = repair_json_literals(&potential_raw);
                         if let Ok(val) = serde_json::from_str::<Value>(&potential) {
                             json_found = true;
                             let target = val.get("final").unwrap_or(&val);
@@ -75,7 +77,45 @@ pub fn parse_supervisor_result(raw: String, hide_evidence: bool, report_style: O
         return extract_result_from_value(Value::Object(merged_value), summary, raw.clone(), hide_evidence, report_style);
     }
     
-    SupervisorExecutionResult::completed(raw.trim().to_string(), vec![], vec![], vec![], vec![], true, hide_evidence, report_style, raw, std::collections::HashMap::new())
+    // Robust fall-back for failed parses: use summary if it was extracted, otherwise default to completed
+    let final_summary = if !summary.is_empty() { summary } else { "Task completed.".to_string() };
+    SupervisorExecutionResult::completed(final_summary, vec![], vec![], vec![], vec![], true, hide_evidence, report_style, raw, std::collections::HashMap::new())
+}
+
+fn repair_json_literals(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_quotes = false;
+    let mut escaped = false;
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '"' if !escaped => {
+                in_quotes = !in_quotes;
+                out.push(c);
+            }
+            '\\' if !escaped => {
+                escaped = true;
+                out.push(c);
+            }
+            '\n' | '\r' if in_quotes => {
+                out.push_str("\\n");
+                escaped = false;
+            }
+            '\t' if in_quotes => {
+                out.push_str("\\t");
+                escaped = false;
+            }
+            _ => {
+                out.push(c);
+                escaped = false;
+            }
+        }
+        i += 1;
+    }
+    out
 }
 
 fn extract_result_from_value(value: Value, summary: String, raw: String, hide_evidence: bool, report_style: Option<String>) -> SupervisorExecutionResult {
@@ -101,8 +141,8 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
         }
     }
 
-    let mut final_summary = summary;
-    if final_summary.trim().is_empty() {
+    let mut final_summary = summary.replace("```json", "").replace("```", "").trim().to_string();
+    if final_summary.is_empty() {
         if let Some(c) = target.get("charts").and_then(|v| v.as_array()).and_then(|a| a.first()) {
             let ctype = c.get("chart_type").and_then(|v| v.as_str()).unwrap_or("chart");
             let title = c.get("title").and_then(|v| v.as_str()).unwrap_or("Data visualization");
