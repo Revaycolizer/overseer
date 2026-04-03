@@ -44,12 +44,13 @@ impl MasterPlanner {
 
         let coordination_rules = r#"
 ═══ COORDINATION PROTOCOL ═══
-1. DELEGATION: Assign tasks based on the Domain Purpose and Equipped Tools in the registry.
-2. MULTI-STEP PLANNING: If a task requires research before action (like creating a PDF or Report), you MUST create a 2-step plan.
+1. INTERNAL APP GUIDANCE: If the query is specifically about USING this Overseer application (how to add agents, tool formats, workshops, or app usage), you MUST route to the 'helper' domain for a single-step chat response. Do NOT plan research or document generation for Overseer usage help.
+2. DELEGATION: For all other tasks, assign based on the Domain Purpose and Equipped Tools in the registry.
+3. MULTI-STEP PLANNING: If an external task (unrelated to Overseer help) requires research before action (like creating a PDF or Report), you MUST create a 2-step plan.
    Step 1: Use 'stealth' or 'web' to gather evidence.
    Step 2: Use 'office' to generate the document using the evidence from Step 1.
-3. CONTEXT PASSING: Explicitly instruct follow-up agents to use findings from specific previous tasks.
-4. DOMAIN EXPERTISE: Use 'office' ONLY for file generation. Use 'stealth' for deep research.
+4. CONTEXT PASSING: Explicitly instruct follow-up agents to use findings from specific previous tasks.
+5. DOMAIN EXPERTISE: Use 'office' ONLY for file generation. Use 'stealth' for deep research.
 "#;
 
         let final_preamble = self.base_instructions.replace(
