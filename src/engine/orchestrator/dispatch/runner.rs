@@ -145,22 +145,34 @@ pub async fn dispatch_domain(
                 }
             }
         }
-
+        
         if let Some(json_str) = tool_json_str {
-            let mut final_json = None;
+            // --- NEW: Improved Extraction and Repair Logic ---
+            let mut final_json: Option<serde_json::Value> = None;
             
-            // Try standard parse first
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+            // 1. Try to find the JSON block if it's surrounded by markdown or text
+            let target_str = if let Some(start) = json_str.find('{') {
+                if let Some(end) = json_str.rfind('}') {
+                    &json_str[start..=end]
+                } else {
+                    &json_str[start..]
+                }
+            } else {
+                &json_str
+            };
+
+            // 2. Try standard parse
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(target_str) {
                 final_json = Some(json);
             } else {
-                // HEURISTIC: Many models (especially Qwen/Llama) output raw newlines in JSON strings.
-                // We attempt to repair the literals (escaping newlines) and re-parse.
-                let repaired = repair_json_literals(&json_str);
+                // 3. Fallback: Heuristic repair of raw newlines or control characters in literals
+                let repaired = repair_json_literals(target_str);
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&repaired) {
-                    println!("✨ [REPAIR] Successfully repaired invalid JSON tool call containing raw newlines.");
+                    println!("✨ [REPAIR] Successfully recovered JSON tool call by escaping raw literals.");
                     final_json = Some(json);
                 }
             }
+            // ----------------------------------------------------
 
             if let Some(json) = final_json {
                 // Support multiple synonyms for tool name and input
@@ -200,9 +212,15 @@ pub async fn dispatch_domain(
                             }
                         }
                     }
+                    let feedback_suffix = if tname == "document_writer" {
+                        "DOCUMENT GENERATED SUCCESSFULLY. If this completes the user request, you MUST now provide your final response using your required JSON output format with status 'completed'."
+                    } else {
+                        "Next: Call another tool (JSON) or provide your final answer using the structured JSON schema."
+                    };
+
                     current_prompt = format!(
-                        "{}\n\n[RESULT for '{}': {}]\n\nNext: Call another tool (JSON) or provide your final answer using the structured JSON schema.",
-                        current_prompt, tname, output
+                        "{}\n\n[RESULT for '{}': {}]\n\n{}",
+                        current_prompt, tname, output, feedback_suffix
                     );
                     continue;
                 }
@@ -236,34 +254,38 @@ pub async fn dispatch_domain(
     Err("Max iterations reached".into())
 }
 
-/// Helper to escape raw newlines inside JSON string literals.
-/// LLMs frequently output: "key": "line 1\nline 2" (invalid JSON)
 fn repair_json_literals(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut in_quotes = false;
     let mut escaped = false;
-    for c in s.chars() {
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    
+    while i < chars.len() {
+        let c = chars[i];
         match c {
             '"' if !escaped => {
                 in_quotes = !in_quotes;
                 out.push(c);
             }
-            '\n' if in_quotes => {
-                out.push_str("\\n");
-            }
-            '\r' if in_quotes => {
-                // skip
-            }
             '\\' if !escaped => {
                 escaped = true;
                 out.push(c);
-                continue;
+            }
+            '\n' | '\r' if in_quotes => {
+                out.push_str("\\n");
+                escaped = false;
+            }
+            '\t' if in_quotes => {
+                out.push_str("\\t");
+                escaped = false;
             }
             _ => {
                 out.push(c);
+                escaped = false;
             }
         }
-        escaped = false;
+        i += 1;
     }
     out
 }

@@ -295,11 +295,46 @@ fn generate_pdf(
 
     if let Some(text) = content {
         for line in text.lines() {
-            if line.trim().is_empty() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
                 doc.push(genpdf::elements::Break::new(1));
                 continue;
             }
-            doc.push(genpdf::elements::Text::new(line));
+
+            let (level, clean_text) = if trimmed.starts_with("### ") {
+                (3, trimmed.trim_start_matches("### ").trim())
+            } else if trimmed.starts_with("## ") {
+                (2, trimmed.trim_start_matches("## ").trim())
+            } else if trimmed.starts_with("# ") {
+                (1, trimmed.trim_start_matches("# ").trim())
+            } else {
+                (0, trimmed)
+            };
+
+            if level > 0 {
+                let size = match level {
+                    1 => 20,
+                    2 => 16,
+                    3 => 14,
+                    _ => 12,
+                };
+                let style = genpdf::style::Style::new().with_font_size(size).bold();
+                doc.push(genpdf::elements::Paragraph::new(clean_text).styled(style));
+                doc.push(genpdf::elements::Break::new(0.5));
+            } else {
+                let (is_line_bold, final_text) = if trimmed.starts_with("**") && trimmed.ends_with("**") {
+                    (true, trimmed.trim_matches('*').trim())
+                } else {
+                    (false, trimmed)
+                };
+
+                let mut p = genpdf::elements::Paragraph::new(final_text);
+                if is_line_bold {
+                    doc.push(p.styled(genpdf::style::Style::new().bold()));
+                } else {
+                    doc.push(p);
+                }
+            }
         }
         doc.push(genpdf::elements::Break::new(1.5));
     }
