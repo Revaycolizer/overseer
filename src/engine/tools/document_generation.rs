@@ -12,23 +12,28 @@ use std::fs;
 // Moved from src/engine/tools/mod.rs
 pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, String> {
     let data_val = args.get("data");
+    let content_val = args.get("content").and_then(|v| v.as_str());
+    let formats_val = args.get("formats").and_then(|v| v.as_array());
     
-    if data_val.is_none() || (data_val.is_some() && data_val.unwrap().is_array() && data_val.unwrap().as_array().unwrap().is_empty()) {
+    if data_val.is_none() && content_val.is_none() {
         return Ok(json!({
             "status": "success",
-            "message": "Tool document_writer initialized and ready. Provide a 'data' array to generate reports.",
+            "message": "Tool document_writer initialized and ready. Provide 'content' for reports or a 'data' array for tables.",
             "artifacts": []
         }).to_string());
     }
 
-    let data = data_val.unwrap().as_array().ok_or_else(|| {
-        "Invalid 'data' format. Expected an array of objects.".to_string()
-    })?;
+    let data = data_val.and_then(|v| v.as_array());
+    let formats: Vec<String> = if let Some(arr) = formats_val {
+        arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+    } else {
+        vec!["pdf".to_string()] 
+    };
 
     let base_filename = args
         .get("filename")
         .and_then(|f| f.as_str())
-        .unwrap_or("overseer_export")
+        .unwrap_or("overseer_report")
         .replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
@@ -41,90 +46,52 @@ pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, 
 
     let file_prefix = format!("{}_{}", base_filename, timestamp);
 
-    // Prepare headers from the first object
-    let headers: Vec<String> = if let Some(first) = data.first() {
-        if let Some(obj) = first.as_object() {
-            obj.keys().cloned().collect()
+    let mut artifacts = Vec::new();
+    let mut errors = Vec::new();
+
+    // Prepare headers if data is present
+    let headers: Vec<String> = if let Some(d) = data {
+        if let Some(first) = d.first() {
+            if let Some(obj) = first.as_object() {
+                obj.keys().cloned().collect()
+            } else {
+                vec!["Value".to_string()]
+            }
         } else {
-            vec!["Value".to_string()]
+            vec![]
         }
     } else {
         vec![]
     };
 
-    let data_cloned = data.clone();
-    let headers_cloned = headers.clone();
-    let file_prefix_cloned = file_prefix.clone();
-    let export_dir_cloned = export_dir.clone();
+    use rayon::prelude::*;
 
-    // Perform parallel generation using rayon
-    let results: Vec<Result<String, String>> = rayon::join(
-        || {
-            rayon::join(
-                || {
-                    generate_csv(
-                        &export_dir_cloned,
-                        &file_prefix_cloned,
-                        &headers_cloned,
-                        &data_cloned,
-                    )
-                },
-                || {
-                    generate_xlsx(
-                        &export_dir_cloned,
-                        &file_prefix_cloned,
-                        &headers_cloned,
-                        &data_cloned,
-                    )
-                },
-            )
-        },
-        || {
-            rayon::join(
-                || {
-                    generate_docx(
-                        &export_dir_cloned,
-                        &file_prefix_cloned,
-                        &headers_cloned,
-                        &data_cloned,
-                    )
-                },
-                || {
-                    generate_pdf(
-                        &export_dir_cloned,
-                        &file_prefix_cloned,
-                        &headers_cloned,
-                        &data_cloned,
-                    )
-                },
-            )
-        },
-    )
-    .into_results();
+    let results: Vec<Result<String, String>> = if formats.len() > 1 {
+        // PARALLEL path (Rayon)
+        formats.par_iter().map(|format| {
+            generate_single_format(format, &export_dir, &file_prefix, &headers, data, content_val)
+        }).collect()
+    } else {
+        // SYNCHRONOUS path
+        formats.iter().map(|format| {
+            generate_single_format(format, &export_dir, &file_prefix, &headers, data, content_val)
+        }).collect()
+    };
 
-    let mut artifacts = Vec::new();
-    let mut errors = Vec::new();
-
-    for (i, res) in results.into_iter().enumerate() {
+    for (idx, res) in results.into_iter().enumerate() {
+        let format = &formats[idx];
         match res {
             Ok(filename) => {
-                let kind = match i {
-                    0 => "csv",
-                    1 => "xlsx",
-                    2 => "docx",
-                    3 => "pdf",
-                    _ => "unknown",
-                };
-                let label = match i {
-                    0 => "CSV Export",
-                    1 => "Excel Spreadsheet",
-                    2 => "Word Document",
-                    3 => "PDF Report",
+                let label = match format.as_str() {
+                    "csv" => "CSV Export",
+                    "xlsx" => "Excel Spreadsheet",
+                    "docx" => "Word Document",
+                    "pdf" => "PDF Report",
                     _ => "Export",
                 };
                 artifacts.push(json!({
                     "path": format!("assets/exports/{}", filename),
-                    "kind": kind,
+                    "kind": format,
                     "label": label
                 }));
             }
@@ -133,30 +100,47 @@ pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, 
     }
 
     if artifacts.is_empty() && !errors.is_empty() {
-        return Err(format!("All document generation tasks failed: {}", errors.join("; ")));
+        return Err(format!("Document generation failed: {}", errors.join("; ")));
     }
 
     Ok(json!({
         "status": "success",
-        "message": format!("Successfully generated {} document(s) in parallel.", artifacts.len()),
+        "message": format!("Successfully generated {} document(s).", artifacts.len()),
         "artifacts": artifacts,
         "errors": if errors.is_empty() { None } else { Some(errors) }
     }).to_string())
 }
 
-// Helper trait to flatten nested join results into a simple Vec
-trait JoinExt {
-    fn into_results(self) -> Vec<Result<String, String>>;
-}
-
-impl JoinExt
-    for (
-        (Result<String, String>, Result<String, String>),
-        (Result<String, String>, Result<String, String>),
-    )
-{
-    fn into_results(self) -> Vec<Result<String, String>> {
-        vec![self.0 .0, self.0 .1, self.1 .0, self.1 .1]
+fn generate_single_format(
+    format: &str,
+    dir: &PathBuf,
+    prefix: &str,
+    headers: &[String],
+    data: Option<&Vec<serde_json::Value>>,
+    content: Option<&str>,
+) -> Result<String, String> {
+    match format {
+        "csv" => {
+            if let Some(d) = data {
+                generate_csv(dir, prefix, headers, d)
+            } else {
+                Err("CSV requires 'data' array.".to_string())
+            }
+        },
+        "xlsx" => {
+            if let Some(d) = data {
+                generate_xlsx(dir, prefix, headers, d)
+            } else {
+                Err("Excel requires 'data' array.".to_string())
+            }
+        },
+        "docx" => {
+            generate_docx(dir, prefix, if headers.is_empty() { None } else { Some(headers) }, data, content)
+        },
+        "pdf" => {
+            generate_pdf(dir, prefix, if headers.is_empty() { None } else { Some(headers) }, data, content)
+        },
+        _ => Err(format!("Unsupported format: {}", format)),
     }
 }
 
@@ -234,8 +218,9 @@ fn generate_xlsx(
 fn generate_docx(
     dir: &PathBuf,
     prefix: &str,
-    headers: &[String],
-    data: &[serde_json::Value],
+    headers: Option<&[String]>,
+    data: Option<&Vec<serde_json::Value>>,
+    content: Option<&str>,
 ) -> Result<String, String> {
     let filename = format!("{}.docx", prefix);
     let path = dir.join(&filename);
@@ -244,45 +229,39 @@ fn generate_docx(
     doc = doc.add_paragraph(
         Paragraph::new().add_run(
             Run::new()
-                .add_text(format!("Export: {}", prefix))
-                .size(24)
+                .add_text(prefix.replace("_", " "))
+                .size(32)
                 .bold(),
         ),
     );
 
-    let mut table = Table::new(vec![]);
-
-    // Header row
-    let mut cells = Vec::new();
-    for h in headers {
-        cells.push(
-            TableCell::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h).bold())),
-        );
+    if let Some(text) = content {
+        for line in text.lines() {
+            if line.trim().is_empty() { continue; }
+            doc = doc.add_paragraph(Paragraph::new().add_run(Run::new().add_text(line)));
+        }
     }
-    table = table.add_row(TableRow::new(cells));
 
-    // Data rows
-    for row in data {
-        let mut row_cells = Vec::new();
-        for h in headers {
-            let val = row
-                .get(h)
-                .map(|v| {
-                    if v.is_string() {
-                        v.as_str().unwrap().to_string()
-                    } else {
-                        v.to_string()
-                    }
-                })
-                .unwrap_or_default();
-            row_cells.push(
-                TableCell::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(val))),
+    if let (Some(h_list), Some(d_list)) = (headers, data) {
+        let mut table = Table::new(vec![]);
+        let mut cells = Vec::new();
+        for h in h_list {
+            cells.push(
+                TableCell::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h).bold())),
             );
         }
-        table = table.add_row(TableRow::new(row_cells));
-    }
+        table = table.add_row(TableRow::new(cells));
 
-    doc = doc.add_table(table);
+        for row in d_list {
+            let mut row_cells = Vec::new();
+            for h in h_list {
+                let val = row.get(h).map(|v| if v.is_string() { v.as_str().unwrap().to_string() } else { v.to_string() }).unwrap_or_default();
+                row_cells.push(TableCell::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(val))));
+            }
+            table = table.add_row(TableRow::new(row_cells));
+        }
+        doc = doc.add_table(table);
+    }
 
     let file = std::fs::File::create(&path).map_err(|e| e.to_string())?;
     doc.build().pack(file).map_err(|e| e.to_string())?;
@@ -293,60 +272,102 @@ fn generate_docx(
 fn generate_pdf(
     dir: &PathBuf,
     prefix: &str,
-    headers: &[String],
-    data: &[serde_json::Value],
+    headers: Option<&[String]>,
+    data: Option<&Vec<serde_json::Value>>,
+    content: Option<&str>,
 ) -> Result<String, String> {
     let filename = format!("{}.pdf", prefix);
     let path = dir.join(&filename);
 
-    let font_family = genpdf::fonts::from_files("./assets/fonts", "Roboto", None)
-        .map_err(|e| format!("Could not load fonts: {}", e))?;
+    let font_family = find_system_font()?;
     let mut doc = genpdf::Document::new(font_family);
-    doc.set_title(format!("Export: {}", prefix));
+    doc.set_title(prefix.replace("_", " "));
 
     let mut decorator = genpdf::SimplePageDecorator::new();
-    decorator.set_margins(10);
+    decorator.set_margins(15);
     doc.set_page_decorator(decorator);
 
     doc.push(
-        genpdf::elements::Text::new(format!("Export Generated: {}", prefix))
-            .styled(genpdf::style::Style::new().with_font_size(18).bold()),
+        genpdf::elements::Text::new(prefix.replace("_", " ").to_uppercase())
+            .styled(genpdf::style::Style::new().with_font_size(20).bold()),
     );
-    doc.push(genpdf::elements::Break::new(1));
+    doc.push(genpdf::elements::Break::new(1.5));
 
-    let mut table = genpdf::elements::TableLayout::new(vec![1; headers.len()]);
-    table.set_cell_decorator(genpdf::elements::FrameCellDecorator::new(true, true, true));
-
-    // Header
-    let mut header_row = table.row();
-    for h in headers {
-        header_row.push_element(
-            genpdf::elements::Text::new(h).styled(genpdf::style::Style::new().bold()),
-        );
-    }
-    header_row.push().map_err(|e| e.to_string())?;
-
-    // Data
-    for row in data {
-        let mut data_row = table.row();
-        for h in headers {
-            let val = row
-                .get(h)
-                .map(|v| {
-                    if v.is_string() {
-                        v.as_str().unwrap().to_string()
-                    } else {
-                        v.to_string()
-                    }
-                })
-                .unwrap_or_default();
-            data_row.push_element(genpdf::elements::Text::new(val));
+    if let Some(text) = content {
+        for line in text.lines() {
+            if line.trim().is_empty() {
+                doc.push(genpdf::elements::Break::new(1));
+                continue;
+            }
+            doc.push(genpdf::elements::Text::new(line));
         }
-        data_row.push().map_err(|e| e.to_string())?;
+        doc.push(genpdf::elements::Break::new(1.5));
     }
 
-    doc.push(table);
+    if let (Some(h_list), Some(d_list)) = (headers, data) {
+        let mut table = genpdf::elements::TableLayout::new(vec![1; h_list.len()]);
+        table.set_cell_decorator(genpdf::elements::FrameCellDecorator::new(true, true, true));
+
+        let mut header_row = table.row();
+        for h in h_list {
+            header_row.push_element(genpdf::elements::Text::new(h).styled(genpdf::style::Style::new().bold()));
+        }
+        header_row.push().map_err(|e| e.to_string())?;
+
+        for row in d_list {
+            let mut data_row = table.row();
+            for h in h_list {
+                let val = row.get(h).map(|v| if v.is_string() { v.as_str().unwrap().to_string() } else { v.to_string() }).unwrap_or_default();
+                data_row.push_element(genpdf::elements::Text::new(val));
+            }
+            data_row.push().map_err(|e| e.to_string())?;
+        }
+        doc.push(table);
+    }
     doc.render_to_file(&path).map_err(|e| e.to_string())?;
 
     Ok(filename)
+}
+
+fn find_system_font() -> Result<genpdf::fonts::FontFamily<genpdf::fonts::FontData>, String> {
+    // 1. Try Bundled Assets First (Prioritized for consistency)
+    if let Ok(f) = genpdf::fonts::from_files("./assets/fonts", "Roboto", None) {
+        return Ok(f);
+    }
+    
+    // 2. Extra Robust Fallback: try relative path for dev environments
+    if let Ok(f) = genpdf::fonts::from_files("assets/fonts", "Roboto", None) {
+        return Ok(f);
+    }
+    
+    // 2. Platform Heuristics for Cross-Platform portability (Windows, Mac, Linux)
+    let paths = if cfg!(target_os = "windows") {
+        vec!["C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\times.ttf"]
+    } else if cfg!(target_os = "macos") {
+        vec!["/Library/Fonts/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Keyboard.ttf"]
+    } else {
+        // Common Linux font locations
+        vec![
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+        ]
+    };
+
+    for path in paths {
+        let p = std::path::Path::new(path);
+        if p.exists() {
+            if let (Some(dir), Some(stem)) = (p.parent(), p.file_stem()) {
+                if let Some(name) = stem.to_str() {
+                    if let Ok(f) = genpdf::fonts::from_files(dir, name, None) {
+                        return Ok(f);
+                    }
+                }
+            }
+        }
+    }
+
+    Err("No suitable system font found for PDF generation. Please ensure at least one TrueType font (DejaVu, Arial, or Roboto) is installed.".to_string())
 }

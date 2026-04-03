@@ -78,30 +78,40 @@ impl StructuredResponse {
             let t = m.trim().to_lowercase();
             t == "task completed." || t == "done." || t == "finished." || t == "success."
         };
+        
+        let is_intermediate_findings = |m: &str| {
+            m.contains("### Findings") || m.contains("KNOWLEDGE_FROM_PREVIOUS_STEPS") || m.contains("research results")
+        };
 
         for m in other.messages {
             let m_trimmed = m.message.trim();
             if m_trimmed.is_empty() { continue; }
             
-            // 1. If an existing message already contains the new one, skip the new one.
+            // 1. If an existing message already contains the new one, skip it.
             if self.messages.iter().any(|e| e.message.trim().contains(m_trimmed)) {
                 continue;
             }
 
-            // 2. If the new message is generic and we already have a NON-generic message, skip it.
+            // 2. If the new message is specific (e.g. from office/generation) and we have intermediate research noise, clear the noise.
+            let is_new_specific = !is_generic(m_trimmed) && !is_intermediate_findings(m_trimmed);
+            if is_new_specific && self.messages.iter().any(|e| is_intermediate_findings(e.message.trim())) {
+                self.messages.retain(|e| !is_intermediate_findings(e.message.trim()));
+            }
+
+            // 3. If the new message is generic and we already have a NON-generic message, skip it.
             if is_generic(m_trimmed) && self.messages.iter().any(|e| !is_generic(e.message.trim())) {
                 continue;
             }
 
-            // 3. If the new message is specific and we ONLY have generic ones, clear them first.
+            // 4. If the new message is specific and we ONLY have generic ones, clear them first.
             if !is_generic(m_trimmed) && self.messages.iter().all(|e| is_generic(e.message.trim())) {
                 self.messages.clear();
             }
 
-            // 4. Remove any existing messages that are contained within (or equal to) the new one.
+            // 5. Remove any existing messages that are contained within (or equal to) the new one.
             self.messages.retain(|e| !m_trimmed.contains(e.message.trim()));
 
-            // 5. Add the new comprehensive message.
+            // 6. Add the new comprehensive message.
             self.messages.push(m);
         }
 

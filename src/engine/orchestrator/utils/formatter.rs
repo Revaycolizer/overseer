@@ -54,32 +54,34 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
     }
 
     // 2. Evidence -> Sources
-    for e in &res.evidence {
-        if is_html_noise(e) {
-            continue;
-        }
-        
-        // Try to parse as JSON if it's already structured evidence (e.g. from a search tool)
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(e) {
-            let title = v.get("title").or(v.get("source")).and_then(|v| v.as_str()).unwrap_or("Evidence");
-            let link = v.get("url").or(v.get("link")).and_then(|v| v.as_str()).unwrap_or("");
-            let desc = v.get("snippet").or(v.get("description")).or(v.get("summary")).and_then(|v| v.as_str()).unwrap_or(e);
+    if !res.hide_evidence {
+        for e in &res.evidence {
+            if is_html_noise(e) {
+                continue;
+            }
             
-            structured.sources.push(SourcePart {
-                source: title.to_string(),
-                link: link.to_string(),
-                description: desc.to_string(),
-            });
-            continue;
-        }
+            // Try to parse as JSON if it's already structured evidence (e.g. from a search tool)
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(e) {
+                let title = v.get("title").or(v.get("source")).and_then(|v| v.as_str()).unwrap_or("Evidence");
+                let link = v.get("url").or(v.get("link")).and_then(|v| v.as_str()).unwrap_or("");
+                let desc = v.get("snippet").or(v.get("description")).or(v.get("summary")).and_then(|v| v.as_str()).unwrap_or(e);
+                
+                structured.sources.push(SourcePart {
+                    source: title.to_string(),
+                    link: link.to_string(),
+                    description: desc.to_string(),
+                });
+                continue;
+            }
 
-        // Fallback: If it's a plain string, wrap it as a description
-        if !e.trim().is_empty() {
-            structured.sources.push(SourcePart {
-                source: "Evidence".to_string(),
-                link: "".to_string(),
-                description: e.clone(),
-            });
+            // Fallback: If it's a plain string, wrap it as a description
+            if !e.trim().is_empty() {
+                structured.sources.push(SourcePart {
+                    source: "Evidence".to_string(),
+                    link: "".to_string(),
+                    description: e.clone(),
+                });
+            }
         }
     }
 

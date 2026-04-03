@@ -147,7 +147,22 @@ pub async fn dispatch_domain(
         }
 
         if let Some(json_str) = tool_json_str {
+            let mut final_json = None;
+            
+            // Try standard parse first
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                final_json = Some(json);
+            } else {
+                // HEURISTIC: Many models (especially Qwen/Llama) output raw newlines in JSON strings.
+                // We attempt to repair the literals (escaping newlines) and re-parse.
+                let repaired = repair_json_literals(&json_str);
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&repaired) {
+                    println!("✨ [REPAIR] Successfully repaired invalid JSON tool call containing raw newlines.");
+                    final_json = Some(json);
+                }
+            }
+
+            if let Some(json) = final_json {
                 // Support multiple synonyms for tool name and input
                 let mut tname = json.get("tool").and_then(|v| v.as_str());
                 let mut input = json.get("input").unwrap_or(&serde_json::Value::Null).clone();
@@ -219,4 +234,36 @@ pub async fn dispatch_domain(
     }
 
     Err("Max iterations reached".into())
+}
+
+/// Helper to escape raw newlines inside JSON string literals.
+/// LLMs frequently output: "key": "line 1\nline 2" (invalid JSON)
+fn repair_json_literals(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_quotes = false;
+    let mut escaped = false;
+    for c in s.chars() {
+        match c {
+            '"' if !escaped => {
+                in_quotes = !in_quotes;
+                out.push(c);
+            }
+            '\n' if in_quotes => {
+                out.push_str("\\n");
+            }
+            '\r' if in_quotes => {
+                // skip
+            }
+            '\\' if !escaped => {
+                escaped = true;
+                out.push(c);
+                continue;
+            }
+            _ => {
+                out.push(c);
+            }
+        }
+        escaped = false;
+    }
+    out
 }
