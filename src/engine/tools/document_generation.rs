@@ -226,14 +226,7 @@ fn generate_docx(
     let path = dir.join(&filename);
 
     let mut doc = Docx::new();
-    doc = doc.add_paragraph(
-        Paragraph::new().add_run(
-            Run::new()
-                .add_text(prefix.replace("_", " "))
-                .size(32)
-                .bold(),
-        ),
-    );
+    // Removed auto-title from filename
 
     if let Some(text) = content {
         for line in text.lines() {
@@ -281,17 +274,13 @@ fn generate_pdf(
 
     let font_family = find_system_font()?;
     let mut doc = genpdf::Document::new(font_family);
-    doc.set_title(prefix.replace("_", " "));
+    // Removed auto-title from filename
 
     let mut decorator = genpdf::SimplePageDecorator::new();
     decorator.set_margins(15);
     doc.set_page_decorator(decorator);
 
-    doc.push(
-        genpdf::elements::Text::new(prefix.replace("_", " ").to_uppercase())
-            .styled(genpdf::style::Style::new().with_font_size(20).bold()),
-    );
-    doc.push(genpdf::elements::Break::new(1.5));
+    // Removed auto-header from filename
 
     if let Some(text) = content {
         for line in text.lines() {

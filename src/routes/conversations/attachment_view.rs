@@ -14,8 +14,11 @@ pub fn AttachmentPreview(att: backend::Attachment) -> Element {
         let fp = file_path.clone();
         let ct = content_type.clone();
         async move {
-            if fp.starts_with("/assets/") { Some(fp) }
-            else {
+            // Normalize path for Dioxus asset system
+            if fp.contains("assets/") {
+                let normalized = if fp.starts_with('/') { fp } else { format!("/{}", fp) };
+                Some(normalized)
+            } else {
                 match std::fs::read(&fp) {
                     Ok(bytes) if !bytes.is_empty() => Some(format!("data:{};base64,{}", ct, general_purpose::STANDARD.encode(bytes))),
                     _ => None,
