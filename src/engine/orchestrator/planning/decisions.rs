@@ -40,16 +40,6 @@ pub async fn heuristic_decision(
 
     let inferred_domain = if let Some(domain) = precomputed_fast_path_domain { Some(domain.to_string()) } else { discovery::discover_fast_path_domain(db, query, has_artifacts).await };
 
-    let lower_query = query.to_lowercase();
-    if (lower_query.contains("how to use") || lower_query.contains("usage guide") || lower_query.contains("about this app") || lower_query.contains("how do i use")) && !lower_query.contains("workflow") {
-        return OrchestrationDecision { 
-            route: OrchestrationRoute::SingleDomain, 
-            domain: Some("helper".to_string()), 
-            personality_mode: "assistant".to_string(), 
-            reason: "Routing help/usage query directly to helper.".to_string() 
-        };
-    }
-
     if inferred_domain.is_none() && (query.len() < 40 || ["hi", "hello", "hey", "who are you"].iter().any(|&g| query.to_lowercase().starts_with(g))) {
         return OrchestrationDecision { route: OrchestrationRoute::DirectChat, domain: Some("chat".to_string()), personality_mode: "assistant".to_string(), reason: "Conversation query routed to direct chat.".to_string() };
     }
