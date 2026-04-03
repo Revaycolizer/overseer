@@ -59,7 +59,15 @@ pub async fn orchestrate_request(
         
         match timeout(Duration::from_millis(90000), master_planner.plan(ollama_client, &clean_query, discovered_agents)).await {
             Ok(plan) => planner_utils::sanitize_plan(&plan, &clean_query),
-            Err(_) => return "Planner timed out.".to_string(),
+            Err(_) => {
+                let mut error_res = crate::engine::orchestrator::core::response::StructuredResponse::new();
+                error_res.status = "failed".to_string();
+                error_res.messages.push(crate::engine::orchestrator::core::response::MessagePart {
+                    role: "assistant".to_string(),
+                    message: "❌ Error: The planner timed out while trying to coordinate your request. Please try again or simplify your query.".to_string(),
+                });
+                return serde_json::to_string(&error_res).unwrap_or_else(|_| "{\"status\":\"failed\"}".to_string());
+            }
         }
     };
 

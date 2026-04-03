@@ -12,13 +12,33 @@ use std::fs;
 // Moved from src/engine/tools/mod.rs
 pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, String> {
     let data_val = args.get("data");
-    let content_val = args.get("content").and_then(|v| v.as_str());
+    
+    // Smart Content Resolution: Try 'content' first, fallback to 'sections' array
+    let mut resolved_content = args.get("content").and_then(|v| v.as_str()).map(|s| s.to_string());
+    if resolved_content.is_none() {
+        if let Some(sections) = args.get("sections").and_then(|v| v.as_array()) {
+            let mut combined = String::new();
+            for s in sections {
+                if let Some(title) = s.get("title").and_then(|v| v.as_str()) {
+                    combined.push_str(&format!("## {}\n", title));
+                }
+                if let Some(text) = s.get("content").and_then(|v| v.as_str()) {
+                    combined.push_str(&format!("{}\n\n", text));
+                }
+            }
+            if !combined.is_empty() {
+                resolved_content = Some(combined);
+            }
+        }
+    }
+    let content_val = resolved_content.as_deref();
+
     let formats_val = args.get("formats").and_then(|v| v.as_array());
     
     if data_val.is_none() && content_val.is_none() {
         return Ok(json!({
             "status": "success",
-            "message": "Tool document_writer initialized and ready. Provide 'content' for reports or a 'data' array for tables.",
+            "message": "Tool document_writer initialized. Please provide 'content' or 'data'.",
             "artifacts": []
         }).to_string());
     }
@@ -27,11 +47,21 @@ pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, 
     let formats: Vec<String> = if let Some(arr) = formats_val {
         arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
     } else {
-        vec!["pdf".to_string()] 
+        // Handle case where agent sends a single string instead of an array
+        if let Some(s) = args.get("formats").and_then(|v| v.as_str()) {
+            vec![s.to_string()]
+        } else if let Some(s) = args.get("type").and_then(|v| v.as_str()) {
+            // Also map 'type' to format (e.g. type: PDF)
+            vec![s.to_lowercase()]
+        } else {
+            vec!["pdf".to_string()] 
+        }
     };
 
+    // Smart Filename Resolution: Try 'filename' first, fallback to 'title'
     let base_filename = args
         .get("filename")
+        .or_else(|| args.get("title"))
         .and_then(|f| f.as_str())
         .unwrap_or("overseer_report")
         .replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
@@ -226,12 +256,39 @@ fn generate_docx(
     let path = dir.join(&filename);
 
     let mut doc = Docx::new();
-    // Removed auto-title from filename
 
     if let Some(text) = content {
         for line in text.lines() {
-            if line.trim().is_empty() { continue; }
-            doc = doc.add_paragraph(Paragraph::new().add_run(Run::new().add_text(line)));
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                doc = doc.add_paragraph(Paragraph::new());
+                continue;
+            }
+
+            let mut p = Paragraph::new();
+            let (level, clean_text) = if trimmed.starts_with("### ") {
+                (3, trimmed.trim_start_matches("### ").trim())
+            } else if trimmed.starts_with("## ") {
+                (2, trimmed.trim_start_matches("## ").trim())
+            } else if trimmed.starts_with("# ") {
+                (1, trimmed.trim_start_matches("# ").trim())
+            } else {
+                (0, trimmed)
+            };
+
+            if level > 0 {
+                let size = match level { 1 => 48, 2 => 36, 3 => 28, _ => 24 };
+                p = p.add_run(Run::new().add_text(clean_text).size(size).bold());
+            } else {
+                let (is_bold, final_text) = if trimmed.starts_with("**") && trimmed.ends_with("**") {
+                    (true, trimmed.trim_matches('*').trim())
+                } else {
+                    (false, trimmed)
+                };
+                let run = Run::new().add_text(final_text);
+                p = p.add_run(if is_bold { run.bold() } else { run });
+            }
+            doc = doc.add_paragraph(p);
         }
     }
 
@@ -274,13 +331,10 @@ fn generate_pdf(
 
     let font_family = find_system_font()?;
     let mut doc = genpdf::Document::new(font_family);
-    // Removed auto-title from filename
 
     let mut decorator = genpdf::SimplePageDecorator::new();
     decorator.set_margins(15);
     doc.set_page_decorator(decorator);
-
-    // Removed auto-header from filename
 
     if let Some(text) = content {
         for line in text.lines() {
@@ -290,6 +344,7 @@ fn generate_pdf(
                 continue;
             }
 
+            // Headers
             let (level, clean_text) = if trimmed.starts_with("### ") {
                 (3, trimmed.trim_start_matches("### ").trim())
             } else if trimmed.starts_with("## ") {
@@ -301,31 +356,36 @@ fn generate_pdf(
             };
 
             if level > 0 {
-                let size = match level {
-                    1 => 20,
-                    2 => 16,
-                    3 => 14,
-                    _ => 12,
-                };
-                let style = genpdf::style::Style::new().with_font_size(size).bold();
-                doc.push(genpdf::elements::Paragraph::new(clean_text).styled(style));
+                let size = match level { 1 => 20, 2 => 16, 3 => 14, _ => 12 };
+                doc.push(genpdf::elements::Paragraph::new(clean_text)
+                    .styled(genpdf::style::Style::new().with_font_size(size).bold()));
                 doc.push(genpdf::elements::Break::new(0.5));
-            } else {
-                let (is_line_bold, final_text) = if trimmed.starts_with("**") && trimmed.ends_with("**") {
-                    (true, trimmed.trim_matches('*').trim())
-                } else {
-                    (false, trimmed)
-                };
+                continue;
+            }
 
-                let mut p = genpdf::elements::Paragraph::new(final_text);
-                if is_line_bold {
-                    doc.push(p.styled(genpdf::style::Style::new().bold()));
-                } else {
-                    doc.push(p);
-                }
+            // Bullet Points
+            if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
+                let bullet_text = trimmed[2..].trim();
+                let mut p = genpdf::elements::Paragraph::new(format!("  • {}", bullet_text));
+                doc.push(p);
+                continue;
+            }
+
+            // Bold Lines (Full Line)
+            let (is_bold, final_text) = if trimmed.starts_with("**") && trimmed.ends_with("**") {
+                (true, trimmed.trim_matches('*').trim())
+            } else {
+                (false, trimmed)
+            };
+
+            let mut p = genpdf::elements::Paragraph::new(final_text);
+            if is_bold {
+                doc.push(p.styled(genpdf::style::Style::new().bold()));
+            } else {
+                doc.push(p);
             }
         }
-        doc.push(genpdf::elements::Break::new(1.5));
+        doc.push(genpdf::elements::Break::new(1));
     }
 
     if let (Some(h_list), Some(d_list)) = (headers, data) {

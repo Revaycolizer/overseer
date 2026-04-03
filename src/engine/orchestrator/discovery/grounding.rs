@@ -308,6 +308,7 @@ pub async fn verify_execution_grounding(
                         report_style: supervisor_result.report_style.clone(),
                         error: Some(ga_response.clone()),
                         raw_response: ga_response.clone(),
+                        findings: std::collections::HashMap::new(),
                     };
                 }
             }

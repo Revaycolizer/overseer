@@ -99,7 +99,7 @@ pub async fn execute_macro_tasks(
                     }
 
                     // ADDITION: Also pass textual findings (summary) as structured context
-                    let findings_ctx = format_step_results_context(step, &supervisor_result.summary, &supervisor_result.evidence);
+                    let findings_ctx = format_step_results_context(step, &supervisor_result.summary, &supervisor_result.evidence, &supervisor_result.findings);
                     if !findings_ctx.is_empty() {
                         println!("🧠 CONTEXT ACCUMULATED for next step: {}", findings_ctx);
                         active_memories.push_str("\n\n");
@@ -149,7 +149,7 @@ pub async fn execute_macro_tasks(
         }
     }
 
-    let final_report = serde_json::to_string(&master_response).unwrap_or_default();
+    let final_report = serde_json::to_string(&master_response).unwrap_or_else(|_| "{\"status\":\"failed\"}".to_string());
     if let Some(rid) = run_id {
         let _ = crate::backend::finish_execution_run(db, rid, "completed", Some(&final_report), None).await;
     }

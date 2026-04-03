@@ -65,7 +65,7 @@ pub async fn dispatch_domain(
         if let Some(t) = tools.iter().find(|t| t.name == "os_tool") {
             let res = crate::engine::tools::call_dynamic_tool(t, serde_json::json!({"action":"screenshot"})).await.map_err(|e| e.to_string())?;
             let (ev, art, sm) = parse_screenshot_artifact_payload(&res);
-            return Ok(SupervisorExecutionResult::completed(sm, vec![], ev, art, vec![], true, s.hide_evidence, s.report_style.clone(), res));
+            return Ok(SupervisorExecutionResult::completed(sm, vec![], ev, art, vec![], true, s.hide_evidence, s.report_style.clone(), res, std::collections::HashMap::new()));
         }
     }
 

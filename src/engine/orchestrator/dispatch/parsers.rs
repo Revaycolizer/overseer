@@ -75,7 +75,7 @@ pub fn parse_supervisor_result(raw: String, hide_evidence: bool, report_style: O
         return extract_result_from_value(Value::Object(merged_value), summary, raw.clone(), hide_evidence, report_style);
     }
     
-    SupervisorExecutionResult::completed(raw.trim().to_string(), vec![], vec![], vec![], vec![], true, hide_evidence, report_style, raw)
+    SupervisorExecutionResult::completed(raw.trim().to_string(), vec![], vec![], vec![], vec![], true, hide_evidence, report_style, raw, std::collections::HashMap::new())
 }
 
 fn extract_result_from_value(value: Value, summary: String, raw: String, hide_evidence: bool, report_style: Option<String>) -> SupervisorExecutionResult {
@@ -91,11 +91,12 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
         }).collect();
     }
     
-    // HEURISTIC: If there are other non-standard keys at the root, promote them to evidence
+    // HEURISTIC: Capture all non-standard keys into 'findings'
+    let mut findings = std::collections::HashMap::new();
     if let Some(obj) = target.as_object() {
         for (k, v) in obj {
             if !matches!(k.as_str(), "status" | "summary" | "evidence" | "evidences" | "artifacts" | "attachments" | "messages" | "charts" | "verified" | "final") {
-                evidence.push(format!("{}: {}", k, v.to_string()));
+                findings.insert(k.clone(), v.clone());
             }
         }
     }
@@ -154,7 +155,7 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
         true
     };
 
-    SupervisorExecutionResult::completed(final_summary.trim().to_string(), messages, evidence, artifacts, charts, verified, hide_evidence, report_style, raw)
+    SupervisorExecutionResult::completed(final_summary.trim().to_string(), messages, evidence, artifacts, charts, verified, hide_evidence, report_style, raw, findings)
 }
 
 pub fn user_facing_runtime_error(details: &str) -> Option<String> {

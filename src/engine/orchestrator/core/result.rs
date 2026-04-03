@@ -22,6 +22,8 @@ pub struct SupervisorExecutionResult {
     pub report_style: Option<String>,
     pub error: Option<String>,
     pub raw_response: String,
+    #[serde(flatten)]
+    pub findings: std::collections::HashMap<String, serde_json::Value>,
 }
 
 impl SupervisorExecutionResult {
@@ -35,6 +37,7 @@ impl SupervisorExecutionResult {
         hide_evidence: bool,
         report_style: Option<String>,
         raw_response: String,
+        findings: std::collections::HashMap<String, serde_json::Value>,
     ) -> Self {
         Self {
             status: "completed".to_string(),
@@ -48,6 +51,7 @@ impl SupervisorExecutionResult {
             report_style,
             error: None,
             raw_response,
+            findings,
         }
     }
 
@@ -70,6 +74,7 @@ impl SupervisorExecutionResult {
             report_style,
             error: Some(error),
             raw_response,
+            findings: std::collections::HashMap::new(),
         }
     }
 
@@ -93,6 +98,7 @@ impl SupervisorExecutionResult {
             report_style,
             error: Some(error),
             raw_response,
+            findings: std::collections::HashMap::new(),
         }
     }
 

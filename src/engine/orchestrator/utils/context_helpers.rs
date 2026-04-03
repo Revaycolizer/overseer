@@ -75,20 +75,34 @@ pub fn format_newly_created_artifacts(artifacts: &[String], step_description: &s
     format!("NEWLY CREATED ARTIFACTS:\n{}", lines.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n"))
 }
 
-pub fn format_step_results_context(step_description: &str, summary: &str, evidence: &[String]) -> String {
+pub fn format_step_results_context(
+    step_description: &str, 
+    summary: &str, 
+    evidence: &[String],
+    findings: &std::collections::HashMap<String, serde_json::Value>
+) -> String {
     let t_summary = summary.trim();
     
     // Check if it's just a generic completion message
     let lower = t_summary.to_lowercase();
     let is_generic = t_summary.is_empty() || lower == "task completed." || lower == "done." || lower == "finished." || lower == "success.";
     
-    if is_generic && evidence.is_empty() {
+    // If absolutely nothing is found and it's generic, return empty
+    if is_generic && evidence.is_empty() && findings.is_empty() {
         return String::new();
     }
 
     let mut findings_content = String::new();
     if !is_generic {
         findings_content.push_str(t_summary);
+    }
+    
+    // Auto-inject any Flattened Findings captured from the supervisor
+    if !findings.is_empty() {
+        if !findings_content.is_empty() { findings_content.push_str("\n"); }
+        if let Ok(json_str) = serde_json::to_string_pretty(findings) {
+            findings_content.push_str(&format!("STRUCTURED_FINDINGS:\n{}", json_str));
+        }
     }
     
     if !evidence.is_empty() {
