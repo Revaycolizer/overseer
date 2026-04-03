@@ -280,13 +280,12 @@ fn generate_docx(
                 let size = match level { 1 => 48, 2 => 36, 3 => 28, _ => 24 };
                 p = p.add_run(Run::new().add_text(clean_text).size(size).bold());
             } else {
-                let (is_bold, final_text) = if trimmed.starts_with("**") && trimmed.ends_with("**") {
-                    (true, trimmed.trim_matches('*').trim())
-                } else {
-                    (false, trimmed)
-                };
-                let run = Run::new().add_text(final_text);
-                p = p.add_run(if is_bold { run.bold() } else { run });
+                let parts = parse_inline_styles(trimmed);
+                for (text, is_bold) in parts {
+                    let mut run = Run::new().add_text(text);
+                    if is_bold { run = run.bold(); }
+                    p = p.add_run(run);
+                }
             }
             doc = doc.add_paragraph(p);
         }
@@ -366,20 +365,22 @@ fn generate_pdf(
             // Bullet Points
             if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
                 let bullet_text = trimmed[2..].trim();
-                let mut p = genpdf::elements::Paragraph::new(format!("  • {}", bullet_text));
+                let parts = parse_inline_styles(bullet_text);
+                // For PDF, we'll join parts to strip markers. 
+                // Full inline bolding support is more complex in genpdf, so we prioritize a clean look.
+                let clean_bullet = parts.iter().map(|(s, _)| s.as_str()).collect::<Vec<_>>().join("");
+                let p = genpdf::elements::Paragraph::new(format!("  • {}", clean_bullet));
                 doc.push(p);
                 continue;
             }
 
-            // Bold Lines (Full Line)
-            let (is_bold, final_text) = if trimmed.starts_with("**") && trimmed.ends_with("**") {
-                (true, trimmed.trim_matches('*').trim())
-            } else {
-                (false, trimmed)
-            };
+            // Bold Lines (Full Line) or Inline Stripping
+            let parts = parse_inline_styles(trimmed);
+            let is_full_bold = parts.len() == 1 && parts[0].1;
+            let clean_text = parts.iter().map(|(s, _)| s.as_str()).collect::<Vec<_>>().join("");
 
-            let mut p = genpdf::elements::Paragraph::new(final_text);
-            if is_bold {
+            let mut p = genpdf::elements::Paragraph::new(clean_text);
+            if is_full_bold {
                 doc.push(p.styled(genpdf::style::Style::new().bold()));
             } else {
                 doc.push(p);
@@ -411,6 +412,50 @@ fn generate_pdf(
     doc.render_to_file(&path).map_err(|e| e.to_string())?;
 
     Ok(filename)
+}
+
+fn parse_inline_styles(text: &str) -> Vec<(String, bool)> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        if i + 1 < chars.len() && chars[i] == '*' && chars[i + 1] == '*' {
+            // Potential bold block
+            if !current.is_empty() {
+                parts.push((current.clone(), false));
+                current.clear();
+            }
+            i += 2;
+            let mut bold_content = String::new();
+            let mut closed = false;
+            while i + 1 < chars.len() {
+                if chars[i] == '*' && chars[i + 1] == '*' {
+                    closed = true;
+                    i += 2;
+                    break;
+                }
+                bold_content.push(chars[i]);
+                i += 1;
+            }
+            if closed {
+                parts.push((bold_content, true));
+            } else {
+                // Treat as literal asterisks if not closed
+                current.push_str("**");
+                current.push_str(&bold_content);
+            }
+        } else {
+            current.push(chars[i]);
+            i += 1;
+        }
+    }
+
+    if !current.is_empty() {
+        parts.push((current, false));
+    }
+    parts
 }
 
 fn find_system_font() -> Result<genpdf::fonts::FontFamily<genpdf::fonts::FontData>, String> {
