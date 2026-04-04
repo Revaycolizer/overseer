@@ -38,6 +38,17 @@ pub async fn heuristic_decision(
         };
     }
 
+    let lower_query = query.to_lowercase();
+    let complex_keywords = ["pdf", "docx", "xlsx", "report", "csv", "research", "find", "summarize", "compare", "chart"];
+    if complex_keywords.iter().any(|&kw| lower_query.contains(kw)) {
+        return OrchestrationDecision {
+            route: OrchestrationRoute::MultiStep,
+            domain: None,
+            personality_mode: "orchestrator".to_string(),
+            reason: "Complex intent detected; forcing multi-step planning.".to_string(),
+        };
+    }
+
     let inferred_domain = if let Some(domain) = precomputed_fast_path_domain { Some(domain.to_string()) } else { discovery::discover_fast_path_domain(db, query, has_artifacts).await };
 
     if inferred_domain.is_none() && (query.len() < 40 || ["hi", "hello", "hey", "who are you"].iter().any(|&g| query.to_lowercase().starts_with(g))) {
