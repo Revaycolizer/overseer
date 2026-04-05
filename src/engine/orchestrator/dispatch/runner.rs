@@ -108,10 +108,17 @@ pub async fn dispatch_domain(
         s.name, s.model
     );
  
+    let max_iterations = sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key = 'max_iterations'")
+        .fetch_optional(&db.pool)
+        .await
+        .unwrap_or(None)
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(10); // Fallback to 10 if missing or invalid
+
     let mut last_chart = None;
     let mut last_artifacts = Vec::new();
-    for iteration in 0..10 {
-        println!("Supervisor iteration {}/10", iteration + 1);
+    for iteration in 0..max_iterations {
+        println!("Supervisor iteration {}/{}", iteration + 1, max_iterations);
         let response = agent.prompt(&current_prompt).await.map_err(|e| e.to_string())?;
         let trimmed = response.trim();
         println!("DEBUG: Supervisor '{}' (iteration {}) raw response: \n---\n{}\n---", s.name, iteration + 1, trimmed);
@@ -248,10 +255,16 @@ pub async fn dispatch_domain(
             }
         }
         
-        // Auto-inject artifacts from previous tool runs
-        for art in last_artifacts {
-            if !res.artifacts.contains(&art) {
-                res.artifacts.push(art);
+        // Auto-inject artifacts from previous tool runs and sanitize hallucinations
+        if !last_artifacts.is_empty() {
+            // Remove absolute path hallucinations (starting with /) if they weren't in last_artifacts
+            res.artifacts.retain(|a| !a.starts_with('/') || last_artifacts.contains(a));
+            
+            // Add any missing "real" artifacts from tool runs
+            for art in last_artifacts {
+                if !res.artifacts.contains(&art) {
+                    res.artifacts.push(art);
+                }
             }
         }
         

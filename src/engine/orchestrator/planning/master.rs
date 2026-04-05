@@ -44,29 +44,36 @@ impl MasterPlanner {
 
         let coordination_rules = r#"
 ═══ COORDINATION PROTOCOL ═══
-1. INTERNAL APP GUIDANCE: If the query is specifically about USING this Overseer application, you MUST route to the 'helper' domain for a single-step chat response. Do NOT plan research or document generation for Overseer usage help.
-2. DELEGATION: For all other tasks, assign domains based on 'Equipped Tools' in the Registry. 
-3. MANDATORY MULTI-STEP PLANNING (GATHER -> ACTION): 
-   - Rule: Any request requiring information or document generation MUST be a 2-step plan.
-   - Step 1 (GATHER): Use a domain equipped with search tools ('stealth', 'web') to collect evidence.
-   - Step 2 (ACTION/SYNTHESIS): Use the research to fulfill the user's ultimate goal.
-   - DOMAIN SELECTION: If the goal is a FILE (PDF, DOCX, CSV, Report), pick a domain equipped with 'document_writer'. NEVER pick 'chat' for file generation.
+1. INTERNAL APP GUIDANCE: If the query is specifically about USING this Overseer application, you MUST route to the 'helper' domain for a single-step chat response.
+
+2. DOMAIN DISCOVERY: Use the 'Equipped Tools' column in the Registry. NEVER assign a task to a domain that doesn't have the required tool.
+
+3. MANDATORY MULTI-STEP WORKFLOW (THINK THEN ACT): 
+   - Any request involving information gathering, research, or cross-domain execution MUST have at least TWO steps.
+   - STEP 1 (GATHER): Always start with a research domain ('stealth' or 'web') to collect facts.
+   - STEP 2 (ACTION/DELIVERY): Follow up with a synthesis domain ('office', 'text_writer', or 'chat') to deliver results.
+
+4. DOCUMENT GENERATION RULES: 
+   - If the user asks for a FILE (PDF, Word, DOCX, CSV, XLSX, Report), you MUST route the final step to a domain with 'document_writer'.
+   - NEVER pick 'chat' to generate or deliver a structured file. Use 'chat' ONLY for conversational summaries.
+
+5. CRITICAL CONSTRAINTS:
+   - NO SINGLE-STEP PLANS: If the query contains "research", "find", "generate", "pdf", or "report", a 1-step plan is WRONG.
+   - ZERO-KNOWLEDGE: You must assume the system knows NOTHING about the topic initially. Always start with a search.
+   - EXPLICIT DATA LINKING: In Step 2, you MUST explicitly list the findings from Step 1 that should be included (e.g. "Include the discovered causes and symptoms in the PDF").
 
 ═══ PLANNING EXAMPLES ═══
 Input: "Generate a PDF about malaria"
 Output: [
-  {"domain": "stealth", "task": "Research comprehensive information about malaria causes, symptoms, and treatments."},
-  {"domain": "office", "task": "Use the findings from Task #1 to generate a professional PDF report about malaria."}
+  {"domain": "stealth", "task": "Research comprehensive information about malaria causes, symptoms, and treatments. Provide all findings in the research results."},
+  {"domain": "office", "task": "Using the research from Task #1, generate a professional malaria report in PDF format. Ensure the sections for causes, symptoms, and treatments are fully populated with the details found."}
 ]
 
-Input: "Research AI agent reliability"
+Input: "How is the stock market doing?"
 Output: [
-  {"domain": "stealth", "task": "Research current best practices and metrics for AI agent reliability."},
-  {"domain": "chat", "task": "Based on Task #1, provide a professional summary of AI agent reliability practices to the user."}
+  {"domain": "stealth", "task": "Search for current stock market indices (S&P 500, DOW, NASDAQ) and today's top market news."},
+  {"domain": "chat", "task": "Based on the market data from Task #1 (indices and top news), provide a concise summary of today's stock performance to the user."}
 ]
-
-4. CONTEXT SHARING: You MUST explicitly instruct follow-up agents to consume and respect findings from specific previous tasks (e.g., "Use findings from Task #1 to answer").
-5. DOMAIN EXPERTISE: Use specialized agents ONLY for their equipped tools.
 "#;
 
         let final_preamble = self.base_instructions.replace(

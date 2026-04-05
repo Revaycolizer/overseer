@@ -46,7 +46,7 @@ pub fn is_native_document_request(query: &str, _step: &str, domain: &str) -> boo
     // Note: We removed 'office' from here in our logic to force MultiStep coordination, 
     // but the helper remains for context-aware fast-paths if needed.
     let lower = query.to_lowercase();
-    (lower.contains("pdf") || lower.contains("word") || lower.contains("excel")) 
+    let _is_doc_req = (lower.contains("pdf") || lower.contains("word") || lower.contains("excel")) 
         && (lower.contains("generate") || lower.contains("create") || lower.contains("export"));
     false // Forced false to ensure coordination for now
 }

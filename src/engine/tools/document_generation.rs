@@ -13,23 +13,123 @@ use std::fs;
 pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, String> {
     let data_val = args.get("data");
     
-    // Smart Content Resolution: Try 'content' first, fallback to 'sections' array
-    let mut resolved_content = args.get("content").and_then(|v| v.as_str()).map(|s| s.to_string());
-    if resolved_content.is_none() {
-        if let Some(sections) = args.get("sections").and_then(|v| v.as_array()) {
-            let mut combined = String::new();
-            for s in sections {
-                if let Some(title) = s.get("title").and_then(|v| v.as_str()) {
-                    combined.push_str(&format!("## {}\n", title));
-                }
-                if let Some(text) = s.get("content").and_then(|v| v.as_str()) {
-                    combined.push_str(&format!("{}\n\n", text));
+    // --- NEW: Polymorphic Content Resolver ---
+    let mut resolved_content = None;
+    let mut combined = String::new();
+
+    // 1. Pre-process top-level title if present
+    if let Some(t) = args.get("title").and_then(|v| v.as_str()) {
+        combined.push_str(&format!("# {}\n\n", t));
+    }
+    
+    // Heuristic: Check for 'content' or 'sections' or 'segments'
+    let potential_content = args.get("content")
+        .or_else(|| args.get("sections"))
+        .or_else(|| args.get("segments"));
+
+    if let Some(val) = potential_content {
+        if let Some(s) = val.as_str() {
+            combined.push_str(s);
+        } else if let Some(arr) = val.as_array() {
+            for item in arr {
+                if let Some(s) = item.as_str() {
+                    combined.push_str(&format!("{}\n\n", s));
+                } else if let Some(obj) = item.as_object() {
+                    let title = obj.get("title")
+                        .or(obj.get("section_title"))
+                        .or(obj.get("heading"))
+                        .or(obj.get("header"))
+                        .and_then(|v| v.as_str());
+                        
+                    let text = obj.get("text")
+                        .or(obj.get("content"))
+                        .or(obj.get("body"))
+                        .or(obj.get("paragraph"))
+                        .or(obj.get("description"))
+                        .or(obj.get("desc"))
+                        .or(obj.get("message"))
+                        .or(obj.get("value"))
+                        .or(obj.get("val"))
+                        .or(obj.get("data"));
+                    
+                    let mut is_list = false;
+                    let list_content = obj.get("items")
+                        .or(obj.get("list"))
+                        .or(obj.get("bullets"))
+                        .or(obj.get("lines"))
+                        .or_else(|| {
+                             // Check if 'type' is bullet_list
+                             if let Some(t) = obj.get("type").and_then(|v| v.as_str()) {
+                                 if t.to_lowercase().contains("list") {
+                                     is_list = true;
+                                     return text;
+                                 }
+                             }
+                             None
+                        });
+
+                    if let Some(t) = title {
+                        combined.push_str(&format!("## {}\n", t));
+                    }
+                    
+                    if let Some(lc) = list_content {
+                        if let Some(a) = lc.as_array() {
+                            for sub_item in a {
+                                if let Some(ss) = sub_item.as_str() {
+                                    combined.push_str(&format!("- {}\n", ss));
+                                } else if let Some(so) = sub_item.as_object() {
+                                    let inner_text = so.get("text").or(so.get("content")).or(so.get("value")).and_then(|v| v.as_str());
+                                    if let Some(it) = inner_text {
+                                        combined.push_str(&format!("- {}\n", it));
+                                    }
+                                }
+                            }
+                            combined.push_str("\n");
+                        } else if is_list {
+                             // Handle case where text itself needs bulleting
+                             if let Some(s) = lc.as_str() {
+                                 combined.push_str(&format!("- {}\n\n", s));
+                             }
+                        }
+                    } else if let Some(content_val) = text {
+                        if let Some(s) = content_val.as_str() {
+                            combined.push_str(&format!("{}\n\n", s));
+                        } else if let Some(a) = content_val.as_array() {
+                            for sub_item in a {
+                                if let Some(ss) = sub_item.as_str() {
+                                    combined.push_str(&format!("- {}\n", ss));
+                                } else if let Some(so) = sub_item.as_object() {
+                                    let inner_text = so.get("text").or(so.get("content")).or(so.get("value")).and_then(|v| v.as_str());
+                                    if let Some(it) = inner_text {
+                                        combined.push_str(&format!("- {}\n", it));
+                                    }
+                                }
+                            }
+                            combined.push_str("\n");
+                        } else {
+                            combined.push_str(&format!("{}\n\n", content_val));
+                        }
+                    }
                 }
             }
-            if !combined.is_empty() {
-                resolved_content = Some(combined);
-            }
+        } else if let Some(obj) = val.as_object() {
+             // Handle case where agent wraps sections in a content object
+             if let Some(title) = obj.get("title").and_then(|v| v.as_str()) {
+                 combined.push_str(&format!("# {}\n\n", title));
+             }
+             if let Some(sections) = obj.get("sections").and_then(|v| v.as_array()) {
+                 for s in sections {
+                    let st = s.get("title").or(s.get("section_title")).or(s.get("heading")).and_then(|v| v.as_str());
+                    let sc = s.get("content").or(s.get("text")).and_then(|v| v.as_str());
+                    if let Some(t) = st { combined.push_str(&format!("## {}\n", t)); }
+                    if let Some(c) = sc { combined.push_str(&format!("{}\n\n", c)); }
+                 }
+             }
         }
+    }
+
+    if !combined.is_empty() {
+        resolved_content = Some(combined);
     }
     let content_val = resolved_content.as_deref();
 
@@ -44,19 +144,33 @@ pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, 
     }
 
     let data = data_val.and_then(|v| v.as_array());
-    let formats: Vec<String> = if let Some(arr) = formats_val {
-        arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
-    } else {
-        // Handle case where agent sends a single string instead of an array
-        if let Some(s) = args.get("formats").and_then(|v| v.as_str()) {
-            vec![s.to_string()]
-        } else if let Some(s) = args.get("type").and_then(|v| v.as_str()) {
-            // Also map 'type' to format (e.g. type: PDF)
-            vec![s.to_lowercase()]
-        } else {
-            vec!["pdf".to_string()] 
-        }
-    };
+    let mut formats: Vec<String> = Vec::new();
+    
+    // Check multiple possible keys
+    if let Some(arr) = args.get("formats").and_then(|v| v.as_array()) {
+        formats.extend(arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string().to_lowercase())));
+    }
+    
+    if let Some(s) = args.get("formats").and_then(|v| v.as_str()) {
+        formats.push(s.to_lowercase());
+    }
+
+    if let Some(s) = args.get("format").and_then(|v| v.as_str()) {
+        formats.push(s.to_lowercase());
+    }
+
+    if let Some(s) = args.get("type").and_then(|v| v.as_str()) {
+        formats.push(s.to_lowercase());
+    }
+
+    // Deduplicate
+    formats.sort_unstable();
+    formats.dedup();
+
+    // Default to pdf only if empty
+    if formats.is_empty() {
+        formats.push("pdf".to_string());
+    }
 
     // Smart Filename Resolution: Try 'filename' first, fallback to 'title'
     let base_filename = args
