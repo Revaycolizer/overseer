@@ -1,4 +1,6 @@
 pub fn clean_content(content: &str) -> String {
+    let re = regex::Regex::new(r"\[E[0-9]+\]").unwrap();
+    let content = re.replace_all(content, "").to_string();
     let trimmed = content.trim();
     if (trimmed.starts_with('{') && trimmed.ends_with('}')) || (trimmed.starts_with('[') && trimmed.ends_with(']')) {
         if serde_json::from_str::<serde_json::Value>(trimmed).is_ok() {
@@ -32,4 +34,18 @@ pub fn clean_content(content: &str) -> String {
         return if before.is_empty() { format!("{}\n{}", marker, inner) } else { format!("{}\n{}\n{}", before, marker, inner) };
     }
     trimmed.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clean_grounding_markers() {
+        let input = "Malaria is a disease [E1]. It is transmitted by mosquitoes [E2].";
+        let expected = "Malaria is a disease . It is transmitted by mosquitoes .";
+        // Note: the executor logic also handles double space cleanup, 
+        // but clean_content just strips the regex.
+        assert_eq!(clean_content(input), expected);
+    }
 }

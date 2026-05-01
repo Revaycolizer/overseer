@@ -1,5 +1,8 @@
 use crate::db::Database;
 use crate::engine::utils::discovery::AgentInfo;
+use rig::providers::ollama::{self, OllamaExt};
+use rig::completion::Prompt;
+use rig::client::CompletionClient;
 
 pub(crate) fn looks_like_planner_request(query: &str) -> bool {
     let lower = query.to_lowercase();
@@ -13,8 +16,21 @@ pub(crate) fn looks_like_planner_request(query: &str) -> bool {
         || lower.contains("monitoring task")
 }
 
+fn is_technical_token(token: &str) -> bool {
+    let t = token.to_lowercase();
+    matches!(
+        t.as_str(),
+        "pdf" | "docx" | "xlsx" | "csv" | "chart" | "document" | "report" | "file" | "search" | "browse" | "web_search" | "bing_search" | "compute" | "automate" | "browse_web"
+    )
+}
+
 fn keyword_score(keyword: &str) -> usize {
-    keyword.len() + (keyword.split_whitespace().count() * 100)
+    let base_score = keyword.len() + (keyword.split_whitespace().count() * 100);
+    if is_technical_token(keyword) {
+        base_score + 1000 // MASSIVE bonus for technical intent
+    } else {
+        base_score
+    }
 }
 
 pub async fn discover_fast_path_domain(
@@ -150,11 +166,13 @@ pub async fn discover_semantic_agents(
     client: &reqwest::Client,
     query: &str,
     limit: usize,
+    ollama_client: &ollama::Client,
 ) -> Vec<AgentInfo> {
+    let internal_limit = 20; // Retrieve more for re-ranking
     let mut supervisors = Vec::new();
     #[cfg(feature = "memory")]
     {
-        match db.search_agents_semantically(client, query, limit).await {
+        match db.search_agents_semantically(client, query, internal_limit).await {
             Ok(domains) => {
                 for domain in domains {
                     if let Ok(Some(s)) = sqlx::query_as::<_, crate::db::Supervisor>(
@@ -178,7 +196,7 @@ pub async fn discover_semantic_agents(
         supervisors = sqlx::query_as::<_, crate::db::Supervisor>(
             "SELECT * FROM supervisors ORDER BY routing_priority DESC LIMIT ?"
         )
-        .bind(limit as i64)
+        .bind(internal_limit as i64)
         .fetch_all(&db.pool)
         .await
         .unwrap_or_default();
@@ -234,6 +252,93 @@ pub async fn discover_semantic_agents(
             response_format: s.response_format,
         });
     }
+
+    // 3. Rerank and Prune to requested limit (5-8)
+    rerank_agents(query, agents, limit, ollama_client).await
+}
+
+async fn rerank_agents(
+    query: &str,
+    mut agents: Vec<AgentInfo>,
+    limit: usize,
+    ollama_client: &ollama::Client,
+) -> Vec<AgentInfo> {
+    if agents.len() <= limit {
+        return agents;
+    }
+
+    println!("🎯 RE-RANKING {} agents down to Top {}...", agents.len(), limit);
+
+    // Build a candidate list for the LLM
+    let mut candidates = String::new();
+    for (i, agent) in agents.iter().enumerate() {
+        candidates.push_str(&format!("{}. [{}] {}\n", i, agent.domain, agent.description));
+    }
+
+    let rerank_prompt = format!(
+        "USER_QUERY: {}\n\n\
+         CANDIDATE_AGENTS:\n{}\n\n\
+         INSTRUCTION: Select the Top {} agents from the list above that are MOST RELEVANT to the USER_QUERY. \
+         Respond with ONLY a comma-separated list of indices (e.g., 0, 2, 5).",
+        query, candidates, limit
+    );
+
+    let model_name = "llama3.2:1b".to_string(); // Use ultra-fast model for re-ranking
+    let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(&model_name))
+        .preamble("You are a specialized agent selector. Prune the list to minimize noise.")
+        .build();
+
+    if let Ok(resp) = agent.prompt(&rerank_prompt).await {
+        let indices: Vec<usize> = resp
+            .split(',')
+            .filter_map(|s: &str| s.trim().parse::<usize>().ok())
+            .filter(|i: &usize| *i < agents.len())
+            .collect::<Vec<usize>>();
+
+        if !indices.is_empty() {
+            let mut top_agents: Vec<AgentInfo> = Vec::new();
+
+            // --- ARCHITECTURE V2: ARTIFACT WHITELISTING ---
+            // If the query mentions files/docs, we MUST include the office domain regardless of re-ranking
+            let lower_query = query.to_lowercase();
+            // Only whitelist office for explicit document-format requests.
+            // Generic words (generate, file, chart, document, artifact) are excluded.
+            let artifact_keywords = vec!["pdf", "docx", "xlsx", "csv", "report", "export"];
+            if artifact_keywords.iter().any(|k| lower_query.contains(k)) {
+                if let Some(office_agent) = agents.iter().find(|a| a.domain == "office") {
+                    top_agents.push(office_agent.clone());
+                    println!("🛡️ WHITELISTED 'office' domain due to artifact intent.");
+                }
+            }
+
+            // Ensure core domains remain if they were selected or as a fallback
+            let core_domains = vec!["stealth", "office", "web", "chat"];
+            
+            for index in indices.iter().take(limit) {
+                let idx: usize = *index;
+                let agent = &agents[idx];
+                
+                // Don't add if already whitelisted
+                if !top_agents.iter().any(|a| a.domain == agent.domain) {
+                    top_agents.push(agent.clone());
+                }
+            }
+
+            // Fallback: fill up with core agents if too few selected
+            for core in core_domains {
+                if top_agents.len() < limit && !top_agents.iter().any(|a| a.domain == core) {
+                    if let Some(a) = agents.iter().find(|a| a.domain == core) {
+                        top_agents.push(a.clone());
+                    }
+                }
+            }
+
+            return top_agents;
+        }
+    }
+
+    // Fallback to priority-based pruning if LLM fails
+    agents.truncate(limit);
     agents
 }
 

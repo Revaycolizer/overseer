@@ -55,9 +55,9 @@ pub async fn orchestrate_request(
     } else {
         // Dynamic Agent Discovery
         let http_client = reqwest::Client::new();
-        let discovered_agents = discovery::discover_semantic_agents(db, &http_client, &clean_query, 8).await;
+        let discovered_agents = discovery::discover_semantic_agents(db, &http_client, &clean_query, 8, ollama_client).await;
         
-        match timeout(Duration::from_millis(90000), master_planner.plan(ollama_client, &clean_query, discovered_agents)).await {
+        let mut macro_tasks = match timeout(Duration::from_millis(90000), master_planner.plan(ollama_client, &clean_query, discovered_agents.clone())).await {
             Ok(plan) => planner_utils::sanitize_plan(&plan, &clean_query),
             Err(_) => {
                 let mut error_res = crate::engine::orchestrator::core::response::StructuredResponse::new();
@@ -68,7 +68,36 @@ pub async fn orchestrate_request(
                 });
                 return serde_json::to_string(&error_res).unwrap_or_else(|_| "{\"status\":\"failed\"}".to_string());
             }
+        };
+
+        // ARCHITECTURE V2.7: DECOMPOSITION INTEGRITY CHECK
+        // If we forced MultiStep but the planner gave a 1-step plan for an artifact task, force a re-plan.
+        let lower_query = clean_query.to_lowercase();
+        // Only force Research→Generation decomposition for explicit document FORMAT requests.
+        // 'chart' and 'document' are intentionally excluded — they don't require the office pipeline.
+        let artifact_keywords = ["pdf", "docx", "xlsx", "csv", "report"];
+        let is_artifact_task = artifact_keywords.iter().any(|&kw| lower_query.contains(kw));
+
+        if is_artifact_task && macro_tasks.len() == 1 {
+            println!("⚖️ DECOMPOSITION FAILURE detected. Forcing autonomous re-plan with strict mandate.");
+            let retry_prompt = format!(
+                "{}\n\n⚠️ COORDINATION FAILURE: You provided a single-step plan for a complex artifact task. \
+                 You MUST decompose this into at least TWO steps: \
+                 1. Information Gathering (stealth or web domain) \
+                 2. Document Generation (office domain).",
+                clean_query
+            );
+            
+            if let Ok(plan) = timeout(Duration::from_millis(60000), master_planner.plan(ollama_client, &retry_prompt, discovered_agents)).await {
+                macro_tasks = planner_utils::sanitize_plan(&plan, &clean_query);
+            }
+
+            // FINAL SILICON GUARDRAIL: If STILL 1-step, force synthetic decomposition
+            if macro_tasks.len() == 1 {
+                macro_tasks = planner_utils::force_decompose_artifact_plan(&clean_query);
+            }
         }
+        macro_tasks
     };
 
     executor::execute_macro_tasks(

@@ -54,13 +54,33 @@ impl MasterPlanner {
    - STEP 2 (ACTION/DELIVERY): Follow up with a synthesis domain ('office', 'text_writer', or 'chat') to deliver results.
 
 4. DOCUMENT GENERATION RULES: 
-   - If the user asks for a FILE (PDF, Word, DOCX, CSV, XLSX, Report), you MUST route the final step to a domain with 'document_writer'.
+   - If the user asks for a FILE (PDF, Word, DOCX, CSV, XLSX, Report, Chart), you MUST route the final step to a domain with 'document_writer' or 'charting'.
    - NEVER pick 'chat' to generate or deliver a structured file. Use 'chat' ONLY for conversational summaries.
+   - ARTIFACT MANDATE: A plan for an artifact MUST ALWAYS have a Research/Search step first. No exceptions.
 
 5. CRITICAL CONSTRAINTS:
-   - NO SINGLE-STEP PLANS: If the query contains "research", "find", "generate", "pdf", or "report", a 1-step plan is WRONG.
+   - NO SINGLE-STEP PLANS: If the query contains "research", "find", "generate", "pdf", or "report", a 1-step plan is STRICTLY FORBIDDEN and will be REJECTED.
    - ZERO-KNOWLEDGE: You must assume the system knows NOTHING about the topic initially. Always start with a search.
    - EXPLICIT DATA LINKING: In Step 2, you MUST explicitly list the findings from Step 1 that should be included (e.g. "Include the discovered causes and symptoms in the PDF").
+
+═══ PLANNING FAILURES (DO NOT REPEAT) ═══
+❌ BAD PLAN (Collapsed): [{"domain": "chat", "task": "Research and tell me about malaria"}]
+✅ GOOD PLAN (Decomposed): [
+  {"domain": "stealth", "task": "Research malaria..."},
+  {"domain": "chat", "task": "Summarize the research..."}
+]
+
+❌ BAD PLAN (Phantom Tool): [{"domain": "chat", "task": "Generate a PDF summary of X"}] (Chat has no PDF tool)
+✅ GOOD PLAN (Correct Domain): [
+  {"domain": "stealth", "task": "Get details on X..."},
+  {"domain": "office", "task": "Generate a PDF report on X using findings..."}
+]
+
+❌ BAD PLAN (Generative Procrastination): [{"domain": "office", "task": "Generate a PDF about X"}] (Missing research step)
+✅ GOOD PLAN (Silicon Mandate): [
+  {"domain": "stealth", "task": "Conduct thorough research on X..."},
+  {"domain": "office", "task": "Using the findings from Task #1, generate the final PDF..."}
+]
 
 ═══ PLANNING EXAMPLES ═══
 Input: "Generate a PDF about malaria"

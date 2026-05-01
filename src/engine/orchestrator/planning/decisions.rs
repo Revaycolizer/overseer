@@ -39,13 +39,18 @@ pub async fn heuristic_decision(
     }
 
     let lower_query = query.to_lowercase();
-    let complex_keywords = ["pdf", "docx", "xlsx", "report", "csv", "research", "find", "summarize", "compare", "chart"];
-    if complex_keywords.iter().any(|&kw| lower_query.contains(kw)) {
+    // ONLY force MultiStep for explicit document-format or research-intent requests.
+    // Generic verbs (make, create, write, find, chart, data, visualize) are left to the LLM router.
+    let artifact_format_keywords = ["pdf", "docx", "xlsx", "csv", "report"];
+    let research_intent_keywords = ["research", "summarize", "compare"];
+    if artifact_format_keywords.iter().any(|&kw| lower_query.contains(kw))
+        || research_intent_keywords.iter().any(|&kw| lower_query.contains(kw))
+    {
         return OrchestrationDecision {
             route: OrchestrationRoute::MultiStep,
             domain: None,
             personality_mode: "orchestrator".to_string(),
-            reason: "Complex intent detected; forcing multi-step planning.".to_string(),
+            reason: "Artifact-format or research intent detected; forcing multi-step planning.".to_string(),
         };
     }
 
@@ -114,6 +119,24 @@ pub async fn decide_orchestration(
     precomputed_fast_path_domain: Option<&str>,
     has_artifacts: bool,
 ) -> Result<OrchestrationDecision, String> {
+    // ARCHITECTURE V2.7: HEURISTIC PRIMACY (Silicon Guardrails)
+    // Only bypass LLM for unambiguous artifact-format or research-intent requests.
+    // Generic verbs (make, create, write, find, chart, data, visualize) go through LLM routing.
+    let lower_query = query.to_lowercase();
+    let artifact_format_keywords = ["pdf", "docx", "xlsx", "csv", "report"];
+    let research_intent_keywords = ["research", "summarize", "compare"];
+    if artifact_format_keywords.iter().any(|&kw| lower_query.contains(kw))
+        || research_intent_keywords.iter().any(|&kw| lower_query.contains(kw))
+    {
+        println!("⚠️  HEURISTIC OVERRIDE: Forcing MultiStep for artifact/research intent.");
+        return Ok(OrchestrationDecision {
+            route: OrchestrationRoute::MultiStep,
+            domain: None,
+            personality_mode: "orchestrator".to_string(),
+            reason: "Heuristic override: Artifact-format or research intent detected.".to_string(),
+        });
+    }
+
     // 1. FAST-PATH (Regex): Always bypass LLM for extremely obvious commands.
     if let Some(domain) = precomputed_fast_path_domain {
         return Ok(OrchestrationDecision { route: OrchestrationRoute::SingleDomain, domain: Some(domain.to_string()), personality_mode: "operator".to_string(), reason: format!("Fast-path routing match for domain: {}", domain) });

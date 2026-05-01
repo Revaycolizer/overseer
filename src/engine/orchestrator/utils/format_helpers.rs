@@ -48,3 +48,8 @@ pub fn is_html_noise(value: &str) -> bool {
     let lower = value.to_lowercase();
     lower.contains("<img ") || lower.contains("```html") || lower.contains("<html")
 }
+
+pub fn strip_grounding_markers(text: &str) -> String {
+    let re = regex::Regex::new(r"\[E[0-9]+\]").unwrap();
+    re.replace_all(text, "").to_string().replace("  ", " ").trim().to_string()
+}

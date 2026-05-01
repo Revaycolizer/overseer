@@ -44,3 +44,25 @@ pub fn sanitize_plan(plan: &str, query: &str) -> Vec<MacroTask> {
         task: query.to_string(),
     }]
 }
+
+pub fn force_decompose_artifact_plan(query: &str) -> Vec<MacroTask> {
+    println!("🛡️ SILICON GUARDRAIL: Forcing synthetic Research -> Generation decomposition.");
+    vec![
+        MacroTask {
+            domain: "stealth".to_string(),
+            task: format!(
+                "Conduct exhaustive research on '{}'. Focus on gathering all relevant facts, \
+                 data points, and quotes for inclusion in a final report. Ensure everything is correctly cited.",
+                query
+            ),
+        },
+        MacroTask {
+            domain: "office".to_string(),
+            task: format!(
+                "Using ONLY the research findings from Task #1, generate a professional document/report \
+                 about '{}' in the requested format (e.g., PDF, DOCX). Include all data points provided by Task #1.",
+                query
+            ),
+        },
+    ]
+}

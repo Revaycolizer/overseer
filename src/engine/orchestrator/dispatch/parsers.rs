@@ -47,7 +47,44 @@ pub fn parse_supervisor_result(raw: String, hide_evidence: bool, report_style: O
                                         _ => {
                                             // Handle summaries inside JSON - we append them to our main summary
                                             if k == "summary" || k == "message" {
-                                                if let Some(s) = v.as_str() {
+                                                let extracted_str = if let Some(s) = v.as_str() {
+                                                    Some(s.to_owned())
+                                                } else if let Some(arr) = v.as_array() {
+                                                    // HEURISTIC: Flatten content arrays (common in Verifier output)
+                                                    let mut flattened = String::new();
+                                                    for item in arr {
+                                                        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                                                            if !flattened.is_empty() { flattened.push_str(" "); }
+                                                            flattened.push_str(text);
+                                                            if let Some(src) = item.get("source").and_then(|s| s.as_str()) {
+                                                                flattened.push_str(&format!(" ({})", src));
+                                                            }
+                                                        } else if let Some(s) = item.as_str() {
+                                                            if !flattened.is_empty() { flattened.push_str(" "); }
+                                                            flattened.push_str(s);
+                                                        }
+                                                    }
+                                                    if flattened.is_empty() { Some(v.to_string()) } else { Some(flattened) }
+                                                } else if let Some(obj) = v.as_object() {
+                                                    obj.get("cleanedSummary")
+                                                        .or(obj.get("cleaned_summary"))
+                                                        .or(obj.get("text"))
+                                                        .or(obj.get("content"))
+                                                        .or(obj.get("message"))
+                                                        .and_then(|val| {
+                                                            if let Some(s) = val.as_str() { Some(s.to_owned()) }
+                                                            else if val.is_array() || val.is_object() {
+                                                                // Recursively handle nested content? 
+                                                                // For now, just stringify if it's too deep, but Llama usually puts it in 'content' array.
+                                                                None 
+                                                            } else { None }
+                                                        })
+                                                        .or_else(|| Some(v.to_string()))
+                                                } else {
+                                                    None
+                                                };
+
+                                                if let Some(s) = extracted_str {
                                                     let trimmed_s = s.trim();
                                                     if !trimmed_s.is_empty() && !summary.contains(trimmed_s) {
                                                         if !summary.is_empty() { summary.push_str("\n\n"); }
@@ -73,13 +110,53 @@ pub fn parse_supervisor_result(raw: String, hide_evidence: bool, report_style: O
     // 2. Cleanup summary (strip markdown noise)
     summary = summary.replace("```json", "").replace("```", "").trim().to_string();
 
+    // ARCHITECTURE V2: WILL-CHECK HEURISTIC
+    // If the summary contains planning language, handle it as a stall even if status is 'completed'
+    let plan_re = regex::Regex::new(r"(?i)\b(I will|I plan to|I need to|Next steps:|I'll perform|I am going to|I should|we could|will be searching|will try to)\b").unwrap();
+    let contains_plan = plan_re.is_match(&summary);
+
     if json_found || !summary.is_empty() {
-        return extract_result_from_value(Value::Object(merged_value), summary, raw.clone(), hide_evidence, report_style);
+        let mut res = extract_result_from_value(Value::Object(merged_value), summary, raw.clone(), hide_evidence, report_style);
+        
+        // PHANTOM ARTIFACT DETECTION: If the model says it "generated" a file but none are in the list
+        let mentions_generation = res.summary.to_lowercase().contains("generated") || res.summary.to_lowercase().contains("created") || res.summary.to_lowercase().contains("pdf") || res.summary.to_lowercase().contains("report");
+        let has_no_artifacts = res.artifacts.is_empty();
+        let is_phantom = mentions_generation && has_no_artifacts && (res.summary.to_lowercase().contains(".pdf") || res.summary.to_lowercase().contains("document") || res.summary.to_lowercase().contains("file"));
+
+        if (contains_plan || is_phantom) && res.status == "completed" {
+            println!("🔍 {} DETECTED in summary. Downgrading status to 'stalled'.", if contains_plan { "PLAN" } else { "PHANTOM ARTIFACT" });
+            res.status = "stalled".to_string();
+        }
+        return res;
     }
     
     // Robust fall-back for failed parses: use summary if it was extracted, otherwise default to completed
-    let final_summary = if !summary.is_empty() { summary } else { "Task completed.".to_string() };
-    SupervisorExecutionResult::completed(final_summary, vec![], vec![], vec![], vec![], true, hide_evidence, report_style, raw, std::collections::HashMap::new())
+    // ARCHITECTURE V2 HARDENING: Check for 'stalled' even in malformed JSON
+    let is_stalled = contains_plan || raw.contains("\"status\": \"stalled\"") || raw.contains("\"status\":\"stalled\"");
+    let final_status = if is_stalled { "stalled" } else { "completed" };
+    
+    let final_summary = if !summary.is_empty() { 
+        summary 
+    } else if is_stalled {
+        "Worker process is stalled (planning without action). Triggering retry...".to_string()
+    } else {
+        "Task completed.".to_string() 
+    };
+
+    SupervisorExecutionResult {
+        status: final_status.to_string(),
+        summary: final_summary,
+        messages: vec![],
+        evidence: vec![],
+        artifacts: vec![],
+        charts: vec![],
+        verified: is_stalled, // Mark as verified if we detected a stall
+        hide_evidence: true,
+        report_style,
+        error: None,
+        raw_response: raw,
+        findings: std::collections::HashMap::new(),
+    }
 }
 
 fn repair_json_literals(s: &str) -> String {
@@ -182,20 +259,22 @@ fn extract_result_from_value(value: Value, summary: String, raw: String, hide_ev
         }
     }
 
-    let verified = if let Some(v) = target.get("status").or_else(|| target.get("verified")) {
-        if let Some(b) = v.as_bool() {
+    let (verified, status) = if let Some(v) = target.get("status").or_else(|| target.get("verified")) {
+        let s_val = v.as_str().map(|s| s.to_string()).unwrap_or_else(|| "unverified".to_string());
+        
+        let is_verified = if let Some(b) = v.as_bool() {
             b
-        } else if let Some(s) = v.as_str() {
-            let lower = s.to_lowercase();
-            lower == "completed" || lower == "done" || lower == "success" || lower == "verified"
         } else {
-            true
-        }
+            let lower = s_val.to_lowercase();
+            lower == "completed" || lower == "done" || lower == "success" || lower == "verified"
+        };
+        
+        (is_verified, s_val)
     } else {
-        true
+        (true, "completed".to_string())
     };
 
-    SupervisorExecutionResult::completed(final_summary.trim().to_string(), messages, evidence, artifacts, charts, verified, hide_evidence, report_style, raw, findings)
+    SupervisorExecutionResult::new(status, final_summary.trim().to_string(), messages, evidence, artifacts, charts, verified, hide_evidence, report_style, raw, findings)
 }
 
 pub fn user_facing_runtime_error(details: &str) -> Option<String> {

@@ -129,7 +129,7 @@ pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, 
     }
 
     if !combined.is_empty() {
-        resolved_content = Some(combined);
+        resolved_content = Some(strip_grounding_markers(&combined));
     }
     let content_val = resolved_content.as_deref();
 
@@ -143,7 +143,21 @@ pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, 
         }).to_string());
     }
 
-    let data = data_val.and_then(|v| v.as_array());
+    let mut data = data_val.and_then(|v| v.as_array()).cloned();
+    
+    // Clean data if present
+    if let Some(ref mut d_arr) = data {
+        for row in d_arr.iter_mut() {
+            if let Some(obj) = row.as_object_mut() {
+                for (_, val) in obj.iter_mut() {
+                    if let Some(s) = val.as_str() {
+                        *val = json!(strip_grounding_markers(s));
+                    }
+                }
+            }
+        }
+    }
+
     let mut formats: Vec<String> = Vec::new();
     
     // Check multiple possible keys
@@ -194,7 +208,7 @@ pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, 
     let mut errors = Vec::new();
 
     // Prepare headers if data is present
-    let headers: Vec<String> = if let Some(d) = data {
+    let headers: Vec<String> = if let Some(ref d) = data {
         if let Some(first) = d.first() {
             if let Some(obj) = first.as_object() {
                 obj.keys().cloned().collect()
@@ -213,12 +227,12 @@ pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, 
     let results: Vec<Result<String, String>> = if formats.len() > 1 {
         // PARALLEL path (Rayon)
         formats.par_iter().map(|format| {
-            generate_single_format(format, &export_dir, &file_prefix, &headers, data, content_val)
+            generate_single_format(format, &export_dir, &file_prefix, &headers, data.as_ref(), content_val)
         }).collect()
     } else {
         // SYNCHRONOUS path
         formats.iter().map(|format| {
-            generate_single_format(format, &export_dir, &file_prefix, &headers, data, content_val)
+            generate_single_format(format, &export_dir, &file_prefix, &headers, data.as_ref(), content_val)
         }).collect()
     };
 
@@ -253,6 +267,11 @@ pub async fn native_document_writer(args: &serde_json::Value) -> Result<String, 
         "artifacts": artifacts,
         "errors": if errors.is_empty() { None } else { Some(errors) }
     }).to_string())
+}
+
+fn strip_grounding_markers(text: &str) -> String {
+    let re = regex::Regex::new(r"\[E[0-9]+\]").unwrap();
+    re.replace_all(text, "").to_string().replace("  ", " ").trim().to_string()
 }
 
 fn generate_single_format(

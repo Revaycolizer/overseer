@@ -549,6 +549,13 @@ impl Database {
             "// Native Implementation".to_string(),
         ));
         tools_data.push((
+            "stealth_search".to_string(),
+            "Search the web anonymously and return structured findings.".to_string(),
+            "rust".to_string(),
+            "".to_string(),
+            "// Native Implementation".to_string(),
+        ));
+        tools_data.push((
             "web_browse".to_string(),
             "Fetch and clean webpage content from a URL for reading and extraction.".to_string(),
             "rust".to_string(),
@@ -639,6 +646,8 @@ impl Database {
             ("stealth", "web_browse"),
             ("stealth", "web_extract"),
             ("stealth", "web_links"),
+            ("chat", "web_search"),
+            ("chat", "stealth_search"),
             ("web_supervisor", "browser_automation"),
             ("web_supervisor", "ui_automation"),
             ("web_supervisor", "web_search"),

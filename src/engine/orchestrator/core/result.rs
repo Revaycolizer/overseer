@@ -27,7 +27,8 @@ pub struct SupervisorExecutionResult {
 }
 
 impl SupervisorExecutionResult {
-    pub fn completed(
+    pub fn new(
+        status: String,
         summary: String,
         messages: Vec<MessagePart>,
         evidence: Vec<String>,
@@ -40,7 +41,7 @@ impl SupervisorExecutionResult {
         findings: std::collections::HashMap<String, serde_json::Value>,
     ) -> Self {
         Self {
-            status: "completed".to_string(),
+            status,
             summary,
             messages,
             evidence,
@@ -53,6 +54,21 @@ impl SupervisorExecutionResult {
             raw_response,
             findings,
         }
+    }
+
+    pub fn completed(
+        summary: String,
+        messages: Vec<MessagePart>,
+        evidence: Vec<String>,
+        artifacts: Vec<String>,
+        charts: Vec<super::response::ChartPart>,
+        verified: bool,
+        hide_evidence: bool,
+        report_style: Option<String>,
+        raw_response: String,
+        findings: std::collections::HashMap<String, serde_json::Value>,
+    ) -> Self {
+        Self::new("completed".to_string(), summary, messages, evidence, artifacts, charts, verified, hide_evidence, report_style, raw_response, findings)
     }
 
     pub fn failed(

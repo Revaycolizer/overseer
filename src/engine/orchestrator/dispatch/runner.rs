@@ -47,6 +47,7 @@ pub async fn dispatch_domain(
     memory_context: &str,
     ollama_client: &ollama::Client,
     model_timeout_ms: u64,
+    retry_message: Option<&str>,
 ) -> Result<SupervisorExecutionResult, String> {
     let supervisor = sqlx::query_as::<_, crate::db::Supervisor>(
         "SELECT * FROM supervisors WHERE domain = ?"
@@ -75,32 +76,35 @@ pub async fn dispatch_domain(
 
     let tool_list = tools.iter().map(|t| format!("- {}: {}", t.name, t.description)).collect::<Vec<_>>().join("\n");
     let style = s.report_style.as_deref().unwrap_or("detailed");
-    let mut current_prompt = format!(
-        "GOAL: {}\n\
+    
+    let retry_inject = match retry_message {
+        Some(msg) => format!("\n\n⚠️ RETRY NOTICE: Your previous response was rejected. REASON: {}\nIMMEDIATE ACTION: You must call a tool NOW. Do NOT plan or describe future intent.", msg),
+        None => "".to_string(),
+    };
+
+     let mut current_prompt = format!(
+        "USER_ORIGINAL_QUERY: {}\n\
          CURRENT_TASK: {}\n\n\
          TOOLS:\n{}\n\n\
          RELEVANT_CONTEXT:\n{}\n\n\
          REPORTING_STYLE: {}\n\n\
-         EXECUTION_HISTORY:\n{}\n\n\
+         EXECUTION_HISTORY:\n{}\n\
+         ═══ TRUTH CONTRACT (V3.1) ═══\n\
+         You MUST:\n\
+         - GENERATION RULE: You may ONLY generate sentences that can be directly mapped to a segment in the `STRUCTURED_STATE` using its `[E#]` ID.\n\
+         - CITATION MANDATE: Every factual claim MUST conclude with a citation, e.g., \"Malaria is a mosquito-borne parasite [E4].\"\n\
+         - DROPPING POLICY: If you lack evidence for a claim, do NOT mention it. Silently discard any unsupported intent.\n\
+         - ABSTAIN PROTOCOL: If the evidence is insufficient to fulfill the task, you MUST return with `status: stalled` and `summary: ABSTAIN | REASON: INSUFFICIENT_EVIDENCE`.\n\
+         - EVIDENCE ID PRESERVATION: Only use `[E#]` IDs provided in the current `STRUCTURED_STATE`. Do NOT fabricate new IDs.\n\
+         - PHYSICAL REALITY: You are FORBIDDEN from returning `status: completed` if your task requires generating a file (PDF, DOCX, CSV, Image) UNLESS you have successfully called the appropriate tool (e.g., `document_writer`).\n\
+         - Explicitly tag every significant claim with its source (e.g., [E1], [E2]).\n\n\
          INSTRUCTIONS:\n\
          You are an autonomous agent performing a specific task as part of a larger multi-step plan. \
-         Use the GOAL and EXECUTION_HISTORY to ensure your output is consistent with what has already been accomplished. \
-         Execute the CURRENT_TASK. Respond with a single JSON block: either a tool call or your final response. \
-         \n\n\
-         == TOOL CALL SCHEMA ==\n\
-         When you need to use a tool, you MUST output ONLY this precise JSON structure:\n\
-         {{\n\
-             \"tool\": \"tool_name\",\n\
-             \"input\": {{\n\
-                 \"key\": \"value\"\n\
-             }}\n\
-         }}\n\
-         \n\
+         Execute the CURRENT_TASK using ONLY the provided evidence. Respond with a single JSON block. \
+         If the task involves creating or exporting a document -> CALL `document_writer` NOW. Do not just report a path.{} \n\n\
          Your final response 'summary' MUST follow the requested REPORTING_STYLE. \
-         If closing without using another tool, you MUST output a final JSON with 'status': 'completed', 'summary': \"Your overview\", and 'evidence': [\"Finding 1\", \"Finding 2\", ...]. \
-         The 'evidence' list should contain ALL specific data points, quotes, or links you discovered. \
-         DO NOT create custom root JSON keys like 'myResearchSubject': {{...}}.",
-        query, step, tool_list, memory_context, style, plan_history
+         The 'evidence' list should contain ALL specific data points, quotes, or links you discovered.",
+        query, step, tool_list, memory_context, style, plan_history, retry_inject
     );
 
     println!(
@@ -117,6 +121,10 @@ pub async fn dispatch_domain(
 
     let mut last_chart = None;
     let mut last_artifacts = Vec::new();
+    let mut visited_urls = HashSet::new();
+    let mut tools_executed_count = 0;
+    let mut action_tool_executed = false;
+
     for iteration in 0..max_iterations {
         println!("Supervisor iteration {}/{}", iteration + 1, max_iterations);
         let response = agent.prompt(&current_prompt).await.map_err(|e| e.to_string())?;
@@ -163,7 +171,7 @@ pub async fn dispatch_domain(
         }
         
         if let Some(json_str) = tool_json_str {
-            // --- NEW: Improved Extraction and Repair Logic ---
+            // --- Improved Extraction and Repair Logic ---
             let mut final_json: Option<serde_json::Value> = None;
             
             // 1. Try to find the JSON block if it's surrounded by markdown or text
@@ -188,7 +196,6 @@ pub async fn dispatch_domain(
                     final_json = Some(json);
                 }
             }
-            // ----------------------------------------------------
 
             if let Some(json) = final_json {
                 // Support multiple synonyms for tool name and input
@@ -208,8 +215,45 @@ pub async fn dispatch_domain(
                     let tool = tools.iter().find(|t| t.name == tname).ok_or_else(|| format!("Tool {} missing", tname))?;
                         
                     println!("🛠️ EXECUTING TOOL: {} with input: {}", tname, input);
-                    let output = crate::engine::tools::call_dynamic_tool(tool, input).await.map_err(|e| e.to_string())?;
+                    let output = crate::engine::tools::call_dynamic_tool(tool, input.clone()).await.map_err(|e| e.to_string())?;
                     
+                    tools_executed_count += 1;
+                    // Define action tools that count towards "physical reality"
+                    let is_action = ["stealth_search", "web_search", "document_writer", "charting", "os_tool", "code_executor", "stealth_browse", "web_browse", "http_request", "web_extract"].iter().any(|&t| t == tname);
+                    if is_action {
+                        action_tool_executed = true;
+                    }
+
+                    // --- REALITY CHECK: Track URLs ---
+                    match tname {
+                        "stealth_search" | "web_search" => {
+                            if let Some(start) = output.find("---SEARCH_RESULTS---") {
+                                let json_input = &output[start + 20..].trim();
+                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_input) {
+                                    if let Some(arr) = val.as_array() {
+                                        for item in arr {
+                                            if let Some(u) = item.get("url").and_then(|v| v.as_str()) {
+                                                visited_urls.insert(u.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "stealth_browse" | "web_browse" | "http_request" | "web_extract" => {
+                            if let Some(u) = input.as_str() { visited_urls.insert(u.to_string()); }
+                            else if let Some(u) = input.get("url").and_then(|v| v.as_str()) { visited_urls.insert(u.to_string()); }
+                            
+                            // Also add the actual final URL if returned
+                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&output) {
+                                if let Some(u) = val.get("url").and_then(|v| v.as_str()) {
+                                    visited_urls.insert(u.to_string());
+                                }
+                            }
+                        },
+                        _ => {}
+                    }
+
                     if tname == "charting" { last_chart = Some(output.clone()); }
                     
                     // Sneak artifacts out of tool responses (like document_writer)
@@ -245,8 +289,7 @@ pub async fn dispatch_domain(
 
         let mut res = parse_supervisor_result(trimmed.to_string(), s.hide_evidence, s.report_style.clone());
         
-        // Data-driven chart injection (NO markers)
-        // Deduplicate: Only inject if the model didn't already include it in its JSON
+        // Data-driven chart injection
         if let Some(json_str) = last_chart {
             if let Ok(injected) = serde_json::from_str::<crate::engine::orchestrator::core::response::ChartPart>(&json_str) {
                 if !res.charts.iter().any(|existing| existing.title == injected.title && existing.chart_type == injected.chart_type) {
@@ -255,20 +298,46 @@ pub async fn dispatch_domain(
             }
         }
         
-        // Auto-inject artifacts from previous tool runs and sanitize hallucinations
-        if !last_artifacts.is_empty() {
-            // Remove absolute path hallucinations (starting with /) if they weren't in last_artifacts
-            res.artifacts.retain(|a| !a.starts_with('/') || last_artifacts.contains(a));
-            
-            // Add any missing "real" artifacts from tool runs
-            for art in last_artifacts {
-                if !res.artifacts.contains(&art) {
-                    res.artifacts.push(art);
-                }
+        // ARTIFACT REALITY CHECK: Only allow artifacts that were actually produced by tools in this step.
+        let original_artifact_count = res.artifacts.len();
+        res.artifacts.retain(|a| last_artifacts.contains(a));
+        
+        // Ensure all actually created artifacts are included
+        for art in &last_artifacts {
+            if !res.artifacts.contains(art) {
+                res.artifacts.push(art.clone());
             }
         }
+
+        // EVIDENCE REALITY CHECK: Prune any evidence items that contain unvisited URLs.
+        let original_evidence_count = res.evidence.len();
+        res.evidence.retain(|e| {
+            // If the evidence contains an http link, it MUST be in visited_urls
+            if e.contains("http://") || e.contains("https://") {
+                visited_urls.iter().any(|u| e.contains(u))
+            } else {
+                // If evidence contains citations like [E1] or [Source: ...] but no tool was called, suspicious!
+                // However, we allow "logical" derived evidence as long as it's not claiming a fake URL source.
+                true 
+            }
+        });
+
+        // --- SILICON GUARDRAIL: PHYSICAL REALITY ENFORCEMENT ---
+        // 1. If we forced a stall for hallucinated URLs or artifacts
+        let artifacts_hallucinated = original_artifact_count > 0 && res.artifacts.is_empty() && last_artifacts.is_empty();
+        let evidence_hallucinated = original_evidence_count > 0 && res.evidence.is_empty() && !visited_urls.is_empty();
         
-        println!("DEBUG: Parsed result for '{}': summary='{}', evidence_count={}", s.name, res.summary, res.evidence.len());
+        // 2. If the domain is an ACTION domain (search/office) but it finished without calling an action tool
+        let is_action_domain = ["stealth", "web", "office", "computer", "desktop", "code_executor"].contains(&domain);
+        let finished_without_action = res.status == "completed" && is_action_domain && !action_tool_executed;
+
+        if res.status == "completed" && (artifacts_hallucinated || evidence_hallucinated || finished_without_action) {
+            let reason = if artifacts_hallucinated { "Hallucinated artifact path" } else if evidence_hallucinated { "Hallucinated evidence URLs" } else { "Task completed without physical tool execution" };
+            println!("⚠️ PHYSICAL REALITY FAILURE in domain '{}': {}. Forcing status to 'stalled'.", domain, reason);
+            res.status = "stalled".to_string();
+        }
+        
+        println!("DEBUG: Parsed result for '{}': summary='{}', evidence_count={}, artifact_count={}", s.name, res.summary, res.evidence.len(), res.artifacts.len());
         
         return Ok(res);
     }
@@ -285,6 +354,25 @@ fn repair_json_literals(s: &str) -> String {
     
     while i < chars.len() {
         let c = chars[i];
+        
+        // HEURISTIC: Catch unquoted [PLACEHOLDERS] and wrap them in quotes
+        if !in_quotes && c == '[' && i + 1 < chars.len() && chars[i+1].is_alphabetic() {
+            // Check if this is a [MESSY_TOKEN]
+            let mut j = i + 1;
+            while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '_' || chars[j] == ' ') {
+                j += 1;
+            }
+            if j < chars.len() && chars[j] == ']' {
+                // If it's something like [MISSING], check if the character before was a ":" or "," or " "
+                // If so, it likely needs quotes.
+                out.push('"');
+                out.push_str(&chars[i..=j].iter().collect::<String>());
+                out.push('"');
+                i = j + 1;
+                continue;
+            }
+        }
+
         match c {
             '"' if !escaped => {
                 in_quotes = !in_quotes;

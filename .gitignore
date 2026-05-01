@@ -5,6 +5,7 @@
 dist/
 db_backups/
 overseer.db
+overseer.db.backup
 overseer.db-shm
 overseer.db-wal
 cargo_check_after_memory_fix.log
