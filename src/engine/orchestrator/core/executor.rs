@@ -91,7 +91,7 @@ pub async fn execute_macro_tasks(
                     clean_query,
                     history.to_vec(),
                     &plan_history,
-                    &active_memories,
+                    &structured_state,
                     ollama_client,
                     model_timeout_ms,
                     current_retry_msg.as_deref(),
@@ -136,13 +136,18 @@ pub async fn execute_macro_tasks(
                                 Some("Your previous response was rejected because you were planning instead of acting OR claimed success without calling a tool. CALL A TOOL NOW. Do not describe future intent.".to_string())
                             } else {
                                 // ARCHITECTURE V2: SILICON MANDATE (Terminal Escalation)
-                                Some("═══ TERMINAL ESCALATION (SILICON MANDATE) ═══\n\
+                                let domain_instruction = if current_domain == "office" {
+                                    "YOU ARE NOW IN THE OFFICE DOMAIN. FORBIDDEN: Do NOT search. MANDATE: Use 'document_writer' to generate the requested file using ONLY the context provided."
+                                } else {
+                                    "1. IF YOU LACK DATA, USE 'stealth_search' OR 'web_search'.\n2. IF THE TASK IS TO GENERATE, USE 'document_writer'."
+                                };
+
+                                Some(format!("═══ TERMINAL ESCALATION (SILICON MANDATE) ═══\n\
                                       YOU HAVE REPEATEDLY FAILED TO ACT. THIS IS YOUR FINAL ATTEMPT.\n\
                                       1. YOU ARE FORBIDDEN FROM RETURNING 'status: completed' WITHOUT A TOOL CALL.\n\
                                       2. YOU MUST IMMEDIATELY CALL A PHYSICAL TOOL (JSON).\n\
-                                      3. IF YOU LACK DATA, USE 'stealth_search' OR 'web_search'.\n\
-                                      4. IF THE TASK IS TO GENERATE, USE 'document_writer'.\n\
-                                      5. ANY RESPONSE WITHOUT A TOOL CALL WILL BE AUTOMATICALLY REJECTED.".to_string())
+                                      {}\n\
+                                      3. ANY RESPONSE WITHOUT A TOOL CALL WILL BE AUTOMATICALLY REJECTED.", domain_instruction))
                             };
                             
                             retry_count += 1;
@@ -169,6 +174,8 @@ pub async fn execute_macro_tasks(
                         if retry_count > 0 {
                             let step_error_prefix = format!("❌ ERROR: Task failed: ");
                             master_response.messages.retain(|m| !m.message.contains(step) || !m.message.starts_with(&step_error_prefix));
+                            // Also clear any previous "Tool missing" or hallucination errors
+                            master_response.messages.retain(|m| !m.message.contains("Tool") && !m.message.contains("missing"));
                             // Also remove "STALLED" or "ABSTAIN" messages for this step if they were added
                             master_response.messages.retain(|m| !m.message.contains("ABSTAIN") || !m.message.contains(step));
                         }
@@ -298,8 +305,11 @@ async fn compile_response(
 ) -> Option<crate::engine::orchestrator::core::result::SupervisorExecutionResult> {
     println!("🛡️ COMPILING RESPONSE for grounding enforcement...");
     
-    // 1. EXTRACTION PHASE: Identify claims and their cited evidence IDs
-    // We use a smaller model (llama3.2:3b) as requested by the user.
+    // 1. PRE-UPDATE: Create a preview state including THIS turn's findings
+    let preview_state = state.preview_update(&result.findings, &result.summary, &result.evidence);
+    let state_prompt = preview_state.to_prompt_string();
+
+    // 2. EXTRACTION PHASE: Identify claims and their cited evidence IDs
     let extraction_prompt = format!(
         "WORKER_SUMMARY: {}\n\n\
          {}\n\n\
@@ -308,7 +318,7 @@ async fn compile_response(
          2. MAP CITATIONS: For each sentence, identify the `[E#]` ID cited by the worker.\n\
          3. FORMAT: Respond ONLY with a JSON list of objects: `[{{\"sentence\": \"...\", \"cited_id\": \"E1\"}}, ...]`. If no citation exists, use `null` for `cited_id`.\n\n\
          INSTRUCTION: Extract all claims and citations. Do NOT add commentary.",
-        result.summary, state.to_prompt_string()
+        result.summary, state_prompt
     );
 
     let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model("llama3.2:3b"))
@@ -316,10 +326,9 @@ async fn compile_response(
         .build();
     let raw_extraction = match agent.prompt(&extraction_prompt).await {
         Ok(resp) => resp,
-        Err(_) => return None, // Fallback to original if extraction fails
+        Err(_) => return None,
     };
 
-    // Parse the extraction
     let claims: Vec<serde_json::Value> = if let Some(start) = raw_extraction.find('[') {
         if let Some(end) = raw_extraction.rfind(']') {
             serde_json::from_str(&raw_extraction[start..=end]).unwrap_or_default()
@@ -330,7 +339,7 @@ async fn compile_response(
         return None;
     }
 
-    // 2. MATCHING PHASE: Verify citations against StructuredState
+    // 3. MATCHING PHASE: Verify citations against StructuredState
     let mut grounded_sentences = Vec::new();
     let mut total_claims = claims.len();
     let mut matching_claims = 0;
@@ -340,8 +349,7 @@ async fn compile_response(
         let cited_id = claim_val["cited_id"].as_str();
 
         if let Some(id) = cited_id {
-            // Check if the ID exists in our evidence database
-            if state.evidence.iter().any(|e| e.id == id) {
+            if preview_state.evidence.iter().any(|e| e.id == id) {
                 grounded_sentences.push(sentence.to_string());
                 matching_claims += 1;
             } else {
@@ -352,8 +360,7 @@ async fn compile_response(
         }
     }
 
-    // 3. ABSTENTION PHASE: Discard turn if confidence is low
-    // Threshold: 50% grounded claims required (User decision #3)
+    // 4. ABSTENTION PHASE: Discard turn if confidence is low
     let grounding_score = matching_claims as f32 / total_claims as f32;
     if grounding_score < 0.5 {
         println!("❌ ABSTENTION TRIGGERED: Grounding score {:.2} below threshold. Discarding turn.", grounding_score);
@@ -377,7 +384,6 @@ async fn compile_response(
         return Some(stalled_res);
     }
 
-    // 4. ASSEMBLY PHASE: Reconstruct the summary from grounded sentences
     let mut final_res = result.clone();
     final_res.summary = grounded_sentences.join(" ");
     final_res.verified = true;

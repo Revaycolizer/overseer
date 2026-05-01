@@ -43,6 +43,21 @@ impl StructuredState {
         out
     }
 
+    pub fn get_known_urls(&self) -> std::collections::HashSet<String> {
+        self.evidence.iter().map(|e| e.source.clone()).filter(|s| s.starts_with("http")).collect()
+    }
+
+    pub fn preview_update(
+        &self,
+        findings: &std::collections::HashMap<String, serde_json::Value>,
+        summary: &str,
+        evidence_raw: &[String]
+    ) -> Self {
+        let mut cloned = self.clone();
+        cloned.update_from_findings(findings, summary, evidence_raw);
+        cloned
+    }
+
     pub fn update_from_findings(
         &mut self, 
         findings: &std::collections::HashMap<String, serde_json::Value>, 

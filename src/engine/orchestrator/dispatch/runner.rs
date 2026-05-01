@@ -4,6 +4,7 @@ use rig::completion::{Message, Prompt};
 use rig::client::CompletionClient;
 use rig::providers::ollama;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
+use crate::engine::orchestrator::core::state::StructuredState;
 use crate::engine::orchestrator::utils::formatter::format_supervisor_result;
 use crate::engine::utils::discovery::{AgentInfo};
 use crate::db::Database;
@@ -44,7 +45,7 @@ pub async fn dispatch_domain(
     query: &str,
     _history: Vec<Message>,
     plan_history: &str,
-    memory_context: &str,
+    state: &StructuredState,
     ollama_client: &ollama::Client,
     model_timeout_ms: u64,
     retry_message: Option<&str>,
@@ -104,7 +105,7 @@ pub async fn dispatch_domain(
          If the task involves creating or exporting a document -> CALL `document_writer` NOW. Do not just report a path.{} \n\n\
          Your final response 'summary' MUST follow the requested REPORTING_STYLE. \
          The 'evidence' list should contain ALL specific data points, quotes, or links you discovered.",
-        query, step, tool_list, memory_context, style, plan_history, retry_inject
+        query, step, tool_list, state.to_prompt_string(), style, plan_history, retry_inject
     );
 
     println!(
@@ -121,7 +122,7 @@ pub async fn dispatch_domain(
 
     let mut last_chart = None;
     let mut last_artifacts = Vec::new();
-    let mut visited_urls = HashSet::new();
+    let mut visited_urls = state.get_known_urls();
     let mut tools_executed_count = 0;
     let mut action_tool_executed = false;
 
@@ -211,8 +212,29 @@ pub async fn dispatch_domain(
                     }
                 }
                 
+                // Tool Lookup with Stalled Recovery
                 if let Some(tname) = tname {
-                    let tool = tools.iter().find(|t| t.name == tname).ok_or_else(|| format!("Tool {} missing", tname))?;
+                    let tool = match tools.iter().find(|t| t.name == tname) {
+                        Some(t) => t,
+                        None => {
+                            let tool_list = tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join(", ");
+                            println!("⚠️  HALLUCINATION: Agent tried to call missing tool '{}'.", tname);
+                            return Ok(SupervisorExecutionResult {
+                                status: "stalled".to_string(),
+                                summary: format!("REJECTED | REASON: You tried to call tool '{}' which is NOT in your capability set. Your available tools are: [{}]", tname, tool_list),
+                                messages: Vec::new(),
+                                evidence: Vec::new(),
+                                artifacts: Vec::new(),
+                                charts: Vec::new(),
+                                verified: false,
+                                hide_evidence: false,
+                                report_style: None,
+                                error: None,
+                                raw_response: format!("Tool {} missing", tname),
+                                findings: std::collections::HashMap::new(),
+                            });
+                        }
+                    };
                         
                     println!("🛠️ EXECUTING TOOL: {} with input: {}", tname, input);
                     let output = crate::engine::tools::call_dynamic_tool(tool, input.clone()).await.map_err(|e| e.to_string())?;
