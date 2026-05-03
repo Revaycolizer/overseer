@@ -8,7 +8,7 @@ use crate::engine::tools::StructuredPerceptionTool;
 use rig::completion::Message;
 use rig::providers::ollama;
 use crate::engine::orchestrator::lattice::compiler;
-
+use crate::engine::orchestrator::lattice::synthesizer;
 pub async fn execute_macro_tasks(
     db: &Database,
     conversation_id: i64,
@@ -38,7 +38,11 @@ pub async fn execute_macro_tasks(
                 history.to_vec(), &plan_history, &state, ollama_client, 60000, None
             ).await {
                 Ok(res) => {
-                    let compiled = compiler::compile_response(db, &task.task, &res, &state).await.unwrap_or(res);
+                    let mut compiled = compiler::compile_response(db, &task.task, &res, &state).await.unwrap_or(res);
+                    
+                    // ARCHITECTURE V3.1: SYNTHESIZER INTEGRATION
+                    compiled.summary = synthesizer::synthesize_step_summary(&task.task, &compiled).await;
+                    
                     update_state_from_findings(&mut state, db, &compiled.findings, &compiled.summary, &compiled.evidence).await;
                     plan_history.push_str(&format!("\nStep {}: {}", idx + 1, compiled.summary));
                     
@@ -57,12 +61,7 @@ pub async fn execute_macro_tasks(
         }
     }
 
-    if master_response.messages.is_empty() && !master_response.artifacts.is_empty() {
-        master_response.messages.push(crate::engine::orchestrator::core::response::MessagePart {
-            role: "agent".to_string(),
-            message: format!("Generated document: {}", master_response.artifacts.join(", ")),
-        });
-    }
+    synthesizer::synthesize_final_response(&mut master_response.messages, &master_response.artifacts);
 
     let final_json = serde_json::to_string(&master_response).unwrap_or_default();
     println!("📦 FINAL ORCHESTRATOR RESPONSE: {}", final_json);

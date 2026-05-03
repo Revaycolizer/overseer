@@ -59,3 +59,8 @@ pub fn strip_grounding_markers(text: &str) -> String {
     let cleaned = re_ui.replace_all(&cleaned, "");
     cleaned.replace("  ", " ").trim().to_string()
 }
+
+pub fn sanitize_links(text: &str) -> String {
+    let re_url = regex::Regex::new(r"https?://[^\s)\]]+").unwrap();
+    re_url.replace_all(text, "[Source]").to_string()
+}
