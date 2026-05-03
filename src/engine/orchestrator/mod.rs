@@ -5,6 +5,7 @@ pub mod utils;
 pub mod native;
 pub mod guardrails;
 pub mod dispatch;
+pub mod v3;
 
 // Re-exports for backward compatibility and convenience
 pub use core::main_loop::orchestrate_request;

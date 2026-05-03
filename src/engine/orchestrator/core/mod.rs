@@ -1,4 +1,5 @@
 pub mod main_loop;
+#[path = "lattice_executor/mod.rs"]
 pub mod executor;
 pub mod result;
 pub mod response;
@@ -6,4 +7,5 @@ pub mod errors;
 pub mod event_logger;
 pub mod direct_chat;
 pub mod state;
+pub mod state_update;
 pub mod consistency;

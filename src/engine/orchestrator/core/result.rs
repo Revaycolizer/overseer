@@ -118,6 +118,23 @@ impl SupervisorExecutionResult {
         }
     }
 
+    pub fn stalled(summary: String, raw_response: String) -> Self {
+        Self {
+            status: "stalled".to_string(),
+            summary,
+            messages: Vec::new(),
+            evidence: Vec::new(),
+            artifacts: Vec::new(),
+            charts: Vec::new(),
+            verified: false,
+            hide_evidence: false,
+            report_style: None,
+            error: None,
+            raw_response,
+            findings: std::collections::HashMap::new(),
+        }
+    }
+
     pub fn display_text(&self) -> String {
         let structured = format_supervisor_result(self);
         serde_json::to_string(&structured).unwrap_or_else(|_| self.summary.clone())

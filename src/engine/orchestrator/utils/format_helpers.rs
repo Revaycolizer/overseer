@@ -50,6 +50,12 @@ pub fn is_html_noise(value: &str) -> bool {
 }
 
 pub fn strip_grounding_markers(text: &str) -> String {
-    let re = regex::Regex::new(r"\[E[0-9]+\]").unwrap();
-    re.replace_all(text, "").to_string().replace("  ", " ").trim().to_string()
+    let re_evidence = regex::Regex::new(r"\(?\[E[0-9]+\]\)?\s*").unwrap();
+    let re_chart = regex::Regex::new(r"---CHART_SVG---").unwrap();
+    let re_ui = regex::Regex::new(r"(?m)^[╭╰═─│\s]+$").unwrap(); // Strips lines that are just UI characters
+    
+    let cleaned = re_evidence.replace_all(text, "");
+    let cleaned = re_chart.replace_all(&cleaned, "");
+    let cleaned = re_ui.replace_all(&cleaned, "");
+    cleaned.replace("  ", " ").trim().to_string()
 }

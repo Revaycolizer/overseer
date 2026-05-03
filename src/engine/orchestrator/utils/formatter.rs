@@ -41,8 +41,18 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
             }
         }
 
+        // ARTIFACT PROMOTION: Ensure artifact links are always in the message
+        if !res.artifacts.is_empty() {
+            let art_msg = format!("Generated document: {}", res.artifacts.join(", "));
+            if is_generic || message.is_empty() {
+                message = art_msg;
+            } else if !message.contains("Generated document") {
+                message = format!("{}\n\n{}", message, art_msg);
+            }
+        }
+
         if !message.is_empty() {
-            let is_generic_now = message == "Task completed." || message == "Done." || message == "Finished.";
+            let is_generic_now = message.to_lowercase().contains("task completed") || message.to_lowercase().contains("done.") || message.is_empty();
             // Skip generic summary if we have better content coming (charts, etc.)
             if !is_generic_now || (res.charts.is_empty() && res.artifacts.is_empty()) {
                 structured.messages.push(MessagePart {
@@ -52,6 +62,7 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
             }
         }
     }
+
 
     // 2. Evidence -> Sources
     if !res.hide_evidence {

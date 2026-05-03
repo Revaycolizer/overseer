@@ -13,6 +13,7 @@ use tokio::process::Command;
 use crate::engine::utils::discovery::{build_python_command, get_tool_executable_path, ToolInfo};
 
 pub mod charting;
+pub mod document_gen;
 pub mod document_generation;
 
 #[derive(Debug, Clone)]
@@ -208,7 +209,19 @@ async fn call_native_builtin_tool(
         "web_search" => Some(native_stealth_search(args).await?),
         "stealth_search" => Some(native_stealth_search(args).await?),
         "app_launcher" => Some(native_app_launcher(args).await?),
-        "document_writer" => Some(native_document_writer(args).await?),
+        "document_writer" => {
+            println!("🛠️ DEBUG: Calling native_document_writer");
+            match native_document_writer(args).await {
+                Ok(r) => {
+                    println!("🛠️ DEBUG: native_document_writer returned: {}", r);
+                    Some(r)
+                },
+                Err(e) => {
+                    println!("❌ DEBUG: native_document_writer failed: {}", e);
+                    return Err(e);
+                }
+            }
+        },
         "export_asset" => Some(native_export_asset(args).await?),
         _ => None,
     };
