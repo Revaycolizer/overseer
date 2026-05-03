@@ -32,6 +32,21 @@ pub async fn execute_macro_tasks(
         let mut domain = task.domain.clone();
 
         loop {
+            // Fetch supervisor config to get dynamic synthesis flags
+            let supervisor = sqlx::query_as::<_, crate::db::Supervisor>(
+                "SELECT * FROM supervisors WHERE domain = ?"
+            )
+            .bind(&domain)
+            .fetch_optional(&db.pool)
+            .await
+            .unwrap_or(None);
+
+            let (hide_evidence, report_style) = if let Some(ref s) = supervisor {
+                (s.hide_evidence, s.report_style.clone().unwrap_or_else(|| "detailed".to_string()))
+            } else {
+                (false, "detailed".to_string())
+            };
+
             // Re-implementing the core loop directly here to avoid missing file dependencies
             match crate::engine::orchestrator::dispatch_domain(
                 db, run_id, event_sequence, _all_agents, &domain, &task.task, &task.task, 
@@ -40,8 +55,9 @@ pub async fn execute_macro_tasks(
                 Ok(res) => {
                     let mut compiled = compiler::compile_response(db, &task.task, &res, &state).await.unwrap_or(res);
                     
-                    // ARCHITECTURE V3.1: SYNTHESIZER INTEGRATION
-                    compiled.summary = synthesizer::synthesize_step_summary(&task.task, &compiled).await;
+                    // ARCHITECTURE V3.1: DYNAMIC AGENT-BASED SYNTHESIS
+                    compiled.hide_evidence = hide_evidence;
+                    synthesizer::synthesize_step_result(db, ollama_client, &mut compiled, &report_style, &task.task).await;
                     
                     update_state_from_findings(&mut state, db, &compiled.findings, &compiled.summary, &compiled.evidence).await;
                     plan_history.push_str(&format!("\nStep {}: {}", idx + 1, compiled.summary));
@@ -61,7 +77,9 @@ pub async fn execute_macro_tasks(
         }
     }
 
-    synthesizer::synthesize_final_response(&mut master_response.messages, &master_response.artifacts);
+    // Final Post-Synthesis for complex multi-step plans (Centralized UI Governance)
+    let has_research = macro_tasks.iter().any(|t| matches!(t.domain.as_str(), "stealth" | "web"));
+    synthesizer::synthesize_final_response(&mut master_response, has_research);
 
     let final_json = serde_json::to_string(&master_response).unwrap_or_default();
     println!("📦 FINAL ORCHESTRATOR RESPONSE: {}", final_json);

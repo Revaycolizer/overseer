@@ -1,42 +1,80 @@
+use crate::db::Database;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
-use crate::engine::orchestrator::core::response::MessagePart;
+use crate::engine::orchestrator::core::response::{MessagePart, StructuredResponse};
 use crate::engine::orchestrator::utils::format_helpers::{sanitize_links, strip_grounding_markers};
+use rig::providers::ollama::{self, OllamaExt};
+use rig::client::CompletionClient;
+use rig::completion::Prompt;
+use rig::agent::AgentBuilder;
 
-pub async fn synthesize_step_summary(
-    _task_description: &str,
-    result: &SupervisorExecutionResult,
-) -> String {
-    // RULE 1: Artifact Silence (Highest Priority)
-    // If a document was generated, focus on the success of that generation.
-    if !result.artifacts.is_empty() {
-        let files = result.artifacts.join(", ");
-        return format!("Successfully generated documentation: {}. The content is professionally formatted and ready for review.", files);
+pub async fn synthesize_step_result(
+    db: &Database,
+    ollama_client: &ollama::Client,
+    result: &mut SupervisorExecutionResult,
+    report_style: &str,
+    task_description: &str,
+) {
+    if result.hide_evidence {
+        result.evidence.clear();
     }
-
-    // RULE 2: Grounding Clean-up & Professional Polish
-    let clean_summary = strip_grounding_markers(&result.summary);
-    let professional_summary = sanitize_links(&clean_summary);
-
-    // RULE 3: Fallback Synthesis
-    if professional_summary.is_empty() || professional_summary.len() < 5 {
-        if !result.findings.is_empty() {
-             return "I have successfully analyzed the data and integrated the findings into the system state.".to_string();
+    
+    let (instructions, model_name) = match sqlx::query(
+        "SELECT instructions, model FROM agents WHERE domain = 'synthesizer' LIMIT 1"
+    )
+    .fetch_optional(&db.pool)
+    .await
+    {
+        Ok(Some(row)) => {
+            use sqlx::Row;
+            (
+                row.get::<Option<String>, _>("instructions").unwrap_or_default(),
+                row.get::<Option<String>, _>("model").unwrap_or_else(|| "qwen2.5:7b-instruct".to_string())
+            )
         }
-        return "Task completed successfully.".to_string();
-    }
+        _ => (
+            "You are a professional assistant. Synthesize a 1-sentence summary of the task completion.".to_string(),
+            "qwen2.5:7b-instruct".to_string()
+        )
+    };
 
-    professional_summary
+    let findings_json = serde_json::to_string(&result.findings).unwrap_or_default();
+    let artifacts_list = result.artifacts.join(", ");
+    
+    let prompt = format!(
+        "{}\n\nUSER INTENT: {}\nFINDINGS: {}\nARTIFACTS: {}\nSTYLE: {}\n\nSYNTHESIZE A 1-SENTENCE PROFESSIONAL SUMMARY:",
+        instructions, task_description, findings_json, artifacts_list, report_style
+    );
+
+    let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(&model_name))
+        .preamble(&instructions)
+        .build();
+
+    let response_result: Result<String, _> = agent.prompt(&prompt).await;
+    if let Ok(response) = response_result {
+        let clean_response = strip_grounding_markers(&response);
+        result.summary = sanitize_links(&clean_response);
+    } else {
+        
+        let raw = strip_grounding_markers(&result.summary);
+        result.summary = sanitize_links(&raw);
+    }
 }
 
 pub fn synthesize_final_response(
-    messages: &mut Vec<MessagePart>,
-    artifacts: &[String],
+    response: &mut StructuredResponse,
+    has_research: bool,
 ) {
-    if !artifacts.is_empty() {
-        messages.clear();
-        messages.push(MessagePart {
+    if !response.attachments.is_empty() || !response.artifacts.is_empty() {
+        let items = if !response.attachments.is_empty() { &response.attachments } else { &response.artifacts };
+        
+        response.messages.clear();
+        response.messages.push(MessagePart {
             role: "agent".to_string(),
-            message: format!("Mission successful. I have generated the following artifacts: {}. These documents are professionally synthesized from research findings and are ready for use.", artifacts.join(", ")),
+            message: format!("I have successfully completed your request. The following attachments are ready"),
         });
+
+        if !has_research {
+            response.sources.clear();
+        }
     }
 }

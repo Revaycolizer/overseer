@@ -39,7 +39,7 @@ pub async fn update_state_from_findings(
             let id = format!("E{}", state.next_id);
             let snowflake_id = db.next_id().await;
             
-            // Clean the text before storing in evidence
+            // ARCHITECTURE V3.1: Clean the text before storing in evidence
             let professional_text = crate::engine::orchestrator::utils::format_helpers::sanitize_links(&text);
             
             state.evidence.push(EvidenceChunk { 
