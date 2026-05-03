@@ -1,5 +1,5 @@
 use super::scheduler::SwarmScheduler;
-use crate::engine::orchestrator::v3::state::GlobalState;
+use crate::engine::orchestrator::state::GlobalState;
 
 pub struct LatticeCoordinator {
     pub scheduler: SwarmScheduler,
@@ -23,15 +23,15 @@ impl LatticeCoordinator {
         
         for task in tasks {
             // 1. Context Sharding: Filter relevant global facts for this cell
-            let mut cell = crate::engine::orchestrator::v3::state::CellState::new(&task);
-            let context = crate::engine::orchestrator::v3::state::sync::filter_relevant_facts(&self.global_state, &task);
+            let mut cell = crate::engine::orchestrator::state::CellState::new(&task);
+            let context = crate::engine::orchestrator::state::sync::filter_relevant_facts(&self.global_state, &task);
             for fact in context { cell.add_fact(fact); }
             
             // 2. Swarm Execution: Dispatch to cell and wait for consensus
             self.scheduler.dispatch_cell_task(&task, &mut cell).await;
             
             // 3. State Synchronization: Commit cell findings to Global Lattice
-            crate::engine::orchestrator::v3::state::sync::sync_cell_to_global(&cell, &mut self.global_state);
+            crate::engine::orchestrator::state::sync::sync_cell_to_global(&cell, &mut self.global_state);
         }
 
         self.global_state.to_prompt_string()

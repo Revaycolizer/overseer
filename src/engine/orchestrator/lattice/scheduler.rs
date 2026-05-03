@@ -1,4 +1,5 @@
-use crate::engine::orchestrator::v3::state::GlobalState;
+use crate::engine::orchestrator::state::GlobalState;
+use crate::engine::orchestrator::state::CellState;
 
 pub struct SwarmScheduler {
     pub active_cell_count: usize,
@@ -9,7 +10,7 @@ impl SwarmScheduler {
         Self { active_cell_count: 0 }
     }
 
-    pub async fn dispatch_cell_task(&mut self, task: &str, cell: &mut crate::engine::orchestrator::v3::state::CellState) {
+    pub async fn dispatch_cell_task(&mut self, task: &str, cell: &mut CellState) {
         self.active_cell_count += 1;
         println!("SCHEDULER: Dispatching Task to Cell {}: {}", self.active_cell_count, task);
         
@@ -21,7 +22,7 @@ impl SwarmScheduler {
             format!("Agent 3 found similar facts for: {}", task),
         ];
 
-        if let Some(consensus) = crate::engine::orchestrator::v3::swarm::calculate_consensus(&agent_outputs) {
+        if let Some(consensus) = crate::engine::orchestrator::swarm::calculate_consensus(&agent_outputs) {
             println!("SCHEDULER: Reached consensus for Cell {}.", self.active_cell_count);
             cell.add_fact(consensus);
         }

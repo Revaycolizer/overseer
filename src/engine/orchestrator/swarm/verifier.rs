@@ -1,4 +1,4 @@
-use crate::engine::orchestrator::v3::state::CellState;
+use crate::engine::orchestrator::state::CellState;
 
 pub struct SwarmVerifier {
     pub confidence_threshold: f32,

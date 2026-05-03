@@ -1,13 +1,12 @@
 use crate::db::Database;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
-use crate::engine::orchestrator::core::state::StructuredState;
-use crate::engine::orchestrator::core::state_update::preview_state_update;
+use crate::engine::orchestrator::state::StructuredState;
+use crate::engine::orchestrator::state::preview_state_update;
 use regex::Regex;
-use rig::providers::ollama;
 
 pub async fn compile_response(
     db: &Database,
-    step_description: &str,
+    _step_description: &str,
     result: &SupervisorExecutionResult,
     state: &StructuredState,
 ) -> Option<SupervisorExecutionResult> {

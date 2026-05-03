@@ -1,5 +1,5 @@
 use serde_json::Value;
-use crate::engine::orchestrator::core::state::StructuredState;
+use crate::engine::orchestrator::state::StructuredState;
 use regex::Regex;
 
 pub fn expand_markers(mut value: Value, state: &StructuredState) -> Value {

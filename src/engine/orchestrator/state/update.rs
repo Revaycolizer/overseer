@@ -1,4 +1,4 @@
-use super::state::{StructuredState, EvidenceChunk};
+use super::{StructuredState, EvidenceChunk};
 use crate::db::Database;
 use std::collections::HashMap;
 use serde_json::Value;

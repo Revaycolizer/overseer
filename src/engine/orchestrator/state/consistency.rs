@@ -3,7 +3,7 @@ use rig::agent::AgentBuilder;
 use rig::client::CompletionClient;
 use rig::providers::ollama;
 use rig::completion::Prompt;
-use crate::engine::orchestrator::core::state::StructuredState;
+use super::StructuredState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConflictReport {

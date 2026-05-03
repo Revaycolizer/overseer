@@ -3,7 +3,7 @@ use rig::completion::{Message, Prompt};
 use rig::providers::ollama;
 use crate::db::Database;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
-use crate::engine::orchestrator::core::state::StructuredState;
+use crate::engine::orchestrator::state::StructuredState;
 use crate::engine::utils::discovery::AgentInfo;
 use super::prompt_builder::build_dispatch_prompt;
 use super::json_utils::repair_json_literals;
