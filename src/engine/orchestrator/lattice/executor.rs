@@ -57,7 +57,12 @@ pub async fn execute_macro_tasks(
                     
                     // ARCHITECTURE V3.1: DYNAMIC AGENT-BASED SYNTHESIS
                     compiled.hide_evidence = hide_evidence;
-                    synthesizer::synthesize_step_result(db, ollama_client, &mut compiled, &report_style, &task.task).await;
+                    
+                    let bypass = supervisor.as_ref().map(|s| s.bypass_synthesizer).unwrap_or(false);
+                    // REDUNDANCY CHECK: Skip LLM synthesis if artifacts were generated (Final synthesizer handles it)
+                    if !bypass && compiled.artifacts.is_empty() {
+                        synthesizer::synthesize_step_result(db, ollama_client, &mut compiled, &report_style, &task.task).await;
+                    }
                     
                     update_state_from_findings(&mut state, db, &compiled.findings, &compiled.summary, &compiled.evidence).await;
                     plan_history.push_str(&format!("\nStep {}: {}", idx + 1, compiled.summary));
@@ -79,7 +84,7 @@ pub async fn execute_macro_tasks(
 
     // Final Post-Synthesis for complex multi-step plans (Centralized UI Governance)
     let has_research = macro_tasks.iter().any(|t| matches!(t.domain.as_str(), "stealth" | "web"));
-    synthesizer::synthesize_final_response(&mut master_response, has_research);
+    synthesizer::synthesize_final_response(db, ollama_client, &mut master_response, has_research, _query).await;
 
     let final_json = serde_json::to_string(&master_response).unwrap_or_default();
     println!("📦 FINAL ORCHESTRATOR RESPONSE: {}", final_json);
