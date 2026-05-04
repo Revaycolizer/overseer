@@ -3,12 +3,13 @@ use crate::engine::orchestrator::core::response::{MessagePart, StructuredRespons
 use rig::providers::ollama::{self, OllamaExt};
 use rig::client::CompletionClient;
 use rig::agent::AgentBuilder;
-use rig::completion::Prompt;
+use rig::completion::{Chat, Prompt};
 use serde_json::Value;
 
 pub async fn synthesize_final_response(
     db: &Database,
     ollama_client: &ollama::Client,
+    history: Vec<rig::completion::Message>,
     response: &mut StructuredResponse,
     _has_research: bool,
     query: &str,
@@ -38,7 +39,7 @@ pub async fn synthesize_final_response(
     let agent = AgentBuilder::new(ollama_client.completion_model(&model_name))
         .preamble(&instructions).build();
 
-    if let Ok(res_text) = agent.prompt(prompt).await {
+    if let Ok(res_text) = agent.chat(prompt, history).await {
         if let Ok(v) = serde_json::from_str::<Value>(&res_text) {
             if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
                 response.messages.clear();

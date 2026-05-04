@@ -238,25 +238,57 @@ impl AgentSystem {
 fn extract_message_content(content: &str) -> String {
     let cleaned = strip_internal_message_markers(content);
     
-    // If it looks like JSON, try to extract the actual message text
+    // If it looks like JSON, try to extract the actual message text and metadata
     if cleaned.trim().starts_with('{') && cleaned.trim().ends_with('}') {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&cleaned) {
-            // Path A: StructuredResponse (the new standard)
+            let mut final_text = String::new();
+
+            // 1. Extract Primary Messages (StructuredResponse)
             if let Some(msgs) = v.get("messages").and_then(|m| m.as_array()) {
-                let mut combined = String::new();
                 for m in msgs {
                     if let Some(msg) = m.get("message").and_then(|s| s.as_str()) {
-                        if !combined.is_empty() { combined.push_str("\n"); }
-                        combined.push_str(msg);
+                        if !final_text.is_empty() { final_text.push_str("\n"); }
+                        final_text.push_str(msg);
                     }
                 }
-                if !combined.is_empty() { return combined; }
+            } else if let Some(summary) = v.get("summary").and_then(|s| s.as_str()) {
+                // Fallback: SupervisorExecutionResult
+                final_text = summary.to_string();
             }
-            
-            // Path B: SupervisorExecutionResult (legacy/intermediate standard)
-            if let Some(summary) = v.get("summary").and_then(|s| s.as_str()) {
-                return summary.to_string();
+
+            // 2. METADATA INJECTION: Append artifacts and sources for context awareness
+            let mut metadata = Vec::new();
+
+            if let Some(artifacts) = v.get("artifacts").and_then(|a| a.as_array()) {
+                for a in artifacts {
+                    if let Some(path) = a.as_str() {
+                        let filename = path.split('/').last().unwrap_or(path);
+                        metadata.push(format!("[Generated Artifact: {}]", filename));
+                    }
+                }
             }
+
+            if let Some(sources) = v.get("sources").and_then(|s| s.as_array()) {
+                for (i, s) in sources.iter().enumerate() {
+                    let title = s.get("source").and_then(|v| v.as_str()).unwrap_or("Unknown Source");
+                    metadata.push(format!("[Source #{}: {}]", i + 1, title));
+                }
+            } else if let Some(evidence) = v.get("evidence").and_then(|e| e.as_array()) {
+                for (i, e) in evidence.iter().enumerate() {
+                    if let Some(text) = e.as_str() {
+                        let snippet = if text.len() > 60 { format!("{}...", &text[..60]) } else { text.to_string() };
+                        metadata.push(format!("[Evidence #{}: {}]", i + 1, snippet));
+                    }
+                }
+            }
+
+            if !metadata.is_empty() {
+                if !final_text.is_empty() { final_text.push_str("\n\n"); }
+                final_text.push_str("CONTEXTUAL_METADATA:\n");
+                final_text.push_str(&metadata.join("\n"));
+            }
+
+            if !final_text.is_empty() { return final_text; }
         }
     }
     

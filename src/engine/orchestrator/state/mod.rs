@@ -36,6 +36,12 @@ impl StructuredState {
             next_id: 1,
         }
     }
+    
+    pub fn add_legacy_context(&mut self, context: &str) {
+        if !context.trim().is_empty() {
+            self.derived_insights.push(format!("Previous Findings/Context:\n{}", context));
+        }
+    }
 
     pub fn to_prompt_string(&self) -> String {
         let mut out = String::from("═══ STRUCTURED_STATE (EVIDENCE-FIRST) ═══\n");

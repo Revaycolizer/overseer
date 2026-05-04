@@ -18,13 +18,14 @@ pub async fn execute_macro_tasks(
     macro_tasks: Vec<MacroTask>,
     _query: &str,
     history: &[Message],
-    _memories: &str,
+    memories: &str,
     _tool: &StructuredPerceptionTool,
     ollama_client: &ollama::Client,
     _timeout: u64,
 ) -> String {
     let mut master_response = StructuredResponse::new();
     let mut state = StructuredState::new();
+    state.add_legacy_context(memories);
     let mut plan_history = String::new();
 
     for (idx, task) in macro_tasks.iter().enumerate() {
@@ -84,7 +85,7 @@ pub async fn execute_macro_tasks(
 
     // Final Post-Synthesis for complex multi-step plans (Centralized UI Governance)
     let has_research = macro_tasks.iter().any(|t| matches!(t.domain.as_str(), "stealth" | "web"));
-    synthesizer::synthesize_final_response(db, ollama_client, &mut master_response, has_research, _query).await;
+    synthesizer::synthesize_final_response(db, ollama_client, history.to_vec(), &mut master_response, has_research, _query).await;
 
     let final_json = serde_json::to_string(&master_response).unwrap_or_default();
     println!("📦 FINAL ORCHESTRATOR RESPONSE: {}", final_json);
