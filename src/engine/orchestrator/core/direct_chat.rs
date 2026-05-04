@@ -2,7 +2,9 @@ use crate::db::Database;
 use crate::engine::utils::discovery::AgentInfo;
 use crate::engine::orchestrator::discovery::dynamic::ChatAgent;
 use crate::engine::orchestrator::core::event_logger::record_event;
+use crate::engine::orchestrator::core::response::{StructuredResponse, MessagePart};
 use rig::providers::ollama;
+use rig::completion::Message;
 
 pub async fn handle_direct_chat(
     db: &Database,
@@ -11,6 +13,7 @@ pub async fn handle_direct_chat(
     ollama_client: &ollama::Client,
     all_agents: &[AgentInfo],
     clean_query: &str,
+    history: &[Message],
     enriched_memory_context: &str,
     decision_details: &str,
 ) -> String {
@@ -62,7 +65,29 @@ pub async fn handle_direct_chat(
     )
     .await;
 
-    let direct_response = chat_agent.answer(clean_query, &direct_context).await;
+    let raw_response = if history.is_empty() {
+        chat_agent.answer(clean_query, &direct_context).await
+    } else {
+        chat_agent.chat(clean_query, history.to_vec()).await
+    };
+    
+    // ARCHITECTURE V3.4: UNIFORM PROTOCOL ENFORCEMENT
+    // If the agent returned a SupervisorExecutionResult JSON, we must parse and format it.
+    let mut response = if raw_response.trim().starts_with('{') && raw_response.trim().ends_with('}') {
+        let parsed = crate::engine::orchestrator::dispatch::parsers::parse_supervisor_result(
+            raw_response.clone(), 
+            false, 
+            Some("detailed".to_string())
+        );
+        crate::engine::orchestrator::utils::formatter::format_supervisor_result(&parsed)
+    } else {
+        let mut res = StructuredResponse::new();
+        res.messages.push(MessagePart {
+            role: "assistant".to_string(),
+            message: raw_response.clone(),
+        });
+        res
+    };
 
     record_event(
         db,
@@ -79,9 +104,10 @@ pub async fn handle_direct_chat(
     )
     .await;
 
+    let final_json = serde_json::to_string(&response).unwrap_or_default();
     if let Some(rid) = run_id {
-        let _ = crate::backend::finish_execution_run(db, rid, "completed", Some(&direct_response), None).await;
+        let _ = crate::backend::finish_execution_run(db, rid, "completed", Some(&final_json), None).await;
     }
 
-    direct_response
+    final_json
 }

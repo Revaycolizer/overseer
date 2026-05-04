@@ -27,8 +27,9 @@ pub async fn synthesize_final_response(
 
     let prompt = format!(
         "USER_QUERY: {}\nCURRENT_RESPONSE: {}\n\n\
-        ARCHITECTURE V3.3: INTENT-AWARE UI GOVERNANCE\n\
-        1. Final Summary: Align with user intent and results.\n\
+        ARCHITECTURE V3.4: CONVERSATIONAL ALIGNMENT\n\
+        1. Final Summary: If the response is creative (story, greeting, etc.), PRESERVE its essence. \
+           If it is operational (results/data), professionally summarize it.\n\
         2. UI Pruning: Determine if sources/attachments are technical noise or requested.\n\n\
         Output JSON: {{\"message\": \"...\", \"keep_sources\": bool, \"keep_attachments\": bool}}",
         query, serde_json::to_string(response).unwrap_or_default()

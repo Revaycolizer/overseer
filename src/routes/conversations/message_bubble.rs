@@ -13,7 +13,14 @@ use crate::routes::conversations::legacy_parser::parse_content;
 pub fn MessageBubble(msg: backend::Message, on_copy: EventHandler<String>) -> Element {
     if msg.role == "user" { return rsx! { UserBubble { msg, on_copy } }; }
 
-    let structured: Option<StructuredResponse> = serde_json::from_str(&msg.content).ok();
+    let mut structured: Option<StructuredResponse> = serde_json::from_str(&msg.content).ok();
+    
+    // Fallback: If it's a SupervisorExecutionResult (standard engine result), convert it for the UI
+    if structured.is_none() {
+        if let Ok(res) = serde_json::from_str::<crate::engine::orchestrator::SupervisorExecutionResult>(&msg.content) {
+            structured = Some(crate::engine::orchestrator::utils::formatter::format_supervisor_result(&res));
+        }
+    }
     
     rsx! {
         div { class: "flex items-start gap-4 mb-6",

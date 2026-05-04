@@ -61,6 +61,13 @@ impl ChatAgent {
             .await
             .unwrap_or_else(|e| format!("Chat error: {}", e))
     }
+
+    pub async fn chat(&self, prompt: &str, history: Vec<Message>) -> String {
+        self.agent
+            .chat(prompt, history)
+            .await
+            .unwrap_or_else(|e| format!("Chat error: {}", e))
+    }
 }
 
 #[derive(Clone)]
