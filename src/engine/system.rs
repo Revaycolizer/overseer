@@ -135,12 +135,22 @@ impl AgentSystem {
                             }
                         }
                     } else {
-                        // Non-image: include as a text description so the model knows about it
+                        // NATIVE MEDIA PERCEPTION (Tiered Fallback)
+                        let media_content = crate::engine::orchestrator::native::media::process_attachment(
+                            db,
+                            &self.ollama_client,
+                            &att.file_path,
+                        ).await;
+                        
+                        // Use <shadow_context> to signal to the synthesizer that this is technical grounding
+                        // and should not be echoed back to the user bubble.
                         contents.push(rig::message::UserContent::text(format!(
-                            "\n[Attached File: {} (Path: {})]",
-                            att.filename, att.file_path
+                            "\n[Attached File: {}]\n<shadow_context>\nNATIVE_GROUNDING_DATA:\n{}\n</shadow_context>",
+                            att.filename, media_content
                         )));
                     }
+
+
                 }
 
                 history.push(rig::completion::Message::User {
