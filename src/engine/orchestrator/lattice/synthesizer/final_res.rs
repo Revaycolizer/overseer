@@ -42,7 +42,7 @@ pub async fn synthesize_final_response(
         if let Ok(v) = serde_json::from_str::<Value>(&res_text) {
             if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
                 response.messages.clear();
-                response.messages.push(MessagePart { role: "agent".to_string(), message: msg.to_string() });
+                response.messages.push(MessagePart { role: "assistant".to_string(), message: msg.to_string() });
             }
             if v.get("keep_sources").and_then(|k| k.as_bool()) == Some(false) { response.sources.clear(); }
             if v.get("keep_attachments").and_then(|k| k.as_bool()) == Some(false) {

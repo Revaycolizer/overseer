@@ -71,7 +71,7 @@ impl AgentSystem {
                 .take(6)
                 .rev()
                 .map(|m| {
-                    let cleaned = strip_internal_message_markers(&m.content);
+                    let cleaned = extract_message_content(&m.content);
                     format!(
                         "[{}]: {}",
                         m.role.to_uppercase(),
@@ -147,7 +147,7 @@ impl AgentSystem {
                     content: rig::OneOrMany::many(contents).unwrap(),
                 });
             } else {
-                let cleaned_content = strip_internal_message_markers(&m.content);
+                let cleaned_content = extract_message_content(&m.content);
                 let content_text = if cleaned_content.trim().is_empty() {
                     "(assistant message)".to_string()
                 } else {
@@ -233,6 +233,34 @@ impl AgentSystem {
             }
         }
     }
+}
+
+fn extract_message_content(content: &str) -> String {
+    let cleaned = strip_internal_message_markers(content);
+    
+    // If it looks like JSON, try to extract the actual message text
+    if cleaned.trim().starts_with('{') && cleaned.trim().ends_with('}') {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&cleaned) {
+            // Path A: StructuredResponse (the new standard)
+            if let Some(msgs) = v.get("messages").and_then(|m| m.as_array()) {
+                let mut combined = String::new();
+                for m in msgs {
+                    if let Some(msg) = m.get("message").and_then(|s| s.as_str()) {
+                        if !combined.is_empty() { combined.push_str("\n"); }
+                        combined.push_str(msg);
+                    }
+                }
+                if !combined.is_empty() { return combined; }
+            }
+            
+            // Path B: SupervisorExecutionResult (legacy/intermediate standard)
+            if let Some(summary) = v.get("summary").and_then(|s| s.as_str()) {
+                return summary.to_string();
+            }
+        }
+    }
+    
+    cleaned
 }
 
 fn strip_internal_message_markers(content: &str) -> String {

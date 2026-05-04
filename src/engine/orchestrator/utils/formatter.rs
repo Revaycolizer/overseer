@@ -57,7 +57,7 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
             if !is_generic_now || (res.charts.is_empty() && res.artifacts.is_empty()) {
                 structured.messages.push(MessagePart {
                     message,
-                    role: "agent".to_string(),
+                    role: "assistant".to_string(),
                 });
             }
         }
