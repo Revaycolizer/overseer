@@ -38,10 +38,17 @@ pub async fn synthesize_step_result(
     };
 
     let prompt = format!(
-        "{}\n\nUSER INTENT: {}\nFINDINGS: {}\nARTIFACTS: {}\nSTYLE: {}\n\n\
-        INSTRUCTION: Synthesize a professional, 1-sentence summary. Output ONLY text:",
-        instructions, task_description, serde_json::to_string(&result.findings).unwrap_or_default(), 
-        result.artifacts.join(", "), report_style
+        "{}\n\nUSER INTENT: {}\nSTEP_RESULT: {}\nSTYLE: {}\n\n\
+        INSTRUCTION: Synthesize a professional, 1-sentence summary based STRICTLY on the STEP_RESULT. Output ONLY text:",
+        instructions, task_description, 
+        serde_json::json!({
+            "findings": result.findings,
+            "charts": result.charts,
+            "artifacts": result.artifacts,
+            "evidence": result.evidence,
+            "messages": result.messages
+        }), 
+        report_style
     );
 
     let agent = AgentBuilder::new(ollama_client.completion_model(&model_name))

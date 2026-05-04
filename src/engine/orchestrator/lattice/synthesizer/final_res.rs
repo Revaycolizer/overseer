@@ -30,8 +30,10 @@ pub async fn synthesize_final_response(
         "USER_QUERY: {}\nCURRENT_RESPONSE: {}\n\n\
         ARCHITECTURE V3.4: CONVERSATIONAL ALIGNMENT\n\
         1. Final Summary: If the response is creative (story, greeting, etc.), PRESERVE its essence. \
-           If it is operational (results/data), professionally summarize it.\n\
-        2. UI Pruning: Determine if sources/attachments are technical noise or requested.\n\n\
+           If it is operational (results/data), professionally summarize it based ONLY on CURRENT_RESPONSE.\n\
+        2. Grounding Mandate: If CURRENT_RESPONSE has sources, charts, or artifacts, YOU MUST acknowledge or summarize them. \
+           NEVER say 'no data found' if these fields are populated.\n\
+        3. UI Pruning: Determine if sources/attachments are technical noise or requested.\n\n\
         Output JSON: {{\"message\": \"...\", \"keep_sources\": bool, \"keep_attachments\": bool}}",
         query, serde_json::to_string(response).unwrap_or_default()
     );
