@@ -1,5 +1,5 @@
 use crate::engine::utils::discovery::AgentInfo;
-use rig::{agent::AgentBuilder, client::CompletionClient, completion::Prompt, providers::ollama};
+use rig::{agent::AgentBuilder, client::CompletionClient, completion::{Chat, Prompt}, providers::ollama};
 
 #[derive(Clone)]
 pub struct MasterPlanner {
@@ -24,6 +24,7 @@ impl MasterPlanner {
         &self,
         ollama_client: &ollama::Client,
         prompt: &str,
+        history: Vec<rig::completion::Message>,
         all_agents: Vec<crate::engine::utils::discovery::AgentInfo>,
     ) -> String {
         // 1. Build a dynamic Registry of Capabilities
@@ -113,7 +114,7 @@ Output: [
         };
 
         agent
-            .prompt(safe_prompt)
+            .chat(safe_prompt, history)
             .await
             .unwrap_or_else(|e| format!("[{{\"domain\": \"error\", \"task\": \"{}\"}}]", e))
     }

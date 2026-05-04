@@ -63,7 +63,7 @@ pub async fn orchestrate_request(
         let http_client = reqwest::Client::new();
         let discovered_agents = discovery::discover_semantic_agents(db, &http_client, &clean_query, 8, ollama_client).await;
         
-        let mut macro_tasks = match timeout(Duration::from_millis(90000), master_planner.plan(ollama_client, &clean_query, discovered_agents.clone())).await {
+        let mut macro_tasks = match timeout(Duration::from_millis(90000), master_planner.plan(ollama_client, &clean_query, history.clone(), discovered_agents.clone())).await {
             Ok(plan) => planner_utils::sanitize_plan(&plan, &clean_query),
             Err(_) => {
                 let mut error_res = crate::engine::orchestrator::core::response::StructuredResponse::new();
@@ -94,7 +94,7 @@ pub async fn orchestrate_request(
                 clean_query
             );
             
-            if let Ok(plan) = timeout(Duration::from_millis(60000), master_planner.plan(ollama_client, &retry_prompt, discovered_agents)).await {
+            if let Ok(plan) = timeout(Duration::from_millis(60000), master_planner.plan(ollama_client, &retry_prompt, history.clone(), discovered_agents)).await {
                 macro_tasks = planner_utils::sanitize_plan(&plan, &clean_query);
             }
 

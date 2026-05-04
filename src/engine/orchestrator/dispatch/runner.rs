@@ -1,5 +1,5 @@
 use rig::agent::AgentBuilder;
-use rig::completion::{Message, Prompt};
+use rig::completion::{Chat, Message, Prompt};
 use rig::providers::ollama;
 use crate::db::Database;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
@@ -20,7 +20,7 @@ pub async fn dispatch_domain(
     domain: &str,
     step: &str,
     query: &str,
-    _history: Vec<Message>,
+    history: Vec<Message>,
     plan_history: &str,
     state: &StructuredState,
     ollama_client: &ollama::Client,
@@ -52,7 +52,7 @@ pub async fn dispatch_domain(
     let mut action_tool_executed = false;
 
     for iteration in 0..10 {
-        let response = agent.prompt(&current_prompt).await.map_err(|e| e.to_string())?;
+        let response = agent.chat(&current_prompt, history.clone()).await.map_err(|e| e.to_string())?;
         let repaired = repair_json_literals(response.trim());
         let json: serde_json::Value = match serde_json::from_str(&repaired) {
             Ok(v) => v,
