@@ -847,7 +847,8 @@ pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result
             a.filename,
             a.file_path,
             a.content_type,
-            a.size
+            a.size,
+            a.extracted_content
          FROM attachments a
          JOIN messages m ON m.id = a.message_id
          WHERE m.conversation_id = ?",
@@ -901,6 +902,19 @@ pub async fn add_attachment(
     .execute(&db.pool)
     .await?;
     Ok(id)
+}
+
+pub async fn update_attachment_content(
+    db: &Database,
+    id: i64,
+    content: &str,
+) -> anyhow::Result<()> {
+    sqlx::query("UPDATE attachments SET extracted_content = ? WHERE id = ?")
+        .bind(content)
+        .bind(id)
+        .execute(&db.pool)
+        .await?;
+    Ok(())
 }
 
 fn is_image_file_path(path: &std::path::Path) -> bool {
@@ -1331,6 +1345,7 @@ pub struct Attachment {
     pub file_path: String,
     pub content_type: String,
     pub size: i64,
+    pub extracted_content: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]

@@ -1,7 +1,8 @@
 -- 202605042200_add_vision_assistant.sql
 -- Add the Vision Assistant agent to the database for deep perception of media and screens.
+-- Robust version: removed explicit response_format to avoid migration sync issues.
 
-INSERT INTO agents (id, name, description, instructions, model, domain, version, code, response_format)
+INSERT INTO agents (id, name, description, instructions, model, domain, version, code)
 VALUES (
     7438649930752856069, -- Unique ID
     'Vision Assistant',
@@ -31,8 +32,7 @@ Trust ONLY what is visible in the provided image data.',
     'qwen2-vl:7b-instruct', -- Vision-capable model by default
     'vision',
     '1.0.0',
-    '',
-    'json'
+    ''
 );
 
 -- Link vision_analysis tool to Vision Assistant if it exists
