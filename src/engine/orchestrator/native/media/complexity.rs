@@ -8,7 +8,7 @@ pub fn is_complex(path: &Path, native_text: Option<&str>) -> bool {
         .unwrap_or("")
         .to_lowercase();
 
-    // 1. If it's an image, it's inherently complex for raw text extraction
+    // 1. If it's an image, it's inherently complex and requires Vision insights
     if matches!(extension.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif") {
         return true;
     }

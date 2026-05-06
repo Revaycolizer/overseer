@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use crate::engine::orchestrator::native::native_checks::*;
-use crate::engine::orchestrator::discovery::discovery;
+use crate::engine::orchestrator::discovery;
 use crate::engine::utils::discovery::AgentInfo;
 use rig::agent::AgentBuilder;
 use rig::completion::{Message, Prompt, PromptError};
