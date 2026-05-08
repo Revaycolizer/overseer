@@ -265,6 +265,13 @@ fn ChatComposer(props: ChatInputProps) -> Element {
         let mut active_request_task_inner = active_request_task;
         let query = val.clone();
         let optimistic_id = -chrono::Utc::now().timestamp_micros();
+        let optimistic_attachments: Vec<backend::Attachment> = attachments.iter().map(|(name, mime, data)| {
+            backend::Attachment {
+                id: 0, message_id: 0, filename: name.clone(),
+                file_path: format!("overseer_files/{}", name),
+                content_type: mime.clone(), size: data.len() as i64, extracted_content: None,
+            }
+        }).collect();
 
         if let Some(id) = conv_id {
             visible_messages.with_mut(|messages| {
@@ -274,7 +281,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                     role: "user".to_string(),
                     content: val.clone(),
                     created_at: chrono::Utc::now().naive_utc(),
-                    attachments: vec![],
+                    attachments: optimistic_attachments.clone(),
                     hide_evidence: false,
                 });
             });
@@ -296,7 +303,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                             role: "user".to_string(),
                             content: val.clone(),
                             created_at: chrono::Utc::now().naive_utc(),
-                            attachments: vec![],
+                            attachments: optimistic_attachments.clone(),
                             hide_evidence: false,
                         }]);
                         id

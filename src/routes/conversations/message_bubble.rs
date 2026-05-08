@@ -44,6 +44,7 @@ pub fn MessageBubble(msg: backend::Message, on_copy: EventHandler<String>) -> El
 #[component]
 fn UserBubble(msg: backend::Message, on_copy: EventHandler<String>) -> Element {
     let content = msg.content.clone();
+    let attachments = msg.attachments.clone();
     rsx! {
         div { class: "flex items-start gap-4 flex-row-reverse",
             div { class: "size-8 shrink-0 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shadow-soft",
@@ -52,6 +53,13 @@ fn UserBubble(msg: backend::Message, on_copy: EventHandler<String>) -> Element {
             div { class: "group relative max-w-[85%] text-right",
                 div { class: "bg-[var(--user-bubble)] p-4 rounded-2xl rounded-tl-none border border-slate-200 text-sm shadow-bubble",
                     p { class: "select-text", "{content}" }
+                }
+                if !attachments.is_empty() {
+                    div { class: "mt-2 flex flex-wrap gap-2 justify-end",
+                        for att in attachments {
+                            AttachmentPreview { att }
+                        }
+                    }
                 }
                 button { class: "absolute -left-10 top-2 p-1.5 opacity-0 group-hover:opacity-100 transition-all shadow-sm", onclick: move |_| on_copy.call(content.clone()),
                     MaterialIcon { name: "content_copy", size: 16 }
