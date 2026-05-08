@@ -64,3 +64,12 @@ category = "DeveloperTool"
 product_name = "Overseer"
 publisher = "Revaycolizer"
 channel = "stable"
+
+[profile.release]
+opt-level = "s"
+debug = false
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+incremental = false
