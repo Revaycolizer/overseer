@@ -60,7 +60,7 @@ async fn invoke_vision_assistant(
         
         // ARCHITECTURE V3.6: GUIDED PERCEPTION
         let prompt = if let Some(q) = query {
-            format!("Analyze the image with focus on answering this user request: '{}'. If the user asks a specific question, respond ONLY with the answer to that question. Do NOT provide a generic description unless needed for context.", q)
+            format!("Analyze the image to provide context for this user request: '{}'. Describe relevant parts of the image that help answer the question, but remain a descriptive observer. Avoid answering the user directly if possible; provide the grounding data instead.", q)
         } else {
             "Describe this image in detail and identify key data points.".to_string()
         };

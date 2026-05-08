@@ -12,7 +12,11 @@ pub async fn build_history(
     user_query: &str,
 ) -> Vec<Message> {
     let mut history = Vec::new();
-    for m in messages {
+    let msg_count = messages.len();
+    
+    for (i, m) in messages.into_iter().enumerate() {
+        let is_current = i == msg_count - 1;
+        
         if m.role == "user" {
             let content_text = strip_internal_message_markers(&m.content);
             let mut contents = vec![UserContent::text(
@@ -20,16 +24,20 @@ pub async fn build_history(
             )];
 
             for att in m.attachments {
-                let media_content = if let Some(cached) = att.extracted_content {
-                    cached
+                let media_content = if is_current {
+                    if att.extracted_content.is_none() {
+                        let generic = media::process_attachment(db, ollama_client, &att.file_path, None).await;
+                        let _ = crate::backend::update_attachment_content(db, att.id, &generic).await;
+                    }
+                    media::process_attachment(db, ollama_client, &att.file_path, Some(user_query)).await
                 } else {
-                    // ARCHITECTURE V3.6: TARGETED PERCEPTION
-                    // Pass the current user query to guide the vision agent.
-                    let extracted = media::process_attachment(
-                        db, ollama_client, &att.file_path, Some(user_query)
-                    ).await;
-                    let _ = crate::backend::update_attachment_content(db, att.id, &extracted).await;
-                    extracted
+                    if let Some(cached) = att.extracted_content {
+                        cached
+                    } else {
+                        let extracted = media::process_attachment(db, ollama_client, &att.file_path, None).await;
+                        let _ = crate::backend::update_attachment_content(db, att.id, &extracted).await;
+                        extracted
+                    }
                 };
 
                 contents.push(UserContent::text(format!(
