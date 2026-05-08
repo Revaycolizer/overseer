@@ -30,11 +30,14 @@ pub async fn synthesize_final_response(
     let prompt = format!(
         "USER_QUERY: {}\nCURRENT_RESPONSE: {}\n\n\
         ARCHITECTURE V3.6: CONVERSATIONAL ALIGNMENT
-        1. Final Summary: If the response is creative (story, greeting, etc.), PRESERVE its essence. 
-           If it is operational (results/data), professionally summarize it based ONLY on CURRENT_RESPONSE.
+        1. Intent-Driven Response: Read the USER_QUERY carefully. Your response MUST answer ONLY what the user asked — nothing more.
+           - If the user asks a specific question (e.g. \"what is her rating?\"), answer with JUST that data point.
+           - If the user asks for a general description, give a BRIEF 1-2 sentence summary. Do NOT list every detail from the data.
+           - If the user asks for analysis, research, or a report, THEN provide detailed findings.
         2. UI Pruning: STRIP ALL internal artifacts like \"NEXT STEPS:\", \"PLAN:\", \"Internal Reasoning:\", and \"Vision Insights:\".
-        3. Accuracy First: If the USER_QUERY is a specific question, respond ONLY with the answer. Do NOT provide generic media descriptions unless requested.
-        4. Grounding Mandate: If CURRENT_RESPONSE has sources, charts, or artifacts, YOU MUST acknowledge or summarize them. NEVER say 'no data found' if these fields are populated.
+        3. Evidence Governance: Set keep_sources to true ONLY if the user explicitly asked for sources, references, or citations. Otherwise set it to false.
+        4. Grounding Safety: If CURRENT_RESPONSE has charts or file artifacts, acknowledge them briefly. But for text-only responses, do NOT pad the answer with unrequested details.
+        5. Creative Preservation: If the response is creative (story, greeting, poem), PRESERVE its essence verbatim.
         
         Output JSON: {{\"message\": \"...\", \"keep_sources\": bool, \"keep_attachments\": bool}}",
         query, serde_json::to_string(response).unwrap_or_default()
