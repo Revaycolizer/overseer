@@ -75,7 +75,7 @@ impl PartialEq for Database {
 impl Database {
     pub async fn new() -> anyhow::Result<Self> {
         let db_url = "sqlite:overseer.db?mode=rwc";
-        println!("🚀 Connecting to SQLite at {}...", db_url);
+        //println!("🚀 Connecting to SQLite at {}...", db_url);
 
         let mut connection_options = SqliteConnectOptions::from_str(db_url)?
             .journal_mode(SqliteJournalMode::Wal)
@@ -87,7 +87,7 @@ impl Database {
             .log_statements(log::LevelFilter::Off)
             .log_slow_statements(log::LevelFilter::Warn, std::time::Duration::from_secs(30));
 
-        println!("📜 Running database migrations (Internal Connection)...");
+       // println!("📜 Running database migrations (Internal Connection)...");
         let pool = SqlitePoolOptions::new()
             .max_connections(1) // Single connection for SQLite is often faster and avoids locks
             .acquire_timeout(std::time::Duration::from_secs(30))
@@ -146,7 +146,7 @@ impl Database {
 
         // Pool is already created above and migrated
 
-        println!("📂 Initializing LanceDB...");
+        //println!("📂 Initializing LanceDB...");
         let generator = SnowflakeIdGenerator::new(1, 1);
         let database = Self {
             pool: pool.clone(),
@@ -159,9 +159,9 @@ impl Database {
             .await
             .context("failed to seed or normalize database content")?;
 
-        println!("🏗️  Staging tools to runtime environment...");
+        //println!("🏗️  Staging tools to runtime environment...");
         if let Err(e) = crate::engine::utils::discovery::prepare_runtime_env(&database).await {
-            println!("⚠️  Tool runtime staging failed: {}", e);
+            //println!("⚠️  Tool runtime staging failed: {}", e);
             let _ =
                 crate::backend::set_setting(&database, "runtime_registry_status", "error").await;
             let _ = crate::backend::set_setting(
@@ -184,22 +184,22 @@ impl Database {
             let _ = crate::backend::set_setting(&database, "runtime_registry_error", "").await;
         }
 
-        println!("✨ Database initialization complete.");
+        //println!("✨ Database initialization complete.");
         Ok(database)
     }
 
     async fn seed_all(&self) -> anyhow::Result<()> {
-        println!("🌱 Initializing v10 Database Environment...");
+        //println!("🌱 Initializing v10 Database Environment...");
         self.ensure_core_registry_seeded().await?;
         self.ensure_setting_defaults().await?;
         self.backfill_ids().await?;
 
         #[cfg(feature = "memory")]
         {
-            println!("🧠 Syncing agents to vector database for semantic discovery...");
+            //println!("🧠 Syncing agents to vector database for semantic discovery...");
             let client = reqwest::Client::new();
             if let Err(e) = self.sync_agents_to_vector_db(&client).await {
-                eprintln!("⚠️ Failed to sync agents to vector DB: {}", e);
+                //eprintln!("⚠️ Failed to sync agents to vector DB: {}", e);
             }
         }
 
@@ -312,7 +312,7 @@ impl Database {
             // return Ok(()); // Allow updates to existing agents
         }
 
-        println!("🌱 Seeding authentic agents from configs and codebase...");
+        //println!("🌱 Seeding authentic agents from configs and codebase...");
 
         let mut agents_data = Vec::new();
 
@@ -475,7 +475,7 @@ impl Database {
             return Ok(());
         }
 
-        println!("🛠️ Seeding ALL authentic tools from filesystem...");
+       // println!("🛠️ Seeding ALL authentic tools from filesystem...");
         let mut tools_data = Vec::new();
 
         let script_dirs = ["web", "stealth", "desktop"];
@@ -635,7 +635,7 @@ impl Database {
             return Ok(());
         }
 
-        println!("🔗 Linking agents and tools with comprehensive mappings...");
+      //  println!("🔗 Linking agents and tools with comprehensive mappings...");
         let mut tx = self.pool.begin().await?;
 
         let mappings = vec![
@@ -712,7 +712,7 @@ impl Database {
             .fetch_one(&self.pool)
             .await?;
 
-        println!("🛸 Seeding dynamic supervisors...");
+       // println!("🛸 Seeding dynamic supervisors...");
         let supervisors = vec![
             (
                 "Web Supervisor",
@@ -856,7 +856,7 @@ impl Database {
             return Ok(());
         }
 
-        println!("🌱 Seeding Planners...");
+        //println!("🌱 Seeding Planners...");
         let planners = vec![
             (
                 "Web Planner",
@@ -914,7 +914,7 @@ impl Database {
 
         let mut tx = conn.begin().await?;
 
-        println!("🔄 Backfilling Missing Snowflake IDs...");
+       // println!("🔄 Backfilling Missing Snowflake IDs...");
 
         // 1. Backfill settings
         let settings_to_backfill: Vec<(String,)> =
@@ -968,7 +968,7 @@ impl Database {
                 .execute(&mut *tx)
                 .await?;
 
-            println!("✅ Migrated agent ID {} -> {}", old_id, new_id);
+        //    println!("✅ Migrated agent ID {} -> {}", old_id, new_id);
         }
 
         tx.commit().await?;

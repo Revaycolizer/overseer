@@ -48,13 +48,13 @@ pub async fn synthesize_final_response(
 
     if let Ok(res_text) = agent.chat(prompt, history).await {
         if let Some(v) = extract_json_from_llm_output(&res_text) {
-            println!("✅ [Synthesizer] JSON parsed successfully, applying UI governance.");
+           // println!("✅ [Synthesizer] JSON parsed successfully, applying UI governance.");
             apply_synthesis(response, &v);
         } else {
-            println!("⚠️ [Synthesizer] JSON parse FAILED on LLM output, response passes through unmodified. Raw: {:.200}", res_text);
+            //println!("⚠️ [Synthesizer] JSON parse FAILED on LLM output, response passes through unmodified. Raw: {:.200}", res_text);
         }
     } else {
-        println!("❌ [Synthesizer] LLM call failed, response passes through unmodified.");
+       // println!("❌ [Synthesizer] LLM call failed, response passes through unmodified.");
     }
 }
 

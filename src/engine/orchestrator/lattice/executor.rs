@@ -88,6 +88,6 @@ pub async fn execute_macro_tasks(
     synthesizer::synthesize_final_response(db, ollama_client, history.to_vec(), &mut master_response, has_research, _query).await;
 
     let final_json = serde_json::to_string(&master_response).unwrap_or_default();
-    println!("📦 FINAL ORCHESTRATOR RESPONSE: {}", final_json);
+  //  println!("📦 FINAL ORCHESTRATOR RESPONSE: {}", final_json);
     final_json
 }
