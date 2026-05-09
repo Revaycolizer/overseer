@@ -1,19 +1,44 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::MaterialIcon;
+use sysinfo::System;
 
 #[component]
 pub fn Widgets() -> Element {
-    let mut efficiency = use_signal(|| 98u8);
-    let mut temp = use_signal(|| 21i8);
+    let mut efficiency = use_signal(|| "Calculating...".to_string());
+    let mut weather = use_signal(|| "Syncing...".to_string());
+    let mut condition = use_signal(|| "Detecting...".to_string());
 
+    // Weather Update
     use_future(move || async move {
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-            // Use basic random with modulo for simplicity and compatibility
-            let eff_val = (rand::random::<u8>() % 6) + 94; // 94-99
-            let temp_val = (rand::random::<i8>() % 7).abs() + 18; // 18-24
-            efficiency.set(eff_val);
-            temp.set(temp_val);
+            // Fetch real weather from wttr.in (IP-based)
+            if let Ok(response) = reqwest::get("https://wttr.in/?format=%t|%C").await {
+                if let Ok(text) = response.text().await {
+                    let parts: Vec<&str> = text.split('|').collect();
+                    if parts.len() == 2 {
+                        weather.set(parts[0].trim().to_string());
+                        condition.set(parts[1].trim().to_string());
+                    }
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1800)).await; // 30 mins
+        }
+    });
+
+    // Efficiency Update (Real System Stats)
+    use_future(move || async move {
+        let mut sys = System::new_all();
+        loop {
+            sys.refresh_cpu_usage();
+            // Wait a bit for accurate reading
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            sys.refresh_cpu_usage();
+            
+            let cpu_load = sys.global_cpu_usage();
+            let eff = 100.0 - cpu_load;
+            efficiency.set(format!("{:.0}%", eff));
+            
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
     });
 
@@ -22,8 +47,8 @@ pub fn Widgets() -> Element {
             Widget {
                 icon: "partly_cloudy_day",
                 label: "Weather",
-                value: format!("{temp}°C"),
-                sub: "Scattered Clouds".to_string()
+                value: weather.read().clone(),
+                sub: condition.read().clone()
             }
             Widget {
                 icon: "calendar_today",
@@ -35,7 +60,7 @@ pub fn Widgets() -> Element {
                 icon: "bolt",
                 label: "Efficiency",
                 value: "Optimal".to_string(),
-                sub: format!("{efficiency}%")
+                sub: efficiency.read().clone()
             }
         }
     }
