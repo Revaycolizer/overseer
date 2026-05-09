@@ -3,6 +3,7 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::MaterialIconStylesheet;
 mod backend;
+#[path = "db/mod.rs"]
 pub mod db;
 pub mod engine;
 mod routes;
