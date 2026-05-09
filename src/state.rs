@@ -9,14 +9,21 @@ pub struct GlobalState {
     pub agent_models: HashMap<String, String>,
     pub db: Arc<Database>,
     pub agent_system: Arc<crate::engine::system::AgentSystem>,
+    pub last_activity: Signal<u64>,
+    pub is_inhibited: Signal<bool>,
 }
 
 #[component]
 pub fn StateProvider(database: Arc<Database>, children: Element) -> Element {
+    let last_activity = use_signal(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+    let is_inhibited = use_signal(|| false);
+    
     let state = use_signal(move || GlobalState {
         agent_models: HashMap::new(),
         db: database.clone(),
         agent_system: Arc::new(crate::engine::system::AgentSystem::new((*database).clone())),
+        last_activity,
+        is_inhibited,
     });
 
     use_context_provider(|| state);

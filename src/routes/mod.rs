@@ -8,6 +8,8 @@ mod settings;
 mod supervisors_workshop;
 mod tools_workshop;
 mod workflow_automation;
+mod listening;
+mod system_idle_secure_lock_screen;
 
 pub use agents_workshop::AgentsWorkshop;
 pub use computer_control::ComputerControl;
@@ -18,3 +20,5 @@ pub use settings::Settings;
 pub use supervisors_workshop::SupervisorsWorkshop;
 pub use tools_workshop::ToolsWorkshop;
 pub use workflow_automation::WorkflowAutomation;
+pub use listening::Listening;
+pub use system_idle_secure_lock_screen::SystemIdleSecureLockScreen;

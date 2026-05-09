@@ -44,6 +44,7 @@ charming = { version = "0.6.0", features = ["ssr"] }
 urlencoding = "2.1"
 dirs = "6.0"
 pdf-extract = "0.7"
+dioxus-desktop = "0.7.9"
 
 
 [features]

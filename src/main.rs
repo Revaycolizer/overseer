@@ -12,34 +12,36 @@ mod state;
 use crate::db::Database;
 use routes::{
     AgentsWorkshop, ComputerControl, Conversations, Layout, PlannersWorkshop, Settings,
-    SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation,
+    SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation, Listening, SystemIdleSecureLockScreen
 };
 use state::StateProvider;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Routable, PartialEq)]
-#[rustfmt::skip]
 enum Route {
+    #[layout(IdleWatcher)]
     #[layout(Layout)]
-        #[route("/")]
-        Conversations {},
-        #[route("/agents")]
-        AgentsWorkshop {},
-        #[route("/workflows")]
-        WorkflowAutomation {},
-        #[route("/tools")]
-        ToolsWorkshop {},
-        #[route("/computer")]
-        ComputerControl {},
-        #[route("/supervisors")]
-        SupervisorsWorkshop {},
-        #[route("/planners")]
-        PlannersWorkshop {},
-        #[route("/settings")]
-        Settings {},
+    #[route("/")]
+    Conversations {},
+    #[route("/agents")]
+    AgentsWorkshop {},
+    #[route("/workflows")]
+    WorkflowAutomation {},
+    #[route("/tools")]
+    ToolsWorkshop {},
+    #[route("/computer")]
+    ComputerControl {},
+    #[route("/supervisors")]
+    SupervisorsWorkshop {},
+    #[route("/planners")]
+    PlannersWorkshop {},
+    #[route("/settings")]
+    Settings {},
     #[end_layout]
-    #[route("/blog/:id")]
-    Blog { id: i32 },
+    #[route("/listening")]
+    Listening {},
+    #[route("/idle")]
+    SystemIdleSecureLockScreen {},
 }
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
@@ -97,6 +99,10 @@ fn App() -> Element {
         document::Link { rel: "icon", href: ICON_PNG }
         document::Stylesheet { href: MAIN_CSS }
         document::Stylesheet { href: TAILWIND_CSS }
+
+        // PrismJS for Syntax Highlighting
+        document::Link { rel: "stylesheet", href: PRISM_CSS }
+        document::Script { src: PRISM_BUNDLE_JS }
 
         // PrismJS for Syntax Highlighting
         document::Link { rel: "stylesheet", href: PRISM_CSS }
@@ -183,73 +189,113 @@ fn App() -> Element {
 }
 
 #[component]
-pub fn Hero() -> Element {
-    rsx! {
-        div {
-            id: "hero",
-            img { src: HEADER_SVG, id: "header" }
-            div { id: "links",
-                a { href: "https://dioxuslabs.com/learn/0.7/", "📚 Learn Dioxus" }
-                a { href: "https://dioxuslabs.com/awesome", "🚀 Awesome Dioxus" }
-                a { href: "https://github.com/dioxus-community/", "📡 Community Libraries" }
-                a { href: "https://github.com/DioxusLabs/sdk", "⚙️ Dioxus Development Kit" }
-                a { href: "https://marketplace.visualstudio.com/items?itemName=DioxusLabs.dioxus", "💫 VSCode Extension" }
-                a { href: "https://discord.gg/XgGxMSkvUM", "👋 Community Discord" }
+pub fn IdleWatcher() -> Element {
+    let nav = use_navigator();
+    let route = use_route::<Route>();
+    let state = use_context::<Signal<crate::state::GlobalState>>();
+
+    let timer_route = route.clone();
+    let timer_nav = nav.clone();
+
+    let mut idle_time = use_signal(|| 0u64);
+
+    // Idle Timer Loop
+    use_future(move || {
+        let tn = timer_nav.clone();
+        async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                
+                let (last, inhibited) = {
+                    let s = state.peek();
+                    let last_val = *s.last_activity.peek();
+                    let inhib_val = *s.is_inhibited.peek();
+                    (last_val, inhib_val)
+                };
+                
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+
+                idle_time.set(now - last);
+
+                // For testing, we use 10 seconds. In production, this should be 300 (5 mins).
+                if !inhibited && (now - last) >= 10 { 
+                    tn.push(Route::SystemIdleSecureLockScreen {});
+                }
             }
+        }
+    });
+
+    let mut entered_idle_at = use_signal(|| 0u64);
+
+    // Sync idle entry time without use_effect to ensure it's always up to date with the render cycle
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    if let Route::SystemIdleSecureLockScreen {} = route {
+        if *entered_idle_at.peek() == 0 {
+            entered_idle_at.set(now);
+        }
+    } else if *entered_idle_at.peek() != 0 {
+        entered_idle_at.set(0);
+    }
+
+    rsx! {
+        div { 
+            class: "h-screen w-screen relative overflow-hidden",
+            onmousedown: {
+                let route = route.clone();
+                let nav = nav.clone();
+                let state = state.clone();
+                move |_| {
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                    let mut last_activity = state.peek().last_activity;
+                    last_activity.set(now);
+                    if let Route::SystemIdleSecureLockScreen {} = route {
+                        if now - *entered_idle_at.peek() > 3 {
+                            nav.push(Route::Conversations {});
+                        }
+                    }
+                }
+            },
+            onkeydown: {
+                let route = route.clone();
+                let nav = nav.clone();
+                let state = state.clone();
+                move |_| {
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                    let mut last_activity = state.peek().last_activity;
+                    last_activity.set(now);
+                    if let Route::SystemIdleSecureLockScreen {} = route {
+                        if now - *entered_idle_at.peek() > 3 {
+                            nav.push(Route::Conversations {});
+                        }
+                    }
+                }
+            },
+            onmousemove: {
+                let route = route.clone();
+                let nav = nav.clone();
+                let state = state.clone();
+                move |_| {
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                    let mut last_activity = state.peek().last_activity;
+                    last_activity.set(now);
+                    if let Route::SystemIdleSecureLockScreen {} = route {
+                        if now - *entered_idle_at.peek() > 3 {
+                            nav.push(Route::Conversations {});
+                        }
+                    }
+                }
+            },
+
+            // Hidden Debug Timer (visible only in dev)
+            div { class: "fixed bottom-0 right-0 p-1 text-[8px] opacity-10 pointer-events-none z-[9999]",
+                "IDLE: {idle_time}s | GRACE: {std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() - *entered_idle_at.peek()}s"
+            }
+            
+            Outlet::<Route> {}
         }
     }
 }
 
-/// Home page
-#[component]
-fn Home() -> Element {
-    rsx! {
-        Hero {}
-
-    }
-}
-
-/// Blog page
-#[component]
-pub fn Blog(id: i32) -> Element {
-    rsx! {
-        div {
-            id: "blog",
-
-            // Content
-            h1 { "This is blog #{id}!" }
-            p { "In blog #{id}, we show how the Dioxus router works and how URL parameters can be passed as props to our route components." }
-
-            // Navigation links
-            Link {
-                to: Route::Blog { id: id - 1 },
-                "Previous"
-            }
-            span { " <---> " }
-            Link {
-                to: Route::Blog { id: id + 1 },
-                "Next"
-            }
-        }
-    }
-}
-
-/// Shared navbar component.
-#[component]
-fn Navbar() -> Element {
-    rsx! {
-        div {
-            id: "navbar",
-            Link {
-                to: Route::Conversations {},
-                "Home"
-            }
-            Link {
-                to: Route::Blog { id: 1 },
-                "Blog"
-            }
-        }
-
-        Outlet::<Route> {}
-    }
-}
