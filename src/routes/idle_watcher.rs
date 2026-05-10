@@ -13,6 +13,7 @@ pub fn IdleWatcher() -> Element {
     let mut idle_time = use_signal(|| 0u64);
 
     use_future(move || {
+        crate::engine::voice::wake_word::start_wake_word_listener();
         let nav = nav.clone();
         async move {
             loop {
