@@ -1,4 +1,5 @@
 pub mod discovery;
+pub mod system_idle;
 
 use rig::tool::Tool;
 use tokio::process::Command;
