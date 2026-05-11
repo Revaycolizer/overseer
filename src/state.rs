@@ -13,6 +13,7 @@ pub struct GlobalState {
     pub is_inhibited: Signal<bool>,
     pub is_listening: Signal<bool>,
     pub voice_enabled: Signal<bool>,
+    pub has_trained_voice: Signal<bool>,
 }
 
 #[component]
@@ -21,6 +22,7 @@ pub fn StateProvider(database: Arc<Database>, children: Element) -> Element {
     let is_inhibited = use_signal(|| false);
     let is_listening = use_signal(|| false);
     let voice_enabled = use_signal(|| true);
+    let has_trained_voice = use_signal(|| false);
     
     let state = use_signal(move || GlobalState {
         agent_models: HashMap::new(),
@@ -30,6 +32,7 @@ pub fn StateProvider(database: Arc<Database>, children: Element) -> Element {
         is_inhibited,
         is_listening,
         voice_enabled,
+        has_trained_voice,
     });
 
     use_context_provider(|| state);

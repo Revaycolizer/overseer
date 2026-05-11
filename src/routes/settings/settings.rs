@@ -4,6 +4,7 @@ use dioxus_material_icons::MaterialIcon;
 #[component]
 pub fn Settings() -> Element {
     let state = crate::state::use_global_state();
+    let nav = use_navigator();
     let db = state.read().db.clone();
     let settings_db = db.clone();
     let health_db = db.clone();
@@ -552,6 +553,22 @@ pub fn Settings() -> Element {
                                         r#type: "checkbox",
                                     }
                                     div { class: "w-14 h-8 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600" }
+                                }
+                            }
+
+                            div { class: "group flex items-center justify-between p-6 rounded-2xl bg-white/75 transition-all duration-200",
+                                div {
+                                    p { class: "text-base font-bold text-slate-900 block mb-1",
+                                        "Voice Calibration"
+                                    }
+                                    p { class: "text-sm text-slate-500",
+                                        "Train Overseer to recognize your voice for wake-word activation."
+                                    }
+                                }
+                                button { 
+                                    class: "bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-100 transition-all",
+                                    onclick: move |_| { nav.push(crate::Route::VoiceTraining {}); },
+                                    "Calibrate"
                                 }
                             }
 

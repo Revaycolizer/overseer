@@ -26,3 +26,4 @@ pub use listening::Listening;
 pub use system_idle_secure_lock_screen::SystemIdleSecureLockScreen;
 pub use idle_watcher::IdleWatcher;
 pub use root::App;
+pub use settings::VoiceTraining;

@@ -12,9 +12,11 @@ pub fn IdleWatcher() -> Element {
     let mut entered_idle_at = use_signal(|| 0u64);
     let mut idle_time = use_signal(|| 0u64);
 
+    let route_for_future = route.clone();
     use_future(move || {
         crate::engine::voice::wake_word::start_wake_word_listener();
         let nav = nav.clone();
+        let route = route_for_future.clone();
         async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -30,10 +32,16 @@ pub fn IdleWatcher() -> Element {
                         nav.push(Route::SystemIdleSecureLockScreen {});
                     }
                 } else if *entered_idle_at.peek() != 0 {
-                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-                    if now - *entered_idle_at.peek() > 2 {
+                    // Only exit if we are currently on the idle screen
+                    if let Route::SystemIdleSecureLockScreen {} = route {
+                        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                        if now - *entered_idle_at.peek() > 2 {
+                            entered_idle_at.set(0);
+                            nav.push(Route::Conversations {});
+                        }
+                    } else {
+                        // If we are already elsewhere, just reset the tracker
                         entered_idle_at.set(0);
-                        nav.push(Route::Conversations {});
                     }
                 }
             }

@@ -17,5 +17,7 @@ overseer_files/assistant-*.png
 /assets/exports/
 /db.sqlite3
 /software.md
+/assets/voice/
+
 
 

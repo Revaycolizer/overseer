@@ -11,7 +11,7 @@ mod state;
 use routes::{
     AgentsWorkshop, App, ComputerControl, Conversations, Layout, PlannersWorkshop, Settings,
     SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation, Listening, SystemIdleSecureLockScreen,
-    IdleWatcher
+    IdleWatcher, VoiceTraining
 };
 
 #[derive(Debug, Clone, Routable, PartialEq)]
@@ -34,6 +34,8 @@ pub enum Route {
             PlannersWorkshop {},
             #[route("/settings")]
             Settings {},
+            #[route("/settings/voice-training")]
+            VoiceTraining {},
         #[end_layout]
         #[route("/listening")]
         Listening {},
