@@ -24,7 +24,7 @@ pub fn IdleWatcher() -> Element {
                     state.write().is_inhibited.set(true);
                     state.write().voice_transcript.set(None);
                     state.write().voice_result.set(None);
-                    nav.push(Route::Listening {});
+                    nav.push(Route::ComputerControl {});
                     crate::engine::voice::tts::speak_locally("How can I help you?");
                     continue;
                 }
