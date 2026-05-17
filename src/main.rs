@@ -9,9 +9,9 @@ mod routes;
 mod state;
 
 use routes::{
-    AgentsWorkshop, App, ComputerControl, Conversations, Layout, PlannersWorkshop, Settings,
-    SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation, Listening, SystemIdleSecureLockScreen,
-    IdleWatcher, VoiceTraining
+    AgentsWorkshop, App, ComputerControl, Conversations, DeviceControl, Layout, PlannersWorkshop,
+    Settings, SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation, Listening,
+    SystemIdleSecureLockScreen, IdleWatcher, VoiceTraining
 };
 
 #[derive(Debug, Clone, Routable, PartialEq)]
@@ -28,6 +28,8 @@ pub enum Route {
             ToolsWorkshop {},
             #[route("/computer")]
             ComputerControl {},
+            #[route("/device")]
+            DeviceControl {},
             #[route("/supervisors")]
             SupervisorsWorkshop {},
             #[route("/planners")]

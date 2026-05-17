@@ -1,6 +1,7 @@
 mod agents_workshop;
 mod computer_control;
 mod conversations;
+mod device_control;
 mod execution_trace;
 mod layout;
 mod planners_workshop;
@@ -16,6 +17,7 @@ mod root;
 pub use agents_workshop::AgentsWorkshop;
 pub use computer_control::ComputerControl;
 pub use conversations::Conversations;
+pub use device_control::DeviceControl;
 pub use layout::Layout;
 pub use planners_workshop::PlannersWorkshop;
 pub use settings::Settings;
