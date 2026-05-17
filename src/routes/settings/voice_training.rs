@@ -22,14 +22,14 @@ pub fn VoiceTraining() -> Element {
                     record_sample()
                 }).await;
 
-                if let Ok(Ok(sample)) = result {
-                    samples.push(sample);
-                    let next_step = current_step.peek().clone() + 1;
-                    current_step.set(next_step);
-                    
-                    if next_step >= 5 {
+                if let Ok(Ok(s)) = result {
+                    samples.push(s);
+                    let step = current_step.peek().clone() + 1;
+                    current_step.set(step);
+                    if step >= 5 {
                         let _ = save_personal_wakeword(samples.cloned(), "assets/voice/models/personal.rpw");
                         state.write().has_trained_voice.set(true);
+                        crate::engine::voice::wake_word::restart_wake_word_listener();
                         nav.push(Route::Settings {});
                     }
                 }
@@ -42,9 +42,7 @@ pub fn VoiceTraining() -> Element {
         div { class: "flex-1 flex flex-col min-h-0 bg-slate-50 items-center justify-center p-6",
             div { class: "max-w-md w-full bg-white rounded-3xl shadow-xl p-8 space-y-8 text-center",
                 div { class: "space-y-2",
-                    div { class: "mx-auto w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-4",
-                        MaterialIcon { name: "mic", size: 32 }
-                    }
+                    div { class: "mx-auto w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-4", MaterialIcon { name: "mic", size: 32 } }
                     h2 { class: "text-2xl font-black text-slate-900", "Voice Calibration" }
                     p { class: "text-slate-500 text-sm", "Say \"Hello Overseer\" clearly to train your personal wake-word model." }
                 }
