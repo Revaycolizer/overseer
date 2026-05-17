@@ -6,6 +6,7 @@ use crate::state::use_global_state;
 #[component]
 pub fn Header() -> Element {
     let mut state = use_global_state();
+    super::speech::use_speech_recognition(state);
     let transcript = state.read().voice_transcript.read().clone();
     let result = state.read().voice_result.read().clone();
     let mut input_text = use_signal(String::new);

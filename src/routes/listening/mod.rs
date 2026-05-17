@@ -5,6 +5,7 @@ mod header;
 mod log_list;
 mod monitor_sidebar;
 mod waveform;
+pub mod speech;
 
 use header::Header;
 use log_list::LogList;
