@@ -112,9 +112,18 @@ pub fn SupervisorPanel(
 
             // Bottom System Telemetry bar
             div { class: "border-t border-slate-200 pt-4 flex items-center justify-between text-[10px] font-mono text-slate-500 uppercase tracking-widest bg-white -mx-5 -mb-5 px-5 py-4",
-                p { "CPU: <span class='text-slate-800 font-bold'>12%</span>" }
-                p { "RAM: <span class='text-slate-400 font-bold'>4.2GB</span>" }
-                p { "NET: <span class='text-slate-400 font-bold'>42ms</span>" }
+                p {
+                    "CPU: "
+                    span { class: "text-slate-800 font-bold", "12%" }
+                }
+                p {
+                    "RAM: "
+                    span { class: "text-slate-400 font-bold", "4.2GB" }
+                }
+                p {
+                    "NET: "
+                    span { class: "text-slate-400 font-bold", "42ms" }
+                }
             }
         }
     }

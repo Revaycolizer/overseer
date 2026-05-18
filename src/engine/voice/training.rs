@@ -48,31 +48,86 @@ pub fn rebuild_model_if_needed(out: &str) -> anyhow::Result<bool> {
 pub fn record_sample() -> anyhow::Result<VoiceSample> {
     let host = cpal::default_host();
     let device = host.default_input_device().ok_or_else(|| anyhow::anyhow!("No input device"))?;
-    let stream_config = cpal::StreamConfig { channels: 1, sample_rate: 16000, buffer_size: cpal::BufferSize::Default };
-    let sample_rate = 16000u32;
-    let rb = HeapRb::<f32>::new(sample_rate as usize * 4);
+    
+    let native_config = device.default_input_config().map_err(|e| anyhow::anyhow!(e))?;
+    let sample_format = native_config.sample_format();
+    let stream_config = native_config.config();
+    
+    let native_rate = stream_config.sample_rate as f32;
+    let target_rate = 16000.0f32;
+    let step = native_rate / target_rate;
+    let channels = stream_config.channels as usize;
+    
+    let rb = HeapRb::<f32>::new(16000 * 4);
     let (mut prod, mut cons) = rb.split();
-    let stream = device.build_input_stream(&stream_config, move |data: &[f32], _: &_| {
-        for &s in data { let _ = prod.push(s); }
-    }, |err| eprintln!("Audio stream error: {}", err), None)?;
+
+    let stream = match sample_format {
+        cpal::SampleFormat::F32 => {
+            let mut resample_index = 0.0f32;
+            let mut prev_sample = 0.0f32;
+            device.build_input_stream(&stream_config, move |data: &[f32], _: &_| {
+                let mono: Vec<f32> = if channels > 1 {
+                    data.chunks_exact(channels)
+                        .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
+                        .collect()
+                } else {
+                    data.to_vec()
+                };
+                for sample in mono {
+                    while resample_index < 1.0 {
+                        let interpolated = prev_sample + resample_index * (sample - prev_sample);
+                        let _ = prod.push(interpolated);
+                        resample_index += step;
+                    }
+                    resample_index -= 1.0;
+                    prev_sample = sample;
+                }
+            }, |err| eprintln!("Audio stream error: {}", err), None)?
+        }
+        cpal::SampleFormat::I16 => {
+            let mut resample_index = 0.0f32;
+            let mut prev_sample = 0.0f32;
+            device.build_input_stream(&stream_config, move |data: &[i16], _: &_| {
+                let mono: Vec<f32> = if channels > 1 {
+                    data.chunks_exact(channels)
+                        .map(|chunk| chunk.iter().map(|&s| s as f32 / 32768.0).sum::<f32>() / channels as f32)
+                        .collect()
+                } else {
+                    data.iter().map(|&s| s as f32 / 32768.0).collect()
+                };
+                for sample in mono {
+                    while resample_index < 1.0 {
+                        let interpolated = prev_sample + resample_index * (sample - prev_sample);
+                        let _ = prod.push(interpolated);
+                        resample_index += step;
+                    }
+                    resample_index -= 1.0;
+                    prev_sample = sample;
+                }
+            }, |err| eprintln!("Audio stream error: {}", err), None)?
+        }
+        _ => return Err(anyhow::anyhow!("Unsupported audio format")),
+    };
+
     stream.play()?;
     std::thread::sleep(std::time::Duration::from_millis(3000));
     drop(stream);
+
     let mut captured_data = Vec::new();
     while let Some(s) = cons.pop() { captured_data.push(s); }
-    if captured_data.is_empty() { return Ok(VoiceSample { data: captured_data, sample_rate }); }
+    if captured_data.is_empty() { return Ok(VoiceSample { data: captured_data, sample_rate: 16000 }); }
 
     // 1. Remove DC offset
     let mean: f32 = captured_data.iter().sum::<f32>() / captured_data.len() as f32;
     for s in &mut captured_data { *s -= mean; }
 
-    // 2. Double-ended silence trimming with 100ms padding
-    let first = captured_data.iter().position(|&s| s.abs() >= 0.015).unwrap_or(0);
-    let last = captured_data.iter().rposition(|&s| s.abs() >= 0.015).unwrap_or(captured_data.len() - 1);
+    // 2. Double-ended silence trimming with 150ms padding
+    let first = captured_data.iter().position(|&s| s.abs() >= 0.010).unwrap_or(0);
+    let last = captured_data.iter().rposition(|&s| s.abs() >= 0.010).unwrap_or(captured_data.len() - 1);
     let trimmed = if first < last {
-        captured_data[first.saturating_sub(1600)..=std::cmp::min(last + 1600, captured_data.len() - 1)].to_vec()
+        captured_data[first.saturating_sub(2400)..=std::cmp::min(last + 2400, captured_data.len() - 1)].to_vec()
     } else {
         captured_data
     };
-    Ok(VoiceSample { data: trimmed, sample_rate })
+    Ok(VoiceSample { data: trimmed, sample_rate: 16000 })
 }

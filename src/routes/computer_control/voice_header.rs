@@ -18,9 +18,15 @@ pub fn VoiceHeader(is_listening: bool, on_terminate: Callback<()>) -> Element {
                     h1 { class: "text-2xl font-black text-slate-800 tracking-tight", "Listening..." }
                 }
                 div { class: "flex items-center gap-4 text-xs font-bold text-slate-500 font-mono",
-                    span { "Uptime: <span class='text-slate-800 font-bold'>14h 22m</span>" }
+                    span {
+                        "Uptime: "
+                        span { class: "text-slate-800 font-bold", "14h 22m" }
+                    }
                     span { class: "text-slate-300", "|" }
-                    span { "SESSION: <span class='text-slate-800 font-bold'>AC-9921</span>" }
+                    span {
+                        "SESSION: "
+                        span { class: "text-slate-800 font-bold", "AC-9921" }
+                    }
                     button {
                         class: "ml-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/60 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all shadow-sm transform active:scale-95 text-[10px] font-black uppercase",
                         onclick: move |_| on_terminate.call(()),
@@ -77,9 +83,18 @@ pub fn TelemetrySummary(uptime: String, session_id: String) -> Element {
                 span { class: "bg-emerald-100 text-emerald-700 text-[8px] font-bold px-1.5 py-0.5 rounded tracking-wide uppercase", "Online" }
             }
             div { class: "space-y-1 text-slate-600 font-medium",
-                p { "Uptime: <span class='text-slate-900 font-bold'>\"{uptime}\"</span>" }
-                p { "Session: <span class='text-slate-900 font-bold'>\"{session_id}\"</span>" }
-                p { "Cluster: <span class='text-slate-900 font-bold'>\"US-East Node\"</span>" }
+                p {
+                    "Uptime: "
+                    span { class: "text-slate-900 font-bold", "\"{uptime}\"" }
+                }
+                p {
+                    "Session: "
+                    span { class: "text-slate-900 font-bold", "\"{session_id}\"" }
+                }
+                p {
+                    "Cluster: "
+                    span { class: "text-slate-900 font-bold", "\"US-East Node\"" }
+                }
             }
             p { class: "text-[8px] text-slate-400 font-bold uppercase tracking-wider", "Security Level: Shielded" }
         }

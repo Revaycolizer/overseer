@@ -15,14 +15,20 @@ pub fn ExecutionLog() -> Element {
             // Entry 1
             div { class: "space-y-2 border-l border-slate-200 pl-4 relative",
                 div { class: "absolute -left-[4.5px] top-1.5 w-2 h-2 rounded-full bg-blue-600 border border-slate-50" }
-                p { class: "text-[10px] text-slate-400", "[14:22:01] <span class='text-blue-600 font-bold'>INITIATE</span>" }
+                p { class: "text-[10px] text-slate-400 flex items-center gap-1",
+                    span { "[14:22:01]" }
+                    span { class: "text-blue-600 font-bold", "INITIATE" }
+                }
                 p { class: "text-slate-700 leading-relaxed font-medium", "Session: \"Market Analysis Automation\"" }
             }
 
             // Entry 2
             div { class: "space-y-2 border-l border-slate-200 pl-4 relative",
                 div { class: "absolute -left-[4.5px] top-1.5 w-2 h-2 rounded-full bg-emerald-500 border border-slate-50" }
-                p { class: "text-[10px] text-slate-400", "[14:22:05] <span class='text-emerald-600 font-bold'>ACTIVE</span>" }
+                p { class: "text-[10px] text-slate-400 flex items-center gap-1",
+                    span { "[14:22:05]" }
+                    span { class: "text-emerald-600 font-bold", "ACTIVE" }
+                }
                 p { class: "text-slate-700 font-medium", "AGENT: Opening Google Chrome..." }
                 div { class: "bg-white border border-slate-200 rounded-xl p-2.5 flex items-center justify-between mt-1 text-slate-500 shadow-sm",
                     span { class: "italic", "Searching..." }
@@ -33,7 +39,10 @@ pub fn ExecutionLog() -> Element {
             // Entry 3
             div { class: "space-y-2 border-l border-slate-200 pl-4 relative",
                 div { class: "absolute -left-[4.5px] top-1.5 w-2 h-2 rounded-full bg-indigo-500 border border-slate-50" }
-                p { class: "text-[10px] text-slate-400", "[14:23:12] <span class='text-indigo-600 font-bold'>PROCESS</span>" }
+                p { class: "text-[10px] text-slate-400 flex items-center gap-1",
+                    span { "[14:23:12]" }
+                    span { class: "text-indigo-600 font-bold", "PROCESS" }
+                }
                 p { class: "text-slate-700 font-medium", "AGENT: Extracting tabular data..." }
                 div { class: "text-[10px] leading-relaxed text-indigo-600 font-semibold",
                     p { "> mapping: table_data_01" }
@@ -54,7 +63,10 @@ pub fn ExecutionLog() -> Element {
             // Entry 4
             div { class: "space-y-2 border-l border-slate-200 pl-4 relative",
                 div { class: "absolute -left-[4.5px] top-1.5 w-2 h-2 rounded-full bg-amber-500 border border-slate-50 animate-pulse" }
-                p { class: "text-[10px] text-slate-400", "[14:24:00] <span class='text-amber-600 font-bold animate-pulse'>AWAIT_INPUT</span>" }
+                p { class: "text-[10px] text-slate-400 flex items-center gap-1",
+                    span { "[14:24:00]" }
+                    span { class: "text-amber-600 font-bold animate-pulse", "AWAIT_INPUT" }
+                }
                 p { class: "text-slate-700 font-medium", "AGENT: Requesting manual review of Cell B42..." }
             }
         }

@@ -11,6 +11,7 @@ mod widgets_panel;
 #[component]
 pub fn ComputerControl() -> Element {
     let mut state = use_global_state();
+    crate::routes::listening::speech::use_speech_recognition(state);
     let db = state.read().db.clone();
     
     let mut settings = use_resource({
@@ -108,11 +109,17 @@ pub fn ComputerControl() -> Element {
             }
 
             // Pulsing voice listener overlay when system is listening
-            voice_header::VoiceHeader {
-                is_listening,
-                on_terminate: move |_| {
-                    state.write().is_listening.set(false);
-                    state.write().is_inhibited.set(false);
+            {
+                let mut is_listening_sig = state.peek().is_listening;
+                let mut is_inhibited_sig = state.peek().is_inhibited;
+                rsx! {
+                    voice_header::VoiceHeader {
+                        is_listening,
+                        on_terminate: move |_| {
+                            is_listening_sig.set(false);
+                            is_inhibited_sig.set(false);
+                        }
+                    }
                 }
             }
 
@@ -145,6 +152,7 @@ pub fn ComputerControl() -> Element {
                             }
                         }
                     }
+                } else {
                     if has_log {
                         interaction_log::InteractionLog {}
                     }

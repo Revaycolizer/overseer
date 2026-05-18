@@ -35,14 +35,22 @@ pub fn restart_wake_word_listener() {
 fn run_listener(model_path: &str) -> anyhow::Result<()> {
     let host = cpal::default_host();
     let device = host.default_input_device().ok_or_else(|| anyhow::anyhow!("No input device"))?;
-    let stream_config = StreamConfig { channels: 1, sample_rate: 16000, buffer_size: cpal::BufferSize::Default };
+    
+    let native_config = device.default_input_config().map_err(|e| anyhow::anyhow!(e))?;
+    let sample_format = native_config.sample_format();
+    let stream_config = native_config.config();
+    
+    let native_rate = stream_config.sample_rate as f32;
+    let target_rate = 16000.0f32;
+    let step = native_rate / target_rate;
+    let channels = stream_config.channels as usize;
 
     let mut rp_config = RustpotterConfig::default();
     rp_config.fmt = AudioFmt { sample_rate: 16000, sample_format: SampleFormat::F32, channels: 1, endianness: Endianness::Little };
-    rp_config.detector.threshold = 0.35;
+    rp_config.detector.threshold = 0.30;
     rp_config.detector.min_scores = 2;
-    rp_config.detector.avg_threshold = 0.0;
-    rp_config.filters.gain_normalizer.enabled = false; // Raw amplitude matching
+    rp_config.detector.avg_threshold = 0.18;
+    rp_config.filters.gain_normalizer.enabled = true;
     let mut detector = Rustpotter::new(&rp_config).map_err(|e| anyhow::anyhow!(e))?;
 
     if std::path::Path::new(model_path).exists() {
@@ -55,11 +63,57 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
 
     let rb = HeapRb::<f32>::new(16000 * 2);
     let (mut producer, mut consumer) = rb.split();
-    let stream = device.build_input_stream(&stream_config, move |data: &[f32], _: &_| {
-        for &sample in data { let _ = producer.push(sample); }
-    }, |err| eprintln!("Audio stream error: {}", err), None)?;
+
+    let stream = match sample_format {
+        cpal::SampleFormat::F32 => {
+            let mut resample_index = 0.0f32;
+            let mut prev_sample = 0.0f32;
+            device.build_input_stream(&stream_config, move |data: &[f32], _: &_| {
+                let mono: Vec<f32> = if channels > 1 {
+                    data.chunks_exact(channels)
+                        .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
+                        .collect()
+                } else {
+                    data.to_vec()
+                };
+                for sample in mono {
+                    while resample_index < 1.0 {
+                        let interpolated = prev_sample + resample_index * (sample - prev_sample);
+                        let _ = producer.push(interpolated);
+                        resample_index += step;
+                    }
+                    resample_index -= 1.0;
+                    prev_sample = sample;
+                }
+            }, |err| eprintln!("Audio stream error: {}", err), None)?
+        }
+        cpal::SampleFormat::I16 => {
+            let mut resample_index = 0.0f32;
+            let mut prev_sample = 0.0f32;
+            device.build_input_stream(&stream_config, move |data: &[i16], _: &_| {
+                let mono: Vec<f32> = if channels > 1 {
+                    data.chunks_exact(channels)
+                        .map(|chunk| chunk.iter().map(|&s| s as f32 / 32768.0).sum::<f32>() / channels as f32)
+                        .collect()
+                } else {
+                    data.iter().map(|&s| s as f32 / 32768.0).collect()
+                };
+                for sample in mono {
+                    while resample_index < 1.0 {
+                        let interpolated = prev_sample + resample_index * (sample - prev_sample);
+                        let _ = producer.push(interpolated);
+                        resample_index += step;
+                    }
+                    resample_index -= 1.0;
+                    prev_sample = sample;
+                }
+            }, |err| eprintln!("Audio stream error: {}", err), None)?
+        }
+        _ => return Err(anyhow::anyhow!("Unsupported audio format")),
+    };
+
     stream.play()?;
-    println!("🎙️ Wake-word listener active and monitoring...");
+    println!("🎙️ Wake-word listener active and monitoring (Resampled from {}Hz)...", native_rate);
 
     let mut audio_buffer = Vec::new();
     let mut last_print = std::time::Instant::now();
