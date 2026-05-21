@@ -1,0 +1,1248 @@
+    Checking overseer v0.1.3 (/home/revaycolizer/projects/overseer)
+warning: unused import: `artifact_utils::*`
+ --> src/engine/orchestrator/core/main_loop.rs:6:62
+  |
+6 | use crate::engine::orchestrator::utils::{context_helpers::*, artifact_utils::*};
+  |                                                              ^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::engine::utils::discovery::AgentInfo`
+ --> src/engine/orchestrator/planning/master.rs:1:5
+  |
+1 | use crate::engine::utils::discovery::AgentInfo;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Prompt`
+ --> src/engine/orchestrator/planning/master.rs:2:77
+  |
+2 | use rig::{agent::AgentBuilder, client::CompletionClient, completion::{Chat, Prompt}, providers::ollama};
+  |                                                                             ^^^^^^
+
+warning: unused import: `crate::engine::orchestrator::native::native_checks::*`
+ --> src/engine/orchestrator/planning/decisions.rs:2:5
+  |
+2 | use crate::engine::orchestrator::native::native_checks::*;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `OllamaExt`
+ --> src/engine/orchestrator/discovery/discovery.rs:3:36
+  |
+3 | use rig::providers::ollama::{self, OllamaExt};
+  |                                    ^^^^^^^^^
+
+warning: unnecessary parentheses around `if` condition
+  --> src/engine/orchestrator/utils/format_helpers.rs:28:8
+   |
+28 |     if (has_extension && (item.contains('/') || item.contains('\\') || item.contains("assets/"))) {
+   |        ^                                                                                        ^
+   |
+   = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+   |
+28 -     if (has_extension && (item.contains('/') || item.contains('\\') || item.contains("assets/"))) {
+28 +     if has_extension && (item.contains('/') || item.contains('\\') || item.contains("assets/"))  {
+   |
+
+warning: unused import: `crate::engine::orchestrator::state::GlobalState`
+ --> src/engine/orchestrator/lattice/scheduler.rs:1:5
+  |
+1 | use crate::engine::orchestrator::state::GlobalState;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `MessagePart` and `StructuredResponse`
+ --> src/engine/orchestrator/lattice/synthesizer/step.rs:3:51
+  |
+3 | use crate::engine::orchestrator::core::response::{MessagePart, StructuredResponse};
+  |                                                   ^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `OllamaExt`
+ --> src/engine/orchestrator/lattice/synthesizer/step.rs:5:36
+  |
+5 | use rig::providers::ollama::{self, OllamaExt};
+  |                                    ^^^^^^^^^
+
+warning: unused import: `serde_json::Value`
+ --> src/engine/orchestrator/lattice/synthesizer/step.rs:9:5
+  |
+9 | use serde_json::Value;
+  |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `OllamaExt`
+ --> src/engine/orchestrator/lattice/synthesizer/final_res.rs:3:36
+  |
+3 | use rig::providers::ollama::{self, OllamaExt};
+  |                                    ^^^^^^^^^
+
+warning: unused import: `Prompt`
+ --> src/engine/orchestrator/lattice/synthesizer/final_res.rs:6:29
+  |
+6 | use rig::completion::{Chat, Prompt};
+  |                             ^^^^^^
+
+warning: unused import: `Prompt`
+ --> src/engine/orchestrator/dispatch/runner.rs:2:38
+  |
+2 | use rig::completion::{Chat, Message, Prompt};
+  |                                      ^^^^^^
+
+warning: unused import: `std::collections::HashSet`
+  --> src/engine/orchestrator/dispatch/runner.rs:13:5
+   |
+13 | use std::collections::HashSet;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::engine::orchestrator::state::StructuredState`
+ --> src/engine/orchestrator/dispatch/prompt_builder.rs:1:5
+  |
+1 | use crate::engine::orchestrator::state::StructuredState;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `json`
+ --> src/engine/orchestrator/dispatch/tool_exec.rs:1:18
+  |
+1 | use serde_json::{json, Value};
+  |                  ^^^^
+
+warning: unused imports: `Message`, `Prompt`, `client::CompletionClient`, and `providers::ollama`
+  --> src/engine/orchestrator/mod.rs:35:5
+   |
+35 |     client::CompletionClient,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+36 |     completion::{Message, Prompt},
+   |                  ^^^^^^^  ^^^^^^
+37 |     providers::ollama,
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Deserialize` and `Serialize`
+  --> src/engine/orchestrator/mod.rs:39:13
+   |
+39 | use serde::{Deserialize, Serialize};
+   |             ^^^^^^^^^^^  ^^^^^^^^^
+
+warning: unused import: `std::time::Duration`
+  --> src/engine/orchestrator/mod.rs:40:5
+   |
+40 | use std::time::Duration;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `sleep` and `timeout`
+  --> src/engine/orchestrator/mod.rs:41:19
+   |
+41 | use tokio::time::{sleep, timeout};
+   |                   ^^^^^  ^^^^^^^
+
+warning: unused import: `crate::engine::tools::StructuredPerceptionTool`
+  --> src/engine/orchestrator/mod.rs:43:5
+   |
+43 | use crate::engine::tools::StructuredPerceptionTool;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::backend::Message as DbMessage`
+ --> src/engine/system.rs:3:5
+  |
+3 | use crate::backend::Message as DbMessage;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::path::PathBuf`
+ --> src/engine/tools/document_gen/utils.rs:1:5
+  |
+1 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `rig::tool::Tool`
+ --> src/engine/utils/mod.rs:3:5
+  |
+3 | use rig::tool::Tool;
+  |     ^^^^^^^^^^^^^^^
+
+warning: unused imports: `ParsedMessage`, `extract_agent_attachments`, and `parse_message`
+ --> src/routes/conversations/helpers.rs:9:26
+  |
+9 | pub use message_parser::{parse_message, extract_agent_attachments, ParsedMessage};
+  |                          ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `VizBlock`
+ --> src/routes/conversations/message_bubble.rs:5:63
+  |
+5 | use crate::routes::conversations::types::{StructuredResponse, VizBlock};
+  |                                                               ^^^^^^^^
+
+warning: unused import: `crate::routes::conversations::attachment_view::AttachmentPreview`
+ --> src/routes/conversations/message_bubble.rs:7:5
+  |
+7 | use crate::routes::conversations::attachment_view::AttachmentPreview;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `ChartPart` and `MessagePart`
+ --> src/routes/conversations/structured_view.rs:3:63
+  |
+3 | use crate::routes::conversations::types::{StructuredResponse, MessagePart, SourcePart, UnknownPart, ChartPart, VizBlock, VizKind};
+  |                                                               ^^^^^^^^^^^                           ^^^^^^^^^
+
+warning: unused import: `MaterialIconColor`
+ --> src/routes/supervisors_workshop/agent_assignments.rs:5:43
+  |
+5 | use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+  |                                           ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::engine::utils::discovery::AgentInfo`
+ --> src/routes/supervisors_workshop/details.rs:6:5
+  |
+6 | use crate::engine::utils::discovery::AgentInfo;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `MaterialIconColor`
+ --> src/routes/supervisors_workshop/hero_card.rs:4:43
+  |
+4 | use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+  |                                           ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `MaterialIconColor`
+ --> src/routes/supervisors_workshop/list.rs:3:43
+  |
+3 | use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+  |                                           ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::engine::utils::discovery::AgentInfo`
+ --> src/routes/supervisors_workshop/modal.rs:4:5
+  |
+4 | use crate::engine::utils::discovery::AgentInfo;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Deserialize` and `Serialize`
+ --> src/state.rs:3:13
+  |
+3 | use serde::{Deserialize, Serialize};
+  |             ^^^^^^^^^^^  ^^^^^^^^^
+
+warning: variable does not need to be mutable
+    --> src/engine/tools/mod.rs:3799:31
+     |
+3799 |                     if let Ok(mut child) = Command::new(&app).spawn() {
+     |                               ----^^^^^
+     |                               |
+     |                               help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src/engine/tools/mod.rs:2953:9
+     |
+2953 |     let mut command_args = vec![
+     |         ----^^^^^^^^^^^^
+     |         |
+     |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/engine/orchestrator/core/../lattice/executor.rs:33:13
+   |
+33 |         let mut domain = task.domain.clone();
+   |             ----^^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/engine/orchestrator/core/direct_chat.rs:76:9
+   |
+76 |     let mut response = if raw_response.trim().starts_with('{') && raw_response.trim().ends_with('}') {
+   |         ----^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/engine/orchestrator/lattice/executor.rs:33:13
+   |
+33 |         let mut domain = task.domain.clone();
+   |             ----^^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/engine/orchestrator/dispatch/runner.rs:50:9
+   |
+50 |     let mut visited_urls = state.get_known_urls();
+   |         ----^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+error[E0308]: mismatched types
+  --> src/engine/system.rs:81:55
+   |
+81 |                 history.push(Message::User { content: contents });
+   |                                                       ^^^^^^^^ expected `OneOrMany<UserContent>`, found `Vec<UserContent>`
+   |
+   = note: expected struct `OneOrMany<rig::message::UserContent>`
+              found struct `Vec<rig::message::UserContent>`
+
+error[E0308]: mismatched types
+  --> src/engine/system.rs:83:55
+   |
+83 |                 history.push(Message::Assistant { id: m.id.to_string(), content: m.content.clone() });
+   |                                                       ^^^^^^^^^^^^^^^^ expected `Option<String>`, found `String`
+   |
+   = note: expected enum `std::option::Option<std::string::String>`
+            found struct `std::string::String`
+help: try wrapping the expression in `Some`
+   |
+83 |                 history.push(Message::Assistant { id: Some(m.id.to_string()), content: m.content.clone() });
+   |                                                       +++++                +
+
+error[E0308]: mismatched types
+  --> src/engine/system.rs:83:82
+   |
+83 |                 history.push(Message::Assistant { id: m.id.to_string(), content: m.content.clone() });
+   |                                                                                  ^^^^^^^^^^^^^^^^^ expected `OneOrMany<AssistantContent>`, found `String`
+   |
+   = note: expected struct `OneOrMany<rig::completion::AssistantContent>`
+              found struct `std::string::String`
+
+error[E0599]: no method named `agent` found for struct `rig::client::Client<Ext, H>` in the current scope
+   --> src/engine/system.rs:125:40
+    |
+125 |         let agent = self.ollama_client.agent(&model_name)
+    |                                        ^^^^^
+    |
+    = help: items from traits can only be used if the trait is in scope
+help: the following traits which provide `agent` are implemented but not in scope; perhaps you want to import one of them
+    |
+  2 + use rig::client::CompletionClient;
+    |
+  2 + use rig::client::completion::CompletionClientDyn;
+    |
+help: there is a method `get` with a similar name
+    |
+125 -         let agent = self.ollama_client.agent(&model_name)
+125 +         let agent = self.ollama_client.get(&model_name)
+    |
+
+error[E0369]: binary operation `==` cannot be applied to type `rig::client::Client<OllamaExt>`
+   --> src/engine/system.rs:12:5
+    |
+ 10 | #[derive(PartialEq)]
+    |          --------- in this derive macro expansion
+ 11 | pub struct AgentSystem {
+ 12 |     pub ollama_client: rig::providers::ollama::Client,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: `rig::client::Client<OllamaExt>` does not implement `PartialEq`
+   --> /home/revaycolizer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rig-core-0.30.0/src/client/mod.rs:126:1
+    |
+126 | pub struct Client<Ext = Nothing, H = reqwest::Client> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `rig::client::Client<OllamaExt>` is defined in another crate
+
+error[E0277]: the trait bound `rig::client::Nothing: From<&str>` is not satisfied
+   --> src/engine/system.rs:18:64
+    |
+ 18 |             ollama_client: rig::providers::ollama::Client::new("http://localhost:11434"),
+    |                            ----------------------------------- ^^^^^^^^^^^^^^^^^^^^^^^^ the trait `From<&str>` is not implemented for `rig::client::Nothing`
+    |                            |
+    |                            required by a bound introduced by this call
+    |
+    = note: required for `&str` to implement `Into<rig::client::Nothing>`
+note: required by a bound in `rig::client::Client::<Ext, H>::new`
+   --> /home/revaycolizer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rig-core-0.30.0/src/client/mod.rs:259:30
+    |
+259 |     pub fn new(api_key: impl Into<Key>) -> http_client::Result<Self> {
+    |                              ^^^^^^^^^ required by this bound in `Client::<Ext, H>::new`
+
+error[E0308]: mismatched types
+  --> src/engine/system.rs:18:28
+   |
+18 |             ollama_client: rig::providers::ollama::Client::new("http://localhost:11434"),
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Client<OllamaExt>`, found `Result<Client<OllamaExt, _>, Error>`
+   |
+   = note: expected struct `rig::client::Client<_, ReqwestClient>`
+                found enum `Result<rig::client::Client<_, _>, rig::http_client::Error>`
+help: consider using `Result::expect` to unwrap the `Result<rig::client::Client<OllamaExt, _>, rig::http_client::Error>` value, panicking if the value is a `Result::Err`
+   |
+18 |             ollama_client: rig::providers::ollama::Client::new("http://localhost:11434").expect("REASON"),
+   |                                                                                         +++++++++++++++++
+
+warning: unused variable: `count`
+   --> src/db.rs:711:13
+    |
+711 |         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM supervisors")
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_count`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `client`
+   --> src/engine/orchestrator/discovery/discovery.rs:166:5
+    |
+166 |     client: &reqwest::Client,
+    |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_client`
+
+warning: unused variable: `conversation_id`
+  --> src/engine/orchestrator/core/../lattice/executor.rs:14:5
+   |
+14 |     conversation_id: i64,
+   |     ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_conversation_id`
+
+warning: unused variable: `run_id`
+  --> src/engine/orchestrator/dispatch/runner.rs:17:5
+   |
+17 |     run_id: Option<i64>,
+   |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_run_id`
+
+warning: unused variable: `event_sequence`
+  --> src/engine/orchestrator/dispatch/runner.rs:18:5
+   |
+18 |     event_sequence: &mut i64,
+   |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_event_sequence`
+
+warning: unused variable: `iteration`
+  --> src/engine/orchestrator/dispatch/runner.rs:54:9
+   |
+54 |     for iteration in 0..10 {
+   |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_iteration`
+
+warning: unused variable: `expanded_input`
+  --> src/engine/orchestrator/dispatch/runner.rs:66:40
+   |
+66 |                 Ok((output, is_action, expanded_input)) => {
+   |                                        ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_expanded_input`
+
+warning: unused variable: `dw_tool`
+   --> src/engine/orchestrator/dispatch/runner.rs:110:25
+    |
+110 |             if let Some(dw_tool) = tools.iter().find(|t| t.name == "document_writer") {
+    |                         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_dw_tool`
+
+warning: value assigned to `action_tool_executed` is never read
+   --> src/engine/orchestrator/dispatch/runner.rs:116:25
+    |
+116 |                         action_tool_executed = true;
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `child`
+    --> src/engine/tools/mod.rs:3799:31
+     |
+3799 |                     if let Ok(mut child) = Command::new(&app).spawn() {
+     |                               ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_child`
+
+warning: value assigned to `launched` is never read
+    --> src/engine/tools/mod.rs:3815:25
+     |
+3815 |                         launched = true; // Best effort
+     |                         ^^^^^^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: unused variable: `tool_name`
+    --> src/engine/tools/mod.rs:3437:5
+     |
+3437 |     tool_name: &str,
+     |     ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tool_name`
+
+warning: unused variable: `agent`
+  --> src/engine/orchestrator/native/media/mod.rs:52:13
+   |
+52 |         let agent = VisionGeneralAgent::new(ollama_client, &model, &info.instructions);
+   |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_agent`
+
+warning: unused variable: `step`
+  --> src/engine/orchestrator/guardrails/guardrails.rs:10:5
+   |
+10 |     step: &str,
+   |     ^^^^ help: if this is intentional, prefix it with an underscore: `_step`
+
+warning: unused variable: `input`
+  --> src/engine/orchestrator/guardrails/guardrails.rs:12:5
+   |
+12 |     input: &serde_json::Value,
+   |     ^^^^^ help: if this is intentional, prefix it with an underscore: `_input`
+
+warning: unused variable: `conversation_id`
+  --> src/engine/orchestrator/lattice/executor.rs:14:5
+   |
+14 |     conversation_id: i64,
+   |     ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_conversation_id`
+
+warning: unused variable: `domain`
+  --> src/engine/orchestrator/dispatch/native.rs:45:61
+   |
+45 | pub fn is_native_document_request(query: &str, _step: &str, domain: &str) -> bool {
+   |                                                             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_domain`
+
+warning: unused variable: `db`
+  --> src/engine/orchestrator/dispatch/native.rs:71:42
+   |
+71 | pub async fn evaluate_computer_tool_gate(db: &Database, domain: &str, tool_name: &str, safety_level: &str, input_json: &Value) -> To...
+   |                                          ^^ help: if this is intentional, prefix it with an underscore: `_db`
+
+warning: unused variable: `domain`
+  --> src/engine/orchestrator/dispatch/native.rs:71:57
+   |
+71 | ..._tool_gate(db: &Database, domain: &str, tool_name: &str, safety_level: &str, input_json: &Value) -> ToolGateDecision {
+   |                              ^^^^^^ help: if this is intentional, prefix it with an underscore: `_domain`
+
+warning: unused variable: `tool_name`
+  --> src/engine/orchestrator/dispatch/native.rs:71:71
+   |
+71 | ...atabase, domain: &str, tool_name: &str, safety_level: &str, input_json: &Value) -> ToolGateDecision {
+   |                           ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tool_name`
+
+warning: unused variable: `safety_level`
+  --> src/engine/orchestrator/dispatch/native.rs:71:88
+   |
+71 | ...r, tool_name: &str, safety_level: &str, input_json: &Value) -> ToolGateDecision {
+   |                        ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_safety_level`
+
+warning: unused variable: `input_json`
+  --> src/engine/orchestrator/dispatch/native.rs:71:108
+   |
+71 | ..., safety_level: &str, input_json: &Value) -> ToolGateDecision {
+   |                          ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_input_json`
+
+warning: variable does not need to be mutable
+ --> src/engine/orchestrator/dispatch/grounding.rs:5:23
+  |
+5 | pub fn expand_markers(mut value: Value, state: &StructuredState) -> Value {
+  |                       ----^^^^^
+  |                       |
+  |                       help: remove this `mut`
+
+warning: unused variable: `data_values`
+  --> src/engine/tools/charting.rs:32:9
+   |
+32 |     let data_values: Vec<charming::datatype::DataPoint> = req
+   |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_data_values`
+
+warning: unused variable: `range`
+  --> src/engine/tools/charting.rs:99:9
+   |
+99 |     let range = max_val - min_val;
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_range`
+
+warning: unused variable: `d`
+  --> src/engine/tools/document_gen/pdf.rs:29:27
+   |
+29 |     if let (Some(h), Some(d)) = (headers, data) {
+   |                           ^ help: if this is intentional, prefix it with an underscore: `_d`
+
+warning: unreachable pattern
+    --> src/engine/tools/mod.rs:1584:23
+     |
+1453 |         "open_file" | "launch" => {
+     |         ----------- matches all the relevant values
+...
+1584 |         "read_file" | "open_file" => {
+     |                       ^^^^^^^^^^^ no value can reach this
+     |
+     = note: `#[warn(unreachable_patterns)]` (part of `#[warn(unused)]`) on by default
+
+warning: unreachable pattern
+    --> src/engine/tools/mod.rs:1488:9
+     |
+1453 |         "open_file" | "launch" => {
+     |         ---------------------- matches all the relevant values
+...
+1488 |         "launch" => {
+     |         ^^^^^^^^ no value can reach this
+
+warning: variable does not need to be mutable
+   --> src/engine/utils/mod.rs:160:13
+    |
+160 |         let mut final_repaired = trimmed[..trimmed.len() - 1].to_string();
+    |             ----^^^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:305:69
+    |
+305 | ...                   let mut agents_resource = agents_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:343:77
+    |
+343 | ...                   let mut agents_resource = agents_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+ --> src/routes/agents_workshop/agents_workshop.rs:7:9
+  |
+7 |     let mut global_state = crate::state::use_global_state();
+  |         ----^^^^^^^^^^^^
+  |         |
+  |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/agents_workshop/agents_workshop.rs:95:9
+   |
+95 |     let mut version_history_resource = use_resource(move || {
+   |         ----^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:469:61
+    |
+469 | ...                   let mut agents_resource = agents_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:470:61
+    |
+470 | ...                   let mut version_history_resource = version_history_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/agents_workshop/agents_workshop.rs:540:53
+    |
+540 | ...                   let mut agents_resource = agents_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:354:53
+    |
+354 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:371:53
+    |
+371 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:228:49
+    |
+228 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:256:49
+    |
+256 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:280:49
+    |
+280 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:302:49
+    |
+302 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:398:45
+    |
+398 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:420:45
+    |
+420 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:442:45
+    |
+442 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:464:45
+    |
+464 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:483:45
+    |
+483 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/computer_control.rs:502:45
+    |
+502 | ...                   let mut settings = settings.clone();
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/conversations/chat_input.rs:29:9
+   |
+29 |     let mut selected_artifacts = props.selected_artifacts;
+   |         ----^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/conversations/chat_input.rs:32:9
+   |
+32 |     let mut starter_prompt = props.starter_prompt;
+   |         ----^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/conversations/chat_input.rs:37:9
+   |
+37 |     let mut computer_state_resource = use_resource(move || {
+   |         ----^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/conversations/chat_input.rs:152:41
+    |
+152 | ...                   let mut computer_state_resource = computer_state_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/conversations/chat_input.rs:169:41
+    |
+169 | ...                   let mut computer_state_resource = computer_state_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/conversations/chat_input.rs:113:37
+    |
+113 | ...                   let mut computer_state_resource = computer_state_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/conversations/chat_input.rs:227:9
+    |
+227 |     let mut messages_resource = props.messages_resource;
+    |         ----^^^^^^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/conversations/chat_input.rs:229:9
+    |
+229 |     let mut conversations_resource = props.conversations_resource;
+    |         ----^^^^^^^^^^^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/conversations/chat_input.rs:231:9
+    |
+231 |     let mut selected_work_item = props.selected_work_item;
+    |         ----^^^^^^^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/conversations/chat_input.rs:243:9
+    |
+243 |     let mut send = use_callback(move |()| {
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/conversations/conversations.rs:467:9
+    |
+467 |     let mut selected_conversation_id = use_signal(|| conversations.first().map(|c| c.id));
+    |         ----^^^^^^^^^^^^^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/conversations/conversations.rs:549:9
+    |
+549 |     let mut is_thinking: Signal<bool> = use_signal(|| false);
+    |         ----^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1332:29
+     |
+1332 |                         let mut messages_resource = messages_resource.clone();
+     |                             ----^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1333:29
+     |
+1333 |                         let mut visible_messages = visible_messages;
+     |                             ----^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1334:29
+     |
+1334 |                         let mut selected_work_item = selected_work_item;
+     |                             ----^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1335:29
+     |
+1335 |                         let mut is_thinking = is_thinking;
+     |                             ----^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1336:29
+     |
+1336 |                         let mut work_items_resource = work_items_resource.clone();
+     |                             ----^^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1337:29
+     |
+1337 |                         let mut execution_runs_resource = execution_runs_resource.clone();
+     |                             ----^^^^^^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1338:29
+     |
+1338 |                         let mut artifacts_resource = artifacts_resource.clone();
+     |                             ----^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1339:29
+     |
+1339 |                         let mut selected_execution_run_id = selected_execution_run_id;
+     |                             ----^^^^^^^^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1374:29
+     |
+1374 |                         let mut selected_work_item = selected_work_item;
+     |                             ----^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1375:29
+     |
+1375 |                         let mut work_items_resource = work_items_resource.clone();
+     |                             ----^^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1395:29
+     |
+1395 |                         let mut selected_work_item = selected_work_item;
+     |                             ----^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1396:29
+     |
+1396 |                         let mut work_items_resource = work_items_resource.clone();
+     |                             ----^^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1788:9
+     |
+1788 |     let mut active_surface = use_signal(move || default_surface.clone());
+     |         ----^^^^^^^^^^^^^^
+     |         |
+     |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1876:29
+     |
+1876 |                         let mut selected_work_item = selected_work_item;
+     |                             ----^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/routes/conversations/conversations.rs:1877:29
+     |
+1877 |                         let mut work_items_resource = work_items_resource.clone();
+     |                             ----^^^^^^^^^^^^^^^^^^^
+     |                             |
+     |                             help: remove this `mut`
+
+warning: unused variable: `file_ext`
+  --> src/routes/conversations/attachment_view.rs:13:9
+   |
+13 |     let file_ext = filename.split('.').last().unwrap_or("FILE").to_uppercase();
+   |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_file_ext`
+
+warning: unused variable: `svg_raw`
+   --> src/routes/conversations/chart_view.rs:116:33
+    |
+116 | ...                   let svg_raw = block.payload.clone();
+    |                           ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_svg_raw`
+
+warning: variable does not need to be mutable
+  --> src/routes/conversations/structured_view.rs:56:25
+   |
+56 |                     let mut kind = match chart.chart_type.to_lowercase().as_str() {
+   |                         ----^^^^
+   |                         |
+   |                         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/supervisors_workshop/mod.rs:26:9
+   |
+26 |     let mut supervisors: Resource<Vec<Supervisor>> = use_resource(move || {
+   |         ----^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/supervisors_workshop/mod.rs:34:9
+   |
+34 |     let mut selected_supervisor = use_signal(|| None::<Supervisor>);
+   |         ----^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:869:69
+    |
+869 | ...                   let mut test_cases_resource = test_cases_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+ --> src/routes/tools_workshop/tools_workshop.rs:7:9
+  |
+7 |     let mut global_state = crate::state::use_global_state();
+  |         ----^^^^^^^^^^^^
+  |         |
+  |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/tools_workshop/tools_workshop.rs:11:9
+   |
+11 |     let mut tools_resource =
+   |         ----^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/tools_workshop/tools_workshop.rs:59:9
+   |
+59 |     let mut version_history_resource = use_resource(move || {
+   |         ----^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/tools_workshop/tools_workshop.rs:90:9
+   |
+90 |     let mut test_cases_resource = use_resource(move || {
+   |         ----^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:425:61
+    |
+425 | ...                   let mut test_cases_resource = test_cases_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:644:57
+    |
+644 | ...                   let mut tools_resource = tools_resource.clone();
+    |                           ----^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:645:57
+    |
+645 | ...                   let mut version_history_resource = version_history_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:236:61
+    |
+236 | ...                   let mut tools_resource = tools_resource.clone();
+    |                           ----^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:269:53
+    |
+269 | ...                   let mut test_cases_resource = test_cases_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:346:53
+    |
+346 | ...                   let mut tools_resource_click = tools_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:374:53
+    |
+374 | ...                   let mut tools_resource_click = tools_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:527:57
+    |
+527 | ...                   let mut tools_resource = tools_resource.clone();
+    |                           ----^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:550:57
+    |
+550 | ...                   let mut tools_resource = tools_resource.clone();
+    |                           ----^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:577:57
+    |
+577 | ...                   let mut tools_resource = tools_resource.clone();
+    |                           ----^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:604:53
+    |
+604 | ...                   let mut tools_resource = tools_resource.clone();
+    |                           ----^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:747:53
+    |
+747 | ...                   let mut test_cases_resource = test_cases_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:749:53
+    |
+749 | ...                   let mut selected_test_case_id = selected_test_case_id;
+    |                           ----^^^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/tools_workshop/tools_workshop.rs:138:37
+    |
+138 | ...                   let mut tools_resource_click = tools_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: unused variable: `agents`
+   --> src/routes/tools_workshop/tools_workshop.rs:628:49
+    |
+628 | ...                   let agents = backend::get_agents(&db);
+    |                           ^^^^^^ help: if this is intentional, prefix it with an underscore: `_agents`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:136:53
+    |
+136 | ...                   let mut workflows_resource = workflows_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/workflow_automation/workflow_automation.rs:14:9
+   |
+14 |     let mut workflows_resource = use_resource(move || {
+   |         ----^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/workflow_automation/workflow_automation.rs:21:9
+   |
+21 |     let mut run_feedback = use_signal(String::new);
+   |         ----^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/workflow_automation/workflow_automation.rs:22:9
+   |
+22 |     let mut is_running = use_signal(|| false);
+   |         ----^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/routes/workflow_automation/workflow_automation.rs:82:37
+   |
+82 | ...                   let mut workflows_resource = workflows_resource.clone();
+   |                           ----^^^^^^^^^^^^^^^^^^
+   |                           |
+   |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:297:37
+    |
+297 | ...                   let mut workflows_resource = workflows_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:317:37
+    |
+317 | ...                   let mut workflows_resource = workflows_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:339:37
+    |
+339 | ...                   let mut workflows_resource = workflows_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:361:37
+    |
+361 | ...                   let mut workflows_resource = workflows_resource.clone();
+    |                           ----^^^^^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:391:37
+    |
+391 | ...                   let mut runs_resource = runs_resource.clone();
+    |                           ----^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:419:37
+    |
+419 | ...                   let mut steps_resource = steps_resource.clone();
+    |                           ----^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:740:33
+    |
+740 | ...                   let mut steps_resource = steps_resource.clone();
+    |                           ----^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:759:33
+    |
+759 | ...                   let mut steps_resource = steps_resource.clone();
+    |                           ----^^^^^^^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:781:29
+    |
+781 |                         let mut steps_resource = steps_resource.clone();
+    |                             ----^^^^^^^^^^^^^^
+    |                             |
+    |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:799:29
+    |
+799 |                         let mut steps_resource = steps_resource.clone();
+    |                             ----^^^^^^^^^^^^^^
+    |                             |
+    |                             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/routes/workflow_automation/workflow_automation.rs:818:25
+    |
+818 |                     let mut steps_resource = steps_resource.clone();
+    |                         ----^^^^^^^^^^^^^^
+    |                         |
+    |                         help: remove this `mut`
+
+Some errors have detailed explanations: E0277, E0308, E0369, E0599.
+For more information about an error, try `rustc --explain E0277`.
+warning: `overseer` (bin "overseer") generated 156 warnings
+error: could not compile `overseer` (bin "overseer") due to 7 previous errors; 156 warnings emitted

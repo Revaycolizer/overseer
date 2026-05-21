@@ -1037,7 +1037,9 @@ async fn attach_assistant_files_from_content(
         return Ok(());
     }
 
-    std::fs::create_dir_all("overseer_files")?;
+    let data_dir = crate::db::get_overseer_data_dir();
+    let overseer_files_dir = data_dir.join("overseer_files");
+    std::fs::create_dir_all(&overseer_files_dir)?;
 
     for path in file_paths {
         let is_already_asset = path.starts_with("assets/") || path.starts_with("./assets/");
@@ -1060,7 +1062,7 @@ async fn attach_assistant_files_from_content(
                 .and_then(|name| name.to_str())
                 .unwrap_or("assistant-file");
             let stored_name = format!("assistant-{}-{}", message_id, original_name);
-            let stored_path = std::path::Path::new("overseer_files").join(&stored_name);
+            let stored_path = overseer_files_dir.join(&stored_name);
 
             if stored_path != path {
                 let _ = std::fs::copy(&path, &stored_path)?;

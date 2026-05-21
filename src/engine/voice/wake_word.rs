@@ -18,9 +18,13 @@ pub fn start_wake_word_listener() {
     *WAKE_TX.lock().unwrap() = Some(tx);
     *WAKE_RX.lock().unwrap() = Some(rx);
     std::thread::spawn(move || {
-        let model_path = "assets/voice/models/personal.rpw";
-        let _ = super::training::rebuild_model_if_needed(model_path);
-        let res = run_listener(model_path);
+        let data_dir = crate::db::get_overseer_data_dir();
+        let model_dir = data_dir.join("assets").join("voice").join("models");
+        let _ = std::fs::create_dir_all(&model_dir);
+        let model_path = model_dir.join("personal.rpw");
+        let model_path_str = model_path.to_string_lossy().to_string();
+        let _ = super::training::rebuild_model_if_needed(&model_path_str);
+        let res = run_listener(&model_path_str);
         IS_LISTENING.store(false, Ordering::SeqCst);
         if let Err(e) = res { eprintln!("❌ Wake-word listener error: {}", e); }
     });

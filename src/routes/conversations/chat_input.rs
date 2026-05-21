@@ -264,11 +264,13 @@ fn ChatComposer(props: ChatInputProps) -> Element {
         let mut selected_conversation_id_inner = selected_conversation_id.clone();
         let mut active_request_task_inner = active_request_task;
         let query = val.clone();
+        let data_dir = crate::db::get_overseer_data_dir();
+        let overseer_files_dir = data_dir.join("overseer_files");
         let optimistic_id = -chrono::Utc::now().timestamp_micros();
         let optimistic_attachments: Vec<backend::Attachment> = attachments.iter().map(|(name, mime, data)| {
             backend::Attachment {
                 id: 0, message_id: 0, filename: name.clone(),
-                file_path: format!("overseer_files/{}", name),
+                file_path: overseer_files_dir.join(name).to_string_lossy().to_string(),
                 content_type: mime.clone(), size: data.len() as i64, extracted_content: None,
             }
         }).collect();
@@ -333,15 +335,16 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                     conversations_inner.restart();
                 }
                 for (name, mime, data) in attachments {
-                    let folder = "overseer_files";
+                    let folder = &overseer_files_dir;
                     let _ = std::fs::create_dir_all(folder);
-                    let path = format!("{folder}/{name}");
+                    let path = folder.join(&name);
+                    let path_str = path.to_string_lossy().to_string();
                     let _ = std::fs::write(&path, &data);
                     let _ = backend::add_attachment(
                         &db_inner,
                         msg_id,
                         &name,
-                        &path,
+                        &path_str,
                         &mime,
                         data.len() as i64,
                     )

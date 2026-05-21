@@ -78,3 +78,13 @@ impl Database {
         gen.real_time_generate()
     }
 }
+
+pub fn get_overseer_data_dir() -> std::path::PathBuf {
+    if let Some(mut data_dir) = dirs::data_dir() {
+        data_dir.push("overseer");
+        data_dir
+    } else {
+        std::path::PathBuf::from(".")
+    }
+}
+

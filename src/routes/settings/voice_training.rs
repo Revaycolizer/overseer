@@ -27,7 +27,9 @@ pub fn VoiceTraining() -> Element {
                     let step = current_step.peek().clone() + 1;
                     current_step.set(step);
                     if step >= 5 {
-                        let _ = save_personal_wakeword(samples.cloned(), "assets/voice/models/personal.rpw");
+                        let data_dir = crate::db::get_overseer_data_dir();
+                        let model_path = data_dir.join("assets").join("voice").join("models").join("personal.rpw");
+                        let _ = save_personal_wakeword(samples.cloned(), &model_path.to_string_lossy());
                         state.write().has_trained_voice.set(true);
                         crate::engine::voice::wake_word::restart_wake_word_listener();
                         nav.push(Route::Settings {});

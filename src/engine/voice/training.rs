@@ -17,8 +17,9 @@ fn build_and_save_model(paths: Vec<String>, out: &str) -> anyhow::Result<()> {
 
 pub fn save_personal_wakeword(samples: Vec<VoiceSample>, out: &str) -> anyhow::Result<()> {
     println!("🧪 Processing {} samples for wake-word training...", samples.len());
-    let model_dir = Path::new("assets/voice/models");
-    std::fs::create_dir_all(model_dir)?;
+    let data_dir = crate::db::get_overseer_data_dir();
+    let model_dir = data_dir.join("assets").join("voice").join("models");
+    std::fs::create_dir_all(&model_dir)?;
     let paths: Vec<String> = samples.iter().enumerate().map(|(i, s)| {
         let max_amp = s.data.iter().map(|&x| x.abs()).fold(0.0f32, f32::max);
         println!("  - Sample {}: Len = {} samples | Max Amplitude = {:.5}", i, s.data.len(), max_amp);
@@ -33,7 +34,8 @@ pub fn save_personal_wakeword(samples: Vec<VoiceSample>, out: &str) -> anyhow::R
 }
 
 pub fn rebuild_model_if_needed(out: &str) -> anyhow::Result<bool> {
-    let model_dir = Path::new("assets/voice/models");
+    let data_dir = crate::db::get_overseer_data_dir();
+    let model_dir = data_dir.join("assets").join("voice").join("models");
     if !model_dir.exists() { return Ok(false); }
     let paths: Vec<String> = (0..5)
         .map(|i| model_dir.join(format!("sample_{}.wav", i)))

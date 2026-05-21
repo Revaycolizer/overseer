@@ -591,16 +591,28 @@ pub async fn native_export_asset(args: &serde_json::Value) -> Result<String, Dyn
             details: "Missing 'path' to export.".to_string(),
         })?;
 
-    // Normalize path: remove leading slash for std::path
-    let clean_path = asset_path.trim_start_matches('/');
-    let source = std::path::Path::new(clean_path);
-    
-    if !source.exists() {
-        return Err(DynamicToolError::ExecutionFailed {
-            tool: "export_asset".to_string(),
-            details: format!("Source asset not found: {}", clean_path),
-        });
-    }
+    let raw_source = std::path::Path::new(asset_path);
+    let source_path_buf = if raw_source.exists() {
+        raw_source.to_path_buf()
+    } else {
+        let clean_path = asset_path.trim_start_matches('/');
+        let rel_path = std::path::Path::new(clean_path);
+        if rel_path.exists() {
+            rel_path.to_path_buf()
+        } else {
+            let data_dir = crate::db::get_overseer_data_dir();
+            let data_path = data_dir.join(clean_path);
+            if data_path.exists() {
+                data_path
+            } else {
+                return Err(DynamicToolError::ExecutionFailed {
+                    tool: "export_asset".to_string(),
+                    details: format!("Source asset not found: {}", asset_path),
+                });
+            }
+        }
+    };
+    let source = &source_path_buf;
 
     let filename = source.file_name()
         .and_then(|n| n.to_str())
