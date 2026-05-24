@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-#[cfg(windows)]
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use regex::Regex;
 use rig::completion::ToolDefinition;
@@ -1974,7 +1973,6 @@ fn extract_key_tokens(input: &serde_json::Value) -> Vec<String> {
     Vec::new()
 }
 
-#[cfg(windows)]
 fn key_from_token(token: &str) -> Option<Key> {
     let lower = token.trim().to_lowercase();
     Some(match lower.as_str() {
@@ -2020,7 +2018,6 @@ fn key_from_token(token: &str) -> Option<Key> {
     })
 }
 
-#[cfg(windows)]
 fn with_enigo() -> Result<Enigo, DynamicToolError> {
     Enigo::new(&Settings::default()).map_err(|err| DynamicToolError::ExecutionFailed {
         tool: "os_tool".to_string(),
@@ -2028,7 +2025,6 @@ fn with_enigo() -> Result<Enigo, DynamicToolError> {
     })
 }
 
-#[cfg(windows)]
 fn runtime_artifacts_dir() -> Result<PathBuf, DynamicToolError> {
     let dir = crate::engine::utils::discovery::runtime_dir().join("artifacts");
     std::fs::create_dir_all(&dir).map_err(|err| DynamicToolError::ExecutionFailed {
@@ -3649,7 +3645,7 @@ async fn find_linux_desktop_file(app_name: &str) -> Option<String> {
     None
 }
 
-async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolError> {
+pub async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolError> {
     let input = object_tool_input(args);
     let action = infer_os_tool_action(&input);
     let selector_present = has_uia_selector(&input);
@@ -3889,296 +3885,236 @@ async fn native_os_tool(args: &serde_json::Value) -> Result<String, DynamicToolE
             if action == "click" && selector_present && extract_coordinates(&input).is_none() {
                 return windows_uia_interaction_json("os_tool", "invoke_element", &input).await;
             }
-            #[cfg(windows)]
-            {
-                let mut enigo = with_enigo()?;
-                let (x, y) = extract_coordinates(&input).ok_or_else(|| {
-                    DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: format!(
-                            "{} action requires `x` and `y` coordinates.",
-                            action
-                        ),
-                    }
+            let mut enigo = with_enigo()?;
+            let (x, y) = extract_coordinates(&input).ok_or_else(|| {
+                DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: format!(
+                        "{} action requires `x` and `y` coordinates.",
+                        action
+                    ),
+                }
+            })?;
+            enigo
+                .move_mouse(x, y, Coordinate::Abs)
+                .map_err(|err| DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: format!("Failed to move mouse: {}", err),
                 })?;
-                enigo
-                    .move_mouse(x, y, Coordinate::Abs)
-                    .map_err(|err| DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: format!("Failed to move mouse: {}", err),
-                    })?;
-                let button = if action == "right_click" {
-                    Button::Right
-                } else {
-                    Button::Left
-                };
+            let button = if action == "right_click" {
+                Button::Right
+            } else {
+                Button::Left
+            };
+            enigo
+                .button(button, Direction::Click)
+                .map_err(|err| DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: format!("Failed to click mouse: {}", err),
+                })?;
+            if action == "double_click" {
                 enigo
                     .button(button, Direction::Click)
                     .map_err(|err| DynamicToolError::ExecutionFailed {
                         tool: "os_tool".to_string(),
-                        details: format!("Failed to click mouse: {}", err),
+                        details: format!("Failed to complete double click: {}", err),
                     })?;
-                if action == "double_click" {
-                    enigo
-                        .button(button, Direction::Click)
-                        .map_err(|err| DynamicToolError::ExecutionFailed {
-                            tool: "os_tool".to_string(),
-                            details: format!("Failed to complete double click: {}", err),
-                        })?;
-                }
-                Ok(json!({
-                    "action": action,
-                    "x": x,
-                    "y": y,
-                    "button": if action == "right_click" { "right" } else { "left" },
-                    "ok": true
-                })
-                .to_string())
             }
-            #[cfg(not(windows))]
-            {
-                Err(DynamicToolError::ExecutionFailed {
-                    tool: "os_tool".to_string(),
-                    details: "Mouse click actions are currently implemented for Windows only.".to_string(),
-                })
-            }
+            Ok(json!({
+                "action": action,
+                "x": x,
+                "y": y,
+                "button": if action == "right_click" { "right" } else { "left" },
+                "ok": true
+            })
+            .to_string())
         }
         "move_mouse" => {
-            #[cfg(windows)]
-            {
-                let mut enigo = with_enigo()?;
-                let (x, y) = extract_coordinates(&input).ok_or_else(|| {
-                    DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: "Move mouse requires `x` and `y` coordinates.".to_string(),
-                    }
-                })?;
-                enigo
-                    .move_mouse(x, y, Coordinate::Abs)
-                    .map_err(|err| DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: format!("Failed to move mouse: {}", err),
-                    })?;
-                Ok(json!({
-                    "action": "move_mouse",
-                    "x": x,
-                    "y": y,
-                    "ok": true
-                })
-                .to_string())
-            }
-            #[cfg(not(windows))]
-            {
-                Err(DynamicToolError::ExecutionFailed {
+            let mut enigo = with_enigo()?;
+            let (x, y) = extract_coordinates(&input).ok_or_else(|| {
+                DynamicToolError::ExecutionFailed {
                     tool: "os_tool".to_string(),
-                    details: "Mouse movement is currently implemented for Windows only.".to_string(),
-                })
-            }
+                    details: "Move mouse requires `x` and `y` coordinates.".to_string(),
+                }
+            })?;
+            enigo
+                .move_mouse(x, y, Coordinate::Abs)
+                .map_err(|err| DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: format!("Failed to move mouse: {}", err),
+                })?;
+            Ok(json!({
+                "action": "move_mouse",
+                "x": x,
+                "y": y,
+                "ok": true
+            })
+            .to_string())
         }
         "type_text" => {
-            #[cfg(windows)]
-            {
-                let text = extract_text_value(&input).ok_or_else(|| {
-                    DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: "Type text requires a `text` value.".to_string(),
-                    }
-                })?;
-                if selector_present {
-                    let raw =
-                        windows_uia_interaction_json("os_tool", "type_text", &input).await?;
-                    let mut value: serde_json::Value =
-                        serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
-                    let method = value
-                        .get("method")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or("");
-                    if method != "value_pattern" {
-                        let mut enigo = with_enigo()?;
-                        enigo
-                            .text(&text)
-                            .map_err(|err| DynamicToolError::ExecutionFailed {
-                                tool: "os_tool".to_string(),
-                                details: format!("Failed to type text after focusing element: {}", err),
-                            })?;
-                        if let Some(object) = value.as_object_mut() {
-                            object.insert(
-                                "method".to_string(),
-                                serde_json::Value::String("uia_focus_then_type".to_string()),
-                            );
-                        }
-                    }
+            let text = extract_text_value(&input).ok_or_else(|| {
+                DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: "Type text requires a `text` value.".to_string(),
+                }
+            })?;
+            if selector_present {
+                let raw =
+                    windows_uia_interaction_json("os_tool", "type_text", &input).await?;
+                let mut value: serde_json::Value =
+                    serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
+                let method = value
+                    .get("method")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                if method != "value_pattern" {
+                    let mut enigo = with_enigo()?;
+                    enigo
+                        .text(&text)
+                        .map_err(|err| DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("Failed to type text after focusing element: {}", err),
+                        })?;
                     if let Some(object) = value.as_object_mut() {
                         object.insert(
-                            "typed_chars".to_string(),
-                            serde_json::Value::Number((text.chars().count() as u64).into()),
+                            "method".to_string(),
+                            serde_json::Value::String("uia_focus_then_type".to_string()),
                         );
-                        object.insert("ok".to_string(), serde_json::Value::Bool(true));
                     }
-                    return Ok(value.to_string());
                 }
+                if let Some(object) = value.as_object_mut() {
+                    object.insert(
+                        "typed_chars".to_string(),
+                        serde_json::Value::Number((text.chars().count() as u64).into()),
+                    );
+                    object.insert("ok".to_string(), serde_json::Value::Bool(true));
+                }
+                return Ok(value.to_string());
+            }
 
-                let mut enigo = with_enigo()?;
-                enigo
-                    .text(&text)
-                    .map_err(|err| DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: format!("Failed to type text: {}", err),
-                    })?;
-                Ok(json!({
-                    "action": "type_text",
-                    "typed_chars": text.chars().count(),
-                    "method": "keyboard_text",
-                    "ok": true
-                })
-                .to_string())
-            }
-            #[cfg(not(windows))]
-            {
-                Err(DynamicToolError::ExecutionFailed {
+            let mut enigo = with_enigo()?;
+            enigo
+                .text(&text)
+                .map_err(|err| DynamicToolError::ExecutionFailed {
                     tool: "os_tool".to_string(),
-                    details: "Typing is currently implemented for Windows only.".to_string(),
-                })
-            }
+                    details: format!("Failed to type text: {}", err),
+                })?;
+            Ok(json!({
+                "action": "type_text",
+                "typed_chars": text.chars().count(),
+                "method": "keyboard_text",
+                "ok": true
+            })
+            .to_string())
         }
         "press_key" => {
-            #[cfg(windows)]
-            {
-                let mut enigo = with_enigo()?;
-                let key = extract_key_tokens(&input).into_iter().next().ok_or_else(|| {
-                    DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: "Press key requires a `key` value.".to_string(),
-                    }
-                })?;
-                let resolved = key_from_token(&key).ok_or_else(|| DynamicToolError::ExecutionFailed {
+            let mut enigo = with_enigo()?;
+            let key = extract_key_tokens(&input).into_iter().next().ok_or_else(|| {
+                DynamicToolError::ExecutionFailed {
                     tool: "os_tool".to_string(),
-                    details: format!("Unsupported key token '{}'.", key),
-                })?;
-                enigo
-                    .key(resolved, Direction::Click)
-                    .map_err(|err| DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: format!("Failed to press key: {}", err),
-                    })?;
-                Ok(json!({
-                    "action": "press_key",
-                    "key": key,
-                    "ok": true
-                })
-                .to_string())
-            }
-            #[cfg(not(windows))]
-            {
-                Err(DynamicToolError::ExecutionFailed {
+                    details: "Press key requires a `key` value.".to_string(),
+                }
+            })?;
+            let resolved = key_from_token(&key).ok_or_else(|| DynamicToolError::ExecutionFailed {
+                tool: "os_tool".to_string(),
+                details: format!("Unsupported key token '{}'.", key),
+            })?;
+            enigo
+                .key(resolved, Direction::Click)
+                .map_err(|err| DynamicToolError::ExecutionFailed {
                     tool: "os_tool".to_string(),
-                    details: "Key presses are currently implemented for Windows only.".to_string(),
-                })
-            }
+                    details: format!("Failed to press key: {}", err),
+                })?;
+            Ok(json!({
+                "action": "press_key",
+                "key": key,
+                "ok": true
+            })
+            .to_string())
         }
         "hotkey" => {
-            #[cfg(windows)]
-            {
-                let mut enigo = with_enigo()?;
-                let keys = extract_key_tokens(&input);
-                if keys.len() < 2 {
-                    return Err(DynamicToolError::ExecutionFailed {
+            let mut enigo = with_enigo()?;
+            let keys = extract_key_tokens(&input);
+            if keys.len() < 2 {
+                return Err(DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: "Hotkey requires at least two key tokens, like `Ctrl+L`.".to_string(),
+                });
+            }
+            let resolved: Vec<Key> = keys
+                .iter()
+                .map(|token| {
+                    key_from_token(token).ok_or_else(|| DynamicToolError::ExecutionFailed {
                         tool: "os_tool".to_string(),
-                        details: "Hotkey requires at least two key tokens, like `Ctrl+L`.".to_string(),
-                    });
-                }
-                let resolved: Vec<Key> = keys
-                    .iter()
-                    .map(|token| {
-                        key_from_token(token).ok_or_else(|| DynamicToolError::ExecutionFailed {
-                            tool: "os_tool".to_string(),
-                            details: format!("Unsupported key token '{}'.", token),
-                        })
+                        details: format!("Unsupported key token '{}'.", token),
                     })
-                    .collect::<Result<_, _>>()?;
+                })
+                .collect::<Result<_, _>>()?;
 
-                for key in &resolved[..resolved.len() - 1] {
-                    enigo
-                        .key(*key, Direction::Press)
-                        .map_err(|err| DynamicToolError::ExecutionFailed {
-                            tool: "os_tool".to_string(),
-                            details: format!("Failed to press hotkey modifier: {}", err),
-                        })?;
-                }
-                let final_key = *resolved.last().expect("checked len");
+            for key in &resolved[..resolved.len() - 1] {
                 enigo
-                    .key(final_key, Direction::Click)
+                    .key(*key, Direction::Press)
                     .map_err(|err| DynamicToolError::ExecutionFailed {
                         tool: "os_tool".to_string(),
-                        details: format!("Failed to trigger hotkey: {}", err),
+                        details: format!("Failed to press hotkey modifier: {}", err),
                     })?;
-                for key in resolved[..resolved.len() - 1].iter().rev() {
-                    enigo
-                        .key(*key, Direction::Release)
-                        .map_err(|err| DynamicToolError::ExecutionFailed {
-                            tool: "os_tool".to_string(),
-                            details: format!("Failed to release hotkey modifier: {}", err),
-                        })?;
-                }
-                Ok(json!({
-                    "action": "hotkey",
-                    "keys": keys,
-                    "ok": true
-                })
-                .to_string())
             }
-            #[cfg(not(windows))]
-            {
-                Err(DynamicToolError::ExecutionFailed {
+            let final_key = *resolved.last().expect("checked len");
+            enigo
+                .key(final_key, Direction::Click)
+                .map_err(|err| DynamicToolError::ExecutionFailed {
                     tool: "os_tool".to_string(),
-                    details: "Hotkeys are currently implemented for Windows only.".to_string(),
-                })
+                    details: format!("Failed to trigger hotkey: {}", err),
+                })?;
+            for key in resolved[..resolved.len() - 1].iter().rev() {
+                enigo
+                    .key(*key, Direction::Release)
+                    .map_err(|err| DynamicToolError::ExecutionFailed {
+                        tool: "os_tool".to_string(),
+                        details: format!("Failed to release hotkey modifier: {}", err),
+                    })?;
             }
+            Ok(json!({
+                "action": "hotkey",
+                "keys": keys,
+                "ok": true
+            })
+            .to_string())
         }
         "scroll" => {
-            #[cfg(windows)]
+            let mut enigo = with_enigo()?;
+            let amount = read_i64_field(&input, &["amount", "delta", "lines"])
+                .unwrap_or_else(|| {
+                    let direction = read_string_field(&input, &["direction"])
+                        .unwrap_or_else(|| stringify_tool_input(&input))
+                        .to_lowercase();
+                    if direction.contains("up") {
+                        -3
+                    } else {
+                        3
+                    }
+                }) as i32;
+            let axis = match read_string_field(&input, &["axis"])
+                .unwrap_or_else(|| "vertical".to_string())
+                .to_lowercase()
+                .as_str()
             {
-                let mut enigo = with_enigo()?;
-                let amount = read_i64_field(&input, &["amount", "delta", "lines"])
-                    .unwrap_or_else(|| {
-                        let direction = read_string_field(&input, &["direction"])
-                            .unwrap_or_else(|| stringify_tool_input(&input))
-                            .to_lowercase();
-                        if direction.contains("up") {
-                            -3
-                        } else {
-                            3
-                        }
-                    }) as i32;
-                let axis = match read_string_field(&input, &["axis"])
-                    .unwrap_or_else(|| "vertical".to_string())
-                    .to_lowercase()
-                    .as_str()
-                {
-                    "horizontal" | "x" => Axis::Horizontal,
-                    _ => Axis::Vertical,
-                };
-                enigo
-                    .scroll(amount, axis)
-                    .map_err(|err| DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: format!("Failed to scroll: {}", err),
-                    })?;
-                Ok(json!({
-                    "action": "scroll",
-                    "amount": amount,
-                    "axis": if matches!(axis, Axis::Horizontal) { "horizontal" } else { "vertical" },
-                    "ok": true
-                })
-                .to_string())
-            }
-            #[cfg(not(windows))]
-            {
-                Err(DynamicToolError::ExecutionFailed {
+                "horizontal" | "x" => Axis::Horizontal,
+                _ => Axis::Vertical,
+            };
+            enigo
+                .scroll(amount, axis)
+                .map_err(|err| DynamicToolError::ExecutionFailed {
                     tool: "os_tool".to_string(),
-                    details: "Scrolling is currently implemented for Windows only.".to_string(),
-                })
-            }
+                    details: format!("Failed to scroll: {}", err),
+                })?;
+            Ok(json!({
+                "action": "scroll",
+                "amount": amount,
+                "axis": if matches!(axis, Axis::Horizontal) { "horizontal" } else { "vertical" },
+                "ok": true
+            })
+            .to_string())
         }
         "wait" => {
             let duration_ms =

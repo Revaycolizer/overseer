@@ -28,8 +28,8 @@ pub fn use_speech_recognition(state: Signal<GlobalState>) {
                 return;
             }
             
-            // Wait 600ms for initial greeting TTS to complete (2.5x faster startup than 1500ms!)
-            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+            // Wait 200ms for initial greeting TTS to start clearing audio channel
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             
             let mut eval_handle = eval(r#"
                 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -89,12 +89,9 @@ pub fn use_speech_recognition(state: Signal<GlobalState>) {
                                     println!("🎙️ Web Speech API transcribed: \"{}\"", cmd);
                                     voice_transcript_sig.set(Some(cmd.clone()));
                                     
-                                    crate::engine::voice::tts::speak_locally(&format!("Executing: {}", cmd));
-
                                     match crate::engine::voice::pipeline::execute_voice_command(&db, &agent, &cmd).await {
                                         Ok(res) => {
                                             voice_result_sig.set(Some(res));
-                                            crate::engine::voice::tts::speak_locally("Task completed successfully.");
                                         }
                                         Err(e) => {
                                             voice_result_sig.set(Some(format!("Execution Error: {}", e)));

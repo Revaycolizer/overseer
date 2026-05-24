@@ -132,62 +132,35 @@ if (Test-Path $zipPath) {
 
 Compress-Archive -Path (Join-Path $portableRoot "*") -DestinationPath $zipPath -CompressionLevel Optimal
 
-$installerBootstrap = @'
-@echo off
-setlocal
-set "SCRIPT_DIR=%~dp0"
-set "PORTABLE_DIR=%SCRIPT_DIR%portable"
-if exist "%PORTABLE_DIR%" rmdir /s /q "%PORTABLE_DIR%"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '%SCRIPT_DIR%PACKAGE_ZIP%' -DestinationPath '%PORTABLE_DIR%' -Force"
-if errorlevel 1 exit /b 1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%install-overseer.ps1" -SourceDir "%PORTABLE_DIR%"
-exit /b %ERRORLEVEL%
-'@.Replace("PACKAGE_ZIP", $zipName)
-$installerBootstrapPath = Join-Path $releaseRoot "run-installer.cmd"
-Set-Content -Path $installerBootstrapPath -Value $installerBootstrap -Encoding ASCII
+$makensis = Get-Command makensis -ErrorAction SilentlyContinue
+if ($makensis) {
+    $makensisPath = $makensis.Source
+} else {
+    $candidates = @(
+        "C:\Program Files (x86)\NSIS\makensis.exe",
+        "C:\Program Files\NSIS\makensis.exe"
+    )
+    $makensisPath = Resolve-FirstExistingPath -Candidates $candidates
+}
 
-$iexpressDirective = @"
-[Version]
-Class=IEXPRESS
-SEDVersion=3
-[Options]
-PackagePurpose=InstallApp
-ShowInstallProgramWindow=1
-HideExtractAnimation=0
-UseLongFileName=1
-InsideCompressed=0
-CAB_FixedSize=0
-CAB_ResvCodeSigning=0
-RebootMode=N
-InstallPrompt=
-DisplayLicense=
-FinishMessage=Overseer setup finished.
-TargetName=$setupExePath
-FriendlyName=Overseer Setup
-AppLaunched=run-installer.cmd
-PostInstallCmd=<None>
-AdminQuietInstCmd=run-installer.cmd
-UserQuietInstCmd=run-installer.cmd
-SourceFiles=SourceFiles
-[SourceFiles]
-SourceFiles0=$releaseRoot
-[SourceFiles0]
-%FILE0%=
-%FILE1%=
-%FILE2%=
-%FILE3%=
-[Strings]
-FILE0=$zipName
-FILE1=install-overseer.ps1
-FILE2=uninstall-overseer.ps1
-FILE3=run-installer.cmd
-"@
-$iexpressDirectivePath = Join-Path $releaseRoot "installer.sed"
-Set-Content -Path $iexpressDirectivePath -Value $iexpressDirective -Encoding ASCII
+if (-not $makensisPath) {
+    throw "NSIS Compiler (makensis.exe) not found. Please install NSIS (e.g., run `winget install NSIS.NSIS`) or add its folder to your system PATH."
+}
 
-& "$env:WINDIR\System32\iexpress.exe" /N $iexpressDirectivePath | Out-Null
-if (-not (Test-Path $setupExePath)) {
-    throw "Failed to build installer executable at $setupExePath"
+Write-Host "[INFO] Generating installer visual assets..."
+try {
+    & python (Join-Path $repoRoot "scripts\generate_installer_assets.py")
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[WARN] Dynamic asset generation failed with exit code $LASTEXITCODE. Using committed pre-generated assets."
+    }
+} catch {
+    Write-Host "[WARN] Dynamic asset generation failed: $_. Using committed pre-generated assets."
+}
+
+Write-Host "[INFO] Compiling production-grade setup installer using NSIS..."
+& $makensisPath /DVERSION="$Version" /DTAG="$Tag" /DREPO_ROOT="$repoRoot" /DOUT_DIR="$releaseRoot" /DPORTABLE_DIR="$portableRoot" (Join-Path $repoRoot "scripts\installer.nsi")
+if ($LASTEXITCODE -ne 0) {
+    throw "NSIS compilation failed with exit code $LASTEXITCODE"
 }
 
 $assets = @(

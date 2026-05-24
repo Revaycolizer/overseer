@@ -31,7 +31,7 @@ impl AgentSystem {
 
     pub async fn generate_title(&self, db: &Database, query: &str) -> String {
         let model_name = crate::backend::resolve_model_name(
-            db, None, "title_generator_model", "qwen2.5:7b-instruct"
+            db, None, "title_generator_model", "llama3.2:1b"
         ).await;
 
         let agent = rig::agent::AgentBuilder::new(self.ollama_client.completion_model(&model_name))

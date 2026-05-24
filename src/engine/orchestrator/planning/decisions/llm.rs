@@ -10,7 +10,7 @@ pub async fn decide_orchestration_with_llm(
     history: &[Message],
     memory_context: &str,
 ) -> Result<OrchestrationDecision, String> {
-    let model = "qwen2.5:7b-instruct";
+    let model = "qwen3:latest";
     let agent = AgentBuilder::new(ollama_client.completion_model(model))
         .preamble("You are the Overseer Router. JSON output only: {\"route\": \"direct_chat|single_domain|multi_step\", \"domain\": \"domain_name_or_null\", \"personality_mode\": \"assistant|operator|orchestrator\", \"reason\": \"explanation\"}")
         .build();
