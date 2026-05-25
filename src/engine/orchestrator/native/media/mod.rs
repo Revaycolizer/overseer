@@ -51,7 +51,7 @@ async fn invoke_vision_assistant(
     
     if let Some(info) = vision_agent_info {
         let model = crate::backend::resolve_model_name(
-            db, Some(&info.model), "vision_model", "gemma4:latest",
+            db, Some(&info.model), "vision_model", "qwen2-vl:7b-instruct",
         ).await;
         
         let agent = VisionGeneralAgent::new(ollama_client, &model, &info.instructions);

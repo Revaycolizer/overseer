@@ -51,9 +51,9 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
 
     let mut rp_config = RustpotterConfig::default();
     rp_config.fmt = AudioFmt { sample_rate: 16000, sample_format: SampleFormat::F32, channels: 1, endianness: Endianness::Little };
-    rp_config.detector.threshold = 0.30;
+    rp_config.detector.threshold = 0.40;
     rp_config.detector.min_scores = 2;
-    rp_config.detector.avg_threshold = 0.18;
+    rp_config.detector.avg_threshold = 0.25;
     rp_config.filters.gain_normalizer.enabled = true;
     let mut detector = Rustpotter::new(&rp_config).map_err(|e| anyhow::anyhow!(e))?;
 

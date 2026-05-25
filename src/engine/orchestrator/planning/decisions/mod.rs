@@ -55,7 +55,11 @@ pub async fn decide_orchestration(
         return Ok(OrchestrationDecision { route: OrchestrationRoute::SingleDomain, domain: Some(domain.to_string()), personality_mode: "operator".to_string(), reason: "Fast-path.".to_string() });
     }
     
-    match tokio::time::timeout(std::time::Duration::from_millis(5000), llm::decide_orchestration_with_llm(ollama_client, query, history, memory_context)).await {
+    let model = crate::backend::resolve_model_name(
+        db, None, "router_model", "qwen2.5:7b-instruct"
+    ).await;
+    
+    match tokio::time::timeout(std::time::Duration::from_millis(5000), llm::decide_orchestration_with_llm(ollama_client, &model, query, history, memory_context)).await {
         Ok(Ok(decision)) => Ok(decision),
         _ => Ok(heuristic_decision(db, query, fast_path, has_artifacts).await),
     }

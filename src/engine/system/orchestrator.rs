@@ -20,7 +20,7 @@ pub async fn orchestrate_request(
 
     let all_agents = crate::backend::get_agents(db).await.unwrap_or_default();
     let planner_model = crate::backend::resolve_model_name(
-        db, None, "planner_model", "qwen3:latest"
+        db, None, "planner_model", "qwen2.5:7b-instruct"
     ).await;
     let instructions = crate::backend::get_setting(db, "master_planner_instructions").await;
     
