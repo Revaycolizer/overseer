@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use dioxus::prelude::document::eval;
 use crate::state::GlobalState;
+use super::async_orchestrator;
 
 pub fn use_speech_recognition(state: Signal<GlobalState>) {
     let is_listening_sig = state.peek().is_listening;
@@ -87,22 +88,25 @@ pub fn use_speech_recognition(state: Signal<GlobalState>) {
                                 if !cmd.is_empty() {
                                     final_received = true;
                                     println!("🎙️ Web Speech API transcribed: \"{}\"", cmd);
-                                    voice_transcript_sig.set(Some(cmd.clone()));
-                                    crate::engine::voice::earcons::play_thinking_hum();
                                     
-                                    match crate::engine::voice::pipeline::execute_voice_command(&db, &agent, &cmd).await {
-                                        Ok(res) => {
-                                            voice_result_sig.set(Some(res));
-                                        }
-                                        Err(e) => {
-                                            voice_result_sig.set(Some(format!("Execution Error: {}", e)));
-                                            crate::engine::voice::earcons::play_blocked_beep();
-                                            crate::engine::voice::tts::speak_locally("Task execution failed.");
-                                        }
-                                    }
+                                    let db = db.clone();
+                                    let agent = agent.clone();
+                                    let voice_transcript_sig = voice_transcript_sig.clone();
+                                    let voice_result_sig = voice_result_sig.clone();
+                                    let is_listening_sig = is_listening_sig.clone();
+                                    let is_inhibited_sig = is_inhibited_sig.clone();
                                     
-                                    is_listening_sig.set(false);
-                                    is_inhibited_sig.set(false);
+                                    spawn(async move {
+                                        async_orchestrator::run_orchestration_async(
+                                            db,
+                                            agent,
+                                            cmd,
+                                            voice_transcript_sig,
+                                            voice_result_sig,
+                                            is_listening_sig,
+                                            is_inhibited_sig,
+                                        ).await;
+                                    });
                                     break;
                                 }
                             }
@@ -116,7 +120,7 @@ pub fn use_speech_recognition(state: Signal<GlobalState>) {
                             let is_listening_sig = is_listening_sig.clone();
                             let is_inhibited_sig = is_inhibited_sig.clone();
                             spawn(async move {
-                                run_local_stt_fallback(db, agent, voice_transcript_sig, voice_result_sig, is_listening_sig, is_inhibited_sig).await;
+                                async_orchestrator::run_local_stt_fallback_async(db, agent, voice_transcript_sig, voice_result_sig, is_listening_sig, is_inhibited_sig).await;
                             });
                             break;
                         }
@@ -130,7 +134,7 @@ pub fn use_speech_recognition(state: Signal<GlobalState>) {
                                 let is_listening_sig = is_listening_sig.clone();
                                 let is_inhibited_sig = is_inhibited_sig.clone();
                                 spawn(async move {
-                                    run_local_stt_fallback(db, agent, voice_transcript_sig, voice_result_sig, is_listening_sig, is_inhibited_sig).await;
+                                    async_orchestrator::run_local_stt_fallback_async(db, agent, voice_transcript_sig, voice_result_sig, is_listening_sig, is_inhibited_sig).await;
                                 });
                             }
                             break;
@@ -141,39 +145,4 @@ pub fn use_speech_recognition(state: Signal<GlobalState>) {
             }
         });
     });
-}
-
-async fn run_local_stt_fallback(
-    db: std::sync::Arc<crate::db::Database>,
-    agent: std::sync::Arc<crate::engine::system::AgentSystem>,
-    mut voice_transcript: Signal<Option<String>>,
-    mut voice_result: Signal<Option<String>>,
-    mut is_listening: Signal<bool>,
-    mut is_inhibited: Signal<bool>,
-) {
-    let vad_threshold = crate::engine::voice::wake_word::get_vad_threshold();
-    match crate::engine::voice::local_stt::record_and_transcribe(vad_threshold).await {
-        Ok(cmd) => {
-            println!("🎙️ Local offline STT transcribed: \"{}\"", cmd);
-            voice_transcript.set(Some(cmd.clone()));
-            crate::engine::voice::earcons::play_thinking_hum();
-            match crate::engine::voice::pipeline::execute_voice_command(&db, &agent, &cmd).await {
-                Ok(res) => {
-                    voice_result.set(Some(res));
-                }
-                Err(e) => {
-                    voice_result.set(Some(format!("Execution Error: {}", e)));
-                    crate::engine::voice::earcons::play_blocked_beep();
-                    crate::engine::voice::tts::speak_locally("Task execution failed.");
-                }
-            }
-        }
-        Err(err) => {
-            eprintln!("🎙️ Local STT fallback failed: {}", err);
-            crate::engine::voice::earcons::play_blocked_beep();
-            crate::engine::voice::tts::speak_locally("Speech recognition failed.");
-        }
-    }
-    is_listening.set(false);
-    is_inhibited.set(false);
 }

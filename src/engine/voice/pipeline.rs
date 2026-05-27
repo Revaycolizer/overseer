@@ -51,6 +51,10 @@ pub async fn execute_voice_command(
 async fn try_voice_fast_path(command: &str) -> Option<String> {
     let lower = command.trim().trim_end_matches('.').to_lowercase();
     
+    if let Some(vol_res) = super::fast_path_utils::handle_volume_fast_path(&lower).await {
+        return Some(vol_res);
+    }
+    
     // Pattern 1: Open/Launch application
     // Examples: "open firefox", "launch chrome", "open terminal", "start spotify"
     // Note: exclude URLs here so they fall through to open_url

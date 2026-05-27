@@ -6,6 +6,8 @@ pub mod local_stt;
 pub mod local_stt_rec;
 pub mod local_stt_trans;
 pub mod earcons;
+pub mod priority;
+pub mod fast_path_utils;
 
 
 

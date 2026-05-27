@@ -7245,6 +7245,7 @@ dependencies = [
  "genpdf",
  "hound",
  "lancedb",
+ "libc",
  "log",
  "md5",
  "mime_guess",

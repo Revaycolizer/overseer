@@ -33,6 +33,7 @@ pub fn start_wake_word_listener() {
     *WAKE_TX.lock().unwrap() = Some(tx);
     *WAKE_RX.lock().unwrap() = Some(rx);
     std::thread::spawn(move || {
+        super::priority::set_thread_priority_and_affinity();
         let data_dir = crate::db::get_overseer_data_dir();
         let model_dir = data_dir.join("assets").join("voice").join("models");
         let _ = std::fs::create_dir_all(&model_dir);

@@ -6,6 +6,7 @@ mod log_list;
 mod monitor_sidebar;
 mod waveform;
 pub mod speech;
+pub mod async_orchestrator;
 
 use header::Header;
 use log_list::LogList;
