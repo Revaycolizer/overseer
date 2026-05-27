@@ -17,17 +17,25 @@ pub async fn capture_linux_screenshot_json(tool_name: &str) -> Result<String, Dy
     ];
 
     let mut captured = false;
-    for (cmd, args) in command_args {
-        if Command::new(cmd).arg("--version").output().await.is_ok() {
-            let output = Command::new(cmd).args(args).output().await.map_err(|e| {
-                DynamicToolError::ExecutionFailed {
-                    tool: tool_name.to_string(),
-                    details: e.to_string(),
+    if crate::engine::tools::os_tool::wayland_compat::is_wayland() {
+        if let Ok(_) = crate::engine::tools::os_tool::wayland_compat::capture_wayland_screenshot(&path_str) {
+            captured = true;
+        }
+    }
+
+    if !captured {
+        for (cmd, args) in command_args {
+            if Command::new(cmd).arg("--version").output().await.is_ok() {
+                let output = Command::new(cmd).args(args).output().await.map_err(|e| {
+                    DynamicToolError::ExecutionFailed {
+                        tool: tool_name.to_string(),
+                        details: e.to_string(),
+                    }
+                })?;
+                if output.status.success() {
+                    captured = true;
+                    break;
                 }
-            })?;
-            if output.status.success() {
-                captured = true;
-                break;
             }
         }
     }

@@ -23,7 +23,17 @@ pub fn IdleWatcher() -> Element {
             let mut tick = 0;
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                if crate::engine::voice::wake_word::try_recv_panic() {
+                    entered_idle_at.set(0);
+                    is_listening_sig.set(false);
+                    is_inhibited_sig.set(false);
+                    crate::engine::voice::tts::speak_locally("Emergency reset. Exiting lock screen.");
+                    nav.push(Route::Conversations {});
+                    continue;
+                }
+
                 if crate::engine::voice::wake_word::try_recv_wake() {
+                    crate::engine::voice::earcons::play_listening_chime();
                     is_listening_sig.set(true);
                     is_inhibited_sig.set(true);
                     voice_transcript_sig.set(None);

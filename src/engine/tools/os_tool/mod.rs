@@ -3,6 +3,7 @@ pub mod workspace_search;
 pub mod action_inference;
 pub mod action_groups;
 pub mod target_extraction;
+pub mod wayland_compat;
 pub mod uia_inference;
 pub mod uia_selector;
 pub mod input_helpers;

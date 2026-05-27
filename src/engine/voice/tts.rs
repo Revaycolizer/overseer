@@ -1,4 +1,11 @@
 use std::process::Command;
+use std::sync::atomic::{AtomicI32, Ordering};
+
+static TTS_SPEAKING_COUNT: AtomicI32 = AtomicI32::new(0);
+
+pub fn is_tts_speaking() -> bool {
+    TTS_SPEAKING_COUNT.load(Ordering::SeqCst) > 0
+}
 
 pub fn speak_locally(text: &str) {
     let clean_text = text
@@ -8,9 +15,15 @@ pub fn speak_locally(text: &str) {
     
     println!("🔊 Local TTS Synthesis: {}", clean_text);
 
+    TTS_SPEAKING_COUNT.fetch_add(1, Ordering::SeqCst);
     std::thread::spawn(move || {
         let temp_wav = std::env::temp_dir().join("overseer_tts.wav");
         let temp_wav_str = temp_wav.to_string_lossy().to_string();
+
+        // Helper macro/closure to safely decrement before return
+        let mut play_finished = || {
+            TTS_SPEAKING_COUNT.fetch_sub(1, Ordering::SeqCst);
+        };
 
         // 1. Try calling piper if installed (Cross-Platform direct stdin implementation)
         if Command::new("piper").arg("--version").output().is_ok() {
@@ -50,6 +63,7 @@ pub fn speak_locally(text: &str) {
                                     .arg(&play_script)
                                     .output();
                             }
+                            play_finished();
                             return;
                         }
                     }
@@ -61,6 +75,7 @@ pub fn speak_locally(text: &str) {
         #[cfg(target_os = "macos")]
         {
             let _ = Command::new("say").arg(&clean_text).output();
+            play_finished();
             return;
         }
 
@@ -74,6 +89,7 @@ pub fn speak_locally(text: &str) {
                 .arg("-Command")
                 .arg(&ps_cmd)
                 .output();
+            play_finished();
             return;
         }
 
@@ -86,6 +102,7 @@ pub fn speak_locally(text: &str) {
                     .arg("female1")
                     .arg(&clean_text)
                     .output();
+                play_finished();
                 return;
             }
 
@@ -95,5 +112,6 @@ pub fn speak_locally(text: &str) {
                     .output();
             }
         }
+        play_finished();
     });
 }
