@@ -77,6 +77,16 @@ icon = ["assets/overseer.png"]
 short_description = "Local-first AI orchestration mission control."
 category = "DeveloperTool"
 
+[package.metadata.bundle.debian]
+depends = [
+    "libwebkit2gtk-4.1-0",
+    "libayatana-appindicator3-1",
+    "xdotool",
+    "wmctrl",
+    "scrot",
+    "x11-utils"
+]
+
 [package.metadata.overseer]
 product_name = "Overseer"
 publisher = "Revaycolizer"

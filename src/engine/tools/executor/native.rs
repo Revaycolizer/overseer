@@ -33,6 +33,20 @@ pub async fn call_native_builtin_tool(
             }
         },
         "export_asset" => Some(crate::engine::tools::export_asset::native_export_asset(args).await?),
+        "os_tool" => Some(crate::engine::tools::os_tool::native_os_tool(args).await?),
+        "vision_analysis" => Some(crate::engine::tools::vision::native_vision_analysis(args).await?),
+        "charting" => {
+            let input_str = if let Some(input) = args.get("input") {
+                if input.is_string() { input.as_str().unwrap_or("").to_string() } else { input.to_string() }
+            } else { args.to_string() }.trim().to_string();
+            let req: crate::engine::tools::charting::ChartRequest = serde_json::from_str(&input_str)
+                .or_else(|_| { let val: serde_json::Value = serde_json::from_str(&input_str)?; serde_json::from_value(val) })
+                .map_err(|e| DynamicToolError::ExecutionFailed { tool: "charting".to_string(), details: e.to_string() })?;
+            match crate::engine::tools::charting::generate_chart_svg(req.clone()) {
+                Ok(_) => Some(serde_json::to_string(&req).unwrap_or(input_str)),
+                Err(e) => return Err(DynamicToolError::ExecutionFailed { tool: "charting".to_string(), details: e }),
+            }
+        },
         _ => None,
     };
 

@@ -46,17 +46,26 @@ pub fn summarize_computer_action(tool_name: &str, input_json: &Value) -> String 
 
 pub fn computer_strategy_hint(query: &str, step: &str, tools: &[crate::engine::utils::discovery::ToolInfo]) -> Option<String> {
     let lower = format!("{} {}", query.to_lowercase(), step.to_lowercase());
-    if !(lower.contains("computer") || lower.contains("desktop") || lower.contains("window") || lower.contains("screen")) { return None; }
+    if !(lower.contains("computer") || lower.contains("desktop") || lower.contains("window") || lower.contains("screen") || lower.contains("click") || lower.contains("type") || lower.contains("open") || lower.contains("launch") || lower.contains("focus") || lower.contains("scroll")) { return None; }
     let has_os_tool = tools.iter().any(|tool| tool.name == "os_tool");
     let has_vision_tool = tools.iter().any(|tool| tool.name == "vision_analysis");
     if !has_os_tool && !has_vision_tool { return None; }
 
     let mut guidance = Vec::new();
+    if has_os_tool {
+        guidance.push("IMPORTANT: Use `os_tool` for ALL computer control actions. Pass JSON with an `action` field. Available actions: get_state, screenshot, launch, open_url, focus, click, double_click, right_click, move_mouse, type_text, press_key, hotkey, scroll, list_processes, find_files, read_file, open_file, wait.");
+    }
     if lower.contains("screenshot") || lower.contains("screen capture") || lower.contains("capture screen") {
         if has_os_tool {
             guidance.push("For screenshot tasks, call `os_tool` with JSON like {\"action\":\"screenshot\"}. Do not open Snipping Tool or any other UI.");
         }
         guidance.push("A native screenshot artifact counts as completion for a screenshot request.");
+    }
+    if lower.contains("click") || lower.contains("press") || lower.contains("type") {
+        guidance.push("For click/type/press actions, use `os_tool` with the appropriate action. Example click: {\"action\":\"click\",\"x\":500,\"y\":300}. Example type: {\"action\":\"type_text\",\"text\":\"hello\"}. Example key: {\"action\":\"press_key\",\"key\":\"enter\"}.");
+    }
+    if lower.contains("launch") || lower.contains("open") {
+        guidance.push("To launch apps: {\"action\":\"launch\",\"target\":\"firefox\"}. To open URLs: {\"action\":\"open_url\",\"target\":\"https://example.com\"}.");
     }
     if guidance.is_empty() { None } else { Some(guidance.join(" ")) }
 }

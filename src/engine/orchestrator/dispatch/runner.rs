@@ -42,7 +42,23 @@ pub async fn dispatch_domain(
         }
     }
 
-    
+    // SAFETY NET: If the computer/desktop domain is missing os_tool or vision_analysis,
+    // inject them directly so the LLM can always control the computer.
+    let is_computer_domain = ["computer", "desktop"].contains(&domain);
+    if is_computer_domain {
+        let required_tools = ["os_tool", "vision_analysis", "app_launcher", "clipboard_read", "clipboard_write"];
+        let missing: Vec<&str> = required_tools.iter().filter(|&&name| !tools.iter().any(|t| t.name == name)).copied().collect();
+        if !missing.is_empty() {
+            if let Ok(all_tools) = crate::backend::get_tools(db).await {
+                for tool_name in missing {
+                    if let Some(tool) = all_tools.iter().find(|t| t.name == tool_name) {
+                        tools.push(tool.clone());
+                    }
+                }
+            }
+        }
+    }
+
     let agent = AgentBuilder::new(ollama_client.completion_model(&model)).preamble(supervisor.instructions.as_deref().unwrap_or("")).build();
     let tool_list = tools.iter().map(|t| format!("- {}: {}", t.name, t.description)).collect::<Vec<_>>().join("\n");
     

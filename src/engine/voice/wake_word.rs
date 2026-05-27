@@ -51,9 +51,9 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
 
     let mut rp_config = RustpotterConfig::default();
     rp_config.fmt = AudioFmt { sample_rate: 16000, sample_format: SampleFormat::F32, channels: 1, endianness: Endianness::Little };
-    rp_config.detector.threshold = 0.40;
+    rp_config.detector.threshold = 0.35;
     rp_config.detector.min_scores = 2;
-    rp_config.detector.avg_threshold = 0.25;
+    rp_config.detector.avg_threshold = 0.22;
     rp_config.filters.gain_normalizer.enabled = true;
     let mut detector = Rustpotter::new(&rp_config).map_err(|e| anyhow::anyhow!(e))?;
 
@@ -122,26 +122,49 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
     let mut audio_buffer = Vec::new();
     let mut last_print = std::time::Instant::now();
     let (mut max_amp, mut sample_count) = (0.0f32, 0);
+    let mut last_trigger = std::time::Instant::now();
+    let cooldown = std::time::Duration::from_secs(3);
+    let vad_threshold = 0.015f32;
+    let mut recent_levels = ringbuf::HeapRb::<f32>::new(1600);
+    let (mut vad_prod, mut vad_cons) = recent_levels.split();
+    let mut is_speaking = false;
+    let mut speaking_cooldown = std::time::Instant::now();
+    let speaking_gate = std::time::Duration::from_millis(300);
     loop {
         if !IS_LISTENING.load(Ordering::SeqCst) { break Ok(()); }
         while let Some(s) = consumer.pop() {
             audio_buffer.push(s);
             if s.abs() > max_amp { max_amp = s.abs(); }
             sample_count += 1;
+            let _ = vad_prod.push(s.abs());
         }
         if last_print.elapsed() >= std::time::Duration::from_secs(2) {
-            println!("🎙️ Telemetry: Processed {} samples | Max Mic Amplitude: {:.5}", sample_count, max_amp);
+            println!("🎙️ Telemetry: Processed {} samples | Max Mic Amplitude: {:.5} | VAD: {}", sample_count, max_amp, is_speaking);
             max_amp = 0.0; sample_count = 0; last_print = std::time::Instant::now();
         }
+        let mut recent_avg = 0.0f32;
+        let mut recent_count = 0;
+        while let Some(l) = vad_cons.pop() {
+            recent_avg += l;
+            recent_count += 1;
+        }
+        if recent_count > 0 { recent_avg /= recent_count as f32; }
+        if recent_avg > vad_threshold { speaking_cooldown = std::time::Instant::now(); is_speaking = true; }
+        else if speaking_cooldown.elapsed() > speaking_gate { is_speaking = false; }
         while audio_buffer.len() >= detector.get_samples_per_frame() {
             let frame: Vec<f32> = audio_buffer.drain(0..detector.get_samples_per_frame()).collect();
-            if let Some(detection) = detector.process_samples(frame) {
-                println!("🚀 WAKE WORD DETECTED: {:?}", detection.name);
-                if let Ok(guard) = WAKE_TX.lock() {
-                    if let Some(tx) = guard.as_ref() { let _ = tx.send(()); }
+            if is_speaking {
+                if let Some(detection) = detector.process_samples(frame) {
+                    if last_trigger.elapsed() >= cooldown {
+                        println!("🚀 WAKE WORD DETECTED: {:?}", detection.name);
+                        last_trigger = std::time::Instant::now();
+                        if let Ok(guard) = WAKE_TX.lock() {
+                            if let Some(tx) = guard.as_ref() { let _ = tx.send(()); }
+                        }
+                    }
                 }
             }
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(1));
     }
 }
