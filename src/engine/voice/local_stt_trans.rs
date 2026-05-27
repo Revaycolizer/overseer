@@ -10,8 +10,18 @@ pub fn transcribe_samples_sync(recorded_data: &[f32]) -> Result<String, String> 
     for &val in recorded_data { let _ = w.write_sample(val); }
     w.finalize().map_err(|e| e.to_string())?;
 
-    if Command::new("vosk-transcriber").arg("--version").output().is_ok() {
-        if let Ok(out) = Command::new("vosk-transcriber").args(["-i", &temp_wav_str, "-o", "/dev/stdout"]).output() {
+    let mut vosk_cmd = "vosk-transcriber".to_string();
+    if !Command::new(&vosk_cmd).arg("--version").output().is_ok() {
+        if let Some(home) = dirs::home_dir() {
+            let local_bin = home.join(".local").join("bin").join("vosk-transcriber");
+            if local_bin.exists() {
+                vosk_cmd = local_bin.to_string_lossy().to_string();
+            }
+        }
+    }
+
+    if Command::new(&vosk_cmd).arg("--version").output().is_ok() {
+        if let Ok(out) = Command::new(&vosk_cmd).args(["-i", &temp_wav_str, "-o", "/dev/stdout"]).output() {
             if out.status.success() {
                 let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !text.is_empty() { return Ok(text); }
