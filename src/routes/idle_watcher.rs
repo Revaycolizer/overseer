@@ -16,30 +16,33 @@ pub fn IdleWatcher() -> Element {
     let mut voice_result_sig = state.peek().voice_result;
     let route_for_future = route.clone();
     use_future(move || {
-        crate::engine::voice::wake_word::start_wake_word_listener();
         let nav = nav.clone();
         let route = route_for_future.clone();
         async move {
             let mut tick = 0;
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                let is_listening = *is_listening_sig.peek();
+                if is_listening {
+                    if crate::engine::voice::wake_word::IS_LISTENING.load(std::sync::atomic::Ordering::SeqCst) {
+                        crate::engine::voice::wake_word::IS_LISTENING.store(false, std::sync::atomic::Ordering::SeqCst);
+                    }
+                } else if !crate::engine::voice::wake_word::IS_LISTENING.load(std::sync::atomic::Ordering::SeqCst) {
+                    crate::engine::voice::wake_word::start_wake_word_listener();
+                }
+
                 if crate::engine::voice::wake_word::try_recv_panic() {
-                    entered_idle_at.set(0);
-                    is_listening_sig.set(false);
-                    is_inhibited_sig.set(false);
+                    entered_idle_at.set(0); is_listening_sig.set(false); is_inhibited_sig.set(false);
                     crate::engine::voice::tts::speak_locally("Emergency reset. Exiting lock screen.");
-                    nav.push(Route::Conversations {});
-                    continue;
+                    nav.push(Route::Conversations {}); continue;
                 }
 
                 if crate::engine::voice::wake_word::try_recv_wake() {
                     crate::engine::voice::earcons::play_listening_chime();
-                    is_listening_sig.set(true);
-                    is_inhibited_sig.set(true);
-                    voice_transcript_sig.set(None);
-                    voice_result_sig.set(None);
-                    nav.push(Route::ComputerControl {});
-                    crate::engine::voice::tts::speak_locally("How can I help you?");
+                    is_listening_sig.set(true); is_inhibited_sig.set(true);
+                    crate::engine::voice::wake_word::IS_LISTENING.store(false, std::sync::atomic::Ordering::SeqCst);
+                    voice_transcript_sig.set(None); voice_result_sig.set(None);
+                    nav.push(Route::ComputerControl {}); crate::engine::voice::tts::speak_locally("How can I help you?");
                     continue;
                 }
                 
@@ -55,9 +58,7 @@ pub fn IdleWatcher() -> Element {
                         nav.push(Route::SystemIdleSecureLockScreen {});
                     } else if idle_secs < 30 && entered != 0 {
                         entered_idle_at.set(0);
-                        if let Route::SystemIdleSecureLockScreen {} = route {
-                            if now() - entered > 2 { nav.push(Route::Conversations {}); }
-                        }
+                        if let Route::SystemIdleSecureLockScreen {} = route { if now() - entered > 2 { nav.push(Route::Conversations {}); } }
                     }
                 }
             }
@@ -83,10 +84,8 @@ pub fn IdleWatcher() -> Element {
             onmousemove: reset_idle!(),
             div { class: "fixed bottom-0 right-0 p-1 text-[8px] opacity-10 pointer-events-none z-[9999]",
                 {
-                    let cur_idle = idle_time();
-                    let cur_start = entered_idle_at();
-                    let grace = if cur_start != 0 { now().saturating_sub(cur_start) } else { 0 };
-                    format!("IDLE: {}s | GRACE: {}s", cur_idle, grace)
+                    let grace = if entered_idle_at() != 0 { now() - entered_idle_at() } else { 0 };
+                    format!("IDLE: {}s | GRACE: {}s", idle_time(), grace)
                 }
             }
             Outlet::<Route> {}

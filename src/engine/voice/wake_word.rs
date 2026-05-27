@@ -231,14 +231,12 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
 
         while audio_buffer.len() >= detector.get_samples_per_frame() {
             let frame: Vec<f32> = audio_buffer.drain(0..detector.get_samples_per_frame()).collect();
-            if is_speaking {
-                if let Some(detection) = detector.process_samples(frame) {
-                    if last_trigger.elapsed() >= cooldown {
-                        println!("🚀 WAKE WORD DETECTED: {:?}", detection.name);
-                        last_trigger = std::time::Instant::now();
-                        if let Ok(guard) = WAKE_TX.lock() {
-                            if let Some(tx) = guard.as_ref() { let _ = tx.send(()); }
-                        }
+            if let Some(detection) = detector.process_samples(frame) {
+                if last_trigger.elapsed() >= cooldown {
+                    println!("🚀 WAKE WORD DETECTED: {:?}", detection.name);
+                    last_trigger = std::time::Instant::now();
+                    if let Ok(guard) = WAKE_TX.lock() {
+                        if let Some(tx) = guard.as_ref() { let _ = tx.send(()); }
                     }
                 }
             }
