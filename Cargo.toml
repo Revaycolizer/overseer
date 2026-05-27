@@ -87,7 +87,11 @@ depends = [
     "wmctrl",
     "scrot",
     "x11-utils",
-    "alsa-utils"
+    "alsa-utils",
+    "xclip",
+    "wl-clipboard",
+    "grim",
+    "wtype"
 ]
 
 [package.metadata.overseer]
