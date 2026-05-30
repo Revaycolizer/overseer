@@ -8,7 +8,27 @@ pub fn is_tts_speaking() -> bool {
 }
 
 pub fn speak_locally(text: &str) {
-    let clean_text = text
+    let mut speech_text = text.to_string();
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
+        if let Some(messages) = val.get("messages").and_then(|m| m.as_array()) {
+            let mut assistant_msg = None;
+            for m in messages.iter().rev() {
+                if m.get("role").and_then(|r| r.as_str()) == Some("assistant") {
+                    if let Some(msg_content) = m.get("message").and_then(|c| c.as_str()) {
+                        assistant_msg = Some(msg_content.to_string());
+                        break;
+                    }
+                }
+            }
+            if let Some(msg) = assistant_msg {
+                speech_text = msg;
+            } else if let Some(status) = val.get("status").and_then(|s| s.as_str()) {
+                speech_text = format!("Task status: {}.", status);
+            }
+        }
+    }
+
+    let clean_text = speech_text
         .chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '.' || *c == ',' || *c == '!' || *c == '?')
         .collect::<String>();
