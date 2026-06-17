@@ -6,3 +6,4 @@ pub mod system;
 pub mod tools;
 pub mod utils;
 pub mod voice;
+pub mod vision;

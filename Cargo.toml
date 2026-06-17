@@ -51,6 +51,9 @@ rodio = "0.22.2"
 ringbuf = "0.3"
 hound = "3.5"
 enigo = "0.3.0"
+ort = { version = "2.0.0-rc.9", features = ["copy-dylibs"] }
+whisper-rs = { version = "0.14.0", optional = true }
+ndarray = "0.15"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "0.13", features = ["screensaver"] }
@@ -71,6 +74,7 @@ web = ["dioxus/web"]
 desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
 memory = ["dep:lancedb", "dep:arrow"]
+whisper = ["dep:whisper-rs"]
 
 [package.metadata.bundle]
 name = "Overseer"
