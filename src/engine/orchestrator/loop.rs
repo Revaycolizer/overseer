@@ -9,12 +9,13 @@ pub struct AgentOrchestrator {
     pub speech_engine: SpeechOptimizer,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Action {
     LaunchApp(String),
     ExecuteShell(String),
     CaptureScreenVerify,
     SpeakFeedback(String),
+    ExecuteDynamicTool(crate::engine::utils::discovery::ToolInfo, String),
 }
 
 impl AgentOrchestrator {
@@ -85,6 +86,23 @@ impl AgentOrchestrator {
                 crate::engine::voice::tts::speak_locally(&text);
                 self.is_tts_speaking.store(false, Ordering::SeqCst);
             }
+            Action::ExecuteDynamicTool(tool, goal) => {
+                let args = serde_json::json!({
+                    "tool_name": tool.name.clone(),
+                    "input": goal
+                });
+                match crate::engine::tools::call_dynamic_tool(&tool, args).await {
+                    Ok(output) => {
+                        println!("Dynamic tool output: {}", output);
+                        self.is_tts_speaking.store(true, Ordering::SeqCst);
+                        crate::engine::voice::tts::speak_locally(&format!("Executed tool {}", tool.name));
+                        self.is_tts_speaking.store(false, Ordering::SeqCst);
+                    }
+                    Err(e) => {
+                        println!("Dynamic tool execution error: {}", e);
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -96,18 +114,21 @@ impl AgentOrchestrator {
 
     async fn resolve_next_agent_step(&self, goal: &str, context: &str) -> Result<Option<Action>, Box<dyn std::error::Error>> {
         let lower = goal.to_lowercase();
+
+        // 1. Query database-defined tools first to execute them dynamically
+        let tools = crate::engine::utils::discovery::get_tools(&self.db_conn).await;
+        for tool in tools {
+            if lower.contains(&tool.name.to_lowercase()) {
+                return Ok(Some(Action::ExecuteDynamicTool(tool, goal.to_string())));
+            }
+        }
+
+        // 2. Fall back to local fast-path heuristics for OS actions
         if lower.contains("firefox") && context.contains("Firefox") { return Ok(None); }
         if lower.contains("firefox") { return Ok(Some(Action::LaunchApp("firefox".to_string()))); }
         if lower.contains("screenshot") { return Ok(Some(Action::CaptureScreenVerify)); }
 
-        use sqlx::Row;
-        let rows = sqlx::query("SELECT name FROM tools").fetch_all(&self.db_conn.pool).await.unwrap_or_default();
-        for r in rows {
-            let name: String = r.get("name");
-            if lower.contains(&name.to_lowercase()) {
-                return Ok(Some(Action::ExecuteShell(format!("echo 'Executing {}'", name))));
-            }
-        }
         Ok(None)
     }
+}
 }
