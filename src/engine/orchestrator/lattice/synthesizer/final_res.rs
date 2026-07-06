@@ -41,7 +41,9 @@ pub async fn synthesize_final_response(
         Output JSON: {{\"message\": \"...\", \"keep_sources\": bool, \"keep_attachments\": bool}}
         
         USER_QUERY: {}
-        CURRENT_RESPONSE: {}",
+        CURRENT_RESPONSE: {}
+        
+        RESPONSE FORMAT INSTRUCTION: Respond ONLY with a valid JSON object matching the schema above, containing the synthesized response in the \"message\" field.",
         query, serde_json::to_string(response).unwrap_or_default()
     );
 
@@ -59,32 +61,6 @@ pub async fn synthesize_final_response(
        // println!("❌ [Synthesizer] LLM call failed, response passes through unmodified.");
     }
 
-    // Programmatic UI Governance: always ensure internal developer/planner artifacts are stripped.
-    for m in &mut response.messages {
-        m.message = clean_internal_artifacts(&m.message);
-    }
-}
-
-fn clean_internal_artifacts(text: &str) -> String {
-    let mut cleaned_lines = Vec::new();
-    for line in text.lines() {
-        let mut clean_line = line.trim().to_lowercase();
-        if clean_line.starts_with("###") {
-            clean_line = clean_line.trim_start_matches('#').trim().to_string();
-        }
-        if clean_line.starts_with("-") || clean_line.starts_with("*") {
-            clean_line = clean_line.trim_start_matches(|c| c == '-' || c == '*').trim().to_string();
-        }
-        if clean_line.starts_with("next steps:")
-            || clean_line.starts_with("plan:")
-            || clean_line.starts_with("internal reasoning:")
-            || clean_line.starts_with("vision insights:")
-        {
-            continue;
-        }
-        cleaned_lines.push(line);
-    }
-    cleaned_lines.join("\n").trim().to_string()
 }
 
 fn extract_json_from_llm_output(raw: &str) -> Option<Value> {
