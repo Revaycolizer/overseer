@@ -35,10 +35,26 @@ impl AgentSystem {
         ).await;
 
         let agent = rig::agent::AgentBuilder::new(self.ollama_client.completion_model(&model_name))
-            .preamble("You are a concise title generator. Summarize the user's query into a 3-5 word title. No emojis. Output ONLY the title text. Do NOT include introductory phrases, quotation marks, conversational explanations, or punctuation.")
+            .preamble("You are a concise conversation title generator. Your sole task is to generate a 3-5 word title summarizing the topic of the user's query. Output ONLY the title itself.")
             .build();
 
-        match agent.prompt(query).await {
+        let mut truncated = query;
+        if query.len() > 1000 {
+            if let Some((idx, _)) = query.char_indices().nth(1000) {
+                truncated = &query[..idx];
+            }
+        }
+
+        let prompt = format!(
+            "Generate a concise 3-5 word title summarizing the topic of this user query.\n\
+             DO NOT answer the query. DO NOT include details, answers, bullet points, numbered lists, or explanations.\n\
+             Output ONLY the short title text, nothing else.\n\n\
+             USER QUERY: \"{}\"\n\n\
+             TITLE:",
+            truncated
+        );
+
+        match agent.prompt(&prompt).await {
             Ok(title) => {
                 let clean = title.trim().trim_matches('"').trim_matches('\'').trim().to_string();
                 clean_title_response(&clean)
