@@ -2,6 +2,7 @@ use rig::agent::AgentBuilder;
 use rig::completion::{Chat, Message, Prompt};
 use rig::providers::ollama;
 use crate::db::Database;
+use crate::engine::orchestrator::core::event_logger;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
 use crate::engine::orchestrator::state::StructuredState;
 use crate::engine::utils::discovery::AgentInfo;
@@ -78,10 +79,12 @@ pub async fn dispatch_domain(
 
         if let Some(tname) = json.get("tool").and_then(|v| v.as_str()) {
             let input = json.get("input").cloned().unwrap_or(serde_json::Value::Null);
+            event_logger::tool_call(db, run_id, event_sequence, domain, step, tname, &model, &input.to_string()).await;
             match execute_tool(tname, input, &tools, state).await {
                 Ok((output, is_action, expanded_input)) => {
                     if is_action { action_tool_executed = true; }
                     current_prompt = format!("{}\n\n[RESULT for '{}': {}]", current_prompt, tname, output);
+                    event_logger::tool_result(db, run_id, event_sequence, domain, step, tname, &model, &output, true).await;
                     
                     // Robust artifact extraction
                     let mut art_found = false;
@@ -113,23 +116,28 @@ pub async fn dispatch_domain(
                             res.summary = format!("Generated document: {}", last_artifacts.join(", "));
                             res.messages.clear();
                         }
+                        event_logger::route_completed(db, run_id, event_sequence, domain, step, &model, &res).await;
                         return Ok(res);
                     }
                     continue;
                 }
-                Err(stalled) => return Ok(stalled),
+                Err(stalled) => {
+                    event_logger::tool_result(db, run_id, event_sequence, domain, step, tname, &model, &serde_json::to_string(&stalled).unwrap_or_default(), false).await;
+                    return Ok(stalled);
+                }
             }
         }
 
-        // OFFICE DOMAIN FALLBACK: ... (existing code) ...
+        // OFFICE DOMAIN FALLBACK
         if is_doc_domain && !action_tool_executed {
             if let Some(dw_tool) = tools.iter().find(|t| t.name == "document_writer") {
                 let content = format!("{}\n\n{}", plan_history, state.to_prompt_string());
                 let auto_input = serde_json::json!({"format": "pdf", "content": content});
-                println!("🔧 OFFICE FALLBACK: Auto-invoking document_writer with state context.");
+                event_logger::tool_call(db, run_id, event_sequence, domain, step, "document_writer", &model, &auto_input.to_string()).await;
                 match execute_tool("document_writer", auto_input, &tools, state).await {
                     Ok((output, _, _)) => {
                         action_tool_executed = true;
+                        event_logger::tool_result(db, run_id, event_sequence, domain, step, "document_writer", &model, &output, true).await;
                         if let Ok(res_json) = serde_json::from_str::<serde_json::Value>(&output) {
                             if let Some(arts) = res_json.get("artifacts").and_then(|a| a.as_array()) {
                                 for a in arts { if let Some(p) = a.get("path").and_then(|v| v.as_str()) { last_artifacts.push(p.to_string()); } }
@@ -141,16 +149,22 @@ pub async fn dispatch_domain(
                             res.summary = format!("Generated document: {}", last_artifacts.join(", "));
                             res.messages.clear();
                         }
+                        event_logger::route_completed(db, run_id, event_sequence, domain, step, &model, &res).await;
                         return Ok(res);
                     }
-                    Err(stalled) => return Ok(stalled),
+                    Err(stalled) => {
+                        event_logger::tool_result(db, run_id, event_sequence, domain, step, "document_writer", &model, &serde_json::to_string(&stalled).unwrap_or_default(), false).await;
+                        return Ok(stalled);
+                    }
                 }
             }
         }
 
         enforce_physical_reality(&mut res, &visited_urls, &last_artifacts, action_tool_executed, domain);
+        event_logger::route_completed(db, run_id, event_sequence, domain, step, &model, &res).await;
         return Ok(res);
 
     }
+    event_logger::route_failed(db, run_id, event_sequence, domain, step, &model, "Max iterations reached without resolution.").await;
     Err("Max iterations reached".into())
 }

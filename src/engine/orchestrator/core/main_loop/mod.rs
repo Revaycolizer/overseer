@@ -45,6 +45,9 @@ pub async fn orchestrate_request(
 
     let macro_tasks = planning::resolve_macro_tasks(db, master_planner, all_agents, &clean_query, history.clone(), &decision, ollama_client).await;
 
+    let macro_plan_details = serde_json::to_string(&macro_tasks).unwrap_or_default();
+    event_logger::simple(db, run_id, &mut seq, "macro_plan", "completed", &format!("Orchestrator planned {} step(s).", macro_tasks.len()), Some(&macro_plan_details)).await;
+
     executor::execute_macro_tasks(db, conversation_id, run_id, &mut seq, all_agents, macro_tasks, &clean_query, &history, &enriched_memory_context, perception_tool, ollama_client, 60000).await
 }
 
