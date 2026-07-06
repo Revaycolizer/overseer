@@ -1986,6 +1986,19 @@ pub async fn get_latest_execution_run_for_conversation(
     Ok(row)
 }
 
+pub async fn get_latest_execution_run(db: &Database) -> anyhow::Result<Option<ExecutionRun>> {
+    let row = sqlx::query_as::<_, ExecutionRun>(
+        "SELECT id, conversation_id, user_query, status, final_response, error_message, started_at, finished_at
+         FROM execution_runs
+         ORDER BY started_at DESC
+         LIMIT 1"
+    )
+    .fetch_optional(&db.pool)
+    .await?;
+    Ok(row)
+}
+
+
 pub async fn get_workflows(db: &Database) -> anyhow::Result<Vec<Workflow>> {
     let rows = sqlx::query_as::<_, Workflow>(
         "SELECT id, name, description, trigger_type, trigger_config, status, created_at, updated_at
