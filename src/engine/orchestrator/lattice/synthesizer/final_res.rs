@@ -28,8 +28,7 @@ pub async fn synthesize_final_response(
     };
 
     let prompt = format!(
-        "USER_QUERY: {}\nCURRENT_RESPONSE: {}\n\n\
-        ARCHITECTURE V3.6: CONVERSATIONAL ALIGNMENT
+        "ARCHITECTURE V3.6: CONVERSATIONAL ALIGNMENT
         1. Intent-Driven Response: Read the USER_QUERY carefully. Your response MUST answer ONLY what the user asked — nothing more.
            - If the user asks a specific question (e.g. \"what is her rating?\"), answer with JUST that data point.
            - If the user asks for a general description, give a BRIEF 1-2 sentence summary. Do NOT list every detail from the data.
@@ -39,7 +38,10 @@ pub async fn synthesize_final_response(
         4. Grounding Safety: If CURRENT_RESPONSE has charts or file artifacts, acknowledge them briefly. But for text-only responses, do NOT pad the answer with unrequested details.
         5. Creative Preservation: If the response is creative (story, greeting, poem), PRESERVE its essence verbatim.
         
-        Output JSON: {{\"message\": \"...\", \"keep_sources\": bool, \"keep_attachments\": bool}}",
+        Output JSON: {{\"message\": \"...\", \"keep_sources\": bool, \"keep_attachments\": bool}}
+        
+        USER_QUERY: {}
+        CURRENT_RESPONSE: {}",
         query, serde_json::to_string(response).unwrap_or_default()
     );
 
@@ -56,6 +58,33 @@ pub async fn synthesize_final_response(
     } else {
        // println!("❌ [Synthesizer] LLM call failed, response passes through unmodified.");
     }
+
+    // Programmatic UI Governance: always ensure internal developer/planner artifacts are stripped.
+    for m in &mut response.messages {
+        m.message = clean_internal_artifacts(&m.message);
+    }
+}
+
+fn clean_internal_artifacts(text: &str) -> String {
+    let mut cleaned_lines = Vec::new();
+    for line in text.lines() {
+        let mut clean_line = line.trim().to_lowercase();
+        if clean_line.starts_with("###") {
+            clean_line = clean_line.trim_start_matches('#').trim().to_string();
+        }
+        if clean_line.starts_with("-") || clean_line.starts_with("*") {
+            clean_line = clean_line.trim_start_matches(|c| c == '-' || c == '*').trim().to_string();
+        }
+        if clean_line.starts_with("next steps:")
+            || clean_line.starts_with("plan:")
+            || clean_line.starts_with("internal reasoning:")
+            || clean_line.starts_with("vision insights:")
+        {
+            continue;
+        }
+        cleaned_lines.push(line);
+    }
+    cleaned_lines.join("\n").trim().to_string()
 }
 
 fn extract_json_from_llm_output(raw: &str) -> Option<Value> {

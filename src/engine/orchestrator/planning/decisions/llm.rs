@@ -16,7 +16,7 @@ pub async fn decide_orchestration_with_llm(
         .build();
 
     let history_str = history.iter().map(|m| format!("{:?}", m)).collect::<Vec<_>>().join("\n");
-    let prompt = format!("QUERY: {}\nCONTEXT: {}\nHISTORY: {}\nDecide route.", query, memory_context, history_str);
+    let prompt = format!("CONTEXT: {}\nHISTORY: {}\nQUERY: {}\nDecide route.", memory_context, history_str, query);
 
     let response = agent.prompt(&prompt).await.map_err(|e: PromptError| e.to_string())?;
     let trimmed = response.trim();

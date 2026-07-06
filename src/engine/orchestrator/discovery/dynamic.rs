@@ -23,10 +23,10 @@ impl OverseerAgent {
 
     pub async fn verify(&self, query: &str, grounding: &str, history: &str) -> (bool, String) {
         let prompt = format!(
-            "USER_REQUEST: {}\n\nCURRENT_GROUNDING:\n{}\n\nPLAN_HISTORY:\n{}\n\n\
+            "USER_REQUEST: {}\n\nPLAN_HISTORY:\n{}\n\nCURRENT_GROUNDING:\n{}\n\n\
              Has the user's specific request been fully completed? \
              Respond with exactly: 'YES' or 'NO: [reason]'",
-            query, grounding, history
+            query, history, grounding
         );
 
         match self.agent.prompt(&prompt).await {
