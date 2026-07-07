@@ -1,0 +1,83 @@
+use crate::db::Database;
+use std::collections::HashMap;
+
+pub async fn get_setting(db: &Database, key: &str) -> String {
+    let res: Result<Option<(String,)>, sqlx::Error> =
+        sqlx::query_as("SELECT value FROM settings WHERE key = ?")
+            .bind(key)
+            .fetch_optional(&db.pool)
+            .await;
+
+    match res {
+        Ok(Some((v,))) => v,
+        _ => "".to_string(),
+    }
+}
+
+pub async fn get_setting_or(db: &Database, key: &str, default: &str) -> String {
+    let value = get_setting(db, key).await;
+    if value.is_empty() {
+        default.to_string()
+    } else {
+        value
+    }
+}
+
+pub async fn get_setting_i64(db: &Database, key: &str, default: i64) -> i64 {
+    get_setting(db, key).await.parse::<i64>().unwrap_or(default)
+}
+
+pub async fn set_setting(db: &Database, key: &str, value: &str) -> anyhow::Result<()> {
+    let id = db.next_id().await;
+    sqlx::query("INSERT INTO settings (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
+        .bind(id)
+        .bind(key)
+        .bind(value)
+        .execute(&db.pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn get_all_settings(db: &Database) -> HashMap<String, String> {
+    let rows: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM settings")
+        .fetch_all(&db.pool)
+        .await
+        .unwrap_or_default();
+
+    rows.into_iter().collect()
+}
+
+pub async fn resolve_model_name(
+    db: &Database,
+    preferred: Option<&str>,
+    setting_key: &str,
+    hard_default: &str,
+) -> String {
+    let available_models = super::get_available_models().await;
+    let configured = get_setting_or(db, setting_key, hard_default).await;
+
+    let preferred_clean = preferred.map(str::trim).filter(|value| !value.is_empty());
+    let configured_clean = configured.trim();
+
+    let is_available = |model: &str| {
+        available_models.is_empty() || available_models.iter().any(|candidate| candidate == model)
+    };
+
+    if !configured_clean.is_empty() && is_available(configured_clean) {
+        return configured_clean.to_string();
+    }
+
+    if let Some(model) = preferred_clean {
+        if is_available(model) {
+            return model.to_string();
+        }
+    }
+
+    available_models.into_iter().next().unwrap_or_else(|| {
+        if configured_clean.is_empty() {
+            hard_default.to_string()
+        } else {
+            configured_clean.to_string()
+        }
+    })
+}
