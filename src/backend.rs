@@ -21,7 +21,7 @@ pub struct SystemLoad {
     pub usage: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RuntimeHealth {
     pub ollama_reachable: bool,
     pub ollama_endpoint: String,

@@ -53,10 +53,12 @@ pub fn IdleWatcher() -> Element {
                     let idle_secs = get_system_idle_secs();
                     idle_time.set(idle_secs);
                     let entered = *entered_idle_at.peek();
-                    if idle_secs >= 30 && entered == 0 {
+                    let db = state.peek().db.clone();
+                    let timeout = crate::backend::get_setting_i64(&db, "idle_lock_timeout_secs", 1800).await as u64;
+                    if idle_secs >= timeout && entered == 0 {
                         entered_idle_at.set(now());
                         nav.push(Route::SystemIdleSecureLockScreen {});
-                    } else if idle_secs < 30 && entered != 0 {
+                    } else if idle_secs < timeout && entered != 0 {
                         entered_idle_at.set(0);
                         if let Route::SystemIdleSecureLockScreen {} = route { if now() - entered > 2 { nav.push(Route::Conversations {}); } }
                     }
