@@ -102,5 +102,10 @@ pub async fn execute_macro_tasks(
 
     event_logger::simple(db, run_id, event_sequence, "final_response", "completed", "Final synthesized response ready.", Some(&final_json)).await;
 
+    if let Some(rid) = run_id {
+        let status = if master_response.status == "failed" { "failed" } else { "completed" };
+        let _ = crate::backend::finish_execution_run(db, rid, status, Some(&final_json), None).await;
+    }
+
     final_json
 }

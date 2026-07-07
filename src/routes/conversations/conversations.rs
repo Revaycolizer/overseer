@@ -62,15 +62,27 @@ pub fn Conversations() -> Element {
     let is_first_msg = messages.is_empty();
     let mut starter_prompt = use_signal(|| None::<String>);
     let mut is_thinking: Signal<bool> = use_signal(|| false);
+    let mut is_local_executing = use_signal(|| false);
+    provide_context(is_local_executing);
     let mut selected_execution_run_id = use_signal(|| None::<i64>);
 
     let db_for_execution_runs = db.clone();
     let execution_runs_resource = use_resource(move || { let db = db_for_execution_runs.clone(); let conv_id = selected_conversation_id(); async move { if let Some(id) = conv_id { backend::get_execution_runs_for_conversation(&db, id, 10).await.unwrap_or_default() } else { vec![] } } });
+    provide_context(execution_runs_resource.clone());
     let execution_runs = execution_runs_resource.read().cloned().unwrap_or_default();
     let runs_loading = execution_runs_resource.read().is_none();
 
     let execution_runs_for_effect = execution_runs.clone();
     use_effect(move || { let runs = execution_runs_for_effect.clone(); let current = selected_execution_run_id(); if runs.is_empty() { if current.is_some() { selected_execution_run_id.set(None); } } else if !runs.iter().any(|run| Some(run.id) == current) { selected_execution_run_id.set(Some(runs[0].id)); } });
+
+    use_effect(move || {
+        if let Some(runs) = execution_runs_resource.read().as_ref() {
+            let has_running = runs.iter().any(|run| run.status == "running");
+            is_thinking.set(is_local_executing() || has_running);
+        } else {
+            is_thinking.set(is_local_executing());
+        }
+    });
 
     let db_for_execution_events = db.clone();
     let execution_events_resource = use_resource(move || { let db = db_for_execution_events.clone(); let run_id = selected_execution_run_id(); async move { if let Some(id) = run_id { backend::get_execution_events(&db, id).await.unwrap_or_default() } else { vec![] } } });
