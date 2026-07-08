@@ -233,7 +233,7 @@ async fn try_voice_fast_path(command: &str) -> Option<String> {
 }
 
 async fn get_voice_conversation(db: &Database) -> i64 {
-    if let Ok(convs) = crate::backend::get_conversations(db).await {
+    if let Ok(convs) = crate::backend::get_conversations(db, 50).await {
         if let Some(c) = convs.iter().find(|c| c.title == "Voice Commands") {
             return c.id;
         }

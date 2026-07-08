@@ -7,6 +7,7 @@ pub mod db;
 pub mod engine;
 mod routes;
 mod state;
+mod server;
 
 use routes::{
     AgentsWorkshop, App, ComputerControl, Conversations, DeviceControl, Layout, PlannersWorkshop,
@@ -48,6 +49,19 @@ pub enum Route {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     println!("📍 Overseer launched with args: {:?}", args);
+
+    if args.len() > 1 && (args[1] == "server" || args[1] == "--server") {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            println!("🛠️  Initializing Database for Server...");
+            let db = crate::db::Database::new().await.unwrap();
+            let agent_system = std::sync::Arc::new(crate::engine::system::AgentSystem::new(db.clone()));
+            if let Err(e) = crate::server::run_server(std::sync::Arc::new(db), agent_system, 8080).await {
+                eprintln!("Server Error: {}", e);
+            }
+        });
+        return;
+    }
 
     if args.len() > 1 && (args[1] == "info" || args[1] == "--info" || !args[1].starts_with("-")) {
         let rt = tokio::runtime::Runtime::new().unwrap();

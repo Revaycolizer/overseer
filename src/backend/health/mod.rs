@@ -8,7 +8,7 @@ pub use runtime::*;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RuntimeHealth {
     pub ollama_reachable: bool,
     pub ollama_endpoint: String,

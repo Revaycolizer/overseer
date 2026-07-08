@@ -5,7 +5,7 @@ pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     let system = crate::engine::system::AgentSystem::new(sqlite_db.clone());
 
     // Create a special CLI conversation if it doesn't exist
-    let conversation_id = match crate::backend::get_conversations(&sqlite_db).await {
+    let conversation_id = match crate::backend::get_conversations(&sqlite_db, 100).await {
         Ok(convs) => convs
             .iter()
             .find(|c| c.title == "CLI Conversation")

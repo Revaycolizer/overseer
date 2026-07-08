@@ -18,9 +18,13 @@ use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct Database {
+    #[cfg(not(target_arch = "wasm32"))]
     pub pool: sqlx::SqlitePool,
+    #[cfg(not(target_arch = "wasm32"))]
     pub snowflake: Arc<Mutex<SnowflakeIdGenerator>>,
     pub lancedb_uri: String,
+    pub remote_url: Option<String>,
+    pub http_client: reqwest::Client,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, PartialEq)]
@@ -74,8 +78,43 @@ impl PartialEq for Database {
 
 impl Database {
     pub async fn next_id(&self) -> i64 {
-        let mut gen = self.snowflake.lock().await;
-        gen.real_time_generate()
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut gen = self.snowflake.lock().await;
+            return gen.real_time_generate();
+        }
+        #[cfg(target_arch = "wasm32")]
+        0
+    }
+
+    pub fn is_remote(&self) -> bool {
+        self.remote_url.is_some()
+    }
+
+    pub fn remote_client(&self) -> crate::backend::RemoteClient {
+        crate::backend::RemoteClient::new(self.remote_url.clone().unwrap_or_default())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn new_remote(url: &str) -> Self {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let generator = SnowflakeIdGenerator::new(1, 1);
+        Self {
+            pool,
+            snowflake: Arc::new(Mutex::new(generator)),
+            lancedb_uri: "".to_string(),
+            remote_url: Some(url.to_string()),
+            http_client: reqwest::Client::new(),
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn new_remote(url: &str) -> Self {
+        Self {
+            lancedb_uri: "".to_string(),
+            remote_url: Some(url.to_string()),
+            http_client: reqwest::Client::new(),
+        }
     }
 }
 

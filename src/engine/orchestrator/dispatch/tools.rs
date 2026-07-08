@@ -75,7 +75,10 @@ pub async fn evaluate_computer_tool_gate(db: &Database, domain: &str, tool_name:
     let touches_computer = matches!(domain, "computer" | "desktop") || action_tool || is_computer_observation_tool(tool_name);
     if !touches_computer { return ToolGateDecision { allowed: true, reason: None, action_summary: None, action_tool: false }; }
 
-    let state = crate::backend::get_computer_supervision_state(db).await;
+    let state = match crate::backend::get_computer_supervision_state(db).await {
+        Ok(s) => s,
+        Err(e) => return ToolGateDecision { allowed: false, reason: Some(format!("Failed to get supervision state: {}", e)), action_summary: None, action_tool },
+    };
     let action_summary = summarize_computer_action(tool_name, input_json);
 
     if state.session_state == "emergency_stopped" {

@@ -38,7 +38,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         async move { backend::get_computer_supervision_state(&db).await }
     });
 
-    let computer_state = computer_state_resource.read().cloned();
+    let computer_state = computer_state_resource.read().as_ref().and_then(|r| r.as_ref().ok().cloned());
     let supervision_mode = computer_state
         .as_ref()
         .map(|state| state.supervision_mode.clone())

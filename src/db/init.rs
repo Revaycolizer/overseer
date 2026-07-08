@@ -91,6 +91,8 @@ impl Database {
             pool: pool.clone(),
             snowflake: Arc::new(Mutex::new(generator)),
             lancedb_uri: data_dir.join("data").join("lancedb").to_string_lossy().to_string(),
+            remote_url: None,
+            http_client: reqwest::Client::new(),
         };
 
         database

@@ -37,7 +37,7 @@ pub fn Conversations() -> Element {
     drop(global_read);
 
     let db_for_conv = db.clone();
-    let conversations_resource = use_resource(move || { let db = db_for_conv.clone(); async move { backend::get_conversations(&db).await.unwrap_or_default() } });
+    let conversations_resource = use_resource(move || { let db = db_for_conv.clone(); async move { backend::get_conversations(&db, 100).await.unwrap_or_default() } });
     let conversations = conversations_resource.read().cloned().unwrap_or_default();
     let mut selected_conversation_id = use_signal(|| conversations.first().map(|c| c.id));
 
