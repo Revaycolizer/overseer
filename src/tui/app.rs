@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use crate::backend::client::BackendClient;
 use crate::backend::{Conversation, Message, SystemLoad};
 
@@ -17,6 +18,8 @@ pub struct App {
     pub active_tab: ActiveTab,
     pub input: String,
     pub status_message: String,
+    pub is_orchestrating: Arc<AtomicBool>,
+    pub orchestrate_error: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 impl App {
@@ -29,7 +32,9 @@ impl App {
             system_load: None,
             active_tab: ActiveTab::Chat,
             input: String::new(),
-            status_message: "Press TAB to switch, ENTER to send message, q to quit".to_string(),
+            status_message: "TAB: Switch | ENTER: Send | Ctrl+N / F2: New Conv | q: Quit".to_string(),
+            is_orchestrating: Arc::new(AtomicBool::new(false)),
+            orchestrate_error: Arc::new(std::sync::Mutex::new(None)),
         };
         app.refresh_conversations().await?;
         app.refresh_metrics().await?;
@@ -59,12 +64,30 @@ impl App {
         let active_conv_id = self.conversations[self.selected_conv_idx].id;
         let query = self.input.clone();
         self.input.clear();
-        self.status_message = "Sending and orchestrating agent run...".to_string();
         
         let _ = self.client.add_message(active_conv_id, "user", &query, false).await?;
-        let _ = self.client.orchestrate(active_conv_id, &query).await;
         self.refresh_conversations().await?;
-        self.status_message = "Message sent successfully.".to_string();
+        
+        self.status_message = "Orchestrating agent run...".to_string();
+        self.is_orchestrating.store(true, std::sync::atomic::Ordering::SeqCst);
+        
+        let client = self.client.clone();
+        let is_orch = self.is_orchestrating.clone();
+        let err_clone = self.orchestrate_error.clone();
+        *err_clone.lock().unwrap() = None;
+
+        tokio::spawn(async move {
+            match client.orchestrate(active_conv_id, &query).await {
+                Ok(response) => {
+                    let _ = client.add_message(active_conv_id, "assistant", &response, false).await;
+                }
+                Err(e) => {
+                    *err_clone.lock().unwrap() = Some(e.to_string());
+                }
+            }
+            is_orch.store(false, std::sync::atomic::Ordering::SeqCst);
+        });
+        
         Ok(())
     }
 }

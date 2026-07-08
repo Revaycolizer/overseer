@@ -52,14 +52,32 @@ async fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut last_refresh = std::time::Instant::now();
     loop {
         terminal.draw(|f| overseer::tui::ui::draw(f, app))?;
+
+        if app.is_orchestrating.load(std::sync::atomic::Ordering::SeqCst) {
+            if last_refresh.elapsed() >= std::time::Duration::from_secs(1) {
+                let _ = app.refresh_conversations().await;
+                last_refresh = std::time::Instant::now();
+            }
+        } else if app.status_message == "Orchestrating agent run..." {
+            let _ = app.refresh_conversations().await;
+            if let Some(err) = app.orchestrate_error.lock().unwrap().take() {
+                app.status_message = format!("Error: {}", err);
+            } else {
+                app.status_message = "Ready.".to_string();
+            }
+        }
+
         if crossterm::event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Char('q') {
-                    return Ok(());
+                if key.kind == event::KeyEventKind::Press {
+                    if key.code == KeyCode::Char('q') {
+                        return Ok(());
+                    }
+                    overseer::tui::handlers::handle_key(app, key).await?;
                 }
-                overseer::tui::handlers::handle_key(app, key.code).await?;
             }
         }
     }
