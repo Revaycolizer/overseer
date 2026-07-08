@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::Value;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
 use crate::engine::orchestrator::core::response::{ChartPart, MessagePart};
 

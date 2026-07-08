@@ -4,6 +4,7 @@ use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingS
 pub struct SpeechOptimizer {
     #[cfg(feature = "whisper")]
     whisper_ctx: Option<WhisperContext>,
+    #[allow(dead_code)]
     custom_vocabulary: String,
 }
 

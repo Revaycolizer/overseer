@@ -3,7 +3,6 @@ pub mod protoc;
 pub mod runtime;
 
 pub use models::*;
-pub use protoc::*;
 pub use runtime::*;
 
 use serde::{Deserialize, Serialize};

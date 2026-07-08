@@ -4,7 +4,7 @@ use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 #[component]
 pub fn AgentsWorkshop() -> Element {
-    let mut global_state = crate::state::use_global_state();
+    let global_state = crate::state::use_global_state();
     let db = global_state.read().db.clone();
 
     let db_for_agents = db.clone();
@@ -92,7 +92,7 @@ pub fn AgentsWorkshop() -> Element {
     });
 
     let db_for_versions = db.clone();
-    let mut version_history_resource = use_resource(move || {
+    let version_history_resource = use_resource(move || {
         let db = db_for_versions.clone();
         let agent_id = selected_agent_id();
         async move {
@@ -302,7 +302,7 @@ pub fn AgentsWorkshop() -> Element {
                                                                 let agent_id = agent.id;
                                                                 let tool_name = tool_name.clone();
                                                                 let db = db.clone();
-                                                                let mut agents_resource = agents_resource.clone();
+                                                                let agents_resource = agents_resource.clone();
                                                                 move |_| {
                                                                     let db = db.clone();
                                                                     let mut agents_resource = agents_resource.clone();
@@ -340,7 +340,7 @@ pub fn AgentsWorkshop() -> Element {
                                                                         let agent_id = agent.id;
                                                                         let tool_id = tool.id;
                                                                         let db = db.clone();
-                                                                        let mut agents_resource = agents_resource.clone();
+                                                                        let agents_resource = agents_resource.clone();
                                                                         move |_| {
                                                                             let db = db.clone();
                                                                             let mut agents_resource = agents_resource.clone();
@@ -466,8 +466,8 @@ pub fn AgentsWorkshop() -> Element {
                                                     class: "bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-slate-800 transition-all",
                                                     onclick: {
                                                         let db = db.clone();
-                                                        let mut agents_resource = agents_resource.clone();
-                                                        let mut version_history_resource = version_history_resource.clone();
+                                                        let agents_resource = agents_resource.clone();
+                                                        let version_history_resource = version_history_resource.clone();
                                                         let version_tag = selected_version_tag();
                                                         move |_| {
                                                             let db = db.clone();
@@ -537,7 +537,7 @@ pub fn AgentsWorkshop() -> Element {
                                             onclick: {
                                                 let agent_id = agent.id;
                                                 let db = global_state.read().db.clone();
-                                                let mut agents_resource = agents_resource.clone();
+                                                let agents_resource = agents_resource.clone();
                                                 move |_| {
                                                     let db = db.clone();
                                                     let mut agents_resource = agents_resource.clone();

@@ -21,10 +21,13 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(workflows::router())
         .merge(work_items::router())
         .merge(planners::router())
+        .merge(supervision::router())
+        .merge(versions::router())
+        .merge(artifacts::router())
         .merge(misc::router())
         .with_state(state);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
     println!("🚀 Overseer Server running on http://{}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
@@ -39,4 +42,7 @@ pub mod tools;
 pub mod workflows;
 pub mod work_items;
 pub mod planners;
+pub mod supervision;
+pub mod versions;
+pub mod artifacts;
 pub mod misc;

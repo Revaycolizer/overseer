@@ -2,7 +2,7 @@ use crate::backend::{link_agent_to_supervisor, unlink_agent_from_supervisor};
 use crate::engine::utils::discovery::AgentInfo;
 use crate::state::use_global_state;
 use dioxus::prelude::*;
-use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+use dioxus_material_icons::MaterialIcon;
 
 #[component]
 pub fn AgentAssignments(

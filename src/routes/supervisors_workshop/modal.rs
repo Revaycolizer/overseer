@@ -1,7 +1,7 @@
 use super::agent_assignments::AgentAssignments;
 use crate::backend::{get_agents, get_supervisor_agents};
 use crate::db::Supervisor;
-use crate::engine::utils::discovery::AgentInfo;
+
 use crate::state::use_global_state;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
@@ -60,7 +60,7 @@ pub fn SupervisorModal(
     });
 
     // Handle Prism highlighting when switching to Code tab
-    const PRISM_HIGHLIGHT_JS: &str = "if (window.Prism) { window.Prism.highlightAll(); }";
+    // const PRISM_HIGHLIGHT_JS: &str = "if (window.Prism) { window.Prism.highlightAll(); }";
 
     rsx! {
         div {

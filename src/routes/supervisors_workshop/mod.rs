@@ -23,7 +23,7 @@ pub use modal::SupervisorModal;
 pub fn SupervisorsWorkshop() -> Element {
     let state = use_global_state();
 
-    let mut supervisors: Resource<Vec<Supervisor>> = use_resource(move || {
+    let supervisors: Resource<Vec<Supervisor>> = use_resource(move || {
         let db = state.read().db.clone();
         async move {
             let res: Vec<Supervisor> = get_supervisors(&db).await.unwrap_or_default();
@@ -31,7 +31,7 @@ pub fn SupervisorsWorkshop() -> Element {
         }
     });
 
-    let mut selected_supervisor = use_signal(|| None::<Supervisor>);
+    let selected_supervisor = use_signal(|| None::<Supervisor>);
     let mut show_modal = use_signal(|| false);
     let mut editing_supervisor = use_signal(|| None::<Supervisor>);
 

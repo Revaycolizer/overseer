@@ -3,7 +3,7 @@ use crate::backend::{
     update_supervisor,
 };
 use crate::db::Supervisor;
-use crate::engine::utils::discovery::AgentInfo;
+
 use crate::state::use_global_state;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};

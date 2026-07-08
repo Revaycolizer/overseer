@@ -2,7 +2,7 @@ use serde_json::json;
 use crate::engine::tools::error::DynamicToolError;
 
 pub async fn windows_accessibility_state_json(
-    tool_name: &str,
+    _tool_name: &str,
     _input: &serde_json::Value,
 ) -> Result<String, DynamicToolError> {
     Ok(json!({

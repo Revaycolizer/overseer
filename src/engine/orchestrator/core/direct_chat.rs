@@ -73,7 +73,7 @@ pub async fn handle_direct_chat(
     
     // ARCHITECTURE V3.4: UNIFORM PROTOCOL ENFORCEMENT
     // If the agent returned a SupervisorExecutionResult JSON, we must parse and format it.
-    let mut response = if raw_response.trim().starts_with('{') && raw_response.trim().ends_with('}') {
+    let response = if raw_response.trim().starts_with('{') && raw_response.trim().ends_with('}') {
         let parsed = crate::engine::orchestrator::dispatch::parsers::parse_supervisor_result(
             raw_response.clone(), 
             false, 

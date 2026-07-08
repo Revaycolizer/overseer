@@ -1,10 +1,12 @@
 use crate::routes::conversations::content_cleaner::clean_content;
 
+#[allow(dead_code)]
 pub struct ParsedMessage {
     pub display_text: String,
     pub attachments: Vec<String>,
 }
 
+#[allow(dead_code)]
 pub fn parse_message(content: &str) -> ParsedMessage {
     let mut attachments = Vec::new();
     for line in content.lines() {
@@ -15,6 +17,7 @@ pub fn parse_message(content: &str) -> ParsedMessage {
     ParsedMessage { display_text: clean_content(content), attachments }
 }
 
+#[allow(dead_code)]
 pub fn extract_agent_attachments(content: &str) -> Vec<String> {
     content.lines().filter_map(|line| {
         let t = line.trim();

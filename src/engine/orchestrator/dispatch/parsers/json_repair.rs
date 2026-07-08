@@ -1,4 +1,3 @@
-use serde_json::Value;
 
 pub fn repair_json_literals(s: &str) -> String {
     let mut out = String::with_capacity(s.len());

@@ -43,7 +43,7 @@ try:
 except Exception as e:
     print(json.dumps({"error": str(e)}))
 "#;
-        let mut child = Command::new("python3")
+        let child = Command::new("python3")
             .args(["-c", py_script])
             .output();
         match child {

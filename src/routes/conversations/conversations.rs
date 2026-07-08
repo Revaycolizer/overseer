@@ -39,7 +39,7 @@ pub fn Conversations() -> Element {
     let db_for_conv = db.clone();
     let conversations_resource = use_resource(move || { let db = db_for_conv.clone(); async move { backend::get_conversations(&db, 100).await.unwrap_or_default() } });
     let conversations = conversations_resource.read().cloned().unwrap_or_default();
-    let mut selected_conversation_id = use_signal(|| conversations.first().map(|c| c.id));
+    let selected_conversation_id = use_signal(|| conversations.first().map(|c| c.id));
 
     let db_for_msg = db.clone();
     let messages_resource = use_resource(move || { let db = db_for_msg.clone(); let conv_id = selected_conversation_id(); async move { if let Some(id) = conv_id { backend::get_messages(&db, id).await.unwrap_or_default() } else { vec![] } } });
@@ -62,7 +62,7 @@ pub fn Conversations() -> Element {
     let is_first_msg = messages.is_empty();
     let mut starter_prompt = use_signal(|| None::<String>);
     let mut is_thinking: Signal<bool> = use_signal(|| false);
-    let mut is_local_executing = use_signal(|| false);
+    let is_local_executing = use_signal(|| false);
     provide_context(is_local_executing);
     let mut selected_execution_run_id = use_signal(|| None::<i64>);
 

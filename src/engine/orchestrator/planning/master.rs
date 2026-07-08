@@ -1,5 +1,4 @@
-use crate::engine::utils::discovery::AgentInfo;
-use rig::{agent::AgentBuilder, client::CompletionClient, completion::{Chat, Prompt}, providers::ollama};
+use rig::{agent::AgentBuilder, client::CompletionClient, completion::Chat, providers::ollama};
 
 #[derive(Clone)]
 pub struct MasterPlanner {

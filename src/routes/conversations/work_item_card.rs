@@ -2,10 +2,8 @@
 use super::work_item_card_parts::{WorkItemCardHeader, WorkItemCardActions};
 use super::route_summary::prettify_token;
 use super::work_item_ops::parse_work_item_runtime_metadata;
-use super::work_item_runner::{run_work_item_now, update_work_item_manual_status};
 use crate::backend;
 use dioxus::prelude::*;
-use dioxus_material_icons::MaterialIcon;
 
 #[component]
 pub fn WorkItemCard(

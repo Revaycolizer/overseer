@@ -64,7 +64,7 @@ impl SystemClient for LocalClient {
             Ok(filename.to_string())
         }
     }
-    async fn save_chart_export(&self, cid: i64, ch: &str) -> anyhow::Result<String> {
+    async fn save_chart_export(&self, _cid: i64, ch: &str) -> anyhow::Result<String> {
         let val: serde_json::Value = serde_json::from_str(ch).unwrap_or_default();
         let title = val.get("title").and_then(|v| v.as_str()).unwrap_or("chart").to_string();
         let data = val.get("data").and_then(|v| v.as_str()).unwrap_or(ch).to_string();

@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use crate::db::get_overseer_data_dir;
 use ort::session::Session;
 use ort::value::Tensor;

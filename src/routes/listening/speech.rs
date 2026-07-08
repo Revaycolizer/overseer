@@ -19,10 +19,10 @@ pub fn use_speech_recognition(state: Signal<GlobalState>) {
         
         let db = db.clone();
         let agent = agent.clone();
-        let mut is_listening_sig = is_listening_sig.clone();
-        let mut is_inhibited_sig = is_inhibited_sig.clone();
+        let is_listening_sig = is_listening_sig.clone();
+        let is_inhibited_sig = is_inhibited_sig.clone();
         let mut voice_transcript_sig = voice_transcript_sig.clone();
-        let mut voice_result_sig = voice_result_sig.clone();
+        let voice_result_sig = voice_result_sig.clone();
 
         spawn(async move {
             if voice_transcript_sig.read().is_some() {
@@ -71,7 +71,7 @@ pub fn use_speech_recognition(state: Signal<GlobalState>) {
                 };
             "#);
 
-            let mut final_received = false;
+            let final_received = false;
             while let Ok(msg) = eval_handle.recv::<serde_json::Value>().await {
                 if let Some(msg_type) = msg.get("type").and_then(|v| v.as_str()) {
                     match msg_type {
@@ -86,7 +86,6 @@ pub fn use_speech_recognition(state: Signal<GlobalState>) {
                             if let Some(text) = msg.get("text").and_then(|v| v.as_str()) {
                                 let cmd = text.trim().to_string();
                                 if !cmd.is_empty() {
-                                    final_received = true;
                                     println!("🎙️ Web Speech API transcribed: \"{}\"", cmd);
                                     
                                     let db = db.clone();

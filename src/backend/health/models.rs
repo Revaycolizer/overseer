@@ -1,16 +1,8 @@
-use serde::{Deserialize, Serialize};
+
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OllamaModel {
-    pub name: String,
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct OllamaTagsResponse {
-    models: Vec<OllamaModel>,
-}
 
 struct AvailableModelsCache {
     fetched_at: Instant,

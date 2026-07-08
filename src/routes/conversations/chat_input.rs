@@ -25,15 +25,15 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let db = global_read.db.clone();
     drop(global_read);
 
-    let mut selected_artifacts = props.selected_artifacts;
+    let selected_artifacts = props.selected_artifacts;
     let mut selected_work_item = props.selected_work_item;
     let selected_conversation_id = props.selected_conversation_id;
-    let mut starter_prompt = props.starter_prompt;
+    let starter_prompt = props.starter_prompt;
     let selected_artifact_count = selected_artifacts().len();
     let has_active_work_item = selected_work_item().is_some();
     let db_for_computer_state = db.clone();
 
-    let mut computer_state_resource = use_resource(move || {
+    let computer_state_resource = use_resource(move || {
         let db = db_for_computer_state.clone();
         async move { backend::get_computer_supervision_state(&db).await }
     });
@@ -109,7 +109,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                             value: "{supervision_mode}",
                             onchange: {
                                 let db = db.clone();
-                                let mut computer_state_resource = computer_state_resource.clone();
+                                let computer_state_resource = computer_state_resource.clone();
                                 move |evt| {
                                     let db = db.clone();
                                     let mut computer_state_resource = computer_state_resource.clone();
@@ -148,7 +148,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                                 class: "inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700 transition-all",
                                 onclick: {
                                     let db = db.clone();
-                                    let mut computer_state_resource = computer_state_resource.clone();
+                                    let computer_state_resource = computer_state_resource.clone();
                                     move |_| {
                                         let db = db.clone();
                                         let mut computer_state_resource = computer_state_resource.clone();
@@ -165,7 +165,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                                 class: "inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 font-bold text-red-600 hover:bg-red-50 transition-all",
                                 onclick: {
                                     let db = db.clone();
-                                    let mut computer_state_resource = computer_state_resource.clone();
+                                    let computer_state_resource = computer_state_resource.clone();
                                     move |_| {
                                         let db = db.clone();
                                         let mut computer_state_resource = computer_state_resource.clone();
@@ -220,16 +220,16 @@ fn ChatComposer(props: ChatInputProps) -> Element {
 
     let mut input_text = use_signal(|| String::new());
     let mut pending_attachments = use_signal(|| Vec::<(String, String, Vec<u8>)>::new());
-    let mut is_thinking = props.is_thinking;
+    let is_thinking = props.is_thinking;
     let mut active_request_abort_handle = use_signal(|| None::<tokio::task::AbortHandle>);
     let mut is_local_executing = use_context::<Signal<bool>>();
-    let mut execution_runs_resource = use_context::<Resource<Vec<backend::ExecutionRun>>>();
+    let execution_runs_resource = use_context::<Resource<Vec<backend::ExecutionRun>>>();
 
-    let mut messages_resource = props.messages_resource;
+    let messages_resource = props.messages_resource;
     let mut visible_messages = props.visible_messages;
-    let mut conversations_resource = props.conversations_resource;
+    let conversations_resource = props.conversations_resource;
     let mut selected_artifacts = props.selected_artifacts;
-    let mut selected_work_item = props.selected_work_item;
+    let selected_work_item = props.selected_work_item;
     let selected_conversation_id = props.selected_conversation_id;
     let is_first_msg = props.is_first_msg;
     let mut starter_prompt = props.starter_prompt;
@@ -241,7 +241,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
         }
     });
 
-    let mut send = use_callback(move |()| {
+    let send = use_callback(move |()| {
         let val = input_text();
         if val.trim().is_empty() || is_thinking() {
             return;
@@ -294,7 +294,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
 
         let is_first_msg_val = is_first_msg;
 
-        let task = spawn(async move {
+        let _task = spawn(async move {
             let mut resolved_conv_id = conv_id;
             let mut created_new_conversation = false;
 

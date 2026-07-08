@@ -13,7 +13,7 @@ use crate::engine::orchestrator::lattice::synthesizer;
 
 pub async fn execute_macro_tasks(
     db: &Database,
-    conversation_id: i64,
+    _conversation_idd: i64,
     run_id: Option<i64>,
     event_sequence: &mut i64,
     _all_agents: &[AgentInfo],
@@ -32,7 +32,7 @@ pub async fn execute_macro_tasks(
 
     for (idx, task) in macro_tasks.iter().enumerate() {
         let mut retry_count = 0;
-        let mut domain = task.domain.clone();
+        let domain = task.domain.clone();
 
         event_logger::micro_step(db, run_id, event_sequence, "running", &domain, &task.task, &format!("Executing step {}/{}: {}", idx + 1, macro_tasks.len(), task.task), None).await;
 

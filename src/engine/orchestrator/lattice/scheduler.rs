@@ -1,4 +1,3 @@
-use crate::engine::orchestrator::state::GlobalState;
 use crate::engine::orchestrator::state::CellState;
 
 pub struct SwarmScheduler {

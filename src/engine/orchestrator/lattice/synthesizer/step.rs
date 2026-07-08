@@ -1,12 +1,10 @@
 use crate::db::Database;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
-use crate::engine::orchestrator::core::response::{MessagePart, StructuredResponse};
 use crate::engine::orchestrator::utils::format_helpers::{sanitize_links, strip_grounding_markers};
-use rig::providers::ollama::{self, OllamaExt};
+use rig::providers::ollama::{self};
 use rig::client::CompletionClient;
 use rig::agent::AgentBuilder;
 use rig::completion::Prompt;
-use serde_json::Value;
 
 pub async fn synthesize_step_result(
     db: &Database,

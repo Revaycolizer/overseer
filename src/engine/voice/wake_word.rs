@@ -1,6 +1,5 @@
 use rustpotter::{Rustpotter, RustpotterConfig, SampleFormat, AudioFmt, Endianness};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::StreamConfig;
 use ringbuf::HeapRb;
 use std::sync::{atomic::{AtomicBool, AtomicU32, Ordering}, mpsc, Mutex};
 
@@ -142,7 +141,7 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
     let mut last_trigger = std::time::Instant::now();
     let cooldown = std::time::Duration::from_secs(3);
     
-    let mut recent_levels = ringbuf::HeapRb::<f32>::new(1600);
+    let recent_levels = ringbuf::HeapRb::<f32>::new(1600);
     let (mut vad_prod, mut vad_cons) = recent_levels.split();
     let mut is_speaking = false;
     let mut was_speaking = false;

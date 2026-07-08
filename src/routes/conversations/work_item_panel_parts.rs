@@ -2,8 +2,6 @@
 use super::helpers::copy_to_clipboard;
 use super::route_summary::prettify_token;
 use super::work_item_card::WorkItemStatusBadge;
-use super::work_item_handoff::create_work_item_handoff;
-use super::work_item_ops::parse_work_item_runtime_metadata;
 use super::work_item_runner::{run_work_item_now, update_work_item_manual_status};
 use crate::backend;
 use dioxus::prelude::*;
@@ -45,7 +43,7 @@ pub fn WorkItemPanelHeader(work_item: backend::WorkItem, runtime_metadata_excerp
 
 #[component]
 pub fn WorkItemPanelActions(db: std::sync::Arc<crate::db::Database>, agent_system: std::sync::Arc<crate::engine::system::AgentSystem>, work_item: backend::WorkItem, messages_resource: Resource<Vec<backend::Message>>, visible_messages: Signal<Vec<backend::Message>>, selected_work_item: Signal<Option<backend::WorkItem>>, is_thinking: Signal<bool>, starter_prompt: Signal<Option<String>>, can_retry: bool, work_items_resource: Resource<Vec<backend::WorkItem>>, execution_runs_resource: Resource<Vec<backend::ExecutionRun>>, artifacts_resource: Resource<Vec<backend::Artifact>>, work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>, selected_execution_run_id: Signal<Option<i64>>) -> Element {
-    let mut is_local_executing = use_context::<Signal<bool>>();
+    let is_local_executing = use_context::<Signal<bool>>();
     rsx! {
         div { class: "flex flex-wrap gap-2",
             button { class: "inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-violet-700 hover:bg-violet-100 transition-all",

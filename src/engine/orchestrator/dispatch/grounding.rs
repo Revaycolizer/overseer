@@ -2,7 +2,7 @@ use serde_json::Value;
 use crate::engine::orchestrator::state::StructuredState;
 use regex::Regex;
 
-pub fn expand_markers(mut value: Value, state: &StructuredState) -> Value {
+pub fn expand_markers(value: Value, state: &StructuredState) -> Value {
     match value {
         Value::String(s) => Value::String(expand_string_markers(s, state)),
         Value::Array(mut arr) => {

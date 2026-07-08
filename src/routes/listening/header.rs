@@ -5,7 +5,7 @@ use crate::state::use_global_state;
 
 #[component]
 pub fn Header() -> Element {
-    let mut state = use_global_state();
+    let state = use_global_state();
     super::speech::use_speech_recognition(state);
     
     let mut is_listening_sig = state.peek().is_listening;

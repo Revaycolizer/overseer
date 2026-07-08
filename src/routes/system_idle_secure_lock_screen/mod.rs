@@ -53,21 +53,4 @@ pub fn SystemIdleSecureLockScreen() -> Element {
     }
 }
 
-// Helper structs (simplified for this route)
-pub struct Conversation {
-    pub id: String,
-    pub messages: Vec<Message>,
-}
 
-pub struct Message {
-    pub id: String,
-    pub role: String,
-    pub content: String,
-    pub created_at: String,
-}
-
-pub enum BiometricStatus {
-    Locked,
-    Authenticating,
-    Unlocked,
-}

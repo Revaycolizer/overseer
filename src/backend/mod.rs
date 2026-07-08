@@ -1,5 +1,5 @@
 mod agents;
-mod artifacts;
+pub mod artifacts;
 mod computer_supervision;
 mod conversations;
 mod execution;
@@ -13,7 +13,7 @@ mod system;
 mod tool_test_cases;
 mod tools;
 mod version_control;
-mod work_items;
+pub mod work_items;
 pub mod workflows;
 pub mod client;
 pub mod local_client;
@@ -29,7 +29,7 @@ pub use system::*;
 pub use tool_test_cases::*;
 pub use version_control::*;
 pub use workflows::models::*;
-pub use client::*;
+pub use client::BackendClient;
 pub use local_client::LocalClient;
 pub use remote_client::RemoteClient;
 

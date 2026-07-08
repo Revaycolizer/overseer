@@ -4,7 +4,7 @@ use crate::db::Database;
 use crate::engine::orchestrator::core::{direct_chat, executor, event_logger};
 use crate::engine::orchestrator::planning::{master::MasterPlanner, decisions::*};
 use crate::engine::utils::discovery::AgentInfo;
-use crate::engine::orchestrator::utils::{context_helpers::*, artifact_utils::*};
+use crate::engine::orchestrator::utils::context_helpers::*;
 use crate::engine::orchestrator::native::native_checks::*;
 use crate::engine::tools::StructuredPerceptionTool;
 use rig::providers::ollama;

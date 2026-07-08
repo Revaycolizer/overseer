@@ -7,7 +7,7 @@ fn now() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EP
 pub fn IdleWatcher() -> Element {
     let nav = use_navigator();
     let route = use_route::<Route>();
-    let mut state = use_context::<Signal<GlobalState>>();
+    let state = use_context::<Signal<GlobalState>>();
     let mut entered_idle_at = use_signal(|| 0u64);
     let mut idle_time = use_signal(|| 0u64);
     let mut is_listening_sig = state.peek().is_listening;

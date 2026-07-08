@@ -7,7 +7,7 @@ pub async fn capture_linux_screenshot_json(tool_name: &str) -> Result<String, Dy
     temp_path.push(format!("overseer_capture_{}.png", uuid::Uuid::new_v4()));
     let path_str = temp_path.to_string_lossy().to_string();
 
-    let mut command_args = vec![
+    let command_args = vec![
         ("scrot", vec![path_str.clone()]),
         ("gnome-screenshot", vec!["-f".to_string(), path_str.clone()]),
         (

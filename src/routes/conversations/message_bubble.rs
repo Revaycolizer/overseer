@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use crate::backend;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 use crate::routes::conversations::helpers::clean_content;
-use crate::routes::conversations::types::{StructuredResponse, VizBlock};
+use crate::routes::conversations::types::StructuredResponse;
 use crate::routes::conversations::markdown_renderer::MarkdownText;
 use crate::routes::conversations::attachment_view::AttachmentPreview;
 use crate::routes::conversations::chart_view::ChartBlock;

@@ -113,7 +113,7 @@ pub fn ChartBlock(block: VizBlock, hide_evidence: bool) -> Element {
                         class: "flex items-center gap-1.5 px-2 py-1 text-[9px] font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-all shadow-sm disabled:opacity-50",
                         disabled: png_status() != 0,
                         onclick: {
-                            let svg_raw = block.payload.clone();
+                            let _svg_raw = block.payload.clone();
                             move |_| {
                                 png_status.set(1);
                                 let mut eval = eval(

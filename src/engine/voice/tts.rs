@@ -41,7 +41,7 @@ pub fn speak_locally(text: &str) {
         let temp_wav_str = temp_wav.to_string_lossy().to_string();
 
         // Helper macro/closure to safely decrement before return
-        let mut play_finished = || {
+        let play_finished = || {
             TTS_SPEAKING_COUNT.fetch_sub(1, Ordering::SeqCst);
         };
 

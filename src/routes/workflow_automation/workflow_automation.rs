@@ -11,15 +11,15 @@ pub fn WorkflowAutomation() -> Element {
     let db = state.read().db.clone();
 
     let db_for_workflows = db.clone();
-    let mut workflows_resource = use_resource(move || {
+    let workflows_resource = use_resource(move || {
         let db = db_for_workflows.clone();
         async move { backend::get_workflows(&db).await.unwrap_or_default() }
     });
 
     let workflows = workflows_resource.read().cloned().unwrap_or_default();
     let mut selected_workflow_id = use_signal(|| workflows.first().map(|w| w.id));
-    let mut run_feedback = use_signal(String::new);
-    let mut is_running = use_signal(|| false);
+    let run_feedback = use_signal(String::new);
+    let is_running = use_signal(|| false);
 
     let workflow_list_for_effect = workflows.clone();
     use_effect(move || {
@@ -79,7 +79,7 @@ pub fn WorkflowAutomation() -> Element {
                             class: "bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all flex items-center gap-2",
                             onclick: {
                                 let db = db.clone();
-                                let mut workflows_resource = workflows_resource.clone();
+                                let workflows_resource = workflows_resource.clone();
                                 move |_| {
                                     let db = db.clone();
                                     let mut workflows_resource = workflows_resource.clone();
@@ -133,7 +133,7 @@ pub fn WorkflowAutomation() -> Element {
                                             onclick: {
                                                 let workflow_id = workflow.id;
                                                 let db = db.clone();
-                                                let mut workflows_resource = workflows_resource.clone();
+                                                let workflows_resource = workflows_resource.clone();
                                                 move |evt| {
                                                     evt.stop_propagation();
                                                     let db = db.clone();
@@ -294,7 +294,7 @@ fn WorkflowEditor(
                             value: "{workflow.name}",
                             oninput: {
                                 let db = db.clone();
-                                let mut workflows_resource = workflows_resource.clone();
+                                let workflows_resource = workflows_resource.clone();
                                 let workflow_for_name = workflow.clone();
                                 move |evt| {
                                     let mut updated = workflow_for_name.clone();
@@ -314,7 +314,7 @@ fn WorkflowEditor(
                             placeholder: "Describe what this workflow should achieve...",
                             oninput: {
                                 let db = db.clone();
-                                let mut workflows_resource = workflows_resource.clone();
+                                let workflows_resource = workflows_resource.clone();
                                 let workflow_for_description = workflow.clone();
                                 move |evt| {
                                     let mut updated = workflow_for_description.clone();
@@ -336,7 +336,7 @@ fn WorkflowEditor(
                             value: "{workflow.trigger_type}",
                             onchange: {
                                 let db = db.clone();
-                                let mut workflows_resource = workflows_resource.clone();
+                                let workflows_resource = workflows_resource.clone();
                                 let workflow_for_trigger = workflow.clone();
                                 move |evt| {
                                     let mut updated = workflow_for_trigger.clone();
@@ -358,7 +358,7 @@ fn WorkflowEditor(
                             value: "{workflow.status}",
                             onchange: {
                                 let db = db.clone();
-                                let mut workflows_resource = workflows_resource.clone();
+                                let workflows_resource = workflows_resource.clone();
                                 let workflow_for_status = workflow.clone();
                                 move |evt| {
                                     let mut updated = workflow_for_status.clone();
@@ -388,7 +388,7 @@ fn WorkflowEditor(
                             onclick: {
                                 let db = db.clone();
                                 let agent_system = agent_system.clone();
-                                let mut runs_resource = runs_resource.clone();
+                                let runs_resource = runs_resource.clone();
                                 move |_| {
                                     let db = db.clone();
                                     let agent_system = agent_system.clone();
@@ -416,7 +416,7 @@ fn WorkflowEditor(
                             class: "bg-slate-900 text-white px-4 py-3 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-sm",
                             onclick: {
                                 let db = db.clone();
-                                let mut steps_resource = steps_resource.clone();
+                                let steps_resource = steps_resource.clone();
                                 move |_| {
                                     let db = db.clone();
                                     let mut steps_resource = steps_resource.clone();
@@ -737,7 +737,7 @@ fn WorkflowStepCard(
                         checked: step.enabled,
                         onchange: {
                             let db = db.clone();
-                            let mut steps_resource = steps_resource.clone();
+                            let steps_resource = steps_resource.clone();
                             let step_for_enabled = step.clone();
                             move |_| {
                                 let db = db.clone();
@@ -756,7 +756,7 @@ fn WorkflowStepCard(
                         value: "{step.step_order}",
                         oninput: {
                             let db = db.clone();
-                            let mut steps_resource = steps_resource.clone();
+                            let steps_resource = steps_resource.clone();
                             let step_for_order = step.clone();
                             move |evt| {
                                 if let Ok(order) = evt.value().parse::<i64>() {
@@ -778,7 +778,7 @@ fn WorkflowStepCard(
                     value: "{step.name}",
                     oninput: {
                         let db = db.clone();
-                        let mut steps_resource = steps_resource.clone();
+                        let steps_resource = steps_resource.clone();
                         let step_for_name = step.clone();
                         move |evt| {
                             let db = db.clone();
@@ -796,7 +796,7 @@ fn WorkflowStepCard(
                     class: "text-slate-400 hover:text-red-500 transition-colors self-start lg:self-auto",
                     onclick: {
                         let db = db.clone();
-                        let mut steps_resource = steps_resource.clone();
+                        let steps_resource = steps_resource.clone();
                         move |_| {
                             let db = db.clone();
                             let mut steps_resource = steps_resource.clone();
@@ -815,7 +815,7 @@ fn WorkflowStepCard(
                 placeholder: "Describe the instruction this step should run...",
                 oninput: {
                     let db = db.clone();
-                    let mut steps_resource = steps_resource.clone();
+                    let steps_resource = steps_resource.clone();
                     let step_for_prompt = step.clone();
                     move |evt| {
                         let db = db.clone();

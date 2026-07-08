@@ -37,7 +37,7 @@ pub async fn handle_launch(app: &str) -> Result<String, DynamicToolError> {
         }
     } else {
         let mut launched = false;
-        if let Ok(mut child) = Command::new(app).spawn() {
+        if let Ok(_) = Command::new(app).spawn() {
             launched = true;
         }
         if !launched {

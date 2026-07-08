@@ -10,7 +10,7 @@ use tokio::time::timeout;
 pub async fn resolve_macro_tasks(
     db: &Database,
     master_planner: &MasterPlanner,
-    all_agents: &[AgentInfo],
+    _all_agents: &[AgentInfo],
     clean_query: &str,
     history: Vec<Message>,
     decision: &OrchestrationDecision,

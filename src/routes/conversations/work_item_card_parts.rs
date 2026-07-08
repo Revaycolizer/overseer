@@ -70,7 +70,7 @@ pub fn WorkItemCardActions(
     work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
     selected_execution_run_id: Signal<Option<i64>>,
 ) -> Element {
-    let mut is_local_executing = use_context::<Signal<bool>>();
+    let is_local_executing = use_context::<Signal<bool>>();
     let is_selected = selected_work_item().as_ref().map(|s| s.id == work_item.id).unwrap_or(false);
     rsx! {
         div { class: "flex flex-wrap gap-2",

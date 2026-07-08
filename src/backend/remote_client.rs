@@ -7,7 +7,6 @@ pub mod planners;
 pub mod misc;
 
 use crate::backend::client::BackendClient;
-use std::sync::Arc;
 
 pub struct RemoteClient {
     pub base_url: String,

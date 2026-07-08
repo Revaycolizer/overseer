@@ -4,7 +4,6 @@ use anyhow::Context;
 use snowflake::SnowflakeIdGenerator;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::ConnectOptions;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 

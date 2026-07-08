@@ -1,6 +1,6 @@
 // src/db/seed_tools.rs — seed_tools() + seed_agent_tools()
 use super::Database;
-use sqlx::Acquire;
+
 
 impl Database {
     pub(super) async fn seed_tools(&self) -> anyhow::Result<()> {

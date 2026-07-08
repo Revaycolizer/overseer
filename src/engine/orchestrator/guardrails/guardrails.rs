@@ -7,9 +7,9 @@ pub struct GuardrailResult {
 
 pub fn check_tool_guardrails(
     query: &str,
-    step: &str,
+    _step: &str,
     tool: &ToolInfo,
-    input: &serde_json::Value,
+    _input: &serde_json::Value,
 ) -> GuardrailResult {
     // 1. Safety Level Check
     let safety_level = tool.safety_level.to_lowercase();

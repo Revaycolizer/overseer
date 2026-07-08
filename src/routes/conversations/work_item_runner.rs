@@ -39,15 +39,15 @@ pub fn run_work_item_now(
     db: std::sync::Arc<crate::db::Database>,
     agent_system: std::sync::Arc<crate::engine::system::AgentSystem>,
     work_item: backend::WorkItem,
-    mut messages_resource: Resource<Vec<backend::Message>>,
+    messages_resource: Resource<Vec<backend::Message>>,
     mut visible_messages: Signal<Vec<backend::Message>>,
-    mut selected_work_item: Signal<Option<backend::WorkItem>>,
-    mut is_local_executing: Signal<bool>,
-    mut work_items_resource: Resource<Vec<backend::WorkItem>>,
-    mut execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
-    mut artifacts_resource: Resource<Vec<backend::Artifact>>,
-    mut work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
-    mut selected_execution_run_id: Signal<Option<i64>>,
+    selected_work_item: Signal<Option<backend::WorkItem>>,
+    is_local_executing: Signal<bool>,
+    work_items_resource: Resource<Vec<backend::WorkItem>>,
+    execution_runs_resource: Resource<Vec<backend::ExecutionRun>>,
+    artifacts_resource: Resource<Vec<backend::Artifact>>,
+    work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>,
+    selected_execution_run_id: Signal<Option<i64>>,
 ) {
     let optimistic_id = -chrono::Utc::now().timestamp_micros();
     visible_messages.with_mut(|messages| {
@@ -67,14 +67,14 @@ pub fn run_work_item_now(
     let work_item_for_spawn = work_item.clone();
 
     let mut messages_resource_inner = messages_resource;
-    let mut visible_messages_inner = visible_messages;
+    let visible_messages_inner = visible_messages;
     let mut selected_work_item_inner = selected_work_item;
     let mut is_local_executing_inner = is_local_executing;
     let mut work_items_resource_inner = work_items_resource;
-    let mut execution_runs_resource_inner = execution_runs_resource;
-    let mut artifacts_resource_inner = artifacts_resource;
+    let execution_runs_resource_inner = execution_runs_resource;
+    let artifacts_resource_inner = artifacts_resource;
     let mut work_item_events_resource_inner = work_item_events_resource;
-    let mut selected_execution_run_id_inner = selected_execution_run_id;
+    let selected_execution_run_id_inner = selected_execution_run_id;
 
     spawn(async move {
         is_local_executing_inner.set(true);

@@ -6,7 +6,7 @@ mod interaction_log; mod widgets_panel; mod header; mod single_widget;
 
 #[component]
 pub fn ComputerControl() -> Element {
-    let mut state = use_global_state();
+    let state = use_global_state();
     crate::routes::listening::speech::use_speech_recognition(state);
     let db = state.read().db.clone();
     
@@ -48,11 +48,11 @@ pub fn ComputerControl() -> Element {
         }
     });
 
-    let mut active_widgets = use_signal(|| vec![
+    let active_widgets = use_signal(|| vec![
         "Interaction Log".to_string(), "Control Center".to_string(), "System Load".to_string(),
         "GPU Performance".to_string(), "Background Processes".to_string(), "Environment".to_string(),
     ]);
-    let mut show_customizer = use_signal(|| false);
+    let show_customizer = use_signal(|| false);
 
     let active_list = active_widgets.read().clone();
     let (has_log, has_center, has_load, has_gpu, has_bg, has_env) = (

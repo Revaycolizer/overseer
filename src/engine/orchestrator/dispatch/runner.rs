@@ -1,5 +1,5 @@
 use rig::agent::AgentBuilder;
-use rig::completion::{Chat, Message, Prompt};
+use rig::completion::{Chat, Message};
 use rig::providers::ollama;
 use crate::db::Database;
 use crate::engine::orchestrator::core::event_logger;
@@ -11,7 +11,6 @@ use super::json_utils::repair_json_literals;
 use super::tool_exec::execute_tool;
 use super::reality::enforce_physical_reality;
 use rig::client::CompletionClient;
-use std::collections::HashSet;
 
 pub async fn dispatch_domain(
     db: &Database,
@@ -64,11 +63,11 @@ pub async fn dispatch_domain(
     let tool_list = tools.iter().map(|t| format!("- {}: {}", t.name, t.description)).collect::<Vec<_>>().join("\n");
     
     let mut current_prompt = build_dispatch_prompt(query, step, &tool_list, &state.to_prompt_string(), supervisor.report_style.as_deref().unwrap_or("detailed"), plan_history, retry_msg);
-    let mut visited_urls = state.get_known_urls();
+    let visited_urls = state.get_known_urls();
     let mut last_artifacts = Vec::new();
     let mut action_tool_executed = false;
 
-    for iteration in 0..10 {
+    for _iteration in 0..10 {
         let response = agent.chat(&current_prompt, history.clone()).await.map_err(|e| e.to_string())?;
         let repaired = repair_json_literals(response.trim());
         let json: serde_json::Value = match serde_json::from_str(&repaired) {
@@ -81,7 +80,7 @@ pub async fn dispatch_domain(
             let input = json.get("input").cloned().unwrap_or(serde_json::Value::Null);
             event_logger::tool_call(db, run_id, event_sequence, domain, step, tname, &model, &input.to_string()).await;
             match execute_tool(tname, input, &tools, state).await {
-                Ok((output, is_action, expanded_input)) => {
+                Ok((output, is_action, _expanded_input)) => {
                     if is_action { action_tool_executed = true; }
                     current_prompt = format!("{}\n\n[RESULT for '{}': {}]", current_prompt, tname, output);
                     event_logger::tool_result(db, run_id, event_sequence, domain, step, tname, &model, &output, true).await;
@@ -130,13 +129,12 @@ pub async fn dispatch_domain(
 
         // OFFICE DOMAIN FALLBACK
         if is_doc_domain && !action_tool_executed {
-            if let Some(dw_tool) = tools.iter().find(|t| t.name == "document_writer") {
+            if let Some(_dw_tool) = tools.iter().find(|t| t.name == "document_writer") {
                 let content = format!("{}\n\n{}", plan_history, state.to_prompt_string());
                 let auto_input = serde_json::json!({"format": "pdf", "content": content});
                 event_logger::tool_call(db, run_id, event_sequence, domain, step, "document_writer", &model, &auto_input.to_string()).await;
                 match execute_tool("document_writer", auto_input, &tools, state).await {
                     Ok((output, _, _)) => {
-                        action_tool_executed = true;
                         event_logger::tool_result(db, run_id, event_sequence, domain, step, "document_writer", &model, &output, true).await;
                         if let Ok(res_json) = serde_json::from_str::<serde_json::Value>(&output) {
                             if let Some(arts) = res_json.get("artifacts").and_then(|a| a.as_array()) {

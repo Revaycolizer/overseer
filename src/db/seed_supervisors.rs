@@ -1,10 +1,10 @@
 // src/db/seed_supervisors.rs — seed_supervisors() + seed_planners()
 use super::Database;
-use sqlx::Acquire;
+
 
 impl Database {
     pub(super) async fn seed_supervisors(&self) -> anyhow::Result<()> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM supervisors")
+        let _count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM supervisors")
             .fetch_one(&self.pool)
             .await?;
 

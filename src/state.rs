@@ -1,6 +1,6 @@
 use crate::db::Database;
 use dioxus::prelude::*;
-use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

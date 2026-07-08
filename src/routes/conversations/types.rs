@@ -1,5 +1,5 @@
 pub use crate::engine::orchestrator::{
-    StructuredResponse, MessagePart, SourcePart, ChartPart, UnknownPart
+    StructuredResponse, SourcePart, UnknownPart
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

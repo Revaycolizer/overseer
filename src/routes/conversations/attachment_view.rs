@@ -10,7 +10,7 @@ pub fn AttachmentPreview(att: backend::Attachment) -> Element {
     let content_type = att.content_type.clone();
     let filename = att.filename.clone();
     let mut exported = use_signal(|| false);
-    let file_ext = filename.split('.').last().unwrap_or("FILE").to_uppercase();
+    let _file_ext = filename.split('.').last().unwrap_or("FILE").to_uppercase();
 
     let asset_data = use_resource(move || {
         let fp = file_path.clone();

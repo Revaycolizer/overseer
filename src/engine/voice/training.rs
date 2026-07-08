@@ -1,7 +1,6 @@
 use rustpotter::{WakewordRef, WakewordRefBuildFromFiles, WakewordSave};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::HeapRb;
-use std::path::Path;
 use hound::{WavSpec, WavWriter, SampleFormat};
 
 #[derive(Clone)]

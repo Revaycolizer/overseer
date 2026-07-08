@@ -4,8 +4,6 @@ pub mod attachment_utils;
 pub mod crud;
 
 pub use types::*;
-pub use extraction::*;
-pub use attachment_utils::*;
 pub use crud::*;
 
 use crate::db::Database;
@@ -49,7 +47,7 @@ pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result
         let hide_evidence: i64 = row.get("hide_evidence");
 
         let created_at = chrono::NaiveDateTime::parse_from_str(&created_at_str, "%Y-%m-%d %H:%M:%S")
-            .unwrap_or_else(|_| chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap());
+            .unwrap_or_else(|_| chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc());
 
         messages.push(Message {
             id: msg_id,
