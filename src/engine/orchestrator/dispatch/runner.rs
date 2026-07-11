@@ -68,7 +68,13 @@ pub async fn dispatch_domain(
     let mut action_tool_executed = false;
 
     for _iteration in 0..10 {
-        let response = agent.chat(&current_prompt, history.clone()).await.map_err(|e| e.to_string())?;
+        let response = crate::engine::resilience::with_resilience(
+            crate::engine::resilience::ollama(),
+            3,
+            || agent.chat(&current_prompt, history.clone()),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         let repaired = repair_json_literals(response.trim());
         let json: serde_json::Value = match serde_json::from_str(&repaired) {
             Ok(v) => v,

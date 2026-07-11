@@ -112,9 +112,12 @@ Output: [
             prompt
         };
 
-        agent
-            .chat(safe_prompt, history)
-            .await
-            .unwrap_or_else(|e| format!("[{{\"domain\": \"error\", \"task\": \"{}\"}}]", e))
+        crate::engine::resilience::with_resilience(
+            crate::engine::resilience::ollama(),
+            3,
+            || agent.chat(safe_prompt, history.clone()),
+        )
+        .await
+        .unwrap_or_else(|e| format!("[{{\"domain\": \"error\", \"task\": \"{}\"}}]", e))
     }
 }
