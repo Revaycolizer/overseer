@@ -333,6 +333,14 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                 None
             };
 
+            let (title_tx, title_rx) = tokio::sync::oneshot::channel::<()>();
+            let mut conversations_for_title = conversations_inner.clone();
+            spawn(async move {
+                if title_rx.await.is_ok() {
+                    conversations_for_title.restart();
+                }
+            });
+
             let handle = tokio::spawn(async move {
                 if let Ok(msg_id) = backend::add_message(
                     &db_inner,
@@ -343,15 +351,17 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                 )
                 .await
                 {
-                    if let Some(optimistic) = optimistic_title.clone() {
+                    if let Some(_optimistic) = optimistic_title.clone() {
                         let db_for_title = db_inner.clone();
                         let agent_for_title = agent_inner.clone();
                         let query_for_title = query.clone();
                         let conv_id_for_title = conversation_id;
+                        let title_tx = title_tx;
                         tokio::spawn(async move {
                             let real_title = agent_for_title.generate_title(&db_for_title, &query_for_title).await;
-                            if real_title != optimistic {
+                            if !real_title.is_empty() {
                                 let _ = backend::update_conversation_title(&db_for_title, conv_id_for_title, &real_title).await;
+                                let _ = title_tx.send(());
                             }
                         });
                     }
