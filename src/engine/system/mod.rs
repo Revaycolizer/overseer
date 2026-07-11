@@ -54,7 +54,22 @@ impl AgentSystem {
             truncated
         );
 
-        match agent.prompt(&prompt).await {
+        let result = crate::engine::resilience::with_resilience(
+            crate::engine::resilience::ollama(),
+            2,
+            || async {
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(2000),
+                    agent.prompt(&prompt),
+                ).await {
+                    Ok(Ok(t)) => Ok(t),
+                    Ok(Err(e)) => Err(e.to_string()),
+                    Err(_) => Err("title generation timed out".to_string()),
+                }
+            },
+        ).await;
+
+        match result {
             Ok(title) => {
                 let clean = title.trim().trim_matches('"').trim_matches('\'').trim().to_string();
                 clean_title_response(&clean)

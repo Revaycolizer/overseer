@@ -324,6 +324,15 @@ fn ChatComposer(props: ChatInputProps) -> Element {
             }
             let conversation_id = resolved_conv_id.unwrap();
 
+            let optimistic_title = if is_first_msg_val || created_new_conversation {
+                let t = query.split_whitespace().take(4).collect::<Vec<_>>().join(" ");
+                let _ = backend::update_conversation_title(&db_inner, conversation_id, &t).await;
+                conversations_inner.restart();
+                Some(t)
+            } else {
+                None
+            };
+
             let handle = tokio::spawn(async move {
                 if let Ok(msg_id) = backend::add_message(
                     &db_inner,
@@ -334,14 +343,16 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                 )
                 .await
                 {
-                    if is_first_msg_val || created_new_conversation {
+                    if let Some(optimistic) = optimistic_title.clone() {
                         let db_for_title = db_inner.clone();
                         let agent_for_title = agent_inner.clone();
                         let query_for_title = query.clone();
                         let conv_id_for_title = conversation_id;
                         tokio::spawn(async move {
-                            let new_title = agent_for_title.generate_title(&db_for_title, &query_for_title).await;
-                            let _ = backend::update_conversation_title(&db_for_title, conv_id_for_title, &new_title).await;
+                            let real_title = agent_for_title.generate_title(&db_for_title, &query_for_title).await;
+                            if real_title != optimistic {
+                                let _ = backend::update_conversation_title(&db_for_title, conv_id_for_title, &real_title).await;
+                            }
                         });
                     }
                     for (name, mime, data) in attachments {
