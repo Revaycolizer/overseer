@@ -335,10 +335,14 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                 .await
                 {
                     if is_first_msg_val || created_new_conversation {
-                        let new_title = agent_inner.generate_title(&db_inner, &query).await;
-                        let _ =
-                            backend::update_conversation_title(&db_inner, conversation_id, &new_title)
-                                .await;
+                        let db_for_title = db_inner.clone();
+                        let agent_for_title = agent_inner.clone();
+                        let query_for_title = query.clone();
+                        let conv_id_for_title = conversation_id;
+                        tokio::spawn(async move {
+                            let new_title = agent_for_title.generate_title(&db_for_title, &query_for_title).await;
+                            let _ = backend::update_conversation_title(&db_for_title, conv_id_for_title, &new_title).await;
+                        });
                     }
                     for (name, mime, data) in attachments {
                         let folder = &overseer_files_dir;
