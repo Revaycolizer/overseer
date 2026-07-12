@@ -45,7 +45,7 @@ impl App {
         self.conversations = self.client.get_conversations(100).await?;
         if !self.conversations.is_empty() {
             let active_conv_id = self.conversations[self.selected_conv_idx].id;
-            self.messages = self.client.get_messages(active_conv_id).await?;
+            self.messages = self.client.get_messages_page(active_conv_id, None, 100).await?;
         }
         Ok(())
     }

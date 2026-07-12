@@ -37,6 +37,13 @@ pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result
     crate::backend::messages::get_messages(db, conversation_id).await
 }
 
+pub async fn get_messages_page(db: &Database, conversation_id: i64, before_id: Option<i64>, limit: u32) -> anyhow::Result<Vec<Message>> {
+    if db.is_remote() {
+        return db.remote_client().get_messages_page(conversation_id, before_id, limit).await;
+    }
+    crate::backend::messages::get_messages_page(db, conversation_id, before_id, limit).await
+}
+
 pub async fn add_message(db: &Database, conversation_id: i64, role: &str, content: &str, hide_evidence: bool) -> anyhow::Result<i64> {
     if db.is_remote() {
         return db.remote_client().add_message(conversation_id, role, content, hide_evidence).await;

@@ -42,7 +42,7 @@ pub fn Conversations() -> Element {
     let selected_conversation_id = use_signal(|| conversations.first().map(|c| c.id));
 
     let db_for_msg = db.clone();
-    let messages_resource = use_resource(move || { let db = db_for_msg.clone(); let conv_id = selected_conversation_id(); async move { if let Some(id) = conv_id { backend::get_messages(&db, id).await.unwrap_or_default() } else { vec![] } } });
+    let messages_resource = use_resource(move || { let db = db_for_msg.clone(); let conv_id = selected_conversation_id(); async move { if let Some(id) = conv_id { backend::get_messages_page(&db, id, None, 50).await.unwrap_or_default() } else { vec![] } } });
 
     let mut visible_messages = use_signal(Vec::<backend::Message>::new);
     let mut selected_conversation_for_cache = use_signal(|| None::<i64>);
@@ -56,9 +56,62 @@ pub fn Conversations() -> Element {
     use_effect(move || { if let Some(artifact) = focused_artifact() { let key = workspace_sessions.with_mut(|s| upsert_workspace_session(s, WorkspaceSessionRef::Artifact(artifact.id))); active_workspace_session_key.set(Some(key)); } });
     use_effect(move || { if let Some(work_item) = selected_work_item() { let key = workspace_sessions.with_mut(|s| upsert_workspace_session(s, WorkspaceSessionRef::WorkItem(work_item.id))); active_workspace_session_key.set(Some(key)); } });
     use_effect(move || { let sessions = workspace_sessions(); let active_key = active_workspace_session_key(); if sessions.is_empty() { if active_key.is_some() { active_workspace_session_key.set(None); } } else if active_key.as_ref().is_none_or(|key| !sessions.iter().any(|s| workspace_session_key(s) == *key)) { active_workspace_session_key.set(Some(workspace_session_key(&sessions[0]))); } });
-    use_effect(move || { if let Some(latest_messages) = messages_resource.read().cloned() { visible_messages.set(latest_messages); } });
 
-    let messages = messages_resource.read().cloned().unwrap_or_else(|| visible_messages());
+    const PAGE_SIZE: u32 = 50;
+    let mut messages_cursor: Signal<Option<i64>> = use_signal(|| None);
+    let mut messages_has_more: Signal<bool> = use_signal(|| true);
+    let mut messages_loading_more: Signal<bool> = use_signal(|| false);
+    let db_for_page = db.clone();
+    use_effect(move || {
+        let conv_id = selected_conversation_id();
+        let db = db_for_page.clone();
+        visible_messages.set(Vec::new());
+        messages_cursor.set(None);
+        messages_has_more.set(true);
+        if let Some(id) = conv_id {
+            if let Some(cached) = crate::engine::cache::messages_cache().lock().ok().and_then(|mut c| c.get_mut(&id).cloned()) {
+                messages_cursor.set(cached.last().map(|m| m.id));
+                messages_has_more.set(cached.len() as u32 >= PAGE_SIZE);
+                visible_messages.set(cached);
+            } else {
+                spawn(async move {
+                    let page = backend::get_messages_page(&db, id, None, PAGE_SIZE).await.unwrap_or_default();
+                    messages_cursor.set(page.last().map(|m| m.id));
+                    messages_has_more.set(page.len() as u32 >= PAGE_SIZE);
+                    if let Ok(mut cache) = crate::engine::cache::messages_cache().lock() {
+                        cache.put(id, page.clone());
+                    }
+                    visible_messages.set(page);
+                });
+            }
+        }
+    });
+    let db_for_load = db.clone();
+    let mut load_more = move || {
+        if messages_loading_more() || !messages_has_more() { return; }
+        let cursor = messages_cursor.read().clone();
+        let Some(conv_id) = selected_conversation_id() else { return; };
+        messages_loading_more.set(true);
+        let db = db_for_load.clone();
+        spawn(async move {
+            let page = backend::get_messages_page(&db, conv_id, cursor, PAGE_SIZE).await.unwrap_or_default();
+            if !page.is_empty() {
+                let mut combined = page.clone();
+                combined.extend(visible_messages.read().iter().cloned());
+                visible_messages.set(combined);
+                messages_cursor.set(page.last().map(|m| m.id));
+                messages_has_more.set(page.len() as u32 >= PAGE_SIZE);
+            }
+            messages_loading_more.set(false);
+        });
+    };
+
+    let visible = visible_messages();
+    let messages = if visible.is_empty() {
+        messages_resource.read().cloned().unwrap_or_default()
+    } else {
+        visible
+    };
     let is_first_msg = messages.is_empty();
     let mut starter_prompt = use_signal(|| None::<String>);
     let mut is_thinking: Signal<bool> = use_signal(|| false);
@@ -179,11 +232,21 @@ pub fn Conversations() -> Element {
                                     }
                                 }
                             }
-                            div { id: "chat-scroll-container", class: "flex-1 overflow-y-auto scroll-smooth custom-scrollbar",
+                            div {
+                                id: "chat-scroll-container",
+                                class: "flex-1 overflow-y-auto scroll-smooth custom-scrollbar",
+                                onscroll: move |evt| {
+                                    if evt.scroll_top() < 100.0 && messages_has_more() && !messages_loading_more() {
+                                        load_more();
+                                    }
+                                },
                                 div { class: "max-w-3xl mx-auto py-10 px-6 space-y-8",
                                     if messages.is_empty() && !is_thinking() {
                                         EmptyConversationState { on_prompt: move |prompt: String| starter_prompt.set(Some(prompt)) }
                                     } else {
+                                        if messages_loading_more() {
+                                            div { class: "mx-auto text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 py-2", "Loading older messages..." }
+                                        }
                                         for msg in &messages { MessageBubble { msg: msg.clone(), on_copy: move |content: String| copy_to_clipboard(content) } }
                                         if is_thinking() { ThinkingBubble {} }
                                     }

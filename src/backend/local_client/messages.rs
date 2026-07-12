@@ -8,6 +8,10 @@ impl MessageClient for LocalClient {
         crate::backend::get_messages(&self.db, conversation_id).await
     }
 
+    async fn get_messages_page(&self, conversation_id: i64, before_id: Option<i64>, limit: u32) -> anyhow::Result<Vec<Message>> {
+        crate::backend::get_messages_page(&self.db, conversation_id, before_id, limit).await
+    }
+
     async fn add_message(&self, conversation_id: i64, role: &str, content: &str, hide_evidence: bool) -> anyhow::Result<i64> {
         crate::backend::add_message(&self.db, conversation_id, role, content, hide_evidence).await
     }

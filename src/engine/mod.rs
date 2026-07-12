@@ -1,5 +1,6 @@
 #[cfg(feature = "memory")]
 pub mod memory;
+pub mod cache;
 pub mod orchestrator;
 pub mod resilience;
 pub mod shell;
