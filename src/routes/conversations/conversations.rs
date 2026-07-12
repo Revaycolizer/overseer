@@ -1,15 +1,11 @@
 // src/routes/conversations/conversations.rs
-use super::chat_input::ChatInput;
-use super::helpers::copy_to_clipboard;
-use super::message_bubble::MessageBubble;
-use super::thinking_bubble::ThinkingBubble;
+use super::chat_panel::ChatPanel;
 use super::sidebar::Sidebar;
 use super::workspace_session::{workspace_session_key, upsert_workspace_session, WorkspaceSessionRef};
 use super::workspace_deck::WorkspaceSessionDeck;
 use super::registry_panel::RuntimeRegistryPanel;
 use super::artifact_panel::RecentArtifactsPanel;
 use super::workboard_panel::WorkboardPanel;
-use super::empty_state::EmptyConversationState;
 use super::route_summary::{derive_execution_route_summary, prettify_status, status_tone};
 use crate::backend;
 use crate::routes::execution_trace::ExecutionTracePanel;
@@ -113,7 +109,7 @@ pub fn Conversations() -> Element {
         visible
     };
     let is_first_msg = messages.is_empty();
-    let mut starter_prompt = use_signal(|| None::<String>);
+    let starter_prompt = use_signal(|| None::<String>);
     let mut is_thinking: Signal<bool> = use_signal(|| false);
     let is_local_executing = use_signal(|| false);
     provide_context(is_local_executing);
@@ -232,27 +228,21 @@ pub fn Conversations() -> Element {
                                     }
                                 }
                             }
-                            div {
-                                id: "chat-scroll-container",
-                                class: "flex-1 overflow-y-auto scroll-smooth custom-scrollbar",
-                                onscroll: move |evt| {
-                                    if evt.scroll_top() < 100.0 && messages_has_more() && !messages_loading_more() {
-                                        load_more();
-                                    }
-                                },
-                                div { class: "max-w-3xl mx-auto py-10 px-6 space-y-8",
-                                    if messages.is_empty() && !is_thinking() {
-                                        EmptyConversationState { on_prompt: move |prompt: String| starter_prompt.set(Some(prompt)) }
-                                    } else {
-                                        if messages_loading_more() {
-                                            div { class: "mx-auto text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 py-2", "Loading older messages..." }
-                                        }
-                                        for msg in &messages { MessageBubble { msg: msg.clone(), on_copy: move |content: String| copy_to_clipboard(content) } }
-                                        if is_thinking() { ThinkingBubble {} }
-                                    }
-                                }
+                            ChatPanel {
+                                messages: messages,
+                                messages_resource: messages_resource.clone(),
+                                visible_messages: visible_messages,
+                                conversations_resource: conversations_resource.clone(),
+                                selected_conversation_id: selected_conversation_id,
+                                selected_artifacts: selected_artifacts,
+                                selected_work_item: selected_work_item,
+                                is_first_msg: is_first_msg,
+                                is_thinking: is_thinking,
+                                starter_prompt: starter_prompt,
+                                messages_has_more: messages_has_more,
+                                messages_loading_more: messages_loading_more,
+                                load_more: Callback::new(move |_| load_more()),
                             }
-                            ChatInput { selected_conversation_id: selected_conversation_id, messages_resource: messages_resource.clone(), visible_messages: visible_messages, conversations_resource: conversations_resource.clone(), selected_artifacts: selected_artifacts, selected_work_item: selected_work_item, is_first_msg: is_first_msg, is_thinking: is_thinking, starter_prompt: starter_prompt }
                         }
                         div { class: "h-full min-h-0 flex flex-col",
                             RuntimeRegistryPanel { status: runtime_registry_status }

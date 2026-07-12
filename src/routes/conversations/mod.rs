@@ -1,5 +1,6 @@
 pub mod assistant_stream;
 pub mod chat_input;
+pub mod chat_panel;
 mod conversations;
 pub mod helpers;
 pub mod message_bubble;
