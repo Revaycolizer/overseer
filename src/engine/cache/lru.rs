@@ -1,5 +1,4 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex, OnceLock};
 
 pub struct LruCache<K, V> {
     capacity: usize,
@@ -10,14 +9,25 @@ pub struct LruCache<K, V> {
 impl<K: Eq + std::hash::Hash + Clone, V> LruCache<K, V> {
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "LruCache capacity must be > 0");
-        Self { capacity, map: HashMap::with_capacity(capacity), order: VecDeque::with_capacity(capacity) }
+        Self {
+            capacity,
+            map: HashMap::with_capacity(capacity),
+            order: VecDeque::with_capacity(capacity),
+        }
     }
 
-    pub fn len(&self) -> usize { self.map.len() }
-    pub fn contains(&self, key: &K) -> bool { self.map.contains_key(key) }
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    pub fn contains(&self, key: &K) -> bool {
+        self.map.contains_key(key)
+    }
 
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
-        if !self.map.contains_key(key) { return None; }
+        if !self.map.contains_key(key) {
+            return None;
+        }
         self.order.retain(|k| k == key);
         self.order.push_back(key.clone());
         self.map.get_mut(key)
@@ -39,10 +49,4 @@ impl<K: Eq + std::hash::Hash + Clone, V> LruCache<K, V> {
         self.map.remove(key);
         self.order.retain(|k| k != key);
     }
-}
-
-static MESSAGES_CACHE: OnceLock<Arc<Mutex<LruCache<i64, Vec<crate::backend::Message>>>>> = OnceLock::new();
-
-pub fn messages_cache() -> Arc<Mutex<LruCache<i64, Vec<crate::backend::Message>>>> {
-    MESSAGES_CACHE.get_or_init(|| Arc::new(Mutex::new(LruCache::new(32)))).clone()
 }

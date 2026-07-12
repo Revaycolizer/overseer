@@ -350,7 +350,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
             });
 
             let handle = tokio::spawn(async move {
-                if let Ok(mut cache) = crate::engine::cache::messages_cache().lock() {
+                if let Ok(mut cache) = crate::engine::cache::messages().lock() {
                     cache.invalidate(&conversation_id);
                 }
                 if let Ok(msg_id) = backend::add_message(
