@@ -1,21 +1,13 @@
 use axum::Router;
-use axum::body::Body;
-use axum::http::Request;
-use axum::middleware::{self, Next};
-use axum::response::Response;
 use crate::db::Database;
 use crate::engine::system::AgentSystem;
 use std::sync::Arc;
 use std::net::SocketAddr;
+use tower_governor::GovernorLayer;
 
 pub struct ServerState {
     pub db: Arc<Database>,
     pub agent_system: Arc<AgentSystem>,
-}
-
-async fn rate_limit_middleware(req: Request<Body>, next: Next) -> Response {
-    let _permit = crate::engine::resilience::server_throttle().acquire().await;
-    next.run(req).await
 }
 
 pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port: u16) -> anyhow::Result<()> {
@@ -34,7 +26,9 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(versions::router())
         .merge(artifacts::router())
         .merge(misc::router())
-        .layer(middleware::from_fn(rate_limit_middleware))
+        .layer(GovernorLayer {
+            config: crate::engine::resilience::server_governor(),
+        })
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));

@@ -44,9 +44,23 @@ pub fn ollama_throttle() -> &'static tokio::sync::Semaphore {
     OLLAMA_THROTTLE.get_or_init(|| tokio::sync::Semaphore::new(4))
 }
 
-static SERVER_THROTTLE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
-pub fn server_throttle() -> &'static tokio::sync::Semaphore {
-    SERVER_THROTTLE.get_or_init(|| tokio::sync::Semaphore::new(32))
+type ServerGovernorConfig = tower_governor::governor::GovernorConfig<
+    tower_governor::key_extractor::SmartIpKeyExtractor,
+    governor::middleware::NoOpMiddleware<governor::clock::QuantaInstant>,
+>;
+
+static SERVER_GOVERNOR: OnceLock<Arc<ServerGovernorConfig>> = OnceLock::new();
+pub fn server_governor() -> Arc<ServerGovernorConfig> {
+    SERVER_GOVERNOR.get_or_init(|| {
+        Arc::new(
+            tower_governor::governor::GovernorConfigBuilder::default()
+                .per_second(2)
+                .burst_size(32)
+                .key_extractor(tower_governor::key_extractor::SmartIpKeyExtractor)
+                .finish()
+                .expect("valid governor config"),
+        )
+    }).clone()
 }
 
 fn backoff_ms(attempt: u32) -> u64 {
