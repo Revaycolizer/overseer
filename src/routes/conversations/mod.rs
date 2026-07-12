@@ -1,3 +1,4 @@
+pub mod assistant_stream;
 pub mod chat_input;
 mod conversations;
 pub mod helpers;

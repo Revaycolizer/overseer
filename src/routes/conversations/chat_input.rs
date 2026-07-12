@@ -341,13 +341,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                 }
             });
 
-            let (assistant_tx, assistant_rx) = tokio::sync::oneshot::channel::<backend::Message>();
-            let mut visible_for_assistant = visible_messages;
-            spawn(async move {
-                if let Ok(msg) = assistant_rx.await {
-                    visible_for_assistant.with_mut(|messages| messages.push(msg));
-                }
-            });
+            let assistant_tx = crate::routes::conversations::assistant_stream::install_listener(visible_messages);
 
             let handle = tokio::spawn(async move {
                 if let Ok(mut cache) = crate::engine::cache::messages().lock() {
@@ -400,15 +394,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                     let _ =
                         backend::add_message(&db_inner, conversation_id, "assistant", &response, false)
                             .await;
-                    let _ = assistant_tx.send(backend::Message {
-                        id: 0,
-                        conversation_id,
-                        role: "assistant".to_string(),
-                        content: response.clone(),
-                        created_at: chrono::Utc::now().naive_utc(),
-                        attachments: vec![],
-                        hide_evidence: false,
-                    });
+                    let _ = assistant_tx.send(crate::routes::conversations::assistant_stream::assistant_message(conversation_id, response.clone()));
                     true
                 } else {
                     false
