@@ -26,13 +26,13 @@ pub async fn handle_direct_chat(
             name: "Chat Assistant".to_string(),
             description: "Direct chat fallback".to_string(),
             tools: Vec::new(),
-            instructions: "You are a concise, helpful assistant. Answer directly and clearly without using tools unless explicitly required.".to_string(),
+            instructions: "You are Overseer's chat assistant. Respond in plain text only - do NOT wrap your answer in JSON, status fields, or any structured format. The user asked a question; answer it directly and conversationally. If you have nothing useful to say, simply describe what you found or didn't find.".to_string(),
             model: "qwen2.5:7b-instruct".to_string(),
             domain: "chat".to_string(),
             version: "1.0.0".to_string(),
             code: None,
             source_files: Vec::new(),
-            response_format: "json".to_string(),
+            response_format: "text".to_string(),
         });
 
     let chat_model = crate::backend::resolve_model_name(

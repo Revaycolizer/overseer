@@ -15,7 +15,8 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
     } else {
         // Fallback synthesis from summary and evidence
         let mut message = final_summary.clone();
-        let is_generic = message == "Task completed." || message == "Done." || message == "Finished." || message.is_empty();
+        let lower = message.to_lowercase();
+        let is_generic = lower == "task completed." || lower == "done." || lower == "finished." || lower == "user task completed" || lower == "task completed" || message.is_empty();
 
         // STYLE-AWARE PROMOTION: If message is generic but we have findings, promote them.
         if is_generic && !res.evidence.is_empty() {
@@ -34,7 +35,7 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
                  }
             }
             
-            if message == "Task completed." || message == "Done." || message == "Finished." {
+            if lower == "task completed." || lower == "done." || lower == "finished." || lower == "user task completed" || lower == "task completed" {
                 message = format!("{}{}", message, findings_str);
             } else {
                 message = findings_str;
