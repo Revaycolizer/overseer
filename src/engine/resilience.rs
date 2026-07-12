@@ -39,6 +39,16 @@ impl CircuitBreaker {
 static OLLAMA_BREAKER: OnceLock<CircuitBreaker> = OnceLock::new();
 pub fn ollama() -> &'static CircuitBreaker { OLLAMA_BREAKER.get_or_init(|| CircuitBreaker::new(5, 30_000)) }
 
+static OLLAMA_THROTTLE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+pub fn ollama_throttle() -> &'static tokio::sync::Semaphore {
+    OLLAMA_THROTTLE.get_or_init(|| tokio::sync::Semaphore::new(4))
+}
+
+static SERVER_THROTTLE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+pub fn server_throttle() -> &'static tokio::sync::Semaphore {
+    SERVER_THROTTLE.get_or_init(|| tokio::sync::Semaphore::new(32))
+}
+
 fn backoff_ms(attempt: u32) -> u64 {
     let cap = 30_000u64;
     let exp = (200u64).saturating_mul(1u64 << attempt.min(20)).min(cap);

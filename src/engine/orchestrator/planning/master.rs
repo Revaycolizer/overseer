@@ -112,6 +112,7 @@ Output: [
             prompt
         };
 
+        let _permit = crate::engine::resilience::ollama_throttle().acquire().await;
         crate::engine::resilience::with_resilience(
             crate::engine::resilience::ollama(),
             3,
