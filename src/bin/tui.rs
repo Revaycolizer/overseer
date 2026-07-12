@@ -68,6 +68,14 @@ async fn run_app<B: ratatui::backend::Backend>(
             } else {
                 app.status_message = "Ready.".to_string();
             }
+            last_refresh = std::time::Instant::now();
+        } else if last_refresh.elapsed() >= std::time::Duration::from_secs(3) {
+            // Background tasks (title LLM refinement, async DB writes) can
+            // land after the orchestration transition refresh. Poll every
+            // 3s so the TUI surfaces refined titles / late updates without
+            // requiring a keypress.
+            let _ = app.refresh_conversations().await;
+            last_refresh = std::time::Instant::now();
         }
 
         if crossterm::event::poll(std::time::Duration::from_millis(100))? {
