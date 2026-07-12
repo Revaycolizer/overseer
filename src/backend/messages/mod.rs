@@ -2,6 +2,7 @@ pub mod extraction;
 pub mod attachment_utils;
 pub mod crud;
 pub mod pagination;
+pub mod titling;
 pub mod types;
 
 pub use crud::*;

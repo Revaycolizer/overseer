@@ -26,7 +26,29 @@ impl AgentSystem {
         conversation_id: i64,
         user_query: &str,
     ) -> String {
-        orchestrator::orchestrate_request(self, db, conversation_id, user_query).await
+        let response = orchestrator::orchestrate_request(self, db, conversation_id, user_query).await;
+
+        if crate::backend::maybe_set_initial_title(db, conversation_id, user_query).await.is_some() {
+            // First user message on this conversation: the optimistic
+            // first-four-words title was just written. Spawn an LLM-
+            // refined title in the background so any caller (TUI, remote,
+            // future scripts) gets a clean three- to five-word title the
+            // next time the conversation list is fetched. The Dioxus
+            // chat_input path runs its own refinement via a channel; the
+            // worst case is two API calls with the second no-op writing
+            // the same string back.
+            let db_bg = db.clone();
+            let agent_bg = self.clone();
+            let query_bg = user_query.to_string();
+            tokio::spawn(async move {
+                let refined = agent_bg.generate_title(&db_bg, &query_bg).await;
+                if !refined.is_empty() {
+                    let _ = crate::backend::update_conversation_title(&db_bg, conversation_id, &refined).await;
+                }
+            });
+        }
+
+        response
     }
 
     pub async fn generate_title(&self, db: &Database, query: &str) -> String {
