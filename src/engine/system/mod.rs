@@ -87,19 +87,25 @@ impl AgentSystem {
     }
 }
 
+use std::sync::OnceLock;
+
 fn clean_title_response(raw: &str) -> String {
+    static PREFIX_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static TITLE_RE: OnceLock<regex::Regex> = OnceLock::new();
+
+    let prefix_re = PREFIX_RE.get_or_init(|| {
+        regex::Regex::new(r"(?i)^here is a \d+(?:-\d+)?(?:-\w+|\s+\w+)? title (?:for [^:]+)?:?\s*")
+            .expect("valid title prefix regex")
+    });
+    let title_re = TITLE_RE.get_or_init(|| {
+        regex::Regex::new(r"(?i)^(suggested\s+)?title:\s*")
+            .expect("valid title label regex")
+    });
+
     let mut title = raw.to_string();
-    
-    // Regex matching "Here is a 4 word/4-word title for [your query]:"
-    if let Ok(re) = regex::Regex::new(r"(?i)^here is a \d+(?:-\d+)?(?:-\w+|\s+\w+)? title (?:for [^:]+)?:?\s*") {
-        title = re.replace(&title, "").to_string();
-    }
-    
-    // Regex matching "Title: " or "Suggested Title: "
-    if let Ok(re) = regex::Regex::new(r"(?i)^(suggested\s+)?title:\s*") {
-        title = re.replace(&title, "").to_string();
-    }
-    
+    title = prefix_re.replace(&title, "").to_string();
+    title = title_re.replace(&title, "").to_string();
+
     title.trim().trim_matches('"').trim_matches('\'').to_string()
 }
 
