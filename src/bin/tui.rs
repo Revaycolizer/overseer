@@ -53,6 +53,8 @@ async fn run_app<B: ratatui::backend::Backend>(
     app: &mut App,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut last_refresh = std::time::Instant::now();
+    let mut last_seen_activity = app.activity.current();
+    let mut last_seen_engine = overseer::engine::activity::engine_activity().current();
     loop {
         terminal.draw(|f| overseer::tui::ui::draw(f, app))?;
 
@@ -68,12 +70,24 @@ async fn run_app<B: ratatui::backend::Backend>(
             } else {
                 app.status_message = "Ready.".to_string();
             }
+            last_seen_activity = app.activity.current();
+            last_seen_engine = overseer::engine::activity::engine_activity().current();
             last_refresh = std::time::Instant::now();
-        } else if last_refresh.elapsed() >= std::time::Duration::from_secs(3) {
-            // Background tasks (title LLM refinement, async DB writes) can
-            // land after the orchestration transition refresh. Poll every
-            // 3s so the TUI surfaces refined titles / late updates without
-            // requiring a keypress.
+        } else if app.activity.changed_since(last_seen_activity)
+            || overseer::engine::activity::engine_activity().changed_since(last_seen_engine)
+        {
+            // A conversation-mutating call (send_message, add_message,
+            // add_conversation) or an engine-side write (LLM-refined
+            // title, future background DB writes) bumped a counter.
+            // Refresh now instead of waiting for a fixed interval.
+            let _ = app.refresh_conversations().await;
+            last_seen_activity = app.activity.current();
+            last_seen_engine = overseer::engine::activity::engine_activity().current();
+            last_refresh = std::time::Instant::now();
+        } else if last_refresh.elapsed() >= std::time::Duration::from_secs(30) {
+            // Long safety poll in case a counter increment was missed
+            // (e.g. a remote mutation that didn't go through the TUI's
+            // send path).
             let _ = app.refresh_conversations().await;
             last_refresh = std::time::Instant::now();
         }

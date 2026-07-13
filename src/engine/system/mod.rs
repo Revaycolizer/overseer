@@ -44,6 +44,12 @@ impl AgentSystem {
                 let refined = agent_bg.generate_title(&db_bg, &query_bg).await;
                 if !refined.is_empty() {
                     let _ = crate::backend::update_conversation_title(&db_bg, conversation_id, &refined).await;
+                    // Bump the engine activity counter so the TUI's
+                    // change-driven refresh picks up the refined title
+                    // (its own `app.activity` counter is only bumped by
+                    // TUI-side events, never by the engine's background
+                    // spawn).
+                    crate::engine::activity::engine_activity().bump();
                 }
             });
         }

@@ -6,6 +6,7 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
 
     if key.code == KeyCode::F(2) || (key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)) {
         let new_id = app.client.add_conversation("New Conversation").await?;
+        app.activity.bump();
         app.refresh_conversations().await?;
         if let Some(idx) = app.conversations.iter().position(|c| c.id == new_id) {
             app.selected_conv_idx = idx;
