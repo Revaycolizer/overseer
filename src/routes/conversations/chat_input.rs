@@ -344,7 +344,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
             let assistant_tx = crate::routes::conversations::assistant_stream::install_listener(visible_messages);
 
             let handle = tokio::spawn(async move {
-                if let Ok(mut cache) = crate::engine::cache::messages().lock() {
+                if let Ok(mut cache) = crate::engine::cache::messages().write() {
                     cache.invalidate(&conversation_id);
                 }
                 if let Ok(msg_id) = backend::add_message(
@@ -394,6 +394,13 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                     let _ =
                         backend::add_message(&db_inner, conversation_id, "assistant", &response, false)
                             .await;
+                    // Invalidate the cached first-page for this conversation so
+                    // a switch-away-and-back returns the assistant message; the
+                    // channel push above already updated the live visible_messages
+                    // but the persistent cache only saw the user message.
+                    if let Ok(mut cache) = crate::engine::cache::messages().write() {
+                        cache.invalidate(&conversation_id);
+                    }
                     let _ = assistant_tx.send(crate::routes::conversations::assistant_stream::assistant_message(conversation_id, response.clone()));
                     true
                 } else {

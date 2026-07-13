@@ -65,21 +65,21 @@ pub fn Conversations() -> Element {
         messages_cursor.set(None);
         messages_has_more.set(true);
         if let Some(id) = conv_id {
-                if let Some(cached) = crate::engine::cache::messages().lock().ok().and_then(|mut c| c.get_mut(&id).cloned()) {
-                messages_cursor.set(cached.last().map(|m| m.id));
-                messages_has_more.set(cached.len() as u32 >= PAGE_SIZE);
-                visible_messages.set(cached);
-            } else {
-                spawn(async move {
-                    let page = backend::get_messages_page(&db, id, None, PAGE_SIZE).await.unwrap_or_default();
-                    messages_cursor.set(page.last().map(|m| m.id));
-                    messages_has_more.set(page.len() as u32 >= PAGE_SIZE);
-                    if let Ok(mut cache) = crate::engine::cache::messages().lock() {
-                        cache.put(id, page.clone());
-                    }
-                    visible_messages.set(page);
-                });
-            }
+                if let Some(cached) = crate::engine::cache::messages().read().ok().and_then(|c| c.get(&id).cloned()) {
+                    messages_cursor.set(cached.last().map(|m| m.id));
+                    messages_has_more.set(cached.len() as u32 >= PAGE_SIZE);
+                    visible_messages.set(cached);
+                } else {
+                    spawn(async move {
+                        let page = backend::get_messages_page(&db, id, None, PAGE_SIZE).await.unwrap_or_default();
+                        messages_cursor.set(page.last().map(|m| m.id));
+                        messages_has_more.set(page.len() as u32 >= PAGE_SIZE);
+                        if let Ok(mut cache) = crate::engine::cache::messages().write() {
+                            cache.put(id, page.clone());
+                        }
+                        visible_messages.set(page);
+                    });
+                }
         }
     });
     let db_for_load = db.clone();

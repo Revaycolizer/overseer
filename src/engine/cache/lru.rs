@@ -24,6 +24,13 @@ impl<K: Eq + std::hash::Hash + Clone, V> LruCache<K, V> {
         self.map.contains_key(key)
     }
 
+    pub fn get(&self, key: &K) -> Option<&V> {
+        if !self.map.contains_key(key) {
+            return None;
+        }
+        self.map.get(key)
+    }
+
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
         if !self.map.contains_key(key) {
             return None;
