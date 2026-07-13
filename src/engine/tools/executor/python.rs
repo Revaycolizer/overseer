@@ -2,6 +2,9 @@ use tokio::process::Command;
 use crate::engine::tools::error::DynamicToolError;
 use crate::engine::utils::discovery::{build_python_command, get_tool_executable_path, ToolInfo};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 pub async fn execute_python_tool(
     info: &ToolInfo,
     args: serde_json::Value,
@@ -22,7 +25,6 @@ pub async fn execute_python_tool(
     cmd.kill_on_drop(true);
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }

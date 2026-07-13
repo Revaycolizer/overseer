@@ -67,13 +67,9 @@ pub async fn get_system_load() -> SystemLoad {
         }
     }
 
-    #[cfg(windows)]
-    return SystemLoad {
-        label: "System Load".to_string(),
-        usage: 0,
-    };
-
-    // 3. Absolute fallback
+    // Absolute fallback (also handles Windows where the early-return above
+    // already produced a value; on Windows this branch is unreachable but
+    // kept so non-Windows targets still hit it.)
     SystemLoad {
         label: "System Load".to_string(),
         usage: 0,

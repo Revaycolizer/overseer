@@ -1,6 +1,9 @@
 use tokio::process::Command;
 use crate::engine::tools::error::DynamicToolError;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 pub async fn run_powershell_hidden(script: &str, tool_name: &str) -> Result<String, DynamicToolError> {
     let mut command = Command::new("powershell");
     command
@@ -13,7 +16,6 @@ pub async fn run_powershell_hidden(script: &str, tool_name: &str) -> Result<Stri
 
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         command.creation_flags(CREATE_NO_WINDOW);
     }

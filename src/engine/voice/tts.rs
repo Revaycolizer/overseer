@@ -131,7 +131,10 @@ pub fn speak_locally(text: &str) {
                     .arg(&clean_text)
                     .output();
             }
+            // On Linux, the piper/macOS/Windows branches above don't apply, so
+            // fall through to the closing play_finished() below.
         }
+        #[cfg(not(any(windows, target_os = "macos")))]
         play_finished();
     });
 }

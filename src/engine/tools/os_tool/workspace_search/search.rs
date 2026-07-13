@@ -3,6 +3,9 @@ use serde_json::json;
 use tokio::process::Command;
 use crate::engine::tools::os_tool::workspace_search::scoring::{score_file_match, tokenize_file_query};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 pub async fn search_workspace_files_fast(query: &str) -> Option<Vec<serde_json::Value>> {
     let cwd = std::env::current_dir().ok()?;
     let query_lower = query.trim().to_lowercase();
@@ -17,7 +20,6 @@ pub async fn search_workspace_files_fast(query: &str) -> Option<Vec<serde_json::
 
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
