@@ -1,6 +1,6 @@
 #[cfg(target_os = "windows")]
 pub fn get_idle_secs() -> u64 {
-    use windows::Win32::UI::WindowsAndMessaging::{GetLastInputInfo, LASTINPUTINFO};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
     use windows::Win32::System::SystemInformation::GetTickCount;
 
     unsafe {
