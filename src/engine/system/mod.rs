@@ -76,7 +76,7 @@ impl AgentSystem {
             truncated
         );
 
-        let _permit = crate::engine::resilience::ollama_throttle().acquire().await;
+        let _permit = crate::engine::resilience::ollama_title_throttle().acquire().await;
         match agent.prompt(&prompt).await {
             Ok(title) => {
                 let clean = title.trim().trim_matches('"').trim_matches('\'').trim().to_string();

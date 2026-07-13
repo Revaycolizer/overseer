@@ -39,9 +39,22 @@ impl CircuitBreaker {
 static OLLAMA_BREAKER: OnceLock<CircuitBreaker> = OnceLock::new();
 pub fn ollama() -> &'static CircuitBreaker { OLLAMA_BREAKER.get_or_init(|| CircuitBreaker::new(5, 30_000)) }
 
-static OLLAMA_THROTTLE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+static OLLAMA_DISPATCH_THROTTLE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+pub fn ollama_dispatch_throttle() -> &'static tokio::sync::Semaphore {
+    OLLAMA_DISPATCH_THROTTLE.get_or_init(|| tokio::sync::Semaphore::new(4))
+}
+
+// Title-refinement is the slow path (1-3s on a small model) and only
+// fires on first-message. A separate single-permit lane keeps a slow
+// title call from holding one of the dispatch's four permits.
+static OLLAMA_TITLE_THROTTLE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+pub fn ollama_title_throttle() -> &'static tokio::sync::Semaphore {
+    OLLAMA_TITLE_THROTTLE.get_or_init(|| tokio::sync::Semaphore::new(1))
+}
+
+/// Backwards-compatible alias for ollama_dispatch_throttle.
 pub fn ollama_throttle() -> &'static tokio::sync::Semaphore {
-    OLLAMA_THROTTLE.get_or_init(|| tokio::sync::Semaphore::new(4))
+    ollama_dispatch_throttle()
 }
 
 type ServerGovernorConfig = tower_governor::governor::GovernorConfig<

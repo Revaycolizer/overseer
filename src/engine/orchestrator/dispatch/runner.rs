@@ -68,7 +68,7 @@ pub async fn dispatch_domain(
     let mut action_tool_executed = false;
 
     for _iteration in 0..10 {
-        let _permit = crate::engine::resilience::ollama_throttle().acquire().await;
+        let _permit = crate::engine::resilience::ollama_dispatch_throttle().acquire().await;
         let response = crate::engine::resilience::with_resilience(
             crate::engine::resilience::ollama(),
             3,
