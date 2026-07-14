@@ -4,6 +4,7 @@ use ratatui::{
 };
 use crate::backend::Message;
 use crate::engine::orchestrator::{StructuredResponse, SupervisorExecutionResult, ChartPart};
+use crate::engine::orchestrator::utils::json_strip::strip_embedded_json;
 
 pub fn format_message(m: &Message) -> Vec<Line<'static>> {
     let role_style = if m.role == "user" {
@@ -15,7 +16,7 @@ pub fn format_message(m: &Message) -> Vec<Line<'static>> {
     if m.role == "user" {
         return vec![Line::from(vec![
             Span::styled("[USER] ", role_style),
-            Span::styled(m.content.clone(), Style::default().fg(Color::White)),
+            Span::styled(strip_embedded_json(&m.content), Style::default().fg(Color::White)),
         ])];
     }
 
@@ -36,7 +37,7 @@ pub fn format_message(m: &Message) -> Vec<Line<'static>> {
             };
             lines.push(Line::from(vec![
                 Span::styled(format!("[{}] ", sub_msg.role.to_uppercase()), sub_role_style),
-                Span::styled(sub_msg.message, Style::default().fg(Color::White)),
+                Span::styled(strip_embedded_json(&sub_msg.message), Style::default().fg(Color::White)),
             ]));
         }
         for chart in res.charts {
@@ -52,7 +53,7 @@ pub fn format_message(m: &Message) -> Vec<Line<'static>> {
     } else {
         vec![Line::from(vec![
             Span::styled(format!("[{}] ", m.role.to_uppercase()), role_style),
-            Span::styled(m.content.clone(), Style::default().fg(Color::White)),
+            Span::styled(strip_embedded_json(&m.content), Style::default().fg(Color::White)),
         ])]
     }
 }

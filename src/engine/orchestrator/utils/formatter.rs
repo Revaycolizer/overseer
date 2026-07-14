@@ -1,17 +1,31 @@
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
 use crate::engine::orchestrator::core::response::{StructuredResponse, MessagePart, SourcePart};
 use crate::engine::orchestrator::utils::format_helpers::{normalize_summary, extract_artifact_path, is_html_noise};
+use crate::engine::orchestrator::utils::json_strip::strip_embedded_json;
 
 pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredResponse {
     let mut structured = StructuredResponse::new();
     let final_summary = normalize_summary(&res.summary);
-    
+
     structured.status = res.status.clone();
 
     // 1. Messages Strategy:
     // If specifically provided by the supervisor, use them.
     if !res.messages.is_empty() {
-        structured.messages.extend(res.messages.clone());
+        // Some small models (qwen2.5 7b in particular) wrap their
+        // structured response as plain text inside `message` instead of
+        // emitting it as the proper JSON shape. Strip any embedded
+        // JSON shell so the renderer shows just the prose answer
+        // instead of "answer + duplicate JSON".
+        structured.messages.extend(
+            res.messages
+                .iter()
+                .cloned()
+                .map(|mut m| {
+                    m.message = strip_embedded_json(&m.message);
+                    m
+                }),
+        );
     } else {
         // Fallback synthesis from summary and evidence
         let mut message = final_summary.clone();
