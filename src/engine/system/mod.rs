@@ -26,17 +26,25 @@ impl AgentSystem {
         conversation_id: i64,
         user_query: &str,
     ) -> String {
+        let query_tokens = crate::engine::tokenizer::count_tokens(user_query);
+        println!(
+            "📊 [orchestrate] conv={} query_tokens=~{}",
+            conversation_id, query_tokens
+        );
         let response = orchestrator::orchestrate_request(self, db, conversation_id, user_query).await;
+        println!(
+            "📊 [orchestrate] conv={} response_tokens=~{}",
+            conversation_id,
+            crate::engine::tokenizer::count_tokens(&response)
+        );
 
-        if crate::backend::maybe_set_initial_title(db, conversation_id, user_query).await.is_some() {
-            // First user message on this conversation: the optimistic
-            // first-four-words title was just written. Spawn an LLM-
-            // refined title in the background so any caller (TUI, remote,
-            // future scripts) gets a clean three- to five-word title the
-            // next time the conversation list is fetched. The Dioxus
-            // chat_input path runs its own refinement via a channel; the
-            // worst case is two API calls with the second no-op writing
-            // the same string back.
+        if crate::backend::is_first_user_message(db, conversation_id).await {
+            // First user message on this conversation: the new-conv
+            // title ("New Conversation") is what the sidebar shows for
+            // a moment. Spawn an LLM-refined title in the background so
+            // any caller (TUI, remote, future scripts) gets a clean
+            // three- to five-word title the next time the conversation
+            // list is fetched.
             let db_bg = db.clone();
             let agent_bg = self.clone();
             let query_bg = user_query.to_string();
@@ -88,7 +96,15 @@ impl AgentSystem {
                 let clean = title.trim().trim_matches('"').trim_matches('\'').trim().to_string();
                 clean_title_response(&clean)
             }
-            Err(_) => query.split_whitespace().take(4).collect::<Vec<_>>().join(" ")
+            // On error or empty response, return empty so the caller
+            // (the agent_system.orchestrate spawn) skips the title
+            // update. The conversation keeps whatever title it already
+            // had ("New Conversation" for new convs, or the prior
+            // refined title for existing ones). Don't fall back to
+            // first-four-words — that placeholder was racing with the
+            // LLM refinement and could overwrite a real title when the
+            // LLM returned empty.
+            Err(_) => String::new(),
         }
     }
 }

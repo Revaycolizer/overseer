@@ -84,12 +84,31 @@ async fn run_app<B: ratatui::backend::Backend>(
             last_seen_activity = app.activity.current();
             last_seen_engine = overseer::engine::activity::engine_activity().current();
             last_refresh = std::time::Instant::now();
-        } else if last_refresh.elapsed() >= std::time::Duration::from_secs(30) {
-            // Long safety poll in case a counter increment was missed
-            // (e.g. a remote mutation that didn't go through the TUI's
-            // send path).
-            let _ = app.refresh_conversations().await;
-            last_refresh = std::time::Instant::now();
+        } else {
+            // Post-orchestrate poll window: after `is_orchestrating` flips
+            // back to false, the LLM-refined title lands in the DB
+            // 1–3 s later via a detached `tokio::spawn` inside
+            // `agent_system::orchestrate`. Poll every 1 s for 5 s after
+            // the spawn returns so the refined title surfaces without
+            // waiting on a counter change.
+            let in_post_window = app
+                .last_orchestrate_finished
+                .lock()
+                .unwrap()
+                .map(|t| t.elapsed() < std::time::Duration::from_secs(5))
+                .unwrap_or(false);
+            if in_post_window && last_refresh.elapsed() >= std::time::Duration::from_secs(1) {
+                let _ = app.refresh_conversations().await;
+                last_refresh = std::time::Instant::now();
+            } else if !in_post_window
+                && last_refresh.elapsed() >= std::time::Duration::from_secs(30)
+            {
+                // Long safety poll in case a counter increment was
+                // missed (e.g. a remote mutation that didn't go through
+                // the TUI's send path).
+                let _ = app.refresh_conversations().await;
+                last_refresh = std::time::Instant::now();
+            }
         }
 
         if crossterm::event::poll(std::time::Duration::from_millis(100))? {

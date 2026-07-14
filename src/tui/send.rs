@@ -20,21 +20,11 @@ impl App {
         let _ = self.client.add_message(active_conv_id, "user", &query, false).await?;
         self.activity.bump();
 
-        // Mirror the Dioxus chat_input optimistic-title pattern: write
-        // the first-four-words to the DB so the sidebar updates the
-        // title immediately on the next refresh, before the agent
-        // starts streaming its response. The LLM-refined title still
-        // lands later via the agent_system.orchestrate spawn.
-        let optimistic_title: String = query
-            .split_whitespace()
-            .take(4)
-            .collect::<Vec<_>>()
-            .join(" ");
-        if !optimistic_title.is_empty() {
-            let _ = self.client.update_conversation_title(active_conv_id, &optimistic_title).await;
-            self.activity.bump();
-        }
-
+        // No 4-word optimistic title write: the LLM refinement via
+        // agent_system.orchestrate writes the proper title within
+        // 1-3 s. The 4-word placeholder was racing with the LLM and
+        // sometimes overwriting the refined title when the LLM
+        // returned empty / errored.
         self.refresh_conversations().await?;
 
         self.status_message = "Orchestrating agent run...".to_string();
@@ -44,6 +34,7 @@ impl App {
         let is_orch = self.is_orchestrating.clone();
         let err_clone = self.orchestrate_error.clone();
         let activity = self.activity.clone();
+        let last_orch_finished = self.last_orchestrate_finished.clone();
         *err_clone.lock().unwrap() = None;
 
         tokio::spawn(async move {
@@ -57,6 +48,7 @@ impl App {
                 }
             }
             is_orch.store(false, Ordering::SeqCst);
+            *last_orch_finished.lock().unwrap() = Some(std::time::Instant::now());
         });
 
         Ok(())

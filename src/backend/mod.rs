@@ -42,7 +42,7 @@ pub use routing_wrappers::artifacts::*;
 pub use routing_wrappers::misc::*;
 
 pub use conversations::Conversation;
-pub use messages::titling::maybe_set_initial_title;
+pub use messages::titling::is_first_user_message;
 pub use messages::{Message, Attachment};
 pub use health::get_available_models;
 pub use artifacts::Artifact;

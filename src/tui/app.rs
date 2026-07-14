@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::time::Instant;
 
 use crate::backend::client::BackendClient;
 use crate::backend::{Conversation, Message, SystemLoad};
@@ -19,6 +20,7 @@ pub struct App {
     pub is_orchestrating: Arc<AtomicBool>,
     pub orchestrate_error: Arc<std::sync::Mutex<Option<String>>>,
     pub activity: Arc<ActivityCounter>,
+    pub last_orchestrate_finished: Arc<std::sync::Mutex<Option<Instant>>>,
 }
 
 impl App {
@@ -35,6 +37,7 @@ impl App {
             is_orchestrating: Arc::new(AtomicBool::new(false)),
             orchestrate_error: Arc::new(std::sync::Mutex::new(None)),
             activity: Arc::new(ActivityCounter::default()),
+            last_orchestrate_finished: Arc::new(std::sync::Mutex::new(None)),
         };
         app.refresh_conversations().await?;
         app.refresh_metrics().await?;

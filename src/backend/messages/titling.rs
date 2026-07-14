@@ -1,30 +1,20 @@
 use crate::db::Database;
 
-/// If this is the first user message on the conversation, write an
-/// optimistic title (first four words of the query) and return it. The
-/// chat_input Dioxus flow layers a later LLM-refined title on top via
-/// the channels; the TUI uses just this optimistic value.
+/// Returns `true` if this is the first user message on the conversation
+/// (the LLM-refined title should be spawned for this turn).
 ///
-/// Returns Some(simple_title) when the write happened (callers can use
-/// the presence of the value to decide whether to spawn LLM refinement
-/// and avoid double-counting the conversation).
-pub async fn maybe_set_initial_title(db: &Database, conversation_id: i64, query: &str) -> Option<String> {
+/// We intentionally do NOT write a placeholder. New conversations start
+/// with the title "New Conversation" set by `add_conversation`; the
+/// LLM refinement in `agent_system::orchestrate` writes the proper
+/// title within 1-3 s. An earlier 4-word placeholder write raced with
+/// the LLM and overwrote the refined title when the LLM returned
+/// empty / errored.
+pub async fn is_first_user_message(db: &Database, conversation_id: i64) -> bool {
     let count_row: Result<(i64,), _> = sqlx::query_as(
         "SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND role = 'user'",
     )
     .bind(conversation_id)
     .fetch_one(&db.pool)
     .await;
-    let count = count_row.ok()?.0;
-    if count != 1 {
-        return None;
-    }
-
-    let simple_title = query
-        .split_whitespace()
-        .take(4)
-        .collect::<Vec<_>>()
-        .join(" ");
-    let _ = crate::backend::update_conversation_title(db, conversation_id, &simple_title).await;
-    Some(simple_title)
+    count_row.map(|row| row.0 == 1).unwrap_or(false)
 }

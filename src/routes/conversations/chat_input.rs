@@ -324,14 +324,12 @@ fn ChatComposer(props: ChatInputProps) -> Element {
             }
             let conversation_id = resolved_conv_id.unwrap();
 
-            let optimistic_title = if is_first_msg_val || created_new_conversation {
-                let t = query.split_whitespace().take(4).collect::<Vec<_>>().join(" ");
-                let _ = backend::update_conversation_title(&db_inner, conversation_id, &t).await;
-                conversations_inner.restart();
-                Some(t)
-            } else {
-                None
-            };
+            // No 4-word optimistic title write: the LLM refinement via
+            // the chat_input spawn (and the engine_system.orchestrate
+            // one) writes the proper title within 1-3 s. The 4-word
+            // placeholder was racing with the LLM and could overwrite
+            // a real title when the LLM returned empty / errored.
+            let spawn_llm_refinement = is_first_msg_val || created_new_conversation;
 
             let (title_tx, title_rx) = tokio::sync::oneshot::channel::<()>();
             let mut conversations_for_title = conversations_inner.clone();
@@ -356,7 +354,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                 )
                 .await
                 {
-                    if let Some(_optimistic) = optimistic_title.clone() {
+                    if spawn_llm_refinement {
                         let db_for_title = db_inner.clone();
                         let agent_for_title = agent_inner.clone();
                         let query_for_title = query.clone();

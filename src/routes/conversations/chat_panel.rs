@@ -23,6 +23,7 @@ pub fn ChatPanel(
     messages_loading_more: Signal<bool>,
     load_more: Callback<()>,
 ) -> Element {
+    let total_tokens = crate::engine::tokenizer::count_messages_tokens(&messages);
     rsx! {
         div {
             id: "chat-scroll-container",
@@ -33,6 +34,11 @@ pub fn ChatPanel(
                 }
             },
             div { class: "max-w-3xl mx-auto py-10 px-6 space-y-8",
+                if !messages.is_empty() {
+                    div { class: "mx-auto text-center text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400",
+                        "~{total_tokens} tokens in view"
+                    }
+                }
                 if messages.is_empty() && !is_thinking() {
                     EmptyConversationState { on_prompt: move |prompt: String| starter_prompt.set(Some(prompt)) }
                 } else {

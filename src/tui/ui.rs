@@ -52,7 +52,15 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
         .flat_map(super::message_view::format_message)
         .collect();
 
-    f.render_widget(Paragraph::new(messages_text).block(Block::default().borders(Borders::ALL).title(" Conversation History ")).wrap(ratatui::widgets::Wrap { trim: true }), right_layout[0]);
+    let token_count = crate::engine::tokenizer::count_messages_tokens(&app.messages);
+    f.render_widget(
+        Paragraph::new(messages_text)
+            .block(Block::default().borders(Borders::ALL).title(format!(
+                " Conversation History (~{} tokens) ", token_count
+            )))
+            .wrap(ratatui::widgets::Wrap { trim: true }),
+        right_layout[0],
+    );
     f.render_widget(Paragraph::new(Span::styled(&app.input, Style::default().fg(Color::White))).block(Block::default().borders(Borders::ALL).title(" Type Message (Press ENTER to send) ")), right_layout[1]);
 }
 
