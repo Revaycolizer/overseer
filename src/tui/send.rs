@@ -38,9 +38,32 @@ impl App {
         *err_clone.lock().unwrap() = None;
 
         tokio::spawn(async move {
+            // Snapshot the engine-activity counter before orchestrate
+            // starts so we can detect when the LLM-refined title fires
+            // its own bump.
+            let initial_engine = crate::engine::activity::engine_activity().current();
+
             match client.orchestrate(active_conv_id, &query).await {
                 Ok(response) => {
                     let _ = client.add_message(active_conv_id, "assistant", &response, false).await;
+                    activity.bump();
+
+                    // Wait for the LLM-refined title to land. The
+                    // spawn of `agent_bg.generate_title(...)` runs
+                    // inside agent_system::orchestrate's LLM refinement
+                    // block and bumps engine_activity once it has
+                    // written the refined title. Polling every 250ms
+                    // caps the worst-case latency at the LLM time
+                    // itself (~1-3 s) rather than the previous 1-5 s
+                    // post-orchestrate poll window.
+                    for _ in 0..20u32 {
+                        if crate::engine::activity::engine_activity().current() != initial_engine {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    }
+                    // Backup activity bump in case the main loop
+                    // missed the engine_activity change.
                     activity.bump();
                 }
                 Err(e) => {

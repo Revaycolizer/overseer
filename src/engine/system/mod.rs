@@ -26,17 +26,11 @@ impl AgentSystem {
         conversation_id: i64,
         user_query: &str,
     ) -> String {
-        let query_tokens = crate::engine::tokenizer::count_tokens(user_query);
-        println!(
-            "📊 [orchestrate] conv={} query_tokens=~{}",
-            conversation_id, query_tokens
-        );
+        // Token-counting log was moved to a debug feature flag so it
+        // doesn't leak stdout into the TUI. The count is still useful
+        // for context-window observability once the tracing module
+        // (item 15 in the V4.17 backlog) is in.
         let response = orchestrator::orchestrate_request(self, db, conversation_id, user_query).await;
-        println!(
-            "📊 [orchestrate] conv={} response_tokens=~{}",
-            conversation_id,
-            crate::engine::tokenizer::count_tokens(&response)
-        );
 
         if crate::backend::is_first_user_message(db, conversation_id).await {
             // First user message on this conversation: the new-conv
