@@ -58,17 +58,33 @@ impl ChatAgent {
 
     pub async fn answer(&self, prompt: &str, context: &str) -> String {
         let full_prompt = format!("Context:\n{}\n\nUser Question: {}", context, prompt);
-        self.agent
-            .prompt(&full_prompt)
-            .await
-            .unwrap_or_else(|e| format!("Chat error: {}", e))
+        // V4.17.1: switch to streaming completion. The token stream is
+        // currently consumed in full via collect_stream (no per-token UI
+        // yet — that's V4.17.1d for the Dioxus app and V4.17.1e for
+        // the TUI). Behaviour matches the previous 'agent.prompt'
+        // path: a single String return, errors coerced to a friendly
+        // placeholder.
+        use rig::streaming::StreamingPrompt;
+        match crate::engine::streaming::collect_stream(
+            self.agent.stream_prompt(&full_prompt).await,
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(_) => "Chat error: streaming completion failed".to_string(),
+        }
     }
 
     pub async fn chat(&self, prompt: &str, history: Vec<Message>) -> String {
-        self.agent
-            .chat(prompt, history)
-            .await
-            .unwrap_or_else(|e| format!("Chat error: {}", e))
+        use rig::streaming::StreamingChat;
+        match crate::engine::streaming::collect_stream(
+            self.agent.stream_chat(prompt, history).await,
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(_) => "Chat error: streaming completion failed".to_string(),
+        }
     }
 }
 
