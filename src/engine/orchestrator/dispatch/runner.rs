@@ -1,5 +1,5 @@
 use rig::agent::AgentBuilder;
-use rig::completion::{Chat, Message};
+use rig::completion::Message;
 use rig::providers::ollama;
 use crate::db::Database;
 use crate::engine::orchestrator::core::event_logger;
@@ -72,7 +72,20 @@ pub async fn dispatch_domain(
         let response = crate::engine::resilience::with_resilience(
             crate::engine::resilience::ollama(),
             3,
-            || agent.chat(&current_prompt, history.clone()),
+            || {
+                // V4.17.1c: switch the dispatch loop to streaming
+                // completion. We build a fresh streaming request per
+                // attempt (the closure is re-invoked on retry) and
+                // collect it back to a String. Behaviour matches the
+                // old `agent.chat(...)` path: a single String result
+                // for the downstream JSON parser.
+                use rig::streaming::StreamingChat;
+                let stream_req = agent.stream_chat(&current_prompt, history.clone());
+                async move {
+                    let stream = stream_req.await;
+                    crate::engine::streaming::collect_stream(stream).await
+                }
+            },
         )
         .await
         .map_err(|e| e.to_string())?;
