@@ -5,6 +5,7 @@ pub mod cache;
 pub mod orchestrator;
 pub mod resilience;
 pub mod shell;
+pub mod streaming;
 pub mod system;
 pub mod tokenizer;
 pub mod tools;
