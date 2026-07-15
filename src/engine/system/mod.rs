@@ -4,7 +4,7 @@ pub mod history_builder;
 
 use crate::db::Database;
 use rig::providers::ollama;
-use rig::completion::Prompt;
+use rig::streaming::StreamingPrompt;
 use rig::client::CompletionClient;
 use std::fmt;
 
@@ -85,7 +85,14 @@ impl AgentSystem {
         );
 
         let _permit = crate::engine::resilience::ollama_title_throttle().acquire().await;
-        match agent.prompt(&prompt).await {
+        // Use streaming + collect_stream: this validates the V4.17.1
+        // streaming helper end-to-end. Title generation doesn't need
+        // per-token UI updates, so a single collect is sufficient.
+        match crate::engine::streaming::collect_stream(
+            agent.stream_prompt(prompt).await,
+        )
+        .await
+        {
             Ok(title) => {
                 let clean = title.trim().trim_matches('"').trim_matches('\'').trim().to_string();
                 clean_title_response(&clean)
