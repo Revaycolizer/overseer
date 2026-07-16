@@ -35,7 +35,14 @@ pub fn MessageBubble(msg: backend::Message, on_copy: EventHandler<String>) -> El
     }
     
     rsx! {
-        div { class: "flex items-start gap-4 mb-6",
+        // V4.17.7: content-visibility: auto lets the browser skip
+        // rendering for messages that aren't in the viewport. This
+        // keeps the chat panel cheap when the conversation is hundreds
+        // of messages long; combined with the existing paged fetch
+        // (50 per page) the DOM stays bounded.
+        div {
+            class: "flex items-start gap-4 mb-6",
+            style: "content-visibility: auto; contain-intrinsic-size: auto 200px;",
             div { class: "size-8 shrink-0 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-soft transition-transform hover:scale-105",
                 MaterialIcon { name: "smart_toy", color: MaterialIconColor::Light, size: 20 }
             }
