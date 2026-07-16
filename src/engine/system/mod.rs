@@ -27,10 +27,23 @@ impl AgentSystem {
         user_query: &str,
         token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     ) -> String {
-        // Token-counting log was moved to a debug feature flag so it
-        // doesn't leak stdout into the TUI. The count is still useful
-        // for context-window observability once the tracing module
-        // (item 15 in the V4.17 backlog) is in.
+        // V4.17.2: emit a budget warning before we send the prompt
+        // to Ollama. The query itself is a lower bound on the prompt
+        // size (the system preamble + context + history add hundreds
+        // more tokens). 8192 covers the default num_ctx of the
+        // qwen2.5 / llama3 model family Overseer ships with. The
+        // warning is logged via the `log` crate so it doesn't surface
+        // stdout in the TUI (V4.17.1 follow-up: the user asked us
+        // to drop the LLM debug prints from the TUI output).
+        if crate::engine::tokenizer::check_token_budget(user_query, 8192) {
+            log::warn!(
+                "overseer.orchestrate: user_query at ~{} tokens (>8192 estimate); \
+                 Ollama may truncate the prompt at num_ctx. Consider V4.17.16 \
+                 (memory compaction) for long conversations.",
+                crate::engine::tokenizer::count_tokens(user_query),
+            );
+        }
+
         let response = orchestrator::orchestrate_request(
             self,
             db,

@@ -22,3 +22,12 @@ pub fn count_messages_tokens(messages: &[crate::backend::Message]) -> usize {
         .map(|m| count_tokens(&m.content) + count_tokens(&m.role) + 8)
         .sum()
 }
+
+/// Returns true if the estimated token count of `text` exceeds `limit`.
+/// Used by the orchestrator to surface a budget-exceeded warning
+/// before Ollama silently truncates the prompt at `num_ctx`. The
+/// limit is configurable per-call so different models (different
+/// `num_ctx`) can pass their own threshold.
+pub fn check_token_budget(text: &str, limit: usize) -> bool {
+    count_tokens(text) > limit
+}
