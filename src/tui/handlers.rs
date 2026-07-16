@@ -6,22 +6,13 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
 
     if key.code == KeyCode::F(2) || (key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)) {
         let new_id = app.client.add_conversation("New Conversation").await?;
+        // Immediately anchor selection to the new conversation's ID —
+        // before any refresh that might re-sort the list. This prevents
+        // the race where refresh_conversations() returns before the INSERT
+        // is visible, causing unwrap_or(0) to silently select the wrong
+        // conversation.
+        app.selected_conv_id = Some(new_id);
         app.activity.bump();
-        app.refresh_conversations().await?;
-        // Pin the new conversation to the top of the list. The
-        // backend's get_conversations already sorts by updated_at
-        // DESC, so the new row is index 0 unless the user has
-        // existing empty "New Conversation" rows from previous F2
-        // presses. In that case find the most recent one with
-        // matching title and select it; if none match, fall back to
-        // index 0.
-        let new_conv_idx = app
-            .conversations
-            .iter()
-            .position(|c| c.title == "New Conversation" && c.id == new_id)
-            .or_else(|| app.conversations.iter().position(|c| c.id == new_id))
-            .unwrap_or(0);
-        app.selected_conv_idx = new_conv_idx;
         app.input.clear();
         app.input_cursor = 0;
         let _ = app.refresh_conversations().await;
@@ -39,15 +30,23 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
             };
         }
         KeyCode::Up => {
-            if app.active_tab == ActiveTab::Chat && app.selected_conv_idx > 0 {
-                app.selected_conv_idx -= 1;
-                app.refresh_conversations().await?;
+            if app.active_tab == ActiveTab::Chat {
+                if let Some(idx) = app.selected_conv_idx() {
+                    if idx > 0 {
+                        app.selected_conv_id = Some(app.conversations[idx - 1].id);
+                        app.refresh_conversations().await?;
+                    }
+                }
             }
         }
         KeyCode::Down => {
-            if app.active_tab == ActiveTab::Chat && app.selected_conv_idx + 1 < app.conversations.len() {
-                app.selected_conv_idx += 1;
-                app.refresh_conversations().await?;
+            if app.active_tab == ActiveTab::Chat {
+                if let Some(idx) = app.selected_conv_idx() {
+                    if idx + 1 < app.conversations.len() {
+                        app.selected_conv_id = Some(app.conversations[idx + 1].id);
+                        app.refresh_conversations().await?;
+                    }
+                }
             }
         }
         KeyCode::Enter => {

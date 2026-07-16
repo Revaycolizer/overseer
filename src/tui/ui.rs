@@ -36,9 +36,11 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
     let chat_layout = Layout::default().direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)]).split(area);
 
+    let selected_idx = app.selected_conv_idx();
     let convs: Vec<ListItem> = app.conversations.iter().enumerate().map(|(i, c)| {
-        let prefix = if i == app.selected_conv_idx { "▶ " } else { "  " };
-        let style = if i == app.selected_conv_idx { Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::Gray) };
+        let is_sel = selected_idx == Some(i);
+        let prefix = if is_sel { "▶ " } else { "  " };
+        let style = if is_sel { Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::Gray) };
         let display_title = if c.title.is_empty() { format!("Chat {}", c.id) } else { c.title.clone() };
         ListItem::new(Line::from(vec![Span::styled(prefix, style), Span::styled(display_title, style)]))
     }).collect();

@@ -10,10 +10,10 @@ impl App {
     /// bumps the engine activity counter so the main loop picks it up
     /// (see `crate::engine::activity`).
     pub async fn send_message(&mut self) -> anyhow::Result<()> {
-        if self.input.trim().is_empty() || self.conversations.is_empty() {
+        if self.input.trim().is_empty() || self.selected_conv_id.is_none() {
             return Ok(());
         }
-        let active_conv_id = self.conversations[self.selected_conv_idx].id;
+        let active_conv_id = self.selected_conv_id.unwrap();
         let query = self.input.clone();
         self.input.clear();
 

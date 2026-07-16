@@ -11,7 +11,12 @@ pub use super::tab::ActiveTab;
 pub struct App {
     pub client: Arc<dyn BackendClient + Send + Sync>,
     pub conversations: Vec<Conversation>,
-    pub selected_conv_idx: usize,
+    /// The database ID of the currently selected conversation.
+    /// Tracking by ID (not by list index) means that background
+    /// `refresh_conversations` calls never accidentally drift the
+    /// selection to a different conversation just because the list
+    /// was re-fetched and positions shifted.
+    pub selected_conv_id: Option<i64>,
     pub messages: Vec<Message>,
     pub system_load: Option<SystemLoad>,
     pub active_tab: ActiveTab,
@@ -32,7 +37,7 @@ impl App {
         let mut app = Self {
             client,
             conversations: vec![],
-            selected_conv_idx: 0,
+            selected_conv_id: None,
             messages: vec![],
             system_load: None,
             active_tab: ActiveTab::Chat,
@@ -50,12 +55,38 @@ impl App {
         Ok(app)
     }
 
+    /// Returns the current list index for the selected conversation, or
+    /// `None` if `selected_conv_id` is unset or not found in the list.
+    pub fn selected_conv_idx(&self) -> Option<usize> {
+        let id = self.selected_conv_id?;
+        self.conversations.iter().position(|c| c.id == id)
+    }
+
     pub async fn refresh_conversations(&mut self) -> anyhow::Result<()> {
         self.conversations = self.client.get_conversations(100).await?;
-        if !self.conversations.is_empty() {
-            let active_conv_id = self.conversations[self.selected_conv_idx].id;
-            self.messages = self.client.get_messages_page(active_conv_id, None, 100).await?;
+
+        // If no conversation is selected yet, default to the first one.
+        if self.selected_conv_id.is_none() {
+            self.selected_conv_id = self.conversations.first().map(|c| c.id);
         }
+
+        // Load messages for whichever conversation is currently selected.
+        // Because we track by ID the position of the selected conversation
+        // in the list doesn't matter — even if a background title update or
+        // a new-conversation insert re-sorted the list, we still load the
+        // right messages.
+        if let Some(id) = self.selected_conv_id {
+            // Verify the ID still exists in the list (e.g. it wasn't
+            // deleted from another session). If it doesn't, fall back to
+            // the first conversation.
+            if !self.conversations.iter().any(|c| c.id == id) {
+                self.selected_conv_id = self.conversations.first().map(|c| c.id);
+            }
+            if let Some(active_id) = self.selected_conv_id {
+                self.messages = self.client.get_messages_page(active_id, None, 100).await?;
+            }
+        }
+
         Ok(())
     }
 
