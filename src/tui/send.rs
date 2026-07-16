@@ -43,7 +43,24 @@ impl App {
             // its own bump.
             let initial_engine = crate::engine::activity::engine_activity().current();
 
-            match client.orchestrate(active_conv_id, &query, None).await {
+            // V4.17.1e: per-token streaming for the TUI. Create a
+            // channel, pass the sender into orchestrate, and bump
+            // engine_activity on each token so the main loop's
+            // change-driven refresh sees live progress. (The TUI
+            // doesn't render the partial message body — that's
+            // V4.17.1d's Dioxus path — but per-bump UI updates let
+            // the TUI show a "typing…" indicator or other live state.)
+            let (token_tx, mut token_rx) =
+                tokio::sync::mpsc::unbounded_channel::<String>();
+            let activity_for_tokens = activity.clone();
+            let _consumer = tokio::spawn(async move {
+                while let Some(_) = token_rx.recv().await {
+                    activity_for_tokens.bump();
+                    crate::engine::activity::engine_activity().bump();
+                }
+            });
+
+            match client.orchestrate(active_conv_id, &query, Some(token_tx)).await {
                 Ok(response) => {
                     let _ = client.add_message(active_conv_id, "assistant", &response, false).await;
                     activity.bump();
