@@ -16,6 +16,10 @@ pub struct App {
     pub system_load: Option<SystemLoad>,
     pub active_tab: ActiveTab,
     pub input: String,
+    /// Cursor position in `input` (UTF-8 byte index). Backspace
+    /// deletes the char before this index; Left/Right arrows move
+    /// it. Insertion is at this index. Clamped to `input.len()`.
+    pub input_cursor: usize,
     pub status_message: String,
     pub is_orchestrating: Arc<AtomicBool>,
     pub orchestrate_error: Arc<std::sync::Mutex<Option<String>>>,
@@ -33,6 +37,7 @@ impl App {
             system_load: None,
             active_tab: ActiveTab::Chat,
             input: String::new(),
+            input_cursor: 0,
             status_message: "TAB: Switch | ENTER: Send | Ctrl+N / F2: New Conv | q: Quit".to_string(),
             is_orchestrating: Arc::new(AtomicBool::new(false)),
             orchestrate_error: Arc::new(std::sync::Mutex::new(None)),
