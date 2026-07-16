@@ -126,6 +126,15 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
                 app.input_cursor += c.len_utf8();
             }
         }
+        // V4.17.14: Esc cancels the current in-flight orchestrate
+        // task (drops the underlying HTTP stream to Ollama). The
+        // spawn itself sets is_orch = false when it unwinds.
+        KeyCode::Esc => {
+            if app.is_orchestrating.load(std::sync::atomic::Ordering::SeqCst) {
+                app.cancel_current_orchestrate();
+                app.status_message = "Cancelling…".to_string();
+            }
+        }
         _ => {}
     }
     Ok(())

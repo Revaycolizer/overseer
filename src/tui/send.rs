@@ -35,9 +35,10 @@ impl App {
         let err_clone = self.orchestrate_error.clone();
         let activity = self.activity.clone();
         let last_orch_finished = self.last_orchestrate_finished.clone();
+        let current_orchestrate = self.current_orchestrate.clone();
         *err_clone.lock().unwrap() = None;
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             // Snapshot the engine-activity counter before orchestrate
             // starts so we can detect when the LLM-refined title fires
             // its own bump.
@@ -90,6 +91,9 @@ impl App {
             is_orch.store(false, Ordering::SeqCst);
             *last_orch_finished.lock().unwrap() = Some(std::time::Instant::now());
         });
+        // V4.17.14: register the in-flight orchestrate task so the
+        // handlers can cancel it via cancel_current_orchestrate.
+        *current_orchestrate.lock().unwrap() = Some(handle);
 
         Ok(())
     }

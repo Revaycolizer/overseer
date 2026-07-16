@@ -30,6 +30,11 @@ pub struct App {
     pub orchestrate_error: Arc<std::sync::Mutex<Option<String>>>,
     pub activity: Arc<ActivityCounter>,
     pub last_orchestrate_finished: Arc<std::sync::Mutex<Option<Instant>>>,
+    /// V4.17.14: handle to the in-flight orchestrate tokio task.
+    /// The handlers check this to wire Esc / a Stop key to abort the
+    /// current LLM stream (drops the futures, which closes the
+    /// underlying HTTP request to Ollama).
+    pub current_orchestrate: Arc<std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl App {
@@ -48,6 +53,7 @@ impl App {
             orchestrate_error: Arc::new(std::sync::Mutex::new(None)),
             activity: Arc::new(ActivityCounter::default()),
             last_orchestrate_finished: Arc::new(std::sync::Mutex::new(None)),
+            current_orchestrate: Arc::new(std::sync::Mutex::new(None)),
         };
         app.refresh_conversations().await?;
         app.refresh_metrics().await?;
@@ -95,5 +101,15 @@ impl App {
             self.system_load = Some(load);
         }
         Ok(())
+    }
+
+    /// V4.17.14: abort the current in-flight orchestrate task. Drops
+    /// the JoinHandle (which closes the underlying HTTP stream to
+    /// Ollama) and clears the stored handle. Idempotent — safe to
+    /// call when no orchestrate is running.
+    pub fn cancel_current_orchestrate(&self) {
+        if let Some(handle) = self.current_orchestrate.lock().unwrap().take() {
+            handle.abort();
+        }
     }
 }
