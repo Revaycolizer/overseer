@@ -81,3 +81,40 @@ pub async fn resolve_model_name(
         }
     })
 }
+
+/// V4.17.8: resolve a primary model and walk a fallback chain. Looks
+/// up `setting_key` first; if it's empty / missing / not in the
+/// available-models list, parses the JSON array stored at
+/// `<setting_key>_fallbacks` (e.g. `planner_model_fallbacks =
+/// ["qwen3:8b","qwen2.5:7b"]`) and returns the first one that's
+/// available. Falls back to `hard_default` if neither is configured.
+pub async fn resolve_model_with_fallbacks(
+    db: &Database,
+    setting_key: &str,
+    hard_default: &str,
+) -> String {
+    let primary = resolve_model_name(db, None, setting_key, hard_default).await;
+    let available = super::get_available_models().await;
+    let is_available = |m: &str| available.is_empty() || available.iter().any(|c| c == m);
+
+    let raw = get_setting_or(
+        db,
+        &format!("{}_fallbacks", setting_key),
+        "[]",
+    )
+    .await;
+    let parsed: Vec<String> = serde_json::from_str(&raw).unwrap_or_default();
+    for candidate in parsed {
+        let c = candidate.trim();
+        if !c.is_empty() && is_available(c) {
+            return c.to_string();
+        }
+    }
+
+    // Last resort: the hard default. (resolve_model_name already tried
+    // `primary` against the available list; if it didn't match
+    // anything it falls back to the first available model. If we get
+    // here without finding anything better, just return whatever the
+    // primary resolved to.)
+    primary
+}

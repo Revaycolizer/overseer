@@ -33,6 +33,26 @@ pub async fn resolve_model_name(db: &Database, preferred: Option<&str>, setting_
     crate::backend::settings::resolve_model_name(db, preferred, setting_key, hard_default).await
 }
 
+/// V4.17.8: model fallback chain. Resolves a primary model from
+/// `setting_key`, and if that's missing or unset, walks a JSON
+/// array of fallback model names stored in `<setting_key>_fallbacks`
+/// (e.g. `planner_model_fallbacks`) and returns the first one that
+/// resolves to a non-empty value. Returns `hard_default` if neither
+/// the primary nor any fallback is configured.
+pub async fn resolve_model_with_fallbacks(
+    db: &Database,
+    setting_key: &str,
+    hard_default: &str,
+) -> String {
+    if db.is_remote() {
+        return db
+            .remote_client()
+            .resolve_model_with_fallbacks(setting_key, hard_default)
+            .await;
+    }
+    crate::backend::settings::resolve_model_with_fallbacks(db, setting_key, hard_default).await
+}
+
 pub async fn get_computer_supervision_state(db: &Database) -> anyhow::Result<ComputerSupervisionState> {
     if db.is_remote() { return db.remote_client().get_computer_supervision_state().await; }
     Ok(crate::backend::computer_supervision::get_computer_supervision_state(db).await)

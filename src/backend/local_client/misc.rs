@@ -11,6 +11,7 @@ impl SettingsClient for LocalClient {
     async fn set_setting(&self, key: &str, val: &str) -> anyhow::Result<()> { crate::backend::set_setting(&self.db, key, val).await }
     async fn get_all_settings(&self) -> HashMap<String, String> { crate::backend::get_all_settings(&self.db).await }
     async fn resolve_model_name(&self, prov: Option<&str>, key: &str, def: &str) -> String { crate::backend::resolve_model_name(&self.db, prov, key, def).await }
+    async fn resolve_model_with_fallbacks(&self, key: &str, def: &str) -> String { crate::backend::resolve_model_with_fallbacks(&self.db, key, def).await }
 }
 
 #[async_trait::async_trait]

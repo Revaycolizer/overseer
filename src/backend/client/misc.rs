@@ -9,6 +9,10 @@ pub trait SettingsClient {
     async fn set_setting(&self, key: &str, value: &str) -> anyhow::Result<()>;
     async fn get_all_settings(&self) -> HashMap<String, String>;
     async fn resolve_model_name(&self, provider: Option<&str>, setting_key: &str, default: &str) -> String;
+    /// V4.17.8: same as `resolve_model_name` but walks a JSON fallback
+    /// chain stored at `<setting_key>_fallbacks` if the primary isn't
+    /// available. Returns the hard default if neither resolves.
+    async fn resolve_model_with_fallbacks(&self, setting_key: &str, hard_default: &str) -> String;
 }
 
 #[async_trait::async_trait]

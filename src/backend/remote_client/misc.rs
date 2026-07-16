@@ -42,6 +42,13 @@ impl SettingsClient for RemoteClient {
         }
         d.to_string()
     }
+    async fn resolve_model_with_fallbacks(&self, k: &str, d: &str) -> String {
+        // For now the remote client just delegates to the same
+        // endpoint via a richer query string. A real impl would
+        // add a /api/settings/resolve_model_with_fallbacks route.
+        // For first-cut, fall back to plain resolve_model_name.
+        self.resolve_model_name(None, k, d).await
+    }
 }
 
 #[async_trait::async_trait]
