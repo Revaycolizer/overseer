@@ -341,6 +341,38 @@ fn ChatComposer(props: ChatInputProps) -> Element {
 
             let assistant_tx = crate::routes::conversations::assistant_stream::install_listener(visible_messages);
 
+            // V4.17.1d: per-token streaming. The streaming consumer must
+            // be a Dioxus spawn (not a tokio spawn) because it captures
+            // the non-Send `visible_messages` Signal. It runs alongside
+            // the outer tokio spawn (which only holds Send values).
+            let (token_tx, token_rx) =
+                tokio::sync::mpsc::unbounded_channel::<String>();
+            let mut visible_for_stream = visible_messages;
+            spawn(async move {
+                let mut partial = String::new();
+                let mut receiver = token_rx;
+                while let Some(chunk) = receiver.recv().await {
+                    partial.push_str(&chunk);
+                    visible_for_stream.with_mut(|msgs| {
+                        if let Some(last) = msgs.last_mut() {
+                            if last.role == "assistant" {
+                                last.content = partial.clone();
+                            } else {
+                                msgs.push(backend::Message {
+                                    id: 0,
+                                    conversation_id,
+                                    role: "assistant".to_string(),
+                                    content: partial.clone(),
+                                    created_at: chrono::Utc::now().naive_utc(),
+                                    attachments: vec![],
+                                    hide_evidence: false,
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+
             let handle = tokio::spawn(async move {
                 if let Ok(mut cache) = crate::engine::cache::messages().write() {
                     cache.invalidate(&conversation_id);
@@ -385,8 +417,22 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                         .await;
                     }
 
+                    // V4.17.1d: per-token streaming. The streaming
+                    // consumer is a Dioxus spawn above this outer
+                    // tokio::spawn (set up at line ~351). The dispatch's
+                    // collect_stream_with_sender pushes each text
+                    // chunk to a tokio::mpsc::UnboundedSender; the
+                    // Dioxus consumer drains the receiver and updates
+                    // the partial assistant message in
+                    // visible_messages in real time. Here we just pass
+                    // the sender into orchestrate.
                     let response = agent_inner
-                        .orchestrate(&db_inner, conversation_id, &query_with_artifacts)
+                        .orchestrate(
+                            &db_inner,
+                            conversation_id,
+                            &query_with_artifacts,
+                            Some(token_tx),
+                        )
                         .await;
 
                     let _ =

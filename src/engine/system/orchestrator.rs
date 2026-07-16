@@ -9,6 +9,7 @@ pub async fn orchestrate_request(
     db: &Database,
     conversation_id: i64,
     user_query: &str,
+    token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
     let messages = crate::backend::get_messages(db, conversation_id)
         .await
@@ -44,5 +45,6 @@ pub async fn orchestrate_request(
         &perception_tool,
         &memory_context,
         &system.ollama_client,
+        None,
     ).await
 }

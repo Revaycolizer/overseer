@@ -43,7 +43,7 @@ impl App {
             // its own bump.
             let initial_engine = crate::engine::activity::engine_activity().current();
 
-            match client.orchestrate(active_conv_id, &query).await {
+            match client.orchestrate(active_conv_id, &query, None).await {
                 Ok(response) => {
                     let _ = client.add_message(active_conv_id, "assistant", &response, false).await;
                     activity.bump();

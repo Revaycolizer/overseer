@@ -34,7 +34,7 @@ pub async fn execute_voice_command(
     ).await;
 
     // Run through the AI orchestrator (uses existing tools: os_tool, app_launcher, etc.)
-    let response = agent.orchestrate(db, conversation_id, command).await;
+    let response = agent.orchestrate(db, conversation_id, command, None).await;
 
     // Save the assistant response
     let _ = crate::backend::add_message(

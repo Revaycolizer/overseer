@@ -86,5 +86,5 @@ async fn get_models(State(_s): State<Arc<ServerState>>) -> Result<Json<Vec<Strin
     Ok(Json(crate::backend::get_available_models().await))
 }
 async fn orchestrate(State(s): State<Arc<ServerState>>, Json(p): Json<OrchestratePayload>) -> Result<String, String> {
-    Ok(s.agent_system.orchestrate(&s.db, p.conversation_id, &p.query).await)
+    Ok(s.agent_system.orchestrate(&s.db, p.conversation_id, &p.query, None).await)
 }

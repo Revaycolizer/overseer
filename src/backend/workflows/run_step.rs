@@ -32,7 +32,7 @@ pub async fn execute_step(
         return Ok(Err(message));
     }
 
-    let output = agent_system.orchestrate(db, conversation_id, &user_prompt).await;
+    let output = agent_system.orchestrate(db, conversation_id, &user_prompt, None).await;
     if let Err(err) = crate::backend::add_message(db, conversation_id, "assistant", &output, false).await {
         let message = format!("Failed to persist workflow step {} output: {}", step.step_order, err);
         super::run_helper::mark_step_failed(db, step_run_id, None, "", &message).await?;

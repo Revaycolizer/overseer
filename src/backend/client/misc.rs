@@ -77,5 +77,15 @@ pub trait VersionClient {
 
 #[async_trait::async_trait]
 pub trait OrchestrateClient {
-    async fn orchestrate(&self, conversation_id: i64, query: &str) -> anyhow::Result<String>;
+    /// Run the orchestrator on `query` for the given conversation. If
+    /// `token_sender` is `Some`, intermediate LLM tokens for the
+    /// supervisor reply are pushed through it (V4.17.1 streaming
+    /// path). All current callers pass `None`; only chat_input uses
+    /// `Some` to feed per-token UI updates.
+    async fn orchestrate(
+        &self,
+        conversation_id: i64,
+        query: &str,
+        token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+    ) -> anyhow::Result<String>;
 }

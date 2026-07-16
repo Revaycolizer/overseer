@@ -82,7 +82,16 @@ impl SystemClient for RemoteClient {
 
 #[async_trait::async_trait]
 impl OrchestrateClient for RemoteClient {
-    async fn orchestrate(&self, conversation_id: i64, query: &str) -> anyhow::Result<String> {
+    async fn orchestrate(
+        &self,
+        conversation_id: i64,
+        query: &str,
+        _token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+    ) -> anyhow::Result<String> {
+        // Remote client cannot forward per-token updates over HTTP
+        // without a streaming endpoint. The token_sender is dropped
+        // here; if per-token UX is needed for remote users, an SSE
+        // streaming endpoint would be needed.
         let url = format!("{}/api/orchestrate", self.base_url);
         let payload = serde_json::json!({ "conversation_id": conversation_id, "query": query });
         let res = self.http_client.post(&url).json(&payload).send().await?.text().await?;

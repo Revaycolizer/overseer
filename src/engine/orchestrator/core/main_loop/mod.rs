@@ -20,6 +20,7 @@ pub async fn orchestrate_request(
     perception_tool: &StructuredPerceptionTool,
     memory_context: &str,
     ollama_client: &ollama::Client,
+    token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
     let (clean_query, artifact_refs, work_item_refs) = extract_structured_context(query);
     let mut seq = 1_i64;
@@ -48,7 +49,7 @@ pub async fn orchestrate_request(
     let macro_plan_details = serde_json::to_string(&macro_tasks).unwrap_or_default();
     event_logger::simple(db, run_id, &mut seq, "macro_plan", "completed", &format!("Orchestrator planned {} step(s).", macro_tasks.len()), Some(&macro_plan_details)).await;
 
-    executor::execute_macro_tasks(db, conversation_id, run_id, &mut seq, all_agents, macro_tasks, &clean_query, &history, &enriched_memory_context, perception_tool, ollama_client, 60000).await
+    executor::execute_macro_tasks(db, conversation_id, run_id, &mut seq, all_agents, macro_tasks, &clean_query, &history, &enriched_memory_context, perception_tool, ollama_client, 60000, token_sender).await
 }
 
 async fn finalize_direct_response(db: &Database, run_id: Option<i64>, resp: &str) -> String {

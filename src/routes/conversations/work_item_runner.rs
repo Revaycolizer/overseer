@@ -103,7 +103,7 @@ pub fn run_work_item_now(
         messages_resource_inner.restart();
 
         let handle = tokio::spawn(async move {
-            let response = agent_system_for_spawn.orchestrate(&db_for_spawn, work_item_for_spawn.conversation_id, &query).await;
+            let response = agent_system_for_spawn.orchestrate(&db_for_spawn, work_item_for_spawn.conversation_id, &query, None).await;
             let _ = backend::add_message(&db_for_spawn, work_item_for_spawn.conversation_id, "assistant", &response, false).await;
             response
         });

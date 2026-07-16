@@ -76,13 +76,21 @@ impl SystemClient for LocalClient {
 
 #[async_trait::async_trait]
 impl OrchestrateClient for LocalClient {
-    async fn orchestrate(&self, conversation_id: i64, query: &str) -> anyhow::Result<String> {
+    async fn orchestrate(
+        &self,
+        conversation_id: i64,
+        query: &str,
+        token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+    ) -> anyhow::Result<String> {
         let db_inner = self.db.clone();
         let agent_system = self.agent_system.clone();
         let query_str = query.to_string();
         let res = tokio::spawn(async move {
-            agent_system.orchestrate(&db_inner, conversation_id, &query_str).await
-        }).await?;
+            agent_system
+                .orchestrate(&db_inner, conversation_id, &query_str, token_sender)
+                .await
+        })
+        .await?;
         Ok(res)
     }
 }

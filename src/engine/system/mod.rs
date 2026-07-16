@@ -25,12 +25,20 @@ impl AgentSystem {
         db: &Database,
         conversation_id: i64,
         user_query: &str,
+        token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     ) -> String {
         // Token-counting log was moved to a debug feature flag so it
         // doesn't leak stdout into the TUI. The count is still useful
         // for context-window observability once the tracing module
         // (item 15 in the V4.17 backlog) is in.
-        let response = orchestrator::orchestrate_request(self, db, conversation_id, user_query).await;
+        let response = orchestrator::orchestrate_request(
+            self,
+            db,
+            conversation_id,
+            user_query,
+            token_sender.clone(),
+        )
+        .await;
 
         if crate::backend::is_first_user_message(db, conversation_id).await {
             // First user message on this conversation: the new-conv

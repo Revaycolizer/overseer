@@ -24,6 +24,7 @@ pub async fn execute_macro_tasks(
     _tool: &StructuredPerceptionTool,
     ollama_client: &ollama::Client,
     _timeout: u64,
+    token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
     let mut master_response = StructuredResponse::new();
     let mut state = StructuredState::new();
@@ -55,7 +56,8 @@ pub async fn execute_macro_tasks(
             // Re-implementing the core loop directly here to avoid missing file dependencies
             match crate::engine::orchestrator::dispatch_domain(
                 db, run_id, event_sequence, _all_agents, &domain, &task.task, &task.task, 
-                history.to_vec(), &plan_history, &state, ollama_client, 60000, None
+                history.to_vec(), &plan_history, &state, ollama_client, 60000, None,
+                token_sender.clone(),
             ).await {
                 Ok(res) => {
                     let mut compiled = compiler::compile_response(db, &task.task, &res, &state).await.unwrap_or(res);

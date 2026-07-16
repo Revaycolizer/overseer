@@ -26,6 +26,7 @@ pub async fn dispatch_domain(
     ollama_client: &ollama::Client,
     _timeout: u64,
     retry_msg: Option<&str>,
+    token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> Result<SupervisorExecutionResult, String> {
     let supervisor = sqlx::query_as::<_, crate::db::Supervisor>("SELECT * FROM supervisors WHERE domain = ?").bind(domain).fetch_one(&db.pool).await.map_err(|e| e.to_string())?;
     let model = crate::backend::resolve_model_name(db, supervisor.model.as_deref(), "default_chat_model", "qwen2.5:7b-instruct").await;
@@ -74,16 +75,21 @@ pub async fn dispatch_domain(
             3,
             || {
                 // V4.17.1c: switch the dispatch loop to streaming
-                // completion. We build a fresh streaming request per
-                // attempt (the closure is re-invoked on retry) and
-                // collect it back to a String. Behaviour matches the
-                // old `agent.chat(...)` path: a single String result
+                // completion. V4.17.1d: if a token_sender was passed
+                // through (e.g. from the Dioxus chat), per-token text
+                // chunks are pushed through the channel for live UI
+                // updates. Either way, the final String is collected
                 // for the downstream JSON parser.
                 use rig::streaming::StreamingChat;
                 let stream_req = agent.stream_chat(&current_prompt, history.clone());
+                let sender_clone = token_sender.clone();
                 async move {
                     let stream = stream_req.await;
-                    crate::engine::streaming::collect_stream(stream).await
+                    crate::engine::streaming::collect_stream_with_sender(
+                        stream,
+                        sender_clone.as_ref(),
+                    )
+                    .await
                 }
             },
         )
