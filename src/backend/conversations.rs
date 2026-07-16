@@ -10,7 +10,7 @@ pub struct Conversation {
 
 pub async fn get_conversations(db: &Database) -> anyhow::Result<Vec<Conversation>> {
     let convs = sqlx::query_as::<_, Conversation>(
-        "SELECT id, title, created_at FROM conversations ORDER BY updated_at DESC",
+        "SELECT id, title, created_at FROM conversations ORDER BY id DESC",
     )
     .fetch_all(&db.pool)
     .await?;
