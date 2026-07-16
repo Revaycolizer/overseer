@@ -61,7 +61,18 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
             .wrap(ratatui::widgets::Wrap { trim: true }),
         right_layout[0],
     );
-    f.render_widget(Paragraph::new(Span::styled(&app.input, Style::default().fg(Color::White))).block(Block::default().borders(Borders::ALL).title(" Type Message (Press ENTER to send) ")), right_layout[1]);
+    // Render the input with a visible cursor: split the string at
+    // `input_cursor` and insert a "▌" so the user can see where the
+    // next character will land and which character is to the right of
+    // the cursor. Cursor is clamped on the TUI side via the input
+    // handler (Left/Right/Home/End/Delete/Backspace).
+    let (left, right) = app.input.split_at(app.input_cursor.min(app.input.len()));
+    let input_line = Line::from(vec![
+        Span::styled(left.to_string(), Style::default().fg(Color::White)),
+        Span::styled("▌".to_string(), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(right.to_string(), Style::default().fg(Color::DarkGray)),
+    ]);
+    f.render_widget(Paragraph::new(input_line).block(Block::default().borders(Borders::ALL).title(" Type Message (←/→ to move cursor, ENTER to send) ")), right_layout[1]);
 }
 
 fn draw_metrics(f: &mut Frame, app: &App, area: Rect) {
