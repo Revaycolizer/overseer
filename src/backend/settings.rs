@@ -59,12 +59,22 @@ pub async fn resolve_model_name(
     let preferred_clean = preferred.map(str::trim).filter(|value| !value.is_empty());
     let configured_clean = configured.trim();
 
+    // V4.17 dynamic model defaults: if the configured value is the
+    // sentinel "__use_first_available__" (set by the migration when no
+    // explicit model was chosen), prefer the first model in Ollama's
+    // /api/tags list. This avoids hardcoding a model name in the seed
+    // and matches the user's actual installed models.
+    let explicit = configured_clean != "__use_first_available__";
+    let configured_useful = explicit.then_some(configured_clean);
+
     let is_available = |model: &str| {
         available_models.is_empty() || available_models.iter().any(|candidate| candidate == model)
     };
 
-    if !configured_clean.is_empty() && is_available(configured_clean) {
-        return configured_clean.to_string();
+    if let Some(model) = configured_useful {
+        if !model.is_empty() && is_available(model) {
+            return model.to_string();
+        }
     }
 
     if let Some(model) = preferred_clean {

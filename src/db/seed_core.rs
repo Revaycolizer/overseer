@@ -60,18 +60,27 @@ impl Database {
     }
 
     async fn ensure_setting_defaults(&self) -> anyhow::Result<()> {
-        let default_model = crate::backend::get_available_models()
-            .await
-            .into_iter()
-            .next()
-            .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
+        // V4.17 dynamic model defaults: the model-related seeds
+        // (title_generator_model, default_chat_model, planner_model,
+        // planner_model_fallbacks, vision_model, router_model) live in
+        // migrations/20260714000000_dynamic_model_defaults.sql with the
+        // '__use_first_available__' sentinel. resolve_model_name
+        // resolves that sentinel to Ollama's first /api/tags model at
+        // runtime, so this seeder no longer needs to hardcode model
+        // names.
         let defaults = [
-            ("title_generator_model", default_model.as_str()),
-            ("default_chat_model", default_model.as_str()),
             ("max_iterations", "10"),
             ("tool_timeout_ms", "45000"),
             ("model_timeout_ms", "90000"),
             ("computer_supervision_mode", "approval_required"),
+            // V4.17.9 / V4.20: shared cache + live updates. Defaults
+            // to "off" — local install keeps the in-memory cache.
+            // Operators hosting overseer-server on a separate box set
+            // use_redis=true and point redis_url at their cache.
+            ("use_redis", "false"),
+            ("redis_url", "redis://127.0.0.1:6379"),
+            ("redis_key_prefix", "overseer"),
+            ("redis_ttl_seconds", "3600"),
             ("computer_supervision_max_actions", "25"),
             ("computer_supervision_session_timeout_ms", "600000"),
             ("computer_supervision_allowlist", ""),

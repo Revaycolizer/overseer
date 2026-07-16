@@ -41,6 +41,6 @@ pub async fn collect_stream_with_sender<R>(
 
 /// Convenience: collect a stream with no token sink. Equivalent to
 /// `collect_stream_with_sender(stream, None)`.
-pub async fn collect_stream<R>(mut stream: StreamingResult<R>) -> Result<String, String> {
+pub async fn collect_stream<R>(stream: StreamingResult<R>) -> Result<String, String> {
     collect_stream_with_sender(stream, None).await
 }
