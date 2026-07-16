@@ -21,6 +21,11 @@ pub struct App {
     pub orchestrate_error: Arc<std::sync::Mutex<Option<String>>>,
     pub activity: Arc<ActivityCounter>,
     pub last_orchestrate_finished: Arc<std::sync::Mutex<Option<Instant>>>,
+    /// V4.17.1e: partial text of the LLM response that is currently
+    /// streaming. Updated by the per-token consumer in send.rs. The
+    /// UI displays it inline as a "typing..." preview until the full
+    /// response lands in `self.messages` after add_message completes.
+    pub streaming_preview: Arc<std::sync::Mutex<String>>,
 }
 
 impl App {
@@ -38,6 +43,7 @@ impl App {
             orchestrate_error: Arc::new(std::sync::Mutex::new(None)),
             activity: Arc::new(ActivityCounter::default()),
             last_orchestrate_finished: Arc::new(std::sync::Mutex::new(None)),
+            streaming_preview: Arc::new(std::sync::Mutex::new(String::new())),
         };
         app.refresh_conversations().await?;
         app.refresh_metrics().await?;

@@ -48,9 +48,22 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
     let right_layout = Layout::default().direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(3)]).split(chat_layout[1]);
 
-    let messages_text: Vec<Line> = app.messages.iter()
+    let mut messages_text: Vec<Line> = app.messages.iter()
         .flat_map(super::message_view::format_message)
         .collect();
+
+    // V4.17.1e: render the streaming preview (partial assistant text
+    // that the per-token consumer in send.rs is updating) just below
+    // the last committed message so the user can see tokens land in
+    // real time.
+    let streaming_preview = app.streaming_preview.lock().unwrap().clone();
+    if !streaming_preview.is_empty() {
+        messages_text.push(Line::from(""));
+        messages_text.push(Line::from(Span::styled(
+            format!("▌ {}", streaming_preview),
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC),
+        )));
+    }
 
     let token_count = crate::engine::tokenizer::count_messages_tokens(&app.messages);
     f.render_widget(

@@ -35,6 +35,7 @@ impl App {
         let err_clone = self.orchestrate_error.clone();
         let activity = self.activity.clone();
         let last_orch_finished = self.last_orchestrate_finished.clone();
+        let streaming_preview = self.streaming_preview.clone();
         *err_clone.lock().unwrap() = None;
 
         tokio::spawn(async move {
@@ -44,17 +45,24 @@ impl App {
             let initial_engine = crate::engine::activity::engine_activity().current();
 
             // V4.17.1e: per-token streaming for the TUI. Create a
-            // channel, pass the sender into orchestrate, and bump
-            // engine_activity on each token so the main loop's
-            // change-driven refresh sees live progress. (The TUI
-            // doesn't render the partial message body — that's
-            // V4.17.1d's Dioxus path — but per-bump UI updates let
-            // the TUI show a "typing…" indicator or other live state.)
+            // channel, pass the sender into orchestrate, and update
+            // a shared `streaming_preview` buffer on each token. The
+            // TUI's main loop sees the change via the activity bump,
+            // re-renders, and displays the in-progress text inline as
+            // a "typing..." preview. The full assistant text lands in
+            // `app.messages` after add_message completes, replacing the
+            // preview.
             let (token_tx, mut token_rx) =
                 tokio::sync::mpsc::unbounded_channel::<String>();
             let activity_for_tokens = activity.clone();
+            let streaming_preview_for_tokens = streaming_preview.clone();
             let _consumer = tokio::spawn(async move {
-                while let Some(_) = token_rx.recv().await {
+                let mut partial = String::new();
+                while let Some(chunk) = token_rx.recv().await {
+                    partial.push_str(&chunk);
+                    if let Ok(mut p) = streaming_preview_for_tokens.lock() {
+                        *p = partial.clone();
+                    }
                     activity_for_tokens.bump();
                     crate::engine::activity::engine_activity().bump();
                 }
@@ -82,6 +90,13 @@ impl App {
                     // Backup activity bump in case the main loop
                     // missed the engine_activity change.
                     activity.bump();
+
+                    // Clear the streaming preview now that the full
+                    // assistant message has landed in app.messages via
+                    // the next refresh_conversations() cycle.
+                    if let Ok(mut p) = streaming_preview.lock() {
+                        p.clear();
+                    }
                 }
                 Err(e) => {
                     *err_clone.lock().unwrap() = Some(e.to_string());
