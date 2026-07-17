@@ -46,6 +46,10 @@ pub trait SystemClient {
     /// existing `export_to_downloads` handles the desktop path; the
     /// mobile / remote path uses the `download_manager` flow).
     async fn export_conversation_markdown(&self, conversation_id: i64) -> anyhow::Result<String>;
+    /// V4.17.10 (json): same data as the Markdown export but as a
+    /// single JSON object. Useful for re-importing into another
+    /// Overseer install or a custom analyzer.
+    async fn export_conversation_json(&self, conversation_id: i64) -> anyhow::Result<String>;
     async fn save_chart_export(&self, conversation_id: i64, chart_json: &str) -> anyhow::Result<String>;
     async fn test_agent_preamble(&self, preamble: &str) -> anyhow::Result<String>;
 }

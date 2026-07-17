@@ -120,3 +120,66 @@ pub async fn export_conversation_markdown(
 
     Ok(out)
 }
+
+/// V4.17.10 (json variant): same data as the Markdown export but
+/// emitted as a single JSON object. Useful for re-importing into
+/// another Overseer install, a tool, or a custom analyzer. The
+/// format mirrors what the chat pipeline already stores in
+/// `messages.content` (a `StructuredResponse` JSON), so no
+/// information is lost.
+pub async fn export_conversation_json(
+    db: &Database,
+    conversation_id: i64,
+) -> anyhow::Result<String> {
+    use serde::Serialize;
+
+    let conv = sqlx::query_as::<_, Conversation>(
+        "SELECT id, title, created_at FROM conversations WHERE id = ?1",
+    )
+    .bind(conversation_id)
+    .fetch_optional(&db.pool)
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("conversation {conversation_id} not found"))?;
+
+    let messages = crate::backend::routing_wrappers::conversations::get_messages_page(
+        db, conversation_id, None, 1_000_000,
+    )
+    .await
+    .unwrap_or_default();
+
+    #[derive(Serialize)]
+    struct ExportedMessage {
+        role: String,
+        structured: Option<serde_json::Value>,
+        raw: String,
+    }
+
+    let exported: Vec<ExportedMessage> = messages
+        .iter()
+        .map(|m| {
+            let structured = serde_json::from_str::<serde_json::Value>(&m.content).ok();
+            ExportedMessage {
+                role: m.role.clone(),
+                structured,
+                raw: m.content.clone(),
+            }
+        })
+        .collect();
+
+    #[derive(Serialize)]
+    struct ExportedConversation {
+        id: i64,
+        title: String,
+        exported_at: String,
+        messages: Vec<ExportedMessage>,
+    }
+
+    let payload = ExportedConversation {
+        id: conv.id,
+        title: conv.title,
+        exported_at: chrono::Local::now().to_rfc3339(),
+        messages: exported,
+    };
+
+    serde_json::to_string_pretty(&payload).map_err(Into::into)
+}

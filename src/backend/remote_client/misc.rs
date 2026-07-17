@@ -88,6 +88,9 @@ impl SystemClient for RemoteClient {
         // name follows the existing /api/system/* convention.
         Ok(self.http_client.get(format!("{}/api/system/export_conversation/{}", self.base_url, conversation_id)).send().await?.text().await?)
     }
+    async fn export_conversation_json(&self, conversation_id: i64) -> anyhow::Result<String> {
+        Ok(self.http_client.get(format!("{}/api/system/export_conversation_json/{}", self.base_url, conversation_id)).send().await?.text().await?)
+}
     async fn save_chart_export(&self, cid: i64, ch: &str) -> anyhow::Result<String> { Ok(self.http_client.post(format!("{}/api/system/save_chart", self.base_url)).json(&serde_json::json!({ "conversation_id": cid, "chart_json": ch })).send().await?.json().await?) }
     async fn test_agent_preamble(&self, pr: &str) -> anyhow::Result<String> { Ok(self.http_client.post(format!("{}/api/system/test_preamble", self.base_url)).json(&serde_json::json!({ "preamble": pr })).send().await?.json().await?) }
 }
