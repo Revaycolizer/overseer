@@ -35,6 +35,8 @@ pub struct App {
     /// current LLM stream (drops the futures, which closes the
     /// underlying HTTP request to Ollama).
     pub current_orchestrate: Arc<std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    pub search_results: Option<Vec<crate::backend::ConversationSearchResult>>,
+    pub search_query: String,
 }
 
 impl App {
@@ -54,6 +56,8 @@ impl App {
             activity: Arc::new(ActivityCounter::default()),
             last_orchestrate_finished: Arc::new(std::sync::Mutex::new(None)),
             current_orchestrate: Arc::new(std::sync::Mutex::new(None)),
+            search_results: None,
+            search_query: String::new(),
         };
         app.refresh_conversations().await?;
         app.refresh_metrics().await?;

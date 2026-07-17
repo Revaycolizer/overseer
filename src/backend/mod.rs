@@ -41,7 +41,7 @@ pub use routing_wrappers::work_items::*;
 pub use routing_wrappers::artifacts::*;
 pub use routing_wrappers::misc::*;
 
-pub use conversations::Conversation;
+pub use conversations::{Conversation, ConversationSearchResult};
 pub use messages::titling::is_first_user_message;
 pub use messages::{Message, Attachment};
 pub use health::get_available_models;

@@ -34,6 +34,7 @@ pub fn router() -> Router<Arc<ServerState>> {
         .route("/api/conversations", get(get_conversations).post(add_conversation))
         .route("/api/conversations/update_title", post(update_conversation_title))
         .route("/api/conversations/delete", post(delete_conversation))
+        .route("/api/conversations/search", get(search_messages))
 }
 
 async fn get_conversations(
@@ -73,3 +74,19 @@ async fn delete_conversation(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    pub q: String,
+}
+
+async fn search_messages(
+    State(state): State<Arc<ServerState>>,
+    Query(query): Query<SearchQuery>,
+) -> Result<Json<Vec<crate::backend::ConversationSearchResult>>, String> {
+    crate::backend::search_messages(&state.db, &query.q)
+        .await
+        .map(Json)
+        .map_err(|e| e.to_string())
+}
+

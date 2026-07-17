@@ -50,16 +50,40 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
     let right_layout = Layout::default().direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(3)]).split(chat_layout[1]);
 
-    let messages_text: Vec<Line> = app.messages.iter()
-        .flat_map(super::message_view::format_message)
-        .collect();
+    let messages_text: Vec<Line> = if let Some(ref results) = app.search_results {
+        let mut lines = vec![
+            Line::from(Span::styled(format!("Search Results for: '{}'", app.search_query), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled("Press ESC to exit search view", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC))),
+            Line::from(""),
+        ];
+        if results.is_empty() {
+            lines.push(Line::from("No matches found."));
+        } else {
+            for (idx, r) in results.iter().enumerate() {
+                lines.push(Line::from(vec![
+                    Span::styled(format!("{}. ", idx + 1), Style::default().fg(Color::Cyan)),
+                    Span::styled(format!("Chat: {} | ", r.conversation_title), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::styled(r.content.chars().take(80).collect::<String>(), Style::default().fg(Color::White)),
+                ]));
+            }
+        }
+        lines
+    } else {
+        app.messages.iter()
+            .flat_map(super::message_view::format_message)
+            .collect()
+    };
 
-    let token_count = crate::engine::tokenizer::count_messages_tokens(&app.messages);
+    let title_str = if app.search_results.is_some() {
+        format!(" Global Search Results ({}) ", app.search_results.as_ref().unwrap().len())
+    } else {
+        let token_count = crate::engine::tokenizer::count_messages_tokens(&app.messages);
+        format!(" Conversation History (~{} tokens) ", token_count)
+    };
+
     f.render_widget(
         Paragraph::new(messages_text)
-            .block(Block::default().borders(Borders::ALL).title(format!(
-                " Conversation History (~{} tokens) ", token_count
-            )))
+            .block(Block::default().borders(Borders::ALL).title(title_str))
             .wrap(ratatui::widgets::Wrap { trim: true }),
         right_layout[0],
     );

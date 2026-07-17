@@ -19,4 +19,8 @@ impl ConversationClient for LocalClient {
     async fn delete_conversation(&self, id: i64) -> anyhow::Result<()> {
         crate::backend::delete_conversation(&self.db, id).await
     }
+
+    async fn search_messages(&self, query: &str) -> anyhow::Result<Vec<crate::backend::ConversationSearchResult>> {
+        crate::backend::conversations::search_messages(&self.db, query).await
+    }
 }

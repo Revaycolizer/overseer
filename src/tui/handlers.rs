@@ -58,7 +58,26 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
                 // by extending this match.
                 let trimmed = app.input.trim();
                 if trimmed == "/help" {
-                    app.status_message = "Commands: /export md, /export json, /help".to_string();
+                    app.status_message = "Commands: /export md, /export json, /search <query>, /help".to_string();
+                } else if let Some(query) = trimmed.strip_prefix("/search ") {
+                    let q = query.trim().to_string();
+                    if q.is_empty() {
+                        app.status_message = "Please provide a query: /search <query>".to_string();
+                    } else {
+                        app.search_query = q.clone();
+                        match app.client.search_messages(&q).await {
+                            Ok(results) => {
+                                app.status_message = format!("Found {} matches. ESC to clear.", results.len());
+                                app.search_results = Some(results);
+                                app.input.clear();
+                                app.input_cursor = 0;
+                                app.activity.bump();
+                            }
+                            Err(e) => {
+                                app.status_message = format!("Search failed: {}", e);
+                            }
+                        }
+                    }
                 } else if let Some(arg) = trimmed.strip_prefix("/export ") {
                     let fmt = arg.trim();
                     if fmt != "md" && fmt != "json" {
@@ -184,6 +203,11 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
             if app.is_orchestrating.load(std::sync::atomic::Ordering::SeqCst) {
                 app.cancel_current_orchestrate();
                 app.status_message = "Cancelling…".to_string();
+            } else if app.search_results.is_some() {
+                app.search_results = None;
+                app.search_query.clear();
+                app.status_message = "Search cleared".to_string();
+                app.activity.bump();
             }
         }
         _ => {}

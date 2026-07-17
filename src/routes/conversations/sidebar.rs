@@ -25,9 +25,25 @@ pub fn Sidebar(props: SidebarProps) -> Element {
     let mut selected_conversation_id = props.selected_conversation_id.clone();
     let db = props.db.clone();
 
+    let global_state = crate::state::use_global_state();
+    let client = global_state.read().client.clone();
+
+    let mut search_query = use_signal(String::new);
+    let search_results = use_resource(move || {
+        let client = client.clone();
+        let q = search_query();
+        async move {
+            if q.trim().is_empty() {
+                vec![]
+            } else {
+                client.search_messages(&q).await.unwrap_or_default()
+            }
+        }
+    });
+
     rsx! {
         aside { class: "w-72 border-r border-slate-200 bg-white flex flex-col shrink-0",
-            div { class: "p-5",
+            div { class: "p-5 space-y-3",
                 button {
                     class: "w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg shadow-soft transition-all text-xs",
                     onclick: {
@@ -45,14 +61,48 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                     MaterialIcon { name: "add", color: MaterialIconColor::Light, size: 20 }
                     span { "New Conversation" }
                 }
+                div { class: "relative",
+                    input {
+                        class: "w-full border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-3 py-2 text-xs transition-all outline-none",
+                        placeholder: "Search messages...",
+                        value: "{search_query}",
+                        oninput: move |evt| search_query.set(evt.value().clone())
+                    }
+                }
             }
             div { class: "flex-1 overflow-y-auto px-4 space-y-6",
                 div {
-                    h3 { class: "px-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3",
-                        "Recent History"
-                    }
-                    div { class: "space-y-1",
-                        for conv in &props.conversations {
+                    if !search_query().trim().is_empty() {
+                        h3 { class: "px-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3",
+                            "Search Results"
+                        }
+                        div { class: "space-y-2",
+                            if let Some(results) = search_results.read().as_ref() {
+                                if results.is_empty() {
+                                    div { class: "px-3 py-2 text-xs italic text-slate-400", "No matches found" }
+                                } else {
+                                    for r in results {
+                                        button {
+                                            class: "w-full text-left px-3 py-2 rounded-lg border border-slate-100 hover:bg-slate-50 transition-all flex flex-col gap-1",
+                                            onclick: {
+                                                let id = r.conversation_id;
+                                                move |_| selected_conversation_id.set(Some(id))
+                                            },
+                                            span { class: "text-[10px] font-bold text-blue-600 truncate uppercase tracking-wider", "{r.conversation_title}" }
+                                            span { class: "text-xs text-slate-600 line-clamp-2 leading-relaxed", "{r.content}" }
+                                        }
+                                    }
+                                }
+                            } else {
+                                div { class: "px-3 py-2 text-xs text-slate-400", "Searching..." }
+                            }
+                        }
+                    } else {
+                        h3 { class: "px-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3",
+                            "Recent History"
+                        }
+                        div { class: "space-y-1",
+                            for conv in &props.conversations {
                             div {
                                 class: format!(
                                     "w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {}",
@@ -101,6 +151,7 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                                 }
                             }
                         }
+                    }
                     }
                 }
             }
