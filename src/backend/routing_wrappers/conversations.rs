@@ -79,3 +79,11 @@ pub async fn search_messages(db: &Database, query: &str) -> anyhow::Result<Vec<c
     crate::backend::conversations::search_messages(db, query).await
 }
 
+pub async fn delete_message(db: &Database, id: i64) -> anyhow::Result<()> {
+    if db.is_remote() {
+        return db.remote_client().delete_message(id).await;
+    }
+    crate::backend::messages::delete_message(db, id).await
+}
+
+

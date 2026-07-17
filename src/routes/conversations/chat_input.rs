@@ -248,6 +248,102 @@ fn ChatComposer(props: ChatInputProps) -> Element {
         }
         is_local_executing.set(true);
         input_text.set(String::new());
+
+        if let Some(cmd) = crate::engine::commands::parse(&val) {
+            is_local_executing.set(false);
+            let client = global_state.read().client.clone();
+            let mut conversations_resource = conversations_resource.clone();
+            let mut selected_conversation_id = selected_conversation_id.clone();
+            let conv_id = selected_conversation_id();
+            match cmd {
+                crate::engine::commands::SlashCommand::Help => {
+                    if let Some(id) = conv_id {
+                        visible_messages.with_mut(|messages| {
+                            messages.push(backend::Message {
+                                id: -1,
+                                conversation_id: id,
+                                role: "assistant".to_string(),
+                                content: r#"{"messages":[{"message":"**Available Commands:**\n- `/new`: Start a new conversation\n- `/export md|json`: Export this conversation\n- `/model <name>`: Switch preferred planner model\n- `/rename <title>`: Rename this conversation\n- `/regen`: Populates last user message and strips last response\n- `/clear`: Clear text input\n- `/help`: Show this helper","role":"assistant"}]}"#.to_string(),
+                                created_at: chrono::Utc::now().naive_utc(),
+                                attachments: vec![],
+                                hide_evidence: false,
+                            });
+                        });
+                    }
+                }
+                crate::engine::commands::SlashCommand::NewConversation => {
+                    spawn(async move {
+                        if let Ok(id) = client.add_conversation("New Conversation").await {
+                            conversations_resource.restart();
+                            selected_conversation_id.set(Some(id));
+                        }
+                    });
+                }
+                crate::engine::commands::SlashCommand::Export { format } => {
+                    if let Some(id) = conv_id {
+                        spawn(async move {
+                            let content = match format.as_str() {
+                                "md" => client.export_conversation_markdown(id).await,
+                                "json" => client.export_conversation_json(id).await,
+                                _ => return,
+                            };
+                            if let Ok(content) = content {
+                                let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                let filename = format!("conv_{}_{}.{}", id, ts, format);
+                                let _ = client.export_to_downloads(&filename, &content).await;
+                            }
+                        });
+                    }
+                }
+                crate::engine::commands::SlashCommand::Search { query: _ } => {}
+                crate::engine::commands::SlashCommand::Model { name } => {
+                    spawn(async move {
+                        let _ = client.set_setting("planner_model", &name).await;
+                    });
+                }
+                crate::engine::commands::SlashCommand::Regenerate => {
+                    let last_user = visible_messages.read().iter().filter(|m| m.role == "user").last().cloned();
+                    if let Some(user_msg) = last_user {
+                        let last_ast_id = {
+                            let msgs = visible_messages.read();
+                            if let Some(last_ast) = msgs.last() {
+                                if last_ast.role == "assistant" {
+                                    Some(last_ast.id)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(msg_id) = last_ast_id {
+                            visible_messages.with_mut(|messages| {
+                                messages.pop();
+                            });
+                            spawn(async move {
+                                let _ = client.delete_message(msg_id).await;
+                            });
+                        }
+                        input_text.set(user_msg.content);
+                    }
+                }
+                crate::engine::commands::SlashCommand::Rename { title } => {
+                    if let Some(id) = conv_id {
+                        spawn(async move {
+                            if client.update_conversation_title(id, &title).await.is_ok() {
+                                conversations_resource.restart();
+                            }
+                        });
+                      }
+                }
+                crate::engine::commands::SlashCommand::Clear => {
+                    input_text.set(String::new());
+                }
+                crate::engine::commands::SlashCommand::Quit => {}
+            }
+            return;
+        }
+
         let attachments = pending_attachments();
         pending_attachments.set(vec![]);
         let artifacts_for_prompt = selected_artifacts();
@@ -510,8 +606,27 @@ fn ChatComposer(props: ChatInputProps) -> Element {
             }
         }
         div { class: "relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white/94 p-2 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-all focus-within:border-blue-400 focus-within:shadow-[0_12px_32px_rgba(59,130,246,0.15)]",
+            if input_text().starts_with('/') {
+                if !crate::engine::commands::get_suggestions(&input_text()).is_empty() {
+                    div { class: "flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-100 overflow-x-auto select-none",
+                        span { class: "text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1 shrink-0", "Suggestions" }
+                        for cmd in crate::engine::commands::get_suggestions(&input_text()) {
+                            button {
+                                class: "px-2 py-0.5 rounded bg-slate-50 hover:bg-blue-50 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-blue-700 transition cursor-pointer border border-slate-200/60 shrink-0",
+                                onclick: {
+                                    let cmd = cmd.to_string();
+                                    move |_| {
+                                        input_text.set(cmd.clone());
+                                    }
+                                },
+                                "{cmd}"
+                            }
+                        }
+                    }
+                }
+            }
             div { class: "pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" }
-            div { class: "flex items-end gap-2",
+            div { class: "flex items-end gap-2 mt-1",
                 label { class: "group flex cursor-pointer items-center rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-slate-400 transition-colors hover:border-slate-300 hover:bg-slate-100 hover:text-slate-600",
                     MaterialIcon { name: "attach_file", size: 24 }
                     input {
@@ -549,6 +664,14 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                             if e.key() == Key::Enter && !e.modifiers().shift() {
                                 e.prevent_default();
                                 send.call(());
+                            } else if e.key() == Key::Tab {
+                                if input_text().starts_with('/') {
+                                    e.prevent_default();
+                                    let suggestions = crate::engine::commands::get_suggestions(&input_text());
+                                    if let Some(first_match) = suggestions.first() {
+                                        input_text.set(first_match.to_string());
+                                    }
+                                }
                             }
                         }
                     }

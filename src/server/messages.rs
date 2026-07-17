@@ -44,6 +44,7 @@ pub struct UpdateAttachmentPayload {
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
         .route("/api/messages", get(get_messages).post(add_message))
+        .route("/api/messages/delete", post(delete_message))
         .route("/api/attachments", get(get_attachments).post(add_attachment))
         .route("/api/attachments/update_content", post(update_attachment_content))
 }
@@ -82,3 +83,16 @@ async fn update_attachment_content(
 ) -> Result<(), String> {
     crate::backend::update_attachment_content(&state.db, payload.id, &payload.content).await.map_err(|e| e.to_string())
 }
+
+#[derive(Deserialize)]
+pub struct DeleteMessagePayload {
+    pub id: i64,
+}
+
+async fn delete_message(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<DeleteMessagePayload>,
+) -> Result<(), String> {
+    crate::backend::delete_message(&state.db, payload.id).await.map_err(|e| e.to_string())
+}
+

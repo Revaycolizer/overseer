@@ -21,13 +21,22 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
 
     match key.code {
         KeyCode::Tab => {
-            app.active_tab = match app.active_tab {
-                ActiveTab::Chat => ActiveTab::Metrics,
-                ActiveTab::Metrics => {
-                    let _ = app.refresh_metrics().await;
-                    ActiveTab::Chat
+            if app.active_tab == ActiveTab::Chat && app.input.starts_with('/') {
+                let suggestions = crate::engine::commands::get_suggestions(&app.input);
+                if let Some(first_match) = suggestions.first() {
+                    app.input = first_match.to_string();
+                    app.input_cursor = app.input.len();
+                    app.activity.bump();
                 }
-            };
+            } else {
+                app.active_tab = match app.active_tab {
+                    ActiveTab::Chat => ActiveTab::Metrics,
+                    ActiveTab::Metrics => {
+                        let _ = app.refresh_metrics().await;
+                        ActiveTab::Chat
+                    }
+                };
+            }
         }
         KeyCode::Up => {
             if app.active_tab == ActiveTab::Chat {
@@ -56,68 +65,109 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
                 // are intercepted here so the input doesn't get
                 // treated as a chat query. New commands can be added
                 // by extending this match.
-                let trimmed = app.input.trim();
-                if trimmed == "/help" {
-                    app.status_message = "Commands: /export md, /export json, /search <query>, /help".to_string();
-                } else if let Some(query) = trimmed.strip_prefix("/search ") {
-                    let q = query.trim().to_string();
-                    if q.is_empty() {
-                        app.status_message = "Please provide a query: /search <query>".to_string();
-                    } else {
-                        app.search_query = q.clone();
-                        match app.client.search_messages(&q).await {
-                            Ok(results) => {
-                                app.status_message = format!("Found {} matches. ESC to clear.", results.len());
-                                app.search_results = Some(results);
+                if let Some(cmd) = crate::engine::commands::parse(&app.input) {
+                    match cmd {
+                        crate::engine::commands::SlashCommand::Help => {
+                            app.status_message = "Commands: /new, /export md|json, /search <q>, /model <name>, /regen, /rename <title>, /clear, /help".to_string();
+                            app.input.clear();
+                            app.input_cursor = 0;
+                        }
+                        crate::engine::commands::SlashCommand::NewConversation => {
+                            let new_id = app.client.add_conversation("New Conversation").await?;
+                            app.selected_conv_id = Some(new_id);
+                            app.input.clear();
+                            app.input_cursor = 0;
+                            let _ = app.refresh_conversations().await;
+                        }
+                        crate::engine::commands::SlashCommand::Export { format } => {
+                            let fmt = format.trim();
+                            if fmt != "md" && fmt != "json" {
+                                app.status_message = "Only `/export md` and `/export json` are supported".to_string();
+                            } else if let Some(conv_id) = app.selected_conv_id {
+                                let content = match fmt {
+                                    "md" => app.client.export_conversation_markdown(conv_id).await,
+                                    "json" => app.client.export_conversation_json(conv_id).await,
+                                    _ => unreachable!(),
+                                };
+                                let content = content.unwrap_or_default();
+                                if !content.is_empty() {
+                                    let safe = app.conversations.iter().find(|c| c.id == conv_id).map(|c| c.title.clone()).unwrap_or_else(|| format!("conv_{conv_id}"));
+                                    let safe = safe.chars().map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect::<String>();
+                                    let filename = format!("{safe}.{fmt}");
+                                    let _ = app.client.export_to_downloads(&filename, &content).await;
+                                    app.status_message = format!("Exported to Downloads/{filename}");
+                                }
+                            } else {
+                                app.status_message = "No conversation selected".to_string();
+                            }
+                            app.input.clear();
+                            app.input_cursor = 0;
+                        }
+                        crate::engine::commands::SlashCommand::Search { query } => {
+                            let q = query.trim().to_string();
+                            if q.is_empty() {
+                                app.status_message = "Please provide a query: /search <query>".to_string();
+                            } else {
+                                app.search_query = q.clone();
+                                match app.client.search_messages(&q).await {
+                                    Ok(results) => {
+                                        app.status_message = format!("Found {} matches. ESC to clear.", results.len());
+                                        app.search_results = Some(results);
+                                        app.input.clear();
+                                        app.input_cursor = 0;
+                                        app.activity.bump();
+                                    }
+                                    Err(e) => {
+                                        app.status_message = format!("Search failed: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                        crate::engine::commands::SlashCommand::Model { name } => {
+                            let m = name.trim().to_string();
+                            if m.is_empty() {
+                                app.status_message = "Please specify a model: /model <name>".to_string();
+                            } else if app.client.set_setting("planner_model", &m).await.is_ok() {
+                                app.status_message = format!("Planner model updated to '{}'", m);
                                 app.input.clear();
                                 app.input_cursor = 0;
-                                app.activity.bump();
-                            }
-                            Err(e) => {
-                                app.status_message = format!("Search failed: {}", e);
                             }
                         }
-                    }
-                } else if let Some(arg) = trimmed.strip_prefix("/export ") {
-                    let fmt = arg.trim();
-                    if fmt != "md" && fmt != "json" {
-                        app.status_message = "Only `/export md` and `/export json` are supported".to_string();
-                    } else if let Some(conv_id) = app.selected_conv_id {
-                        let (content, extension) = match fmt {
-                            "md" => (
-                                app.client.export_conversation_markdown(conv_id).await,
-                                "md",
-                            ),
-                            "json" => (
-                                app.client.export_conversation_json(conv_id).await,
-                                "json",
-                            ),
-                            _ => unreachable!(),
-                        };
-                        let content = match content {
-                            Ok(s) => s,
-                            Err(e) => {
-                                app.status_message = format!("Export failed: {e}");
-                                String::new()
+                        crate::engine::commands::SlashCommand::Regenerate => {
+                            if let Some(last_msg) = app.messages.last().cloned() {
+                                if last_msg.role == "assistant" {
+                                    let _ = app.client.delete_message(last_msg.id).await;
+                                    if let Some(last_user) = app.messages.iter().filter(|m| m.role == "user").last().cloned() {
+                                        app.input = last_user.content;
+                                        app.input_cursor = app.input.len();
+                                        let _ = app.send_message().await;
+                                    }
+                                }
+                            } else {
+                                app.input.clear();
+                                app.input_cursor = 0;
                             }
-                        };
-                        if !content.is_empty() {
-                            let safe = app
-                                .conversations
-                                .iter()
-                                .find(|c| c.id == conv_id)
-                                .map(|c| c.title.clone())
-                                .unwrap_or_else(|| format!("conv_{conv_id}"));
-                            let safe = safe
-                                .chars()
-                                .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
-                                .collect::<String>();
-                            let filename = format!("{safe}.{extension}");
-                            let _ = app.client.export_to_downloads(&filename, &content).await;
-                            app.status_message = format!("Exported to Downloads/{filename}");
                         }
-                    } else {
-                        app.status_message = "No conversation selected".to_string();
+                        crate::engine::commands::SlashCommand::Rename { title } => {
+                            let t = title.trim().to_string();
+                            if let Some(conv_id) = app.selected_conv_id {
+                                if !t.is_empty() && app.client.update_conversation_title(conv_id, &t).await.is_ok() {
+                                    app.status_message = format!("Conversation renamed to '{}'", t);
+                                    let _ = app.refresh_conversations().await;
+                                }
+                            }
+                            app.input.clear();
+                            app.input_cursor = 0;
+                        }
+                        crate::engine::commands::SlashCommand::Clear => {
+                            app.input.clear();
+                            app.input_cursor = 0;
+                        }
+                        crate::engine::commands::SlashCommand::Quit => {
+                            app.input.clear();
+                            app.input_cursor = 0;
+                            app.status_message = "Please press Ctrl+C or 'q' to quit".to_string();
+                        }
                     }
                 } else {
                     app.send_message().await?;
@@ -211,6 +261,14 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
             }
         }
         _ => {}
+    }
+    if app.input.starts_with('/') {
+        let suggestions = crate::engine::commands::get_suggestions(&app.input);
+        if !suggestions.is_empty() {
+            app.status_message = format!("Suggestions: {} (TAB to autocomplete)", suggestions.join(", "));
+        } else {
+            app.status_message = "No matching command".to_string();
+        }
     }
     Ok(())
 }

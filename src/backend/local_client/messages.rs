@@ -27,4 +27,8 @@ impl MessageClient for LocalClient {
     async fn update_attachment_content(&self, attachment_id: i64, content: &str) -> anyhow::Result<()> {
         crate::backend::update_attachment_content(&self.db, attachment_id, content).await
     }
+
+    async fn delete_message(&self, id: i64) -> anyhow::Result<()> {
+        crate::backend::messages::delete_message(&self.db, id).await
+    }
 }
