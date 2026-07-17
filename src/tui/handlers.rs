@@ -58,13 +58,24 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
                 // by extending this match.
                 let trimmed = app.input.trim();
                 if trimmed == "/help" {
-                    app.status_message = "Commands: /export md, /help".to_string();
+                    app.status_message = "Commands: /export md, /export json, /help".to_string();
                 } else if let Some(arg) = trimmed.strip_prefix("/export ") {
                     let fmt = arg.trim();
-                    if fmt != "md" {
-                        app.status_message = "Only `/export md` is supported".to_string();
+                    if fmt != "md" && fmt != "json" {
+                        app.status_message = "Only `/export md` and `/export json` are supported".to_string();
                     } else if let Some(conv_id) = app.selected_conv_id {
-                        let content = match app.client.export_conversation_markdown(conv_id).await {
+                        let (content, extension) = match fmt {
+                            "md" => (
+                                app.client.export_conversation_markdown(conv_id).await,
+                                "md",
+                            ),
+                            "json" => (
+                                app.client.export_conversation_json(conv_id).await,
+                                "json",
+                            ),
+                            _ => unreachable!(),
+                        };
+                        let content = match content {
                             Ok(s) => s,
                             Err(e) => {
                                 app.status_message = format!("Export failed: {e}");
@@ -82,7 +93,7 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
                                 .chars()
                                 .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
                                 .collect::<String>();
-                            let filename = format!("{safe}.md");
+                            let filename = format!("{safe}.{extension}");
                             let _ = app.client.export_to_downloads(&filename, &content).await;
                             app.status_message = format!("Exported to Downloads/{filename}");
                         }
