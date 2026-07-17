@@ -30,6 +30,7 @@ pub fn Conversations() -> Element {
     let global_read = global_state.read();
     let db = global_read.db.clone();
     let agent_system = global_read.agent_system.clone();
+    let client = global_read.client.clone();
     drop(global_read);
 
     let db_for_conv = db.clone();
@@ -182,6 +183,11 @@ pub fn Conversations() -> Element {
 
     use_effect(move || { let _ = messages_resource.read(); let _ = is_thinking(); spawn(async move { tokio::time::sleep(std::time::Duration::from_millis(100)).await; let eval = eval(r#"const container = document.getElementById('chat-scroll-container'); if (container) { const scrollToBottom = (force = false) => { const threshold = 150; const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold; if (force || isAtBottom) { container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' }); } }; scrollToBottom(true); setTimeout(() => scrollToBottom(true), 100); setTimeout(() => scrollToBottom(true), 300); if (!window._overseerScrollObserver) { window._overseerScrollObserver = new MutationObserver(() => { scrollToBottom(); }); window._overseerScrollObserver.observe(container, { childList: true, subtree: true }); } }"#); let _ = eval.await; }); });
 
+    let client_for_md = client.clone();
+    let client_for_json = client.clone();
+    let title_for_md = conversation_title.clone();
+    let title_for_json = conversation_title.clone();
+
     rsx! {
         div { class: "flex-1 flex flex-col min-w-0 min-h-0 relative",
             div { class: "flex flex-1 overflow-hidden",
@@ -201,6 +207,42 @@ pub fn Conversations() -> Element {
                                         }
                                     }
                                     div { class: "flex flex-wrap items-center justify-end gap-2 shrink-0",
+                                        if let Some(id) = selected_conversation_id() {
+                                            button {
+                                                class: "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[10px] rounded-full px-3 py-1 font-black uppercase tracking-[0.18em] transition flex items-center gap-1.5 cursor-pointer",
+                                                onclick: move |_| {
+                                                    let client = client_for_md.clone();
+                                                    let title_slug = title_for_md.to_lowercase().replace(" ", "_");
+                                                    spawn(async move {
+                                                        if let Ok(content) = client.export_conversation_markdown(id).await {
+                                                            let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                                            let filename = format!("{}_{}.md", title_slug, ts);
+                                                            if let Ok(path) = client.export_to_downloads(&filename, &content).await {
+                                                                let _ = backend::open_local_path(&path).await;
+                                                            }
+                                                        }
+                                                    });
+                                                },
+                                                "Export MD"
+                                            }
+                                            button {
+                                                class: "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[10px] rounded-full px-3 py-1 font-black uppercase tracking-[0.18em] transition flex items-center gap-1.5 cursor-pointer",
+                                                onclick: move |_| {
+                                                    let client = client_for_json.clone();
+                                                    let title_slug = title_for_json.to_lowercase().replace(" ", "_");
+                                                    spawn(async move {
+                                                        if let Ok(content) = client.export_conversation_json(id).await {
+                                                            let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                                            let filename = format!("{}_{}.json", title_slug, ts);
+                                                            if let Ok(path) = client.export_to_downloads(&filename, &content).await {
+                                                                let _ = backend::open_local_path(&path).await;
+                                                            }
+                                                        }
+                                                    });
+                                                },
+                                                "Export JSON"
+                                            }
+                                        }
                                         if let Some(label) = route_label.clone() { ChatScreenChip { tone: "blue".to_string(), label: label } }
                                         if let Some(label) = personality_label.clone() { ChatScreenChip { tone: "violet".to_string(), label: label } }
                                         if let Some(run) = latest_run.clone() { ChatScreenChip { tone: status_tone(&run.status).to_string(), label: format!("Run {}", prettify_status(&run.status)) } }
