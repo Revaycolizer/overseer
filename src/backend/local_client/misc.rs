@@ -50,6 +50,9 @@ impl RegistryClient for LocalClient {
 impl SystemClient for LocalClient {
     async fn get_system_load(&self) -> anyhow::Result<SystemLoad> { Ok(crate::backend::get_system_load().await) }
     async fn open_local_path(&self, p: &str) -> anyhow::Result<()> { crate::backend::open_local_path(p).await }
+    async fn export_conversation_markdown(&self, conversation_id: i64) -> anyhow::Result<String> {
+        crate::backend::conversations::export_conversation_markdown(&self.db, conversation_id).await
+    }
     async fn export_to_downloads(&self, filename: &str, content: &str) -> anyhow::Result<String> {
         if content.is_empty() {
             crate::backend::export_to_downloads(filename).await

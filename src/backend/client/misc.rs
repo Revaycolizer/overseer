@@ -39,6 +39,13 @@ pub trait SystemClient {
     async fn get_system_load(&self) -> anyhow::Result<SystemLoad>;
     async fn open_local_path(&self, path: &str) -> anyhow::Result<()>;
     async fn export_to_downloads(&self, filename: &str, content: &str) -> anyhow::Result<String>;
+    /// V4.17.10: render a conversation as a self-contained
+    /// Markdown document and return the Markdown text. Used by the
+    /// TUI's `/export md` slash command and the Dioxus Download
+    /// button. Saving to disk / sharing is the caller's job (the
+    /// existing `export_to_downloads` handles the desktop path; the
+    /// mobile / remote path uses the `download_manager` flow).
+    async fn export_conversation_markdown(&self, conversation_id: i64) -> anyhow::Result<String>;
     async fn save_chart_export(&self, conversation_id: i64, chart_json: &str) -> anyhow::Result<String>;
     async fn test_agent_preamble(&self, preamble: &str) -> anyhow::Result<String>;
 }

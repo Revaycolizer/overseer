@@ -51,7 +51,47 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         }
         KeyCode::Enter => {
             if app.active_tab == ActiveTab::Chat && !is_orch {
-                app.send_message().await?;
+                // V4.17.10: slash command dispatch. The send
+                // message is the default; `/export md` and `/help`
+                // are intercepted here so the input doesn't get
+                // treated as a chat query. New commands can be added
+                // by extending this match.
+                let trimmed = app.input.trim();
+                if trimmed == "/help" {
+                    app.status_message = "Commands: /export md, /help".to_string();
+                } else if let Some(arg) = trimmed.strip_prefix("/export ") {
+                    let fmt = arg.trim();
+                    if fmt != "md" {
+                        app.status_message = "Only `/export md` is supported".to_string();
+                    } else if let Some(conv_id) = app.selected_conv_id {
+                        let content = match app.client.export_conversation_markdown(conv_id).await {
+                            Ok(s) => s,
+                            Err(e) => {
+                                app.status_message = format!("Export failed: {e}");
+                                String::new()
+                            }
+                        };
+                        if !content.is_empty() {
+                            let safe = app
+                                .conversations
+                                .iter()
+                                .find(|c| c.id == conv_id)
+                                .map(|c| c.title.clone())
+                                .unwrap_or_else(|| format!("conv_{conv_id}"));
+                            let safe = safe
+                                .chars()
+                                .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+                                .collect::<String>();
+                            let filename = format!("{safe}.md");
+                            let _ = app.client.export_to_downloads(&filename, &content).await;
+                            app.status_message = format!("Exported to Downloads/{filename}");
+                        }
+                    } else {
+                        app.status_message = "No conversation selected".to_string();
+                    }
+                } else {
+                    app.send_message().await?;
+                }
             }
         }
         KeyCode::Left => {

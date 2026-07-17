@@ -83,6 +83,11 @@ impl SystemClient for RemoteClient {
     async fn get_system_load(&self) -> anyhow::Result<SystemLoad> { Ok(self.http_client.get(format!("{}/api/system/load", self.base_url)).send().await?.json().await?) }
     async fn open_local_path(&self, p: &str) -> anyhow::Result<()> { self.http_client.post(format!("{}/api/system/open_path", self.base_url)).json(&serde_json::json!({ "path": p })).send().await?; Ok(()) }
     async fn export_to_downloads(&self, n: &str, c: &str) -> anyhow::Result<String> { Ok(self.http_client.post(format!("{}/api/system/export", self.base_url)).json(&serde_json::json!({ "filename": n, "content": c })).send().await?.json().await?) }
+    async fn export_conversation_markdown(&self, conversation_id: i64) -> anyhow::Result<String> {
+        // The remote server exposes the same conversion; the route
+        // name follows the existing /api/system/* convention.
+        Ok(self.http_client.get(format!("{}/api/system/export_conversation/{}", self.base_url, conversation_id)).send().await?.text().await?)
+    }
     async fn save_chart_export(&self, cid: i64, ch: &str) -> anyhow::Result<String> { Ok(self.http_client.post(format!("{}/api/system/save_chart", self.base_url)).json(&serde_json::json!({ "conversation_id": cid, "chart_json": ch })).send().await?.json().await?) }
     async fn test_agent_preamble(&self, pr: &str) -> anyhow::Result<String> { Ok(self.http_client.post(format!("{}/api/system/test_preamble", self.base_url)).json(&serde_json::json!({ "preamble": pr })).send().await?.json().await?) }
 }
