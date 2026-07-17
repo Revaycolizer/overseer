@@ -64,3 +64,59 @@ pub async fn delete_conversation(db: &Database, id: i64) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// V4.17.10: render a conversation as a self-contained Markdown
+/// document. Reads the conversation metadata and all
+/// user/assistant messages and renders a portable `.md` string
+/// suitable for sharing or archiving. The conversion reuses
+/// `engine::orchestrator::utils::formatter::format_for_markdown`
+/// to normalise message content (charts, evidence, tool blocks) so
+/// the output reads as plain Markdown.
+pub async fn export_conversation_markdown(
+    db: &Database,
+    conversation_id: i64,
+) -> anyhow::Result<String> {
+    let conv = sqlx::query_as::<_, Conversation>(
+        "SELECT id, title, created_at FROM conversations WHERE id = ?1",
+    )
+    .bind(conversation_id)
+    .fetch_optional(&db.pool)
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("conversation {conversation_id} not found"))?;
+
+    let messages = crate::backend::routing_wrappers::conversations::get_messages_page(
+        db, conversation_id, None, 1_000_000,
+    )
+    .await
+    .unwrap_or_default();
+
+    let mut out = String::new();
+    out.push_str(&format!("# {}\n\n", conv.title));
+    out.push_str(&format!(
+        "_Exported {} from Overseer._\n\n",
+        chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+    ));
+    out.push_str("---\n\n");
+
+    for (i, m) in messages.iter().enumerate() {
+        let header = match m.role.as_str() {
+            "user" => format!("## {}. {}", i + 1, "User"),
+            "assistant" => format!("## {}. {}", i + 1, "Assistant"),
+            other => format!("## {}. {}", i + 1, other),
+        };
+        out.push_str(&header);
+        out.push('\n');
+        if let Ok(structured) =
+            serde_json::from_str::<crate::engine::orchestrator::StructuredResponse>(&m.content)
+        {
+            out.push_str(&crate::engine::orchestrator::utils::formatter::format_for_markdown(
+                &structured,
+            ));
+        } else {
+            out.push_str(&m.content);
+        }
+        out.push_str("\n\n---\n\n");
+    }
+
+    Ok(out)
+}

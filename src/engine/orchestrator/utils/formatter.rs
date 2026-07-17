@@ -130,3 +130,50 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
 
     structured
 }
+
+/// V4.17.10: render a `StructuredResponse` as a self-contained
+/// Markdown document for the conversation exporter. The
+/// existing `format_supervisor_result` focuses on UI widgets (blocks,
+/// sources) — this variant is a pure-Markdown rendering so
+/// the same `StructuredResponse` data can be archived or shared as
+/// `.md`.
+pub fn format_for_markdown(res: &StructuredResponse) -> String {
+    let mut out = String::new();
+    for m in &res.messages {
+        out.push_str(&format!(
+            "**{}:** {}\n\n",
+            m.role,
+            m.message.replace("```", "ʼʼʼ")
+        ));
+    }
+    if !res.sources.is_empty() {
+        out.push_str("### Sources\n\n");
+        for s in &res.sources {
+            out.push_str(&format!("- **{}**", s.source));
+            if !s.link.is_empty() {
+                out.push_str(&format!(" ([{}])", s.link));
+            }
+            if !s.description.is_empty() {
+                out.push_str(&format!(" — {}", s.description));
+            }
+            out.push_str("\n");
+        }
+        out.push('\n');
+    }
+    for (i, c) in res.charts.iter().enumerate() {
+        out.push_str(&format!(
+            "### Chart {}: {}\n\n\
+             ```\n\
+             type: {}\n\
+             labels: {:?}\n\
+             data:   {:?}\n\
+             ```\n\n",
+            i + 1,
+            c.title.as_deref().unwrap_or(""),
+            c.chart_type,
+            c.labels.as_deref().unwrap_or(&Vec::new()),
+            c.data.as_deref().unwrap_or(&Vec::new()),
+        ));
+    }
+    out
+}
