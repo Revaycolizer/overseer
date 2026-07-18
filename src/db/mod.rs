@@ -127,3 +127,20 @@ pub fn get_overseer_data_dir() -> std::path::PathBuf {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    #[tokio::test]
+    async fn all_migrations_apply_cleanly() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("failed to create in-memory SQLite pool");
+
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("migrations should apply without errors");
+    }
+}
+
