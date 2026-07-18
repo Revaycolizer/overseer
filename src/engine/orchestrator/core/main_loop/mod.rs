@@ -3,6 +3,7 @@ pub mod planning;
 use crate::db::Database;
 use crate::engine::orchestrator::core::{direct_chat, executor, event_logger};
 use crate::engine::orchestrator::planning::{master::MasterPlanner, decisions::*};
+use crate::engine::orchestrator::truthfulness;
 use crate::engine::utils::discovery::AgentInfo;
 use crate::engine::orchestrator::utils::context_helpers::*;
 use crate::engine::orchestrator::native::native_checks::*;
@@ -72,6 +73,8 @@ pub async fn orchestrate_request(
 
     if matches!(decision.route, OrchestrationRoute::DirectChat) {
         let res = direct_chat::handle_direct_chat(db, run_id, &mut seq, ollama_client, all_agents, &clean_query, &history, &enriched_memory_context, &decision_details).await;
+        // Direct chat never runs tools, so any claimed side effect is unverified.
+        let res = truthfulness::enforce_truthful_response(&res, false);
         completed.store(true, std::sync::atomic::Ordering::SeqCst);
         return res;
     }
@@ -82,6 +85,10 @@ pub async fn orchestrate_request(
     event_logger::simple(db, run_id, &mut seq, "macro_plan", "completed", &format!("Orchestrator planned {} step(s).", macro_tasks.len()), Some(&macro_plan_details)).await;
 
     let res = executor::execute_macro_tasks(db, conversation_id, run_id, &mut seq, all_agents, macro_tasks, &clean_query, &history, &enriched_memory_context, perception_tool, ollama_client, 60000, token_sender).await;
+    // Truthfulness guard: only allow a claimed side effect if a real tool actually
+    // succeeded in this run (derived from the execution trace).
+    let executed_action = crate::backend::run_produced_action(db, run_id).await;
+    let res = truthfulness::enforce_truthful_response(&res, executed_action);
     completed.store(true, std::sync::atomic::Ordering::SeqCst);
     res
 }
