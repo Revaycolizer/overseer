@@ -68,7 +68,7 @@ impl SystemClient for LocalClient {
             }
             let path = download_dir.join(filename);
             std::fs::write(&path, content)?;
-            Ok(filename.to_string())
+            Ok(path.to_string_lossy().to_string())
         }
     }
     async fn save_chart_export(&self, _cid: i64, ch: &str) -> anyhow::Result<String> {

@@ -62,7 +62,7 @@ async fn export(State(_s): State<Arc<ServerState>>, Json(p): Json<serde_json::Va
     }
     let path = download_dir.join(name);
     std::fs::write(&path, content).map_err(|e| e.to_string())?;
-    Ok(Json(name.to_string()))
+    Ok(Json(path.to_string_lossy().to_string()))
 }
 async fn save_chart(State(_s): State<Arc<ServerState>>, Json(p): Json<serde_json::Value>) -> Result<Json<String>, String> {
     let ch = p["chart_json"].as_str().unwrap_or("");

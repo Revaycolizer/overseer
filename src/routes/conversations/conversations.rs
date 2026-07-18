@@ -217,8 +217,8 @@ pub fn Conversations() -> Element {
                                                         if let Ok(content) = client.export_conversation_markdown(id).await {
                                                             let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                                             let filename = format!("{}_{}.md", title_slug, ts);
-                                                            if let Ok(path) = client.export_to_downloads(&filename, &content).await {
-                                                                let _ = backend::open_local_path(&path).await;
+                                                             if let Ok(path) = client.export_to_downloads(&filename, &content).await {
+                                                                let _ = client.open_local_path(&path).await;
                                                             }
                                                         }
                                                     });
@@ -235,7 +235,7 @@ pub fn Conversations() -> Element {
                                                             let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                                             let filename = format!("{}_{}.json", title_slug, ts);
                                                             if let Ok(path) = client.export_to_downloads(&filename, &content).await {
-                                                                let _ = backend::open_local_path(&path).await;
+                                                                let _ = client.open_local_path(&path).await;
                                                             }
                                                         }
                                                     });

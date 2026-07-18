@@ -290,7 +290,9 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                             if let Ok(content) = content {
                                 let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                 let filename = format!("conv_{}_{}.{}", id, ts, format);
-                                let _ = client.export_to_downloads(&filename, &content).await;
+                                if let Ok(path) = client.export_to_downloads(&filename, &content).await {
+                                    let _ = client.open_local_path(&path).await;
+                                }
                             }
                         });
                     }
@@ -612,7 +614,7 @@ fn ChatComposer(props: ChatInputProps) -> Element {
                         span { class: "text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1 shrink-0", "Suggestions" }
                         for cmd in crate::engine::commands::get_suggestions(&input_text()) {
                             button {
-                                class: "px-2 py-0.5 rounded bg-slate-50 hover:bg-blue-50 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-blue-700 transition cursor-pointer border border-slate-200/60 shrink-0",
+                                class: "px-2 py-0.5 rounded bg-slate-50 hover:bg-blue-50 text-[10px] font-medium text-slate-500 hover:text-blue-700 transition cursor-pointer border border-slate-200/60 shrink-0",
                                 onclick: {
                                     let cmd = cmd.to_string();
                                     move |_| {
