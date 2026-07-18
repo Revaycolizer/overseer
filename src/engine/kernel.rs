@@ -253,7 +253,7 @@ where
 /// separate rule set.
 pub async fn evaluate_named(
     db: &Database,
-    domain: &str,
+    _domain: &str,
     kind: ActionKind,
     tool_name: &str,
     arguments: &Value,
