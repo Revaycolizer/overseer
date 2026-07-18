@@ -1,4 +1,5 @@
 use serde_json::Value;
+use tokio::sync::mpsc::UnboundedSender;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
 use crate::engine::orchestrator::state::StructuredState;
 use crate::engine::utils::discovery::ToolInfo;
@@ -9,6 +10,7 @@ pub async fn execute_tool(
     input: Value,
     tools: &[ToolInfo],
     state: &StructuredState,
+    token_sender: Option<&UnboundedSender<String>>,
 ) -> Result<(String, bool, Value), SupervisorExecutionResult> {
     let tool = match tools.iter().find(|t| t.name == tname) {
         Some(t) => t,
@@ -17,10 +19,13 @@ pub async fn execute_tool(
 
     // --- ARCHITECTURE V3.3: AUTOMATIC GROUNDING EXPANSION ---
     let expanded_input = expand_markers(input, state);
-    println!("🛠️ EXECUTING TOOL: {} with expanded input: {}", tname, expanded_input);
+    tracing::debug!(?tname, "Executing tool");
 
     let output = match crate::engine::tools::call_dynamic_tool(tool, expanded_input.clone()).await {
-        Ok(o) => o,
+        Ok(o) => {
+            crate::engine::streaming::stream_tool_output(tname, &o, token_sender);
+            o
+        }
         Err(e) => return Ok((format!("ERROR: {}", e), false, expanded_input)),
     };
 

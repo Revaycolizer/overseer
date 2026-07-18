@@ -105,7 +105,7 @@ pub async fn dispatch_domain(
         if let Some(tname) = json.get("tool").and_then(|v| v.as_str()) {
             let input = json.get("input").cloned().unwrap_or(serde_json::Value::Null);
             event_logger::tool_call(db, run_id, event_sequence, domain, step, tname, &model, &input.to_string()).await;
-            match execute_tool(tname, input, &tools, state).await {
+            match execute_tool(tname, input, &tools, state, token_sender.as_ref()).await {
                 Ok((output, is_action, _expanded_input)) => {
                     if is_action { action_tool_executed = true; }
                     current_prompt = format!("{}\n\n[RESULT for '{}': {}]", current_prompt, tname, output);
@@ -159,7 +159,7 @@ pub async fn dispatch_domain(
                 let content = format!("{}\n\n{}", plan_history, state.to_prompt_string());
                 let auto_input = serde_json::json!({"format": "pdf", "content": content});
                 event_logger::tool_call(db, run_id, event_sequence, domain, step, "document_writer", &model, &auto_input.to_string()).await;
-                match execute_tool("document_writer", auto_input, &tools, state).await {
+                match execute_tool("document_writer", auto_input, &tools, state, token_sender.as_ref()).await {
                     Ok((output, _, _)) => {
                         event_logger::tool_result(db, run_id, event_sequence, domain, step, "document_writer", &model, &output, true).await;
                         if let Ok(res_json) = serde_json::from_str::<serde_json::Value>(&output) {

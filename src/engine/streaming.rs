@@ -1,6 +1,7 @@
 use futures::StreamExt;
 use rig::agent::{MultiTurnStreamItem, StreamingResult};
 use rig::streaming::StreamedAssistantContent;
+use tokio::sync::mpsc::UnboundedSender;
 
 /// Consume a `StreamingResult` from a rig-core 0.30 streaming
 /// completion into a single `String` (the assembled final response).
@@ -43,4 +44,23 @@ pub async fn collect_stream_with_sender<R>(
 /// `collect_stream_with_sender(stream, None)`.
 pub async fn collect_stream<R>(stream: StreamingResult<R>) -> Result<String, String> {
     collect_stream_with_sender(stream, None).await
+}
+
+/// Stream a tool output string in small chunks through the token
+/// channel so the UI can render it incrementally. Sends a
+/// `\n── Tool Output ──\n` marker before the content and a
+/// trailing `\n─────────────────\n` after it.
+pub fn stream_tool_output(
+    tool_name: &str,
+    output: &str,
+    token_sender: Option<&UnboundedSender<String>>,
+) {
+    let Some(sender) = token_sender else { return };
+    let _ = sender.send(format!("\n── Tool ({tool_name}) Output ──\n"));
+    for chunk in output.as_bytes().chunks(120) {
+        if let Ok(text) = std::str::from_utf8(chunk) {
+            let _ = sender.send(text.to_string());
+        }
+    }
+    let _ = sender.send("\n─────────────────────────\n".to_string());
 }
