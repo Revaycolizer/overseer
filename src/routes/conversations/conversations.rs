@@ -86,9 +86,36 @@ pub fn Conversations() -> Element {
     let db_for_load = db.clone();
     let mut load_more = move || {
         if messages_loading_more() || !messages_has_more() { return; }
-        let cursor = messages_cursor.read().clone();
         let Some(conv_id) = selected_conversation_id() else { return; };
+
+        // Check if cache has pre-fetched messages that are not yet visible
+        let cached_opt = {
+            let cache = crate::engine::cache::messages();
+            cache.read().ok().and_then(|c| c.get(&conv_id).cloned())
+        };
+        if let Some(cached) = cached_opt {
+            let (visible_len, visible_clone) = {
+                let visible = visible_messages.read();
+                (visible.len(), visible.iter().cloned().collect::<Vec<_>>())
+            };
+            if cached.len() > visible_len {
+                let diff = cached.len() - visible_len;
+                let take_count = diff.min(PAGE_SIZE as usize);
+                let start_idx = cached.len() - visible_len - take_count;
+                let end_idx = cached.len() - visible_len;
+                let page = cached[start_idx..end_idx].to_vec();
+
+                let mut combined = page.clone();
+                combined.extend(visible_clone);
+                visible_messages.set(combined);
+                messages_cursor.set(page.last().map(|m| m.id));
+                messages_has_more.set(start_idx > 0 || messages_has_more.peek().clone());
+                return;
+            }
+        }
+
         messages_loading_more.set(true);
+        let cursor = messages_cursor.read().clone();
         let db = db_for_load.clone();
         spawn(async move {
             let page = backend::get_messages_page(&db, conv_id, cursor, PAGE_SIZE).await.unwrap_or_default();
@@ -102,6 +129,45 @@ pub fn Conversations() -> Element {
             messages_loading_more.set(false);
         });
     };
+
+    let db_for_prefetch = db.clone();
+    use_future(move || {
+        let db = db_for_prefetch.clone();
+        let conv_id = selected_conversation_id();
+        async move {
+            let Some(id) = conv_id else { return; };
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+            for _ in 0..5 {
+                let oldest_id = {
+                    let cache = crate::engine::cache::messages();
+                    let cache_read = cache.read();
+                    if let Ok(c) = cache_read {
+                        c.get(&id).and_then(|v| v.first().map(|m| m.id))
+                    } else {
+                        None
+                    }
+                };
+
+                let page = backend::get_messages_page(&db, id, oldest_id, PAGE_SIZE).await.unwrap_or_default();
+                if page.is_empty() {
+                    break;
+                }
+
+                if let Ok(mut cache) = crate::engine::cache::messages().write() {
+                    if let Some(cached) = cache.get(&id).cloned() {
+                        let mut combined = page.clone();
+                        combined.extend(cached);
+                        cache.put(id, combined);
+                    } else {
+                        cache.put(id, page.clone());
+                    }
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        }
+    });
 
     let visible = visible_messages();
     let messages = if visible.is_empty() {
