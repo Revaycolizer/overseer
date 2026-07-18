@@ -107,13 +107,9 @@ fn send_message(
 
     let db_for_msg = db.clone();
     let q = query_with_context.clone();
-    let optimistic_id: i64 = 0;
-
     is_local_executing.set(true);
     is_thinking.set(true);
     input_text.set(String::new());
-
-    let optimistic_msg = backend::Message { id: 0, conversation_id: 0, role: "user".to_string(), content: val.clone(), created_at: chrono::Utc::now().naive_utc(), hide_evidence: false, attachments: vec![] };
 
     spawn(async move {
         let mut resolved_conv_id = selected_conversation_id();
@@ -154,11 +150,7 @@ fn send_message(
             pending_attachments.set(Vec::new());
         }
 
-        let mut created_optimistic_placeholder = false;
-        if let Ok(_msg_id) = backend::add_message(&db_for_msg, conv_id, "user", &query_with_context, false).await {
-            let _ = backend::add_attachment(&db_for_msg, _msg_id, "_optimistic", "", "text/plain", 0).await;
-            created_optimistic_placeholder = true;
-        }
+        let _ = backend::add_message(&db_for_msg, conv_id, "user", &query_with_context, false).await;
 
         let agent_ref = agent.clone();
         let handle = tokio::spawn(async move {
