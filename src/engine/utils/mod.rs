@@ -1,4 +1,5 @@
 pub mod discovery;
+pub mod image_optimizer;
 pub mod system_idle;
 
 use tokio::process::Command;
