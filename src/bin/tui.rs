@@ -11,6 +11,13 @@ use overseer::tui::app::App;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
     let args: Vec<String> = std::env::args().collect();
     let is_remote = args.iter().any(|arg| arg == "--remote" || arg == "remote");
     let remote_url = args.iter().position(|arg| arg == "--url").and_then(|idx| args.get(idx + 1)).map(|s| s.as_str()).unwrap_or("http://127.0.0.1:8080");
@@ -43,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        println!("{:?}", err);
+        tracing::error!(?err, "TUI run loop exited with error");
     }
     Ok(())
 }

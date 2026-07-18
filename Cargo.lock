@@ -7534,6 +7534,8 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower_governor",
+ "tracing",
+ "tracing-subscriber",
  "urlencoding",
  "uuid",
  "whisper-rs",
