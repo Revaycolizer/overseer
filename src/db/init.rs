@@ -82,6 +82,19 @@ impl Database {
             .await
             .context("failed to restore SQLite synchronous mode after migrations")?;
 
+        // Kernel v0.1 restart recovery: any approval left `pending` by a previous
+        // process can never be resolved (its in-memory async waiter did not
+        // survive the restart), so cancel stale pending rows on every boot.
+        let _ = sqlx::query(
+            "UPDATE approval_requests \
+                SET status = 'cancelled', resolver = 'system:restart', \
+                    resolution = 'cancelled on application restart', \
+                    resolved_at = CURRENT_TIMESTAMP \
+              WHERE status = 'pending'",
+        )
+        .execute(&pool)
+        .await;
+
         // Pool is already created above and migrated
 
         //println!("📂 Initializing LanceDB...");
@@ -126,5 +139,24 @@ impl Database {
 
         //println!("✨ Database initialization complete.");
         Ok(database)
+    }
+
+    /// Test-only: a fresh in-memory database with all migrations applied (no seed
+    /// data, no runtime staging). Used by the main-crate kernel bridge integration
+    /// test so it can exercise the real glue without touching the user's DB.
+    #[cfg(test)]
+    pub(crate) async fn new_in_memory() -> anyhow::Result<Self> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await?;
+        sqlx::migrate!("./migrations").run(&pool).await?;
+        Ok(Self {
+            pool,
+            snowflake: Arc::new(Mutex::new(SnowflakeIdGenerator::new(1, 1))),
+            lancedb_uri: String::new(),
+            remote_url: None,
+            http_client: reqwest::Client::new(),
+        })
     }
 }
