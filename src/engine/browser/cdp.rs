@@ -34,3 +34,16 @@ pub async fn cdp_call(ws_url: &str, method: &str, params: Value) -> Result<Value
         }
     }
 }
+
+pub async fn block_resources(ws_url: &str) -> Result<()> {
+    cdp_call(ws_url, "Network.enable", serde_json::json!({})).await?;
+    cdp_call(ws_url, "Network.setBlockedURLs", serde_json::json!({
+        "urls": [
+            "*.png", "*.jpg", "*.gif", "*.svg", "*.ico",
+            "*.woff", "*.woff2", "*.ttf", "*.eot",
+            "*.mp4", "*.mp3", "*.webm",
+            "*/analytics/*", "*/tracking/*", "*/ads/*", "*/beacon/*",
+        ]
+    })).await?;
+    Ok(())
+}

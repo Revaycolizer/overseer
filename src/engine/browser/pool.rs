@@ -48,7 +48,15 @@ impl BrowserPool {
         let (process, cdp_ws_url) = spawner::spawn_obscura(port, &profile_path, self.config.stealth).await?;
 
         let session = BrowserSession::new(id, port, profile_path, Some(process), cdp_ws_url);
+        let ws_url = session.cdp_ws_url.clone();
         inner.sessions.insert(id, session);
+        drop(inner);
+
+        // Resource blocking in the background — non-critical
+        let ws = ws_url.clone();
+        tokio::spawn(async move {
+            let _ = super::cdp::block_resources(&ws).await;
+        });
 
         Ok(id)
     }
