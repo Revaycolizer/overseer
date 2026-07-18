@@ -38,6 +38,8 @@ sha2 = "0.10"
 csv = "1.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+image = "0.25"
+zenwebp = "0.2"
 rayon = "1.10"
 docx-rs = "0.4"
 genpdf = "0.2"

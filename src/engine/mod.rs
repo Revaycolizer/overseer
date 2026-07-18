@@ -1,3 +1,4 @@
+pub mod browser;
 #[cfg(feature = "memory")]
 pub mod memory;
 pub mod activity;
