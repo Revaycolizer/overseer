@@ -30,7 +30,9 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(tools::router())
         .merge(workflows::router())
         .merge(work_items::router())
+        .merge(workflow_triggers::router())
         .merge(planners::router())
+        .merge(workflow_triggers::router())
         .merge(supervision::router())
         .merge(versions::router())
         .merge(artifacts::router())
@@ -68,6 +70,7 @@ pub mod messages;
 pub mod agents;
 pub mod supervisors;
 pub mod tools;
+pub mod workflow_triggers;
 pub mod workflows;
 pub mod work_items;
 pub mod planners;
