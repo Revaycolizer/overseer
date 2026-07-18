@@ -14,11 +14,17 @@ use std::sync::Arc;
 pub struct LocalClient {
     pub db: Arc<Database>,
     pub agent_system: Arc<AgentSystem>,
+    pub browser_pool: Arc<crate::engine::browser::pool::BrowserPool>,
 }
 
 impl LocalClient {
     pub fn new(db: Arc<Database>, agent_system: Arc<AgentSystem>) -> Self {
-        Self { db, agent_system }
+        let data_dir = crate::db::get_overseer_data_dir();
+        let browser_pool = Arc::new(crate::engine::browser::pool::BrowserPool::new(
+            crate::engine::browser::pool::PoolConfig::default(),
+            data_dir,
+        ));
+        Self { db, agent_system, browser_pool }
     }
 }
 

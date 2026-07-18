@@ -8,10 +8,16 @@ use tower_governor::GovernorLayer;
 pub struct ServerState {
     pub db: Arc<Database>,
     pub agent_system: Arc<AgentSystem>,
+    pub browser_pool: Arc<crate::engine::browser::pool::BrowserPool>,
 }
 
 pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port: u16) -> anyhow::Result<()> {
-    let state = Arc::new(ServerState { db, agent_system });
+    let data_dir = crate::db::get_overseer_data_dir();
+    let browser_pool = Arc::new(crate::engine::browser::pool::BrowserPool::new(
+        crate::engine::browser::pool::PoolConfig::default(),
+        data_dir,
+    ));
+    let state = Arc::new(ServerState { db, agent_system, browser_pool });
 
     let app = Router::new()
         .merge(conversations::router())
