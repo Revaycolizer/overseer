@@ -9,7 +9,6 @@ pub fn ChatComposer(props: ChatInputProps) -> Element {
     let state = use_chat_state(&props);
     let mut input_text = state.input_text;
     let is_thinking = state.is_thinking;
-    let is_local_executing = state.is_local_executing;
     let mut pending_attachments = state.pending_attachments;
     let selected_conversation_id = props.selected_conversation_id;
     let send_fn = state.send.clone();

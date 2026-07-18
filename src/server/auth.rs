@@ -101,7 +101,7 @@ async fn get_avatar(
     let data = sqlx::query_scalar::<_, Vec<u8>>("SELECT avatar_data FROM users WHERE id = ?")
         .bind(id).fetch_optional(&state.db.pool).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .flatten()
+        .and_then(|v| if v.is_empty() { None } else { Some(v) })
         .ok_or(StatusCode::NOT_FOUND)?;
     Ok(([(header::CONTENT_TYPE, "image/png")], Bytes::from(data)))
 }
