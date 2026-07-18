@@ -67,6 +67,46 @@ impl WorkflowRunner {
                 let text = resp.text().await.unwrap_or_default();
                 Ok(serde_json::json!({"status": status, "body": text}))
             }
+            "browser_session" => {
+                let pool = crate::engine::browser::global::get()
+                    .ok_or_else(|| anyhow::anyhow!("Browser pool not initialized"))?;
+                let id = pool.create_session(None).await?;
+                Ok(serde_json::json!({"session_id": id}))
+            }
+            "browser_navigate" => {
+                let pool = crate::engine::browser::global::get()
+                    .ok_or_else(|| anyhow::anyhow!("Browser pool not initialized"))?;
+                let sid = cfg.get("session_id").and_then(|v| v.as_i64()).ok_or_else(|| anyhow::anyhow!("missing session_id"))?;
+                let url = cfg.get("url").and_then(|v| v.as_str()).ok_or_else(|| anyhow::anyhow!("missing url"))?;
+                let result = pool.cdp_call(sid, "Page.navigate", serde_json::json!({"url": url})).await?;
+                Ok(result)
+            }
+            "browser_click" => {
+                let pool = crate::engine::browser::global::get()
+                    .ok_or_else(|| anyhow::anyhow!("Browser pool not initialized"))?;
+                let sid = cfg.get("session_id").and_then(|v| v.as_i64()).ok_or_else(|| anyhow::anyhow!("missing session_id"))?;
+                let selector = cfg.get("selector").and_then(|v| v.as_str()).ok_or_else(|| anyhow::anyhow!("missing selector"))?;
+                let result = pool.cdp_call(sid, "Runtime.evaluate", serde_json::json!({
+                    "expression": format!("document.querySelector('{}').click()", selector),
+                })).await?;
+                Ok(result)
+            }
+            "browser_screenshot" => {
+                let pool = crate::engine::browser::global::get()
+                    .ok_or_else(|| anyhow::anyhow!("Browser pool not initialized"))?;
+                let sid = cfg.get("session_id").and_then(|v| v.as_i64()).ok_or_else(|| anyhow::anyhow!("missing session_id"))?;
+                let result = pool.cdp_call(sid, "Page.captureScreenshot", serde_json::json!({"format": "png"})).await?;
+                Ok(result)
+            }
+            "browser_extract" => {
+                let pool = crate::engine::browser::global::get()
+                    .ok_or_else(|| anyhow::anyhow!("Browser pool not initialized"))?;
+                let sid = cfg.get("session_id").and_then(|v| v.as_i64()).ok_or_else(|| anyhow::anyhow!("missing session_id"))?;
+                let result = pool.cdp_call(sid, "Runtime.evaluate", serde_json::json!({
+                    "expression": "document.body.innerText",
+                })).await?;
+                Ok(result)
+            }
             "if" => {
                 let condition = cfg.get("condition").and_then(|v| v.as_str()).unwrap_or("");
                 Ok(serde_json::json!({"condition": condition, "result": !condition.is_empty()}))

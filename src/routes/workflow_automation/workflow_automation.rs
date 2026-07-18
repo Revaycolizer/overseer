@@ -98,4 +98,9 @@ const NODE_TYPES: &[(&str, &str, &str)] = &[
     ("http_request", "HTTP Request", "http"),
     ("if", "Condition", "call_split"),
     ("set", "Set Value", "data_object"),
+    ("browser_session", "Browser Session", "language"),
+    ("browser_navigate", "Navigate", "open_in_new"),
+    ("browser_click", "Click", "touch_app"),
+    ("browser_screenshot", "Screenshot", "screenshot"),
+    ("browser_extract", "Extract Text", "text_snippet"),
 ];
