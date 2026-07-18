@@ -159,8 +159,14 @@ fn send_message(
             if spawn_llm_refinement {
                 let agent_title = agent_ref.clone();
                 let db_t = db.clone();
+                let q_t = q.clone();
                 tokio::spawn(async move {
-                    let _ = agent_title.generate_title(&db_t, &q).await;
+                    let title = agent_title.generate_title(&db_t, &q_t).await;
+                    if title.is_empty() {
+                        tracing::warn!("Title generation returned empty string");
+                    } else {
+                        tracing::info!(?title, "Generated conversation title");
+                    }
                 });
             }
         });
