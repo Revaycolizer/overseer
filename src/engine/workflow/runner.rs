@@ -31,7 +31,7 @@ impl WorkflowRunner {
     async fn execute_node(&self, node: &super::graph::WorkflowNode) -> anyhow::Result<serde_json::Value> {
         let cfg: Value = serde_json::from_str(&node.config_json).unwrap_or(Value::Object(Default::default()));
         match node.node_type.as_str() {
-            "manual_trigger" => Ok(serde_json::json!({"triggered": true})),
+            "manual_trigger" | "chat_trigger" => Ok(serde_json::json!({"triggered": true})),
             "agent" => {
                 let query = cfg.get("query").and_then(|v| v.as_str()).unwrap_or("");
                 let db = self.db.clone();
