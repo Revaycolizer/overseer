@@ -11,6 +11,8 @@ pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
         .route("/v1/browser/sessions", post(create_session))
         .route("/v1/browser/sessions/{id}", get(get_session).delete(close_session))
+        .route("/v1/browser/sessions/{id}/navigate", post(navigate))
+        .route("/v1/browser/sessions/{id}/screenshot", get(screenshot))
 }
 
 #[derive(Serialize)]
@@ -52,4 +54,34 @@ async fn close_session(
 ) -> Result<Json<()>, String> {
     state.browser_pool.close_session(id).await.map_err(|e| e.to_string())?;
     Ok(Json(()))
+}
+
+#[derive(Deserialize)]
+struct NavigatePayload {
+    url: String,
+}
+
+async fn navigate(
+    State(state): State<Arc<ServerState>>,
+    Path(id): Path<i64>,
+    Json(payload): Json<NavigatePayload>,
+) -> Result<Json<serde_json::Value>, String> {
+    let ws_url = format!("ws://127.0.0.1:{}/devtools/browser", 9300 + id as u16);
+    let result = crate::engine::browser::cdp::cdp_call(
+        &ws_url, "Page.navigate",
+        serde_json::json!({"url": payload.url}),
+    ).await.map_err(|e| e.to_string())?;
+    Ok(Json(result))
+}
+
+async fn screenshot(
+    State(state): State<Arc<ServerState>>,
+    Path(id): Path<i64>,
+) -> Result<Json<serde_json::Value>, String> {
+    let ws_url = format!("ws://127.0.0.1:{}/devtools/browser", 9300 + id as u16);
+    let result = crate::engine::browser::cdp::cdp_call(
+        &ws_url, "Page.captureScreenshot",
+        serde_json::json!({"format": "png"}),
+    ).await.map_err(|e| e.to_string())?;
+    Ok(Json(result))
 }
