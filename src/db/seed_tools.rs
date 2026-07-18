@@ -69,6 +69,7 @@ impl Database {
             ("clipboard_read", "Read text from the system clipboard."),
             ("clipboard_write", "Write text to the system clipboard."),
             ("document_writer", "Generate CSV, Excel (XLSX), Word (DOCX), and beautiful PDF reports in parallel."),
+            ("write_file", "Write text content to a file at an absolute path (creates parent dirs). Input: {\"path\": \"...\", \"content\": \"...\"}. Kernel-governed filesystem write; requires approval."),
         ];
         for (name, desc) in native_tools {
             tools_data.push((
@@ -126,6 +127,9 @@ impl Database {
             ("desktop", "app_launcher"), ("desktop", "clipboard_read"),
             ("desktop", "clipboard_write"), ("office", "document_writer"),
             ("computer", "document_writer"), ("desktop", "document_writer"),
+            ("computer", "write_file"), ("desktop", "write_file"),
+            ("office", "write_file"), ("text_writer", "write_file"),
+            ("orchestrator", "write_file"),
         ];
 
         for (domain, tool_name) in mappings {
