@@ -10,7 +10,7 @@ pub async fn discover_semantic_agents(
     limit: usize,
     ollama_client: &ollama::Client,
 ) -> Vec<AgentInfo> {
-    let mut supervisors = sqlx::query_as::<_, crate::db::Supervisor>(
+    let supervisors = sqlx::query_as::<_, crate::db::Supervisor>(
         "SELECT * FROM supervisors ORDER BY routing_priority DESC"
     ).fetch_all(&db.pool).await.unwrap_or_default();
 

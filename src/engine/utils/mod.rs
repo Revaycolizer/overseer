@@ -1,6 +1,6 @@
 pub mod discovery;
+pub mod system_idle;
 
-use rig::tool::Tool;
 use tokio::process::Command;
 
 pub async fn get_browser_dom_tree() -> Option<String> {
@@ -157,7 +157,7 @@ fn repair_json_truncation(input: &str) -> String {
     // One more try: If the last char is a comma, it's definitely truncated mid-field
     let trimmed = repaired.trim();
     if trimmed.ends_with(',') {
-        let mut final_repaired = trimmed[..trimmed.len() - 1].to_string();
+        let final_repaired = trimmed[..trimmed.len() - 1].to_string();
         // Recalculate braces for the shorter version
         // (Simplified: just re-run the same logic)
         return repair_json_truncation(&final_repaired);

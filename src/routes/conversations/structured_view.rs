@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
-use crate::routes::conversations::types::{StructuredResponse, MessagePart, SourcePart, UnknownPart, ChartPart, VizBlock, VizKind};
+use crate::routes::conversations::types::{StructuredResponse, SourcePart, UnknownPart, VizBlock, VizKind};
 use crate::routes::conversations::markdown_renderer::MarkdownText;
 use crate::routes::conversations::attachment_view::AttachmentPreview;
 use crate::routes::conversations::chart_view::ChartBlock;
@@ -53,7 +53,7 @@ pub fn StructuredView(res: StructuredResponse, hide_evidence: bool) -> Element {
             }
             for (i, chart) in res.charts.iter().enumerate() {
                 {
-                    let mut kind = match chart.chart_type.to_lowercase().as_str() {
+                    let kind = match chart.chart_type.to_lowercase().as_str() {
                         "svg" | "html" => VizKind::Svg,
                         "bar" | "line" | "pie" | "data" => VizKind::Data,
                         _ => VizKind::Asset,

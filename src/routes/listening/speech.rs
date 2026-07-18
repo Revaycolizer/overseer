@@ -1,0 +1,147 @@
+use dioxus::prelude::*;
+use dioxus::prelude::document::eval;
+use crate::state::GlobalState;
+use super::async_orchestrator;
+
+pub fn use_speech_recognition(state: Signal<GlobalState>) {
+    let is_listening_sig = state.peek().is_listening;
+    let is_inhibited_sig = state.peek().is_inhibited;
+    let voice_transcript_sig = state.peek().voice_transcript;
+    let voice_result_sig = state.peek().voice_result;
+    let db = state.peek().db.clone();
+    let agent = state.peek().agent_system.clone();
+
+    use_effect(move || {
+        let is_listening = *is_listening_sig.read();
+        if !is_listening {
+            return;
+        }
+        
+        let db = db.clone();
+        let agent = agent.clone();
+        let is_listening_sig = is_listening_sig.clone();
+        let is_inhibited_sig = is_inhibited_sig.clone();
+        let mut voice_transcript_sig = voice_transcript_sig.clone();
+        let voice_result_sig = voice_result_sig.clone();
+
+        spawn(async move {
+            if voice_transcript_sig.read().is_some() {
+                return;
+            }
+            
+            // Wait 200ms for initial greeting TTS to start clearing audio channel
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            
+            let mut eval_handle = eval(r#"
+                const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRec) {
+                    dioxus.send({ type: "error", message: "Web Speech API not supported" });
+                    return;
+                }
+                const rec = new SpeechRec();
+                rec.lang = 'en-US';
+                rec.interimResults = true;
+                rec.continuous = false;
+                rec.start();
+                
+                rec.onresult = (e) => {
+                    let interim = "";
+                    let finalResult = "";
+                    for (let i = e.resultIndex; i < e.results.length; ++i) {
+                        const text = e.results[i][0].transcript;
+                        if (e.results[i].isFinal) {
+                            finalResult += text;
+                        } else {
+                            interim += text;
+                        }
+                    }
+                    if (finalResult.length > 0) {
+                        dioxus.send({ type: "final", text: finalResult });
+                    } else if (interim.length > 0) {
+                        dioxus.send({ type: "interim", text: interim });
+                    }
+                };
+                
+                rec.onerror = (e) => {
+                    dioxus.send({ type: "error", message: e.error });
+                };
+                
+                rec.onend = () => {
+                    dioxus.send({ type: "end" });
+                };
+            "#);
+
+            let final_received = false;
+            while let Ok(msg) = eval_handle.recv::<serde_json::Value>().await {
+                if let Some(msg_type) = msg.get("type").and_then(|v| v.as_str()) {
+                    match msg_type {
+                        "interim" => {
+                            if !final_received {
+                                if let Some(text) = msg.get("text").and_then(|v| v.as_str()) {
+                                    voice_transcript_sig.set(Some(text.to_string()));
+                                }
+                            }
+                        }
+                        "final" => {
+                            if let Some(text) = msg.get("text").and_then(|v| v.as_str()) {
+                                let cmd = text.trim().to_string();
+                                if !cmd.is_empty() {
+                                    println!("🎙️ Web Speech API transcribed: \"{}\"", cmd);
+                                    
+                                    let db = db.clone();
+                                    let agent = agent.clone();
+                                    let voice_transcript_sig = voice_transcript_sig.clone();
+                                    let voice_result_sig = voice_result_sig.clone();
+                                    let is_listening_sig = is_listening_sig.clone();
+                                    let is_inhibited_sig = is_inhibited_sig.clone();
+                                    
+                                    spawn(async move {
+                                        async_orchestrator::run_orchestration_async(
+                                            db,
+                                            agent,
+                                            cmd,
+                                            voice_transcript_sig,
+                                            voice_result_sig,
+                                            is_listening_sig,
+                                            is_inhibited_sig,
+                                        ).await;
+                                    });
+                                    break;
+                                }
+                            }
+                        }
+                        "error" => {
+                            eprintln!("🎙️ Speech Recognition Error: {:?}. Running local fallback...", msg.get("message"));
+                            let db = db.clone();
+                            let agent = agent.clone();
+                            let voice_transcript_sig = voice_transcript_sig.clone();
+                            let voice_result_sig = voice_result_sig.clone();
+                            let is_listening_sig = is_listening_sig.clone();
+                            let is_inhibited_sig = is_inhibited_sig.clone();
+                            spawn(async move {
+                                async_orchestrator::run_local_stt_fallback_async(db, agent, voice_transcript_sig, voice_result_sig, is_listening_sig, is_inhibited_sig).await;
+                            });
+                            break;
+                        }
+                        "end" => {
+                            if !final_received {
+                                println!("🎙️ Speech Recognition ended without result. Running local fallback...");
+                                let db = db.clone();
+                                let agent = agent.clone();
+                                let voice_transcript_sig = voice_transcript_sig.clone();
+                                let voice_result_sig = voice_result_sig.clone();
+                                let is_listening_sig = is_listening_sig.clone();
+                                let is_inhibited_sig = is_inhibited_sig.clone();
+                                spawn(async move {
+                                    async_orchestrator::run_local_stt_fallback_async(db, agent, voice_transcript_sig, voice_result_sig, is_listening_sig, is_inhibited_sig).await;
+                                });
+                            }
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        });
+    });
+}

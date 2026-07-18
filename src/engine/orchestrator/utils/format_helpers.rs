@@ -25,7 +25,7 @@ pub fn extract_artifact_path(item: &str) -> Option<String> {
                         lower.contains(".doc") || lower.contains(".txt") || lower.contains(".json") ||
                         lower.contains(".md") || lower.contains(".svg");
 
-    if (has_extension && (item.contains('/') || item.contains('\\') || item.contains("assets/"))) {
+    if has_extension && (item.contains('/') || item.contains('\\') || item.contains("assets/"))  {
         return Some(item.trim().to_string());
     }
 

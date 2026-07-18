@@ -2,12 +2,10 @@
 use super::artifact_workbench_parts::WorkbenchSurfaces;
 use super::artifact_workbench_utils::WorkbenchUtilities;
 use super::artifact_panel::ArtifactKindBadge;
-use super::helpers::copy_to_clipboard;
 use super::route_summary::prettify_token;
 use base64::{engine::general_purpose, Engine as _};
 use crate::backend;
 use dioxus::prelude::*;
-use dioxus_material_icons::MaterialIcon;
 
 #[component]
 pub fn ArtifactWorkbenchPanel(
@@ -39,7 +37,7 @@ pub fn ArtifactWorkbenchPanel(
     let has_other_selected = selected_artifacts().iter().any(|s| s.id != artifact.id);
     let other_selected_labels = selected_artifacts().iter().filter(|s| s.id != artifact.id).map(|s| s.label.clone()).collect::<Vec<_>>();
     let default_surface = if has_other_selected { "compare".to_string() } else { "summary".to_string() };
-    let mut active_surface = use_signal(move || default_surface.clone());
+    let active_surface = use_signal(move || default_surface.clone());
 
     rsx! {
         div { class: "rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 shadow-sm space-y-4",

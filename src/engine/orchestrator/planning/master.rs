@@ -1,5 +1,4 @@
-use crate::engine::utils::discovery::AgentInfo;
-use rig::{agent::AgentBuilder, client::CompletionClient, completion::{Chat, Prompt}, providers::ollama};
+use rig::{agent::AgentBuilder, client::CompletionClient, completion::Chat, providers::ollama};
 
 #[derive(Clone)]
 pub struct MasterPlanner {
@@ -113,9 +112,13 @@ Output: [
             prompt
         };
 
-        agent
-            .chat(safe_prompt, history)
-            .await
-            .unwrap_or_else(|e| format!("[{{\"domain\": \"error\", \"task\": \"{}\"}}]", e))
+        let _permit = crate::engine::resilience::ollama_dispatch_throttle().acquire().await;
+        crate::engine::resilience::with_resilience(
+            crate::engine::resilience::ollama(),
+            3,
+            || agent.chat(safe_prompt, history.clone()),
+        )
+        .await
+        .unwrap_or_else(|e| format!("[{{\"domain\": \"error\", \"task\": \"{}\"}}]", e))
     }
 }

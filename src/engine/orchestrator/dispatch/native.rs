@@ -42,7 +42,7 @@ pub fn is_native_browser_state_request(query: &str, step: &str, domain: &str) ->
     combined.contains("current tab") || combined.contains("browser state") || (combined.contains("browser") && combined.contains("open"))
 }
 
-pub fn is_native_document_request(query: &str, _step: &str, domain: &str) -> bool {
+pub fn is_native_document_request(query: &str, _step: &str, _domain: &str) -> bool {
     // Note: We removed 'office' from here in our logic to force MultiStep coordination, 
     // but the helper remains for context-aware fast-paths if needed.
     let lower = query.to_lowercase();
@@ -68,7 +68,7 @@ pub fn native_selector_action(query: &str, step: &str, domain: &str) -> Option<&
     None
 }
 
-pub async fn evaluate_computer_tool_gate(db: &Database, domain: &str, tool_name: &str, safety_level: &str, input_json: &Value) -> ToolGateDecision {
+pub async fn evaluate_computer_tool_gate(_db: &Database, _domain: &str, _tool_name: &str, _safety_level: &str, _input_json: &Value) -> ToolGateDecision {
     // Logic from dispatcher's evaluate_computer_tool_gate...
     // Simplified for now, will copy full logic if needed.
     ToolGateDecision { allowed: true, reason: None, action_summary: None, action_tool: false }

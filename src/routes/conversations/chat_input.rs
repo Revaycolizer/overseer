@@ -2,7 +2,6 @@ use crate::backend;
 use crate::routes::conversations::helpers::build_query_with_context;
 use crate::state::use_global_state;
 use base64::{engine::general_purpose, Engine as _};
-use dioxus::prelude::dioxus_core::Task;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
@@ -26,20 +25,20 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     let db = global_read.db.clone();
     drop(global_read);
 
-    let mut selected_artifacts = props.selected_artifacts;
+    let selected_artifacts = props.selected_artifacts;
     let mut selected_work_item = props.selected_work_item;
     let selected_conversation_id = props.selected_conversation_id;
-    let mut starter_prompt = props.starter_prompt;
+    let starter_prompt = props.starter_prompt;
     let selected_artifact_count = selected_artifacts().len();
     let has_active_work_item = selected_work_item().is_some();
     let db_for_computer_state = db.clone();
 
-    let mut computer_state_resource = use_resource(move || {
+    let computer_state_resource = use_resource(move || {
         let db = db_for_computer_state.clone();
         async move { backend::get_computer_supervision_state(&db).await }
     });
 
-    let computer_state = computer_state_resource.read().cloned();
+    let computer_state = computer_state_resource.read().as_ref().and_then(|r| r.as_ref().ok().cloned());
     let supervision_mode = computer_state
         .as_ref()
         .map(|state| state.supervision_mode.clone())
@@ -110,7 +109,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                             value: "{supervision_mode}",
                             onchange: {
                                 let db = db.clone();
-                                let mut computer_state_resource = computer_state_resource.clone();
+                                let computer_state_resource = computer_state_resource.clone();
                                 move |evt| {
                                     let db = db.clone();
                                     let mut computer_state_resource = computer_state_resource.clone();
@@ -149,7 +148,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                                 class: "inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700 transition-all",
                                 onclick: {
                                     let db = db.clone();
-                                    let mut computer_state_resource = computer_state_resource.clone();
+                                    let computer_state_resource = computer_state_resource.clone();
                                     move |_| {
                                         let db = db.clone();
                                         let mut computer_state_resource = computer_state_resource.clone();
@@ -166,7 +165,7 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                                 class: "inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 font-bold text-red-600 hover:bg-red-50 transition-all",
                                 onclick: {
                                     let db = db.clone();
-                                    let mut computer_state_resource = computer_state_resource.clone();
+                                    let computer_state_resource = computer_state_resource.clone();
                                     move |_| {
                                         let db = db.clone();
                                         let mut computer_state_resource = computer_state_resource.clone();
@@ -221,14 +220,16 @@ fn ChatComposer(props: ChatInputProps) -> Element {
 
     let mut input_text = use_signal(|| String::new());
     let mut pending_attachments = use_signal(|| Vec::<(String, String, Vec<u8>)>::new());
-    let mut is_thinking = props.is_thinking;
-    let mut active_request_task = use_signal(|| None::<Task>);
+    let is_thinking = props.is_thinking;
+    let mut active_request_abort_handle = use_signal(|| None::<tokio::task::AbortHandle>);
+    let mut is_local_executing = use_context::<Signal<bool>>();
+    let execution_runs_resource = use_context::<Resource<Vec<backend::ExecutionRun>>>();
 
-    let mut messages_resource = props.messages_resource;
+    let messages_resource = props.messages_resource;
     let mut visible_messages = props.visible_messages;
-    let mut conversations_resource = props.conversations_resource;
+    let conversations_resource = props.conversations_resource;
     let mut selected_artifacts = props.selected_artifacts;
-    let mut selected_work_item = props.selected_work_item;
+    let selected_work_item = props.selected_work_item;
     let selected_conversation_id = props.selected_conversation_id;
     let is_first_msg = props.is_first_msg;
     let mut starter_prompt = props.starter_prompt;
@@ -240,12 +241,12 @@ fn ChatComposer(props: ChatInputProps) -> Element {
         }
     });
 
-    let mut send = use_callback(move |()| {
+    let send = use_callback(move |()| {
         let val = input_text();
         if val.trim().is_empty() || is_thinking() {
             return;
         }
-        is_thinking.set(true);
+        is_local_executing.set(true);
         input_text.set(String::new());
         let attachments = pending_attachments();
         pending_attachments.set(vec![]);
@@ -262,13 +263,17 @@ fn ChatComposer(props: ChatInputProps) -> Element {
         let mut conversations_inner = conversations_resource.clone();
         let conv_id = selected_conversation_id();
         let mut selected_conversation_id_inner = selected_conversation_id.clone();
-        let mut active_request_task_inner = active_request_task;
+        let mut active_request_abort_handle_inner = active_request_abort_handle;
+        let mut is_local_executing_inner = is_local_executing;
+        let mut execution_runs_resource_inner = execution_runs_resource;
         let query = val.clone();
+        let data_dir = crate::db::get_overseer_data_dir();
+        let overseer_files_dir = data_dir.join("overseer_files");
         let optimistic_id = -chrono::Utc::now().timestamp_micros();
         let optimistic_attachments: Vec<backend::Attachment> = attachments.iter().map(|(name, mime, data)| {
             backend::Attachment {
                 id: 0, message_id: 0, filename: name.clone(),
-                file_path: format!("overseer_files/{}", name),
+                file_path: overseer_files_dir.join(name).to_string_lossy().to_string(),
                 content_type: mime.clone(), size: data.len() as i64, extracted_content: None,
             }
         }).collect();
@@ -287,93 +292,194 @@ fn ChatComposer(props: ChatInputProps) -> Element {
             });
         }
 
-        let task = spawn(async move {
+        let is_first_msg_val = is_first_msg;
+
+        let _task = spawn(async move {
+            let mut resolved_conv_id = conv_id;
             let mut created_new_conversation = false;
-            let conversation_id = if let Some(id) = conv_id {
-                id
-            } else {
+
+            if resolved_conv_id.is_none() {
                 match backend::add_conversation(&db_inner, "New Conversation").await {
                     Ok(id) => {
                         created_new_conversation = true;
+                        resolved_conv_id = Some(id);
                         selected_conversation_id_inner.set(Some(id));
                         conversations_inner.restart();
                         visible_messages_inner.set(vec![backend::Message {
                             id: optimistic_id,
                             conversation_id: id,
                             role: "user".to_string(),
-                            content: val.clone(),
+                            content: query.clone(),
                             created_at: chrono::Utc::now().naive_utc(),
                             attachments: optimistic_attachments.clone(),
                             hide_evidence: false,
                         }]);
-                        id
                     }
                     Err(_) => {
-                        is_thinking.set(false);
-                        active_request_task_inner.set(None);
+                        is_local_executing_inner.set(false);
+                        active_request_abort_handle_inner.set(None);
                         return;
                     }
                 }
+            }
+            let conversation_id = resolved_conv_id.unwrap();
+
+            // No 4-word optimistic title write: the LLM refinement via
+            // the chat_input spawn (and the engine_system.orchestrate
+            // one) writes the proper title within 1-3 s. The 4-word
+            // placeholder was racing with the LLM and could overwrite
+            // a real title when the LLM returned empty / errored.
+            let spawn_llm_refinement = is_first_msg_val || created_new_conversation;
+
+            let (title_tx, title_rx) = tokio::sync::oneshot::channel::<()>();
+            let mut conversations_for_title = conversations_inner.clone();
+            spawn(async move {
+                if title_rx.await.is_ok() {
+                    conversations_for_title.restart();
+                }
+            });
+
+            let assistant_tx = crate::routes::conversations::assistant_stream::install_listener(visible_messages);
+
+            // V4.17.1d: per-token streaming. The streaming consumer must
+            // be a Dioxus spawn (not a tokio spawn) because it captures
+            // the non-Send `visible_messages` Signal. It runs alongside
+            // the outer tokio spawn (which only holds Send values).
+            let (token_tx, token_rx) =
+                tokio::sync::mpsc::unbounded_channel::<String>();
+            let mut visible_for_stream = visible_messages;
+            spawn(async move {
+                let mut partial = String::new();
+                let mut receiver = token_rx;
+                while let Some(chunk) = receiver.recv().await {
+                    partial.push_str(&chunk);
+                    visible_for_stream.with_mut(|msgs| {
+                        if let Some(last) = msgs.last_mut() {
+                            if last.role == "assistant" {
+                                last.content = partial.clone();
+                            } else {
+                                msgs.push(backend::Message {
+                                    id: 0,
+                                    conversation_id,
+                                    role: "assistant".to_string(),
+                                    content: partial.clone(),
+                                    created_at: chrono::Utc::now().naive_utc(),
+                                    attachments: vec![],
+                                    hide_evidence: false,
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+
+            let handle = tokio::spawn(async move {
+                if let Ok(mut cache) = crate::engine::cache::messages().write() {
+                    cache.invalidate(&conversation_id);
+                }
+                if let Ok(msg_id) = backend::add_message(
+                    &db_inner,
+                    conversation_id,
+                    "user",
+                    &query_with_artifacts,
+                    false,
+                )
+                .await
+                {
+                    if spawn_llm_refinement {
+                        let db_for_title = db_inner.clone();
+                        let agent_for_title = agent_inner.clone();
+                        let query_for_title = query.clone();
+                        let conv_id_for_title = conversation_id;
+                        let title_tx = title_tx;
+                        tokio::spawn(async move {
+                            let real_title = agent_for_title.generate_title(&db_for_title, &query_for_title).await;
+                            if !real_title.is_empty() {
+                                let _ = backend::update_conversation_title(&db_for_title, conv_id_for_title, &real_title).await;
+                                let _ = title_tx.send(());
+                            }
+                        });
+                    }
+                    for (name, mime, data) in attachments {
+                        let folder = &overseer_files_dir;
+                        let _ = std::fs::create_dir_all(folder);
+                        let path = folder.join(&name);
+                        let path_str = path.to_string_lossy().to_string();
+                        let _ = std::fs::write(&path, &data);
+                        let _ = backend::add_attachment(
+                            &db_inner,
+                            msg_id,
+                            &name,
+                            &path_str,
+                            &mime,
+                            data.len() as i64,
+                        )
+                        .await;
+                    }
+
+                    // V4.17.1d: per-token streaming. The streaming
+                    // consumer is a Dioxus spawn above this outer
+                    // tokio::spawn (set up at line ~351). The dispatch's
+                    // collect_stream_with_sender pushes each text
+                    // chunk to a tokio::mpsc::UnboundedSender; the
+                    // Dioxus consumer drains the receiver and updates
+                    // the partial assistant message in
+                    // visible_messages in real time. Here we just pass
+                    // the sender into orchestrate.
+                    let response = agent_inner
+                        .orchestrate(
+                            &db_inner,
+                            conversation_id,
+                            &query_with_artifacts,
+                            Some(token_tx),
+                        )
+                        .await;
+
+                    let _ =
+                        backend::add_message(&db_inner, conversation_id, "assistant", &response, false)
+                            .await;
+                    // Invalidate the cached first-page for this conversation so
+                    // a switch-away-and-back returns the assistant message; the
+                    // channel push above already updated the live visible_messages
+                    // but the persistent cache only saw the user message.
+                    if let Ok(mut cache) = crate::engine::cache::messages().write() {
+                        cache.invalidate(&conversation_id);
+                    }
+                    let _ = assistant_tx.send(crate::routes::conversations::assistant_stream::assistant_message(conversation_id, response.clone()));
+                    true
+                } else {
+                    false
+                }
+            });
+
+            active_request_abort_handle_inner.set(Some(handle.abort_handle()));
+
+            let success = match handle.await {
+                Ok(res) => res,
+                Err(_) => false,
             };
 
-            if let Ok(msg_id) = backend::add_message(
-                &db_inner,
-                conversation_id,
-                "user",
-                &query_with_artifacts,
-                false,
-            )
-            .await
-            {
-                if is_first_msg || created_new_conversation {
-                    let new_title = agent_inner.generate_title(&db_inner, &query).await;
-                    let _ =
-                        backend::update_conversation_title(&db_inner, conversation_id, &new_title)
-                            .await;
-                    conversations_inner.restart();
-                }
-                for (name, mime, data) in attachments {
-                    let folder = "overseer_files";
-                    let _ = std::fs::create_dir_all(folder);
-                    let path = format!("{folder}/{name}");
-                    let _ = std::fs::write(&path, &data);
-                    let _ = backend::add_attachment(
-                        &db_inner,
-                        msg_id,
-                        &name,
-                        &path,
-                        &mime,
-                        data.len() as i64,
-                    )
-                    .await;
-                }
+            if success {
                 messages_inner.restart();
-                is_thinking.set(true);
-                let response = agent_inner
-                    .orchestrate(&db_inner, conversation_id, &query_with_artifacts)
-                    .await;
-                is_thinking.set(false);
-                let _ =
-                    backend::add_message(&db_inner, conversation_id, "assistant", &response, false)
-                        .await;
-                messages_inner.restart();
-                active_request_task_inner.set(None);
+                conversations_inner.restart();
+                execution_runs_resource_inner.restart();
+                is_local_executing_inner.set(false);
+                active_request_abort_handle_inner.set(None);
             } else {
-                is_thinking.set(false);
+                is_local_executing_inner.set(false);
                 visible_messages_inner
                     .write()
                     .retain(|message| message.id != optimistic_id);
-                active_request_task_inner.set(None);
+                active_request_abort_handle_inner.set(None);
             }
         });
-        active_request_task.set(Some(task));
     });
 
     let stop = use_callback(move |()| {
-        if let Some(task) = active_request_task.take() {
-            task.cancel();
+        if let Some(abort_handle) = active_request_abort_handle.take() {
+            abort_handle.abort();
         }
-        is_thinking.set(false);
+        is_local_executing.set(false);
 
         if let Some(conversation_id) = selected_conversation_id() {
             let db = db_for_stop.clone();

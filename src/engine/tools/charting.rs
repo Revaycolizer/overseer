@@ -29,7 +29,7 @@ pub fn generate_chart_svg(req: ChartRequest) -> Result<String, String> {
     if req.chart_type == "pie" && req.data.len() < 2 {
         return Err("Pie chart requires at least 2 data points".to_string());
     }
-    let data_values: Vec<charming::datatype::DataPoint> = req
+    let _data_values: Vec<charming::datatype::DataPoint> = req
         .data
         .iter()
         .map(|&v| charming::datatype::DataPoint::Value(charming::datatype::CompositeValue::from(v)))
@@ -96,7 +96,7 @@ fn render_bar(title: &str, labels: &[String], data: &[f64]) -> Result<String, St
 fn render_line(title: &str, labels: &[String], data: &[f64]) -> Result<String, String> {
     let min_val = data.iter().cloned().fold(f64::INFINITY, f64::min);
     let max_val = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let range = max_val - min_val;
+    let _range = max_val - min_val;
 
     // Always start from 0 if min is close to 0, otherwise add padding
     let y_min = 0.0_f64; // always start from 0

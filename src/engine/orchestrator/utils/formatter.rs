@@ -1,21 +1,36 @@
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
 use crate::engine::orchestrator::core::response::{StructuredResponse, MessagePart, SourcePart};
 use crate::engine::orchestrator::utils::format_helpers::{normalize_summary, extract_artifact_path, is_html_noise};
+use crate::engine::orchestrator::utils::json_strip::strip_embedded_json;
 
 pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredResponse {
     let mut structured = StructuredResponse::new();
     let final_summary = normalize_summary(&res.summary);
-    
+
     structured.status = res.status.clone();
 
     // 1. Messages Strategy:
     // If specifically provided by the supervisor, use them.
     if !res.messages.is_empty() {
-        structured.messages.extend(res.messages.clone());
+        // Some small models (qwen2.5 7b in particular) wrap their
+        // structured response as plain text inside `message` instead of
+        // emitting it as the proper JSON shape. Strip any embedded
+        // JSON shell so the renderer shows just the prose answer
+        // instead of "answer + duplicate JSON".
+        structured.messages.extend(
+            res.messages
+                .iter()
+                .cloned()
+                .map(|mut m| {
+                    m.message = strip_embedded_json(&m.message);
+                    m
+                }),
+        );
     } else {
         // Fallback synthesis from summary and evidence
         let mut message = final_summary.clone();
-        let is_generic = message == "Task completed." || message == "Done." || message == "Finished." || message.is_empty();
+        let lower = message.to_lowercase();
+        let is_generic = lower == "task completed." || lower == "done." || lower == "finished." || lower == "user task completed" || lower == "task completed" || message.is_empty();
 
         // STYLE-AWARE PROMOTION: If message is generic but we have findings, promote them.
         if is_generic && !res.evidence.is_empty() {
@@ -34,7 +49,7 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
                  }
             }
             
-            if message == "Task completed." || message == "Done." || message == "Finished." {
+            if lower == "task completed." || lower == "done." || lower == "finished." || lower == "user task completed" || lower == "task completed" {
                 message = format!("{}{}", message, findings_str);
             } else {
                 message = findings_str;
@@ -114,4 +129,51 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
     structured.charts.extend(res.charts.clone());
 
     structured
+}
+
+/// V4.17.10: render a `StructuredResponse` as a self-contained
+/// Markdown document for the conversation exporter. The
+/// existing `format_supervisor_result` focuses on UI widgets (blocks,
+/// sources) — this variant is a pure-Markdown rendering so
+/// the same `StructuredResponse` data can be archived or shared as
+/// `.md`.
+pub fn format_for_markdown(res: &StructuredResponse) -> String {
+    let mut out = String::new();
+    for m in &res.messages {
+        out.push_str(&format!(
+            "**{}:** {}\n\n",
+            m.role,
+            m.message.replace("```", "ʼʼʼ")
+        ));
+    }
+    if !res.sources.is_empty() {
+        out.push_str("### Sources\n\n");
+        for s in &res.sources {
+            out.push_str(&format!("- **{}**", s.source));
+            if !s.link.is_empty() {
+                out.push_str(&format!(" ([{}])", s.link));
+            }
+            if !s.description.is_empty() {
+                out.push_str(&format!(" — {}", s.description));
+            }
+            out.push_str("\n");
+        }
+        out.push('\n');
+    }
+    for (i, c) in res.charts.iter().enumerate() {
+        out.push_str(&format!(
+            "### Chart {}: {}\n\n\
+             ```\n\
+             type: {}\n\
+             labels: {:?}\n\
+             data:   {:?}\n\
+             ```\n\n",
+            i + 1,
+            c.title.as_deref().unwrap_or(""),
+            c.chart_type,
+            c.labels.as_deref().unwrap_or(&Vec::new()),
+            c.data.as_deref().unwrap_or(&Vec::new()),
+        ));
+    }
+    out
 }

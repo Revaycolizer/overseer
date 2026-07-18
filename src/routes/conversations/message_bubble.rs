@@ -1,8 +1,9 @@
 use dioxus::prelude::*;
 use crate::backend;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+use crate::engine::orchestrator::utils::json_strip::strip_embedded_json;
 use crate::routes::conversations::helpers::clean_content;
-use crate::routes::conversations::types::{StructuredResponse, VizBlock};
+use crate::routes::conversations::types::StructuredResponse;
 use crate::routes::conversations::markdown_renderer::MarkdownText;
 use crate::routes::conversations::attachment_view::AttachmentPreview;
 use crate::routes::conversations::chart_view::ChartBlock;
@@ -14,16 +15,34 @@ pub fn MessageBubble(msg: backend::Message, on_copy: EventHandler<String>) -> El
     if msg.role == "user" { return rsx! { UserBubble { msg, on_copy } }; }
 
     let mut structured: Option<StructuredResponse> = serde_json::from_str(&msg.content).ok();
-    
+
     // Fallback: If it's a SupervisorExecutionResult (standard engine result), convert it for the UI
     if structured.is_none() {
         if let Ok(res) = serde_json::from_str::<crate::engine::orchestrator::SupervisorExecutionResult>(&msg.content) {
             structured = Some(crate::engine::orchestrator::utils::formatter::format_supervisor_result(&res));
         }
     }
+
+    // Some small models (qwen2.5 7b in particular) wrap their structured
+    // response as plain text inside `messages[].message` instead of
+    // emitting the proper JSON shape. Strip any embedded JSON shell so
+    // the renderer shows just the prose answer instead of
+    // "answer + duplicate JSON".
+    if let Some(res) = structured.as_mut() {
+        for m in res.messages.iter_mut() {
+            m.message = strip_embedded_json(&m.message);
+        }
+    }
     
     rsx! {
-        div { class: "flex items-start gap-4 mb-6",
+        // V4.17.7: content-visibility: auto lets the browser skip
+        // rendering for messages that aren't in the viewport. This
+        // keeps the chat panel cheap when the conversation is hundreds
+        // of messages long; combined with the existing paged fetch
+        // (50 per page) the DOM stays bounded.
+        div {
+            class: "flex items-start gap-4 mb-6",
+            style: "content-visibility: auto; contain-intrinsic-size: auto 200px;",
             div { class: "size-8 shrink-0 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-soft transition-transform hover:scale-105",
                 MaterialIcon { name: "smart_toy", color: MaterialIconColor::Light, size: 20 }
             }

@@ -67,3 +67,85 @@ pub async fn persist_step_artifacts(
         record_event(db, execution_run_id, event_sequence, "artifacts_recorded", "completed", Some(domain), Some(step), None, None, Some(&format!("Recorded {} artifacts for this step.", recorded.len())), Some(&details)).await;
     }
 }
+
+pub async fn tool_call(
+    db: &Database,
+    run_id: Option<i64>,
+    seq: &mut i64,
+    domain: &str,
+    step: &str,
+    tool: &str,
+    model: &str,
+    input: &str,
+) {
+    record_event(db, run_id, seq, "tool_call", "running", Some(domain), Some(step), Some(tool), Some(model), Some(&format!("Invoking tool '{}'.", tool)), Some(input)).await;
+}
+
+pub async fn tool_result(
+    db: &Database,
+    run_id: Option<i64>,
+    seq: &mut i64,
+    domain: &str,
+    step: &str,
+    tool: &str,
+    model: &str,
+    output: &str,
+    success: bool,
+) {
+    let (status, msg) = if success {
+        ("completed", format!("Tool '{}' completed successfully.", tool))
+    } else {
+        ("failed", format!("Tool '{}' execution failed.", tool))
+    };
+    record_event(db, run_id, seq, "tool_result", status, Some(domain), Some(step), Some(tool), Some(model), Some(&msg), Some(output)).await;
+}
+
+pub async fn route_completed(
+    db: &Database,
+    run_id: Option<i64>,
+    seq: &mut i64,
+    domain: &str,
+    step: &str,
+    model: &str,
+    res: &crate::engine::orchestrator::core::result::SupervisorExecutionResult,
+) {
+    let details = serde_json::to_string(res).unwrap_or_default();
+    record_event(db, run_id, seq, "single_domain_route", "completed", Some(domain), Some(step), None, Some(model), Some(&format!("Domain '{}' execution completed.", domain)), Some(&details)).await;
+}
+
+pub async fn route_failed(
+    db: &Database,
+    run_id: Option<i64>,
+    seq: &mut i64,
+    domain: &str,
+    step: &str,
+    model: &str,
+    reason: &str,
+) {
+    record_event(db, run_id, seq, "single_domain_route", "failed", Some(domain), Some(step), None, Some(model), Some(reason), None).await;
+}
+
+pub async fn micro_step(
+    db: &Database,
+    run_id: Option<i64>,
+    seq: &mut i64,
+    status: &str,
+    domain: &str,
+    step: &str,
+    message: &str,
+    details: Option<&str>,
+) {
+    record_event(db, run_id, seq, "micro_step", status, Some(domain), Some(step), None, None, Some(message), details).await;
+}
+
+pub async fn simple(
+    db: &Database,
+    run_id: Option<i64>,
+    seq: &mut i64,
+    event_type: &str,
+    status: &str,
+    message: &str,
+    details: Option<&str>,
+) {
+    record_event(db, run_id, seq, event_type, status, None, None, None, None, Some(message), details).await;
+}

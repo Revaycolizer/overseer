@@ -4,16 +4,18 @@ use anyhow::Context;
 use snowflake::SnowflakeIdGenerator;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::ConnectOptions;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 impl Database {
     pub async fn new() -> anyhow::Result<Self> {
-        let db_url = "sqlite:overseer.db?mode=rwc";
-        //println!("🚀 Connecting to SQLite at {}...", db_url);
+        let data_dir = super::get_overseer_data_dir();
+        std::fs::create_dir_all(&data_dir).context("failed to create overseer data directory")?;
+        let db_path = data_dir.join("overseer.db");
 
-        let mut connection_options = SqliteConnectOptions::from_str(db_url)?
+        let mut connection_options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
             .busy_timeout(std::time::Duration::from_secs(30)); // Longer timeout
@@ -87,7 +89,9 @@ impl Database {
         let database = Self {
             pool: pool.clone(),
             snowflake: Arc::new(Mutex::new(generator)),
-            lancedb_uri: "data/lancedb".to_string(),
+            lancedb_uri: data_dir.join("data").join("lancedb").to_string_lossy().to_string(),
+            remote_url: None,
+            http_client: reqwest::Client::new(),
         };
 
         database

@@ -4,11 +4,11 @@ use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 #[component]
 pub fn ToolsWorkshop() -> Element {
-    let mut global_state = crate::state::use_global_state();
+    let global_state = crate::state::use_global_state();
     let db = global_state.read().db.clone();
 
     let db_resource = db.clone();
-    let mut tools_resource =
+    let tools_resource =
         use_resource::<Vec<crate::engine::utils::discovery::ToolInfo>, _>(move || {
             let db_inner = db_resource.clone();
             async move { backend::get_tools(&db_inner).await.unwrap_or_default() }
@@ -56,7 +56,7 @@ pub fn ToolsWorkshop() -> Element {
     });
 
     let db_for_versions = db.clone();
-    let mut version_history_resource = use_resource(move || {
+    let version_history_resource = use_resource(move || {
         let db = db_for_versions.clone();
         let tool_id = selected_tool_id();
         async move {
@@ -87,7 +87,7 @@ pub fn ToolsWorkshop() -> Element {
     });
 
     let db_for_test_cases = db.clone();
-    let mut test_cases_resource = use_resource(move || {
+    let test_cases_resource = use_resource(move || {
         let db = db_for_test_cases.clone();
         let tool_id = selected_tool_id();
         async move {
@@ -135,7 +135,7 @@ pub fn ToolsWorkshop() -> Element {
                             class: "bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-slate-800 shadow-sm transition-all active:scale-[0.98]",
                             onclick: {
                                 let db_click = db.clone();
-                                let mut tools_resource_click = tools_resource.clone();
+                                let tools_resource_click = tools_resource.clone();
                                 move |_| {
                                     let db_spawn = db_click.clone();
                                     let mut tools_resource_spawn = tools_resource_click.clone();
@@ -233,7 +233,7 @@ pub fn ToolsWorkshop() -> Element {
                                                     class: "font-bold text-slate-900 border-none focus:ring-0 p-0",
                                                     value: "{tool.name}",
                                                     oninput: {
-                                                        let mut tools_resource = tools_resource.clone();
+                                                        let tools_resource = tools_resource.clone();
                                                         let db = db.clone();
                                                         let tool_for_name = tool.clone();
                                                         move |e| {
@@ -266,7 +266,7 @@ pub fn ToolsWorkshop() -> Element {
                                                 let expected_substring = expected_substring.clone();
                                                 let selected_test_case_id = selected_test_case_id;
                                                 let db = db.clone();
-                                                let mut test_cases_resource = test_cases_resource.clone();
+                                                let test_cases_resource = test_cases_resource.clone();
                                                 move |_| {
                                                     let lang = t.language.clone();
                                                     let code = local_code();
@@ -343,7 +343,7 @@ pub fn ToolsWorkshop() -> Element {
                                                 let t = tool.clone();
                                                 let local_code = local_code.clone();
                                                 let db_click = db.clone();
-                                                let mut tools_resource_click = tools_resource.clone();
+                                                let tools_resource_click = tools_resource.clone();
                                                 move |_| {
                                                     let mut updated_tool = t.clone();
                                                     updated_tool.code = local_code();
@@ -371,7 +371,7 @@ pub fn ToolsWorkshop() -> Element {
                                                 let t = tool.clone();
                                                 let local_code = local_code.clone();
                                                 let db_click = db.clone();
-                                                let mut tools_resource_click = tools_resource.clone();
+                                                let tools_resource_click = tools_resource.clone();
                                                 move |_| {
                                                     let mut updated_tool = t.clone();
                                                     updated_tool.code = local_code();
@@ -422,7 +422,7 @@ pub fn ToolsWorkshop() -> Element {
                                                         let expected_substring = expected_substring.clone();
                                                         let selected_test_case_id = selected_test_case_id;
                                                         let db = db.clone();
-                                                        let mut test_cases_resource = test_cases_resource.clone();
+                                                        let test_cases_resource = test_cases_resource.clone();
                                                         move |_| {
                                                             let lang = t.language.clone();
                                                             let code = local_code();
@@ -524,7 +524,7 @@ pub fn ToolsWorkshop() -> Element {
                                                 class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs text-slate-600 focus:ring-1 focus:ring-brand-blue/20 focus:border-brand-blue transition-all min-h-[60px]",
                                                 value: "{tool.description}",
                                                 oninput: {
-                                                    let mut tools_resource = tools_resource.clone();
+                                                    let tools_resource = tools_resource.clone();
                                                     let db = db.clone();
                                                     let tool_for_desc = tool.clone();
                                                     move |e| {
@@ -547,7 +547,7 @@ pub fn ToolsWorkshop() -> Element {
                                                 class: "w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-semibold text-slate-600 focus:ring-1 focus:ring-brand-blue/20 focus:border-brand-blue transition-all",
                                                 value: "{tool.safety_level}",
                                                 onchange: {
-                                                    let mut tools_resource = tools_resource.clone();
+                                                    let tools_resource = tools_resource.clone();
                                                     let db = db.clone();
                                                     let tool_for_safety = tool.clone();
                                                     move |e| {
@@ -574,7 +574,7 @@ pub fn ToolsWorkshop() -> Element {
                                                 placeholder: "Leave empty to use DB code exclusively",
                                                 value: tool.script_path.clone().unwrap_or_default(),
                                                 oninput: {
-                                                    let mut tools_resource = tools_resource.clone();
+                                                    let tools_resource = tools_resource.clone();
                                                     let db = db.clone();
                                                     let tool_for_path = tool.clone();
                                                     move |e| {
@@ -601,7 +601,7 @@ pub fn ToolsWorkshop() -> Element {
                                             placeholder: "e.g., chart,graph,plot (comma separated). Tool will only run if query contains these.",
                                             value: tool.required_intent.clone().unwrap_or_default(),
                                             oninput: {
-                                                let mut tools_resource = tools_resource.clone();
+                                                let tools_resource = tools_resource.clone();
                                                 let db = db.clone();
                                                 let tool_for_intent = tool.clone();
                                                 move |e| {
@@ -625,7 +625,7 @@ pub fn ToolsWorkshop() -> Element {
                                     h4 { class: "text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3", "Used by Agents" }
                                     div { class: "flex flex-wrap gap-2",
                                         {
-                                            let agents = backend::get_agents(&db);
+                                            let _agents = backend::get_agents(&db);
                                             rsx! {
                                                 span { class: "text-[10px] text-slate-400 italic", "Agent relationship surfacing is still lightweight here. Use this area as the assignment checkpoint before publishing." }
                                             }
@@ -641,8 +641,8 @@ pub fn ToolsWorkshop() -> Element {
                                                 class: "bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-slate-800 transition-all",
                                                 onclick: {
                                                     let db = db.clone();
-                                                    let mut tools_resource = tools_resource.clone();
-                                                    let mut version_history_resource = version_history_resource.clone();
+                                                    let tools_resource = tools_resource.clone();
+                                                    let version_history_resource = version_history_resource.clone();
                                                     let version_tag = selected_version_tag();
                                                     move |_| {
                                                         let db = db.clone();
@@ -744,9 +744,9 @@ pub fn ToolsWorkshop() -> Element {
                                             class: "px-3 py-2 rounded-lg bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all",
                                             onclick: {
                                                 let db = db.clone();
-                                                let mut test_cases_resource = test_cases_resource.clone();
+                                                let test_cases_resource = test_cases_resource.clone();
                                                 let tool_id = tool.id;
-                                                let mut selected_test_case_id = selected_test_case_id;
+                                                let selected_test_case_id = selected_test_case_id;
                                                 let test_case_name = test_case_name.clone();
                                                 let test_query = test_query.clone();
                                                 let expected_substring = expected_substring.clone();
@@ -866,7 +866,7 @@ pub fn ToolsWorkshop() -> Element {
                                                             class: "text-slate-300 hover:text-red-500 transition-colors",
                                                             onclick: {
                                                                 let db = db.clone();
-                                                                let mut test_cases_resource = test_cases_resource.clone();
+                                                                let test_cases_resource = test_cases_resource.clone();
                                                                 let case_id = case.id;
                                                                 move |_| {
                                                                     let db = db.clone();

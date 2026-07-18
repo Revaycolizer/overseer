@@ -2,8 +2,6 @@
 use super::helpers::copy_to_clipboard;
 use super::route_summary::prettify_token;
 use super::work_item_card::WorkItemStatusBadge;
-use super::work_item_handoff::create_work_item_handoff;
-use super::work_item_ops::parse_work_item_runtime_metadata;
 use super::work_item_runner::{run_work_item_now, update_work_item_manual_status};
 use crate::backend;
 use dioxus::prelude::*;
@@ -45,6 +43,7 @@ pub fn WorkItemPanelHeader(work_item: backend::WorkItem, runtime_metadata_excerp
 
 #[component]
 pub fn WorkItemPanelActions(db: std::sync::Arc<crate::db::Database>, agent_system: std::sync::Arc<crate::engine::system::AgentSystem>, work_item: backend::WorkItem, messages_resource: Resource<Vec<backend::Message>>, visible_messages: Signal<Vec<backend::Message>>, selected_work_item: Signal<Option<backend::WorkItem>>, is_thinking: Signal<bool>, starter_prompt: Signal<Option<String>>, can_retry: bool, work_items_resource: Resource<Vec<backend::WorkItem>>, execution_runs_resource: Resource<Vec<backend::ExecutionRun>>, artifacts_resource: Resource<Vec<backend::Artifact>>, work_item_events_resource: Resource<Vec<backend::WorkItemEvent>>, selected_execution_run_id: Signal<Option<i64>>) -> Element {
+    let is_local_executing = use_context::<Signal<bool>>();
     rsx! {
         div { class: "flex flex-wrap gap-2",
             button { class: "inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-violet-700 hover:bg-violet-100 transition-all",
@@ -53,7 +52,7 @@ pub fn WorkItemPanelActions(db: std::sync::Arc<crate::db::Database>, agent_syste
             button { class: format!("inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all {}", if is_thinking() { "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed" } else { "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" }),
                 disabled: is_thinking(),
                 onclick: { let db = db.clone(); let agent_system = agent_system.clone(); let work_item = work_item.clone(); let messages_resource = messages_resource.clone(); let work_items_resource = work_items_resource.clone(); let execution_runs_resource = execution_runs_resource.clone(); let artifacts_resource = artifacts_resource.clone();
-                    move |_| { run_work_item_now(db.clone(), agent_system.clone(), work_item.clone(), messages_resource.clone(), visible_messages, selected_work_item, is_thinking, work_items_resource.clone(), execution_runs_resource.clone(), artifacts_resource.clone(), work_item_events_resource.clone(), selected_execution_run_id); } },
+                    move |_| { run_work_item_now(db.clone(), agent_system.clone(), work_item.clone(), messages_resource.clone(), visible_messages, selected_work_item, is_local_executing, work_items_resource.clone(), execution_runs_resource.clone(), artifacts_resource.clone(), work_item_events_resource.clone(), selected_execution_run_id); } },
                 MaterialIcon { name: if is_thinking() { "hourglass_top" } else if can_retry { "replay" } else { "smart_toy" }, size: 14 }
                 if is_thinking() { "Running" } else if can_retry { "Retry" } else { "Run Now" } }
             button { class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 hover:border-blue-200 hover:text-blue-700 transition-all",

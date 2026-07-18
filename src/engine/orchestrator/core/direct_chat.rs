@@ -26,7 +26,7 @@ pub async fn handle_direct_chat(
             name: "Chat Assistant".to_string(),
             description: "Direct chat fallback".to_string(),
             tools: Vec::new(),
-            instructions: "You are a concise, helpful assistant. Answer directly and clearly without using tools unless explicitly required.".to_string(),
+            instructions: "You are Overseer's chat assistant. Always return your answer as a structured JSON object with this exact shape: {\"messages\": [{\"role\": \"assistant\", \"message\": \"<your direct, conversational answer to the user's question>\"}], \"status\": \"completed\"}. Put your real answer in the inner 'message' string, not in a status or summary field. Do not call any tools; answer the user's question directly.".to_string(),
             model: "qwen2.5:7b-instruct".to_string(),
             domain: "chat".to_string(),
             version: "1.0.0".to_string(),
@@ -73,7 +73,7 @@ pub async fn handle_direct_chat(
     
     // ARCHITECTURE V3.4: UNIFORM PROTOCOL ENFORCEMENT
     // If the agent returned a SupervisorExecutionResult JSON, we must parse and format it.
-    let mut response = if raw_response.trim().starts_with('{') && raw_response.trim().ends_with('}') {
+    let response = if raw_response.trim().starts_with('{') && raw_response.trim().ends_with('}') {
         let parsed = crate::engine::orchestrator::dispatch::parsers::parse_supervisor_result(
             raw_response.clone(), 
             false, 

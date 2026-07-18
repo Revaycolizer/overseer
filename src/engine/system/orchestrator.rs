@@ -9,6 +9,7 @@ pub async fn orchestrate_request(
     db: &Database,
     conversation_id: i64,
     user_query: &str,
+    _token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
     let messages = crate::backend::get_messages(db, conversation_id)
         .await
@@ -19,9 +20,18 @@ pub async fn orchestrate_request(
     ).await;
 
     let all_agents = crate::backend::get_agents(db).await.unwrap_or_default();
-    let planner_model = crate::backend::resolve_model_name(
-        db, None, "planner_model", "qwen2.5:7b-instruct"
-    ).await;
+    // V4.17.8: if the primary planner model isn't reachable (e.g.
+    // Ollama is down or busy), fall back to the chain in the
+    // `planner_model_fallbacks` setting. The chain is a JSON array
+    // of model names tried in order; on the first one that
+    // resolves we use it for the planner. If the chain is empty
+    // we keep the existing single-model behaviour.
+    let planner_model = crate::backend::resolve_model_with_fallbacks(
+        db,
+        "planner_model",
+        "qwen2.5:7b-instruct",
+    )
+    .await;
     let instructions = crate::backend::get_setting(db, "master_planner_instructions").await;
     
     let master_planner = MasterPlanner::new(
@@ -44,5 +54,6 @@ pub async fn orchestrate_request(
         &perception_tool,
         &memory_context,
         &system.ollama_client,
+        None,
     ).await
 }

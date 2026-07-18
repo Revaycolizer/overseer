@@ -5,7 +5,7 @@ pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     let system = crate::engine::system::AgentSystem::new(sqlite_db.clone());
 
     // Create a special CLI conversation if it doesn't exist
-    let conversation_id = match crate::backend::get_conversations(&sqlite_db).await {
+    let conversation_id = match crate::backend::get_conversations(&sqlite_db, 100).await {
         Ok(convs) => convs
             .iter()
             .find(|c| c.title == "CLI Conversation")
@@ -37,7 +37,7 @@ pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
         println!("🚀 CLI Query: {}", query);
 
         let response = system
-            .orchestrate(&sqlite_db, conversation_id, &query)
+            .orchestrate(&sqlite_db, conversation_id, &query, None)
             .await;
         println!("\n✅ FINAL RESULT:\n{}", response);
 
@@ -64,7 +64,7 @@ pub async fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
         let _ =
             crate::backend::add_message(&sqlite_db, conversation_id, "user", trimmed, false).await;
         let response = system
-            .orchestrate(&sqlite_db, conversation_id, trimmed)
+            .orchestrate(&sqlite_db, conversation_id, trimmed, None)
             .await;
         let _ =
             crate::backend::add_message(&sqlite_db, conversation_id, "assistant", &response, false)

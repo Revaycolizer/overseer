@@ -1,7 +1,14 @@
 #[cfg(feature = "memory")]
 pub mod memory;
+pub mod activity;
+pub mod cache;
 pub mod orchestrator;
+pub mod resilience;
 pub mod shell;
+pub mod streaming;
 pub mod system;
+pub mod tokenizer;
 pub mod tools;
 pub mod utils;
+pub mod voice;
+pub mod vision;

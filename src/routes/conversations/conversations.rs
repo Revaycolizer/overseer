@@ -1,15 +1,11 @@
 // src/routes/conversations/conversations.rs
-use super::chat_input::ChatInput;
-use super::helpers::copy_to_clipboard;
-use super::message_bubble::MessageBubble;
-use super::thinking_bubble::ThinkingBubble;
+use super::chat_panel::ChatPanel;
 use super::sidebar::Sidebar;
 use super::workspace_session::{workspace_session_key, upsert_workspace_session, WorkspaceSessionRef};
 use super::workspace_deck::WorkspaceSessionDeck;
 use super::registry_panel::RuntimeRegistryPanel;
 use super::artifact_panel::RecentArtifactsPanel;
 use super::workboard_panel::WorkboardPanel;
-use super::empty_state::EmptyConversationState;
 use super::route_summary::{derive_execution_route_summary, prettify_status, status_tone};
 use crate::backend;
 use crate::routes::execution_trace::ExecutionTracePanel;
@@ -37,12 +33,12 @@ pub fn Conversations() -> Element {
     drop(global_read);
 
     let db_for_conv = db.clone();
-    let conversations_resource = use_resource(move || { let db = db_for_conv.clone(); async move { backend::get_conversations(&db).await.unwrap_or_default() } });
+    let conversations_resource = use_resource(move || { let db = db_for_conv.clone(); async move { backend::get_conversations(&db, 100).await.unwrap_or_default() } });
     let conversations = conversations_resource.read().cloned().unwrap_or_default();
-    let mut selected_conversation_id = use_signal(|| conversations.first().map(|c| c.id));
+    let selected_conversation_id = use_signal(|| conversations.first().map(|c| c.id));
 
     let db_for_msg = db.clone();
-    let messages_resource = use_resource(move || { let db = db_for_msg.clone(); let conv_id = selected_conversation_id(); async move { if let Some(id) = conv_id { backend::get_messages(&db, id).await.unwrap_or_default() } else { vec![] } } });
+    let messages_resource = use_resource(move || { let db = db_for_msg.clone(); let conv_id = selected_conversation_id(); async move { if let Some(id) = conv_id { backend::get_messages_page(&db, id, None, 50).await.unwrap_or_default() } else { vec![] } } });
 
     let mut visible_messages = use_signal(Vec::<backend::Message>::new);
     let mut selected_conversation_for_cache = use_signal(|| None::<i64>);
@@ -56,21 +52,86 @@ pub fn Conversations() -> Element {
     use_effect(move || { if let Some(artifact) = focused_artifact() { let key = workspace_sessions.with_mut(|s| upsert_workspace_session(s, WorkspaceSessionRef::Artifact(artifact.id))); active_workspace_session_key.set(Some(key)); } });
     use_effect(move || { if let Some(work_item) = selected_work_item() { let key = workspace_sessions.with_mut(|s| upsert_workspace_session(s, WorkspaceSessionRef::WorkItem(work_item.id))); active_workspace_session_key.set(Some(key)); } });
     use_effect(move || { let sessions = workspace_sessions(); let active_key = active_workspace_session_key(); if sessions.is_empty() { if active_key.is_some() { active_workspace_session_key.set(None); } } else if active_key.as_ref().is_none_or(|key| !sessions.iter().any(|s| workspace_session_key(s) == *key)) { active_workspace_session_key.set(Some(workspace_session_key(&sessions[0]))); } });
-    use_effect(move || { if let Some(latest_messages) = messages_resource.read().cloned() { visible_messages.set(latest_messages); } });
 
-    let messages = messages_resource.read().cloned().unwrap_or_else(|| visible_messages());
+    const PAGE_SIZE: u32 = 50;
+    let mut messages_cursor: Signal<Option<i64>> = use_signal(|| None);
+    let mut messages_has_more: Signal<bool> = use_signal(|| true);
+    let mut messages_loading_more: Signal<bool> = use_signal(|| false);
+    let db_for_page = db.clone();
+    use_effect(move || {
+        let conv_id = selected_conversation_id();
+        let db = db_for_page.clone();
+        visible_messages.set(Vec::new());
+        messages_cursor.set(None);
+        messages_has_more.set(true);
+        if let Some(id) = conv_id {
+                if let Some(cached) = crate::engine::cache::messages().read().ok().and_then(|c| c.get(&id).cloned()) {
+                    messages_cursor.set(cached.last().map(|m| m.id));
+                    messages_has_more.set(cached.len() as u32 >= PAGE_SIZE);
+                    visible_messages.set(cached);
+                } else {
+                    spawn(async move {
+                        let page = backend::get_messages_page(&db, id, None, PAGE_SIZE).await.unwrap_or_default();
+                        messages_cursor.set(page.last().map(|m| m.id));
+                        messages_has_more.set(page.len() as u32 >= PAGE_SIZE);
+                        if let Ok(mut cache) = crate::engine::cache::messages().write() {
+                            cache.put(id, page.clone());
+                        }
+                        visible_messages.set(page);
+                    });
+                }
+        }
+    });
+    let db_for_load = db.clone();
+    let mut load_more = move || {
+        if messages_loading_more() || !messages_has_more() { return; }
+        let cursor = messages_cursor.read().clone();
+        let Some(conv_id) = selected_conversation_id() else { return; };
+        messages_loading_more.set(true);
+        let db = db_for_load.clone();
+        spawn(async move {
+            let page = backend::get_messages_page(&db, conv_id, cursor, PAGE_SIZE).await.unwrap_or_default();
+            if !page.is_empty() {
+                let mut combined = page.clone();
+                combined.extend(visible_messages.read().iter().cloned());
+                visible_messages.set(combined);
+                messages_cursor.set(page.last().map(|m| m.id));
+                messages_has_more.set(page.len() as u32 >= PAGE_SIZE);
+            }
+            messages_loading_more.set(false);
+        });
+    };
+
+    let visible = visible_messages();
+    let messages = if visible.is_empty() {
+        messages_resource.read().cloned().unwrap_or_default()
+    } else {
+        visible
+    };
     let is_first_msg = messages.is_empty();
-    let mut starter_prompt = use_signal(|| None::<String>);
+    let starter_prompt = use_signal(|| None::<String>);
     let mut is_thinking: Signal<bool> = use_signal(|| false);
+    let is_local_executing = use_signal(|| false);
+    provide_context(is_local_executing);
     let mut selected_execution_run_id = use_signal(|| None::<i64>);
 
     let db_for_execution_runs = db.clone();
     let execution_runs_resource = use_resource(move || { let db = db_for_execution_runs.clone(); let conv_id = selected_conversation_id(); async move { if let Some(id) = conv_id { backend::get_execution_runs_for_conversation(&db, id, 10).await.unwrap_or_default() } else { vec![] } } });
+    provide_context(execution_runs_resource.clone());
     let execution_runs = execution_runs_resource.read().cloned().unwrap_or_default();
     let runs_loading = execution_runs_resource.read().is_none();
 
     let execution_runs_for_effect = execution_runs.clone();
     use_effect(move || { let runs = execution_runs_for_effect.clone(); let current = selected_execution_run_id(); if runs.is_empty() { if current.is_some() { selected_execution_run_id.set(None); } } else if !runs.iter().any(|run| Some(run.id) == current) { selected_execution_run_id.set(Some(runs[0].id)); } });
+
+    use_effect(move || {
+        if let Some(runs) = execution_runs_resource.read().as_ref() {
+            let has_running = runs.iter().any(|run| run.status == "running");
+            is_thinking.set(is_local_executing() || has_running);
+        } else {
+            is_thinking.set(is_local_executing());
+        }
+    });
 
     let db_for_execution_events = db.clone();
     let execution_events_resource = use_resource(move || { let db = db_for_execution_events.clone(); let run_id = selected_execution_run_id(); async move { if let Some(id) = run_id { backend::get_execution_events(&db, id).await.unwrap_or_default() } else { vec![] } } });
@@ -167,17 +228,21 @@ pub fn Conversations() -> Element {
                                     }
                                 }
                             }
-                            div { id: "chat-scroll-container", class: "flex-1 overflow-y-auto scroll-smooth custom-scrollbar",
-                                div { class: "max-w-3xl mx-auto py-10 px-6 space-y-8",
-                                    if messages.is_empty() && !is_thinking() {
-                                        EmptyConversationState { on_prompt: move |prompt: String| starter_prompt.set(Some(prompt)) }
-                                    } else {
-                                        for msg in &messages { MessageBubble { msg: msg.clone(), on_copy: move |content: String| copy_to_clipboard(content) } }
-                                        if is_thinking() { ThinkingBubble {} }
-                                    }
-                                }
+                            ChatPanel {
+                                messages: messages,
+                                messages_resource: messages_resource.clone(),
+                                visible_messages: visible_messages,
+                                conversations_resource: conversations_resource.clone(),
+                                selected_conversation_id: selected_conversation_id,
+                                selected_artifacts: selected_artifacts,
+                                selected_work_item: selected_work_item,
+                                is_first_msg: is_first_msg,
+                                is_thinking: is_thinking,
+                                starter_prompt: starter_prompt,
+                                messages_has_more: messages_has_more,
+                                messages_loading_more: messages_loading_more,
+                                load_more: Callback::new(move |_| load_more()),
                             }
-                            ChatInput { selected_conversation_id: selected_conversation_id, messages_resource: messages_resource.clone(), visible_messages: visible_messages, conversations_resource: conversations_resource.clone(), selected_artifacts: selected_artifacts, selected_work_item: selected_work_item, is_first_msg: is_first_msg, is_thinking: is_thinking, starter_prompt: starter_prompt }
                         }
                         div { class: "h-full min-h-0 flex flex-col",
                             RuntimeRegistryPanel { status: runtime_registry_status }

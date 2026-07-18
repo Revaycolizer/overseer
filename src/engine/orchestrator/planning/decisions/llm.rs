@@ -6,17 +6,17 @@ use super::types::OrchestrationDecision;
 
 pub async fn decide_orchestration_with_llm(
     ollama_client: &ollama::Client,
+    model: &str,
     query: &str,
     history: &[Message],
     memory_context: &str,
 ) -> Result<OrchestrationDecision, String> {
-    let model = "qwen2.5:7b-instruct";
     let agent = AgentBuilder::new(ollama_client.completion_model(model))
         .preamble("You are the Overseer Router. JSON output only: {\"route\": \"direct_chat|single_domain|multi_step\", \"domain\": \"domain_name_or_null\", \"personality_mode\": \"assistant|operator|orchestrator\", \"reason\": \"explanation\"}")
         .build();
 
     let history_str = history.iter().map(|m| format!("{:?}", m)).collect::<Vec<_>>().join("\n");
-    let prompt = format!("QUERY: {}\nCONTEXT: {}\nHISTORY: {}\nDecide route.", query, memory_context, history_str);
+    let prompt = format!("CONTEXT: {}\nHISTORY: {}\nQUERY: {}\nDecide route.", memory_context, history_str, query);
 
     let response = agent.prompt(&prompt).await.map_err(|e: PromptError| e.to_string())?;
     let trimmed = response.trim();

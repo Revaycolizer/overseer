@@ -1,15 +1,9 @@
 // src/routes/conversations/work_item_panel.rs
 use super::work_item_panel_parts::{WorkItemPanelHeader, WorkItemPanelActions};
 use super::work_item_panel_extras::{WorkItemBlockedResolution, WorkItemEventTimeline};
-use super::helpers::copy_to_clipboard;
-use super::route_summary::prettify_token;
-use super::work_item_card::WorkItemStatusBadge;
-use super::work_item_handoff::create_work_item_handoff;
 use super::work_item_ops::parse_work_item_runtime_metadata;
-use super::work_item_runner::{run_work_item_now, update_work_item_manual_status};
 use crate::backend;
 use dioxus::prelude::*;
-use dioxus_material_icons::MaterialIcon;
 
 #[component]
 pub fn WorkItemWorkspacePanel(

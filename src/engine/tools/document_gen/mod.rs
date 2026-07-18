@@ -4,7 +4,6 @@ pub mod csv_gen;
 pub mod xlsx_gen;
 pub mod docx_gen;
 
-use std::path::PathBuf;
 use serde_json::{json, Value};
 use utils::strip_grounding_markers;
 
@@ -27,7 +26,8 @@ pub async fn native_document_writer(args: &Value) -> Result<String, String> {
     let content_str = build_content_string(args.get("content"));
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let export_dir = PathBuf::from("assets/exports");
+    let data_dir = crate::db::get_overseer_data_dir();
+    let export_dir = data_dir.join("assets").join("exports");
     std::fs::create_dir_all(&export_dir).map_err(|e| e.to_string())?;
     let prefix = format!("report_{}", timestamp);
 
@@ -42,7 +42,7 @@ pub async fn native_document_writer(args: &Value) -> Result<String, String> {
     match res {
         Ok(file) => Ok(json!({
             "status": "success",
-            "artifacts": [{"path": format!("assets/exports/{}", file), "kind": format}]
+            "artifacts": [{"path": export_dir.join(&file).to_string_lossy().to_string(), "kind": format}]
         })
         .to_string()),
         Err(e) => Err(e),

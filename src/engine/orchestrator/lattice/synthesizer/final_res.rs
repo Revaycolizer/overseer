@@ -1,10 +1,10 @@
 use crate::db::Database;
 use crate::engine::orchestrator::core::response::{MessagePart, StructuredResponse};
 use crate::engine::orchestrator::dispatch::json_utils::repair_json_literals;
-use rig::providers::ollama::{self, OllamaExt};
+use rig::providers::ollama::{self};
 use rig::client::CompletionClient;
 use rig::agent::AgentBuilder;
-use rig::completion::{Chat, Prompt};
+use rig::completion::Chat;
 use serde_json::Value;
 
 pub async fn synthesize_final_response(
@@ -28,8 +28,7 @@ pub async fn synthesize_final_response(
     };
 
     let prompt = format!(
-        "USER_QUERY: {}\nCURRENT_RESPONSE: {}\n\n\
-        ARCHITECTURE V3.6: CONVERSATIONAL ALIGNMENT
+        "ARCHITECTURE V3.6: CONVERSATIONAL ALIGNMENT
         1. Intent-Driven Response: Read the USER_QUERY carefully. Your response MUST answer ONLY what the user asked — nothing more.
            - If the user asks a specific question (e.g. \"what is her rating?\"), answer with JUST that data point.
            - If the user asks for a general description, give a BRIEF 1-2 sentence summary. Do NOT list every detail from the data.
@@ -39,7 +38,12 @@ pub async fn synthesize_final_response(
         4. Grounding Safety: If CURRENT_RESPONSE has charts or file artifacts, acknowledge them briefly. But for text-only responses, do NOT pad the answer with unrequested details.
         5. Creative Preservation: If the response is creative (story, greeting, poem), PRESERVE its essence verbatim.
         
-        Output JSON: {{\"message\": \"...\", \"keep_sources\": bool, \"keep_attachments\": bool}}",
+        Output JSON: {{\"message\": \"...\", \"keep_sources\": bool, \"keep_attachments\": bool}}
+        
+        USER_QUERY: {}
+        CURRENT_RESPONSE: {}
+        
+        RESPONSE FORMAT INSTRUCTION: Respond ONLY with a valid JSON object matching the schema above, containing the synthesized response in the \"message\" field.",
         query, serde_json::to_string(response).unwrap_or_default()
     );
 
@@ -56,6 +60,7 @@ pub async fn synthesize_final_response(
     } else {
        // println!("❌ [Synthesizer] LLM call failed, response passes through unmodified.");
     }
+
 }
 
 fn extract_json_from_llm_output(raw: &str) -> Option<Value> {

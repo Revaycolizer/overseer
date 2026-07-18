@@ -21,8 +21,8 @@ pub fn CreateWorkItemButton(
             class: "inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700 hover:bg-emerald-100 transition-all",
             onclick: {
                 let db = db.clone(); let artifact = artifact.clone();
-                let selected_artifacts = selected_artifacts; let mut selected_work_item = selected_work_item;
-                let mut work_items_resource = work_items_resource.clone();
+                let selected_artifacts = selected_artifacts; let selected_work_item = selected_work_item;
+                let work_items_resource = work_items_resource.clone();
                 move |_| {
                     let db = db.clone(); let artifact = artifact.clone();
                     let selected_artifacts = selected_artifacts; let mut selected_work_item = selected_work_item;

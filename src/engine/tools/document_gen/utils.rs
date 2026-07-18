@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 
 pub fn strip_grounding_markers(text: &str) -> String {
     let re_e = regex::Regex::new(r"\(?\[E[0-9]+\]\)?\s*").unwrap();
