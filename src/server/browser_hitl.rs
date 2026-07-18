@@ -3,7 +3,6 @@ use axum::{
     extract::{Path, State, Json},
     Router,
 };
-use serde::Deserialize;
 use std::sync::Arc;
 use super::ServerState;
 
@@ -11,8 +10,6 @@ pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
         .route("/v1/browser/sessions/{id}/resume", post(resume_session))
 }
-
-#[derive(Deserialize)]
 
 async fn resume_session(
     State(state): State<Arc<ServerState>>,
