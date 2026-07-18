@@ -8,26 +8,16 @@ use super::port_alloc;
 use super::session::{BrowserSession, SessionState};
 use super::session_init;
 use super::spawner;
+pub use super::pool_config::PoolConfig;
 
-pub struct PoolConfig {
-    pub max_sessions: usize,
-    pub stealth: bool,
-}
-
-impl Default for PoolConfig {
-    fn default() -> Self {
-        Self { max_sessions: 4, stealth: false }
-    }
-}
-
-struct Inner {
-    sessions: HashMap<i64, BrowserSession>,
-    next_id: i64,
+pub(super) struct Inner {
+    pub(super) sessions: HashMap<i64, BrowserSession>,
+    pub(super) next_id: i64,
 }
 
 pub struct BrowserPool {
     config: PoolConfig,
-    inner: Mutex<Inner>,
+    pub(super) inner: Mutex<Inner>,
     data_dir: PathBuf,
 }
 
@@ -74,25 +64,6 @@ impl BrowserPool {
             }
         }
         Ok(())
-    }
-
-    pub async fn get_cdp_url(&self, session_id: i64) -> Option<String> {
-        self.inner.lock().await.sessions.get(&session_id).map(|s| s.cdp_ws_url.clone())
-    }
-
-    pub async fn cdp_call(&self, session_id: i64, method: &str, params: Value) -> anyhow::Result<Value> {
-        let inner = self.inner.lock().await;
-        if let Some(s) = inner.sessions.get(&session_id) {
-            if let Some(ref cdp) = s.cdp {
-                return cdp.call(method, params).await;
-            }
-            drop(inner);
-            return super::cdp::cdp_call(
-                &format!("ws://127.0.0.1:{}/devtools/browser", 9300 + session_id as u16),
-                method, params,
-            ).await;
-        }
-        anyhow::bail!("Session {session_id} not found")
     }
 
     pub async fn session_count(&self) -> usize {

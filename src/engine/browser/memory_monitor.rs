@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum PressureLevel {
     Ok,
     Warning,
@@ -6,7 +6,7 @@ pub enum PressureLevel {
     Blocked,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct MemoryReport {
     pub total_ram_mb: u64,
     pub used_ram_mb: u64,

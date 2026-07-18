@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::process::Child;
 use super::cdp::CdpConnection;
+use super::recorder::FrameRecorder;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionState {
@@ -20,6 +21,7 @@ pub struct BrowserSession {
     pub process: Option<Child>,
     pub cdp_ws_url: String,
     pub cdp: Option<Arc<CdpConnection>>,
+    pub recorder: Option<FrameRecorder>,
     pub action_count: Arc<AtomicU32>,
     pub navigation_depth: Arc<AtomicU32>,
     pub created_at: chrono::NaiveDateTime,
@@ -36,6 +38,7 @@ impl BrowserSession {
             process,
             cdp_ws_url,
             cdp: None,
+            recorder: None,
             action_count: Arc::new(AtomicU32::new(0)),
             navigation_depth: Arc::new(AtomicU32::new(0)),
             created_at: chrono::Utc::now().naive_utc(),

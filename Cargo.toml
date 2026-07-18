@@ -21,7 +21,7 @@ tokio = { version = "1.49.0", features = ["full"] }
 anyhow = "1.0.100"
 rig = { package = "rig-core", version = "0.30.0" }
 async-trait = "0.1.86"
-axum = "0.7"
+axum = { version = "0.7", features = ["ws"] }
 tower_governor = "0.4"
 governor = "0.6"
 base64 = "0.22.1"
