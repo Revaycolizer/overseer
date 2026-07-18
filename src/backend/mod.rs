@@ -1,3 +1,4 @@
+pub mod auth;
 mod agents;
 pub mod artifacts;
 mod computer_supervision;
