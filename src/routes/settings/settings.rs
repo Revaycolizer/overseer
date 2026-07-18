@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::MaterialIcon;
+use crate::routes::settings::connection::ConnectionSection;
 use crate::routes::settings::health_summary::HealthSummary;
 use crate::routes::settings::health_details::HealthDetails;
 use crate::routes::settings::intelligence::IntelligenceSection;
