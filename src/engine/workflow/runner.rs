@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use crate::db::Database;
+use serde_json::Value;
 use super::graph::WorkflowGraph;
 
 pub struct WorkflowRunner {
@@ -28,26 +29,27 @@ impl WorkflowRunner {
     }
 
     async fn execute_node(&self, node: &super::graph::WorkflowNode) -> anyhow::Result<serde_json::Value> {
+        let cfg: Value = serde_json::from_str(&node.config_json).unwrap_or(Value::Object(Default::default()));
         match node.node_type.as_str() {
             "manual_trigger" => Ok(serde_json::json!({"triggered": true})),
             "agent" => {
-                let query = node.config_json.get("query").and_then(|v| v.as_str()).unwrap_or("");
-                let system = crate::engine::system::AgentSystem::new(self.db.as_ref().clone());
-                let response = system.orchestrate(&self.db, 0, query, None).await;
-                Ok(serde_json::json!({"response": response}))
+                let query = cfg.get("query").and_then(|v| v.as_str()).unwrap_or("");
+                let db = self.db.clone();
+                let system = crate::engine::system::AgentSystem::new((*db).clone());
+                Ok(serde_json::json!({"response": system.orchestrate(&db, 0, query, None).await}))
             }
             "llm" => {
-                let prompt = node.config_json.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
-                let model = node.config_json.get("model").and_then(|v| v.as_str()).unwrap_or("qwen2.5:7b-instruct");
-                let client = rig::providers::ollama::Client::new();
-                let agent = rig::agent::AgentBuilder::new(client.completion_model(model))
-                    .preamble("You are a helpful assistant.").build();
-                match agent.prompt(prompt).await {
-                    Ok(text) => Ok(serde_json::json!({"text": text})),
-                    Err(e) => Ok(serde_json::json!({"error": e.to_string()})),
-                }
+                let prompt = cfg.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
+                let model = cfg.get("model").and_then(|v| v.as_str()).unwrap_or("qwen2.5:7b-instruct");
+                let body = serde_json::json!({"model": model, "prompt": prompt, "stream": false});
+                let resp = reqwest::Client::new()
+                    .post("http://localhost:11434/api/generate")
+                    .json(&body).send().await.map_err(|e| anyhow::anyhow!("ollama: {e}"))?;
+                let data: Value = resp.json().await.map_err(|e| anyhow::anyhow!("ollama parse: {e}"))?;
+                let text = data.get("response").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                Ok(serde_json::json!({"text": text}))
             }
-            "set" => Ok(serde_json::json!(node.config_json)),
+            "set" => Ok(cfg),
             _ => Ok(serde_json::json!({"error": format!("Unknown node type: {}", node.node_type)})),
         }
     }
