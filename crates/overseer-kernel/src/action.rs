@@ -19,6 +19,8 @@ pub enum ActionKind {
     ShellCommand,
     /// Mouse / keyboard / screenshot / window control of the desktop.
     ComputerControl,
+    /// A structured write to the filesystem (path + content), never via a shell.
+    FilesystemWrite,
 }
 
 impl ActionKind {
@@ -28,6 +30,7 @@ impl ActionKind {
             ActionKind::PythonTool => "python_tool",
             ActionKind::ShellCommand => "shell_command",
             ActionKind::ComputerControl => "computer_control",
+            ActionKind::FilesystemWrite => "filesystem_write",
         }
     }
 }
