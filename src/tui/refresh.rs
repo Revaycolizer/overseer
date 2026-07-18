@@ -11,6 +11,9 @@ impl App {
         if self.selected_conv_id.is_none() && !self.conversations.is_empty() {
             self.selected_conv_id = self.conversations.first().map(|c| c.id);
         }
+        if let Some(id) = self.selected_conv_id {
+            self.messages = self.client.get_messages_page(id, None, 100).await?;
+        }
         Ok(())
     }
 

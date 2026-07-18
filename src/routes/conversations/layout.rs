@@ -23,7 +23,7 @@ pub fn ConversationsHeader(
     let id_opt = (state.selected_conversation_id)();
 
     rsx! {
-        div { class: "border-b border-slate-200 bg-white/90 backdrop-blur-sm px-6 py-4",
+        div { class: "border-b border-slate-200 bg-white/90 backdrop-blur-sm px-3 sm:px-6 py-3 sm:py-4",
             div { class: "max-w-3xl mx-auto flex items-start justify-between gap-4",
                 div { class: "min-w-0",
                     p { class: "text-[10px] font-black uppercase tracking-[0.24em] text-slate-400", if id_opt.is_some() { "Conversation Workspace" } else { "Ready to Start" } }

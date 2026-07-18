@@ -1,12 +1,10 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::MaterialIcon;
-
 #[component]
 pub fn VoiceHeader(is_listening: bool, on_terminate: Callback<()>) -> Element {
     if !is_listening {
         return rsx! {};
     }
-
     rsx! {
         div { class: "bg-blue-50/40 border-b border-blue-100 px-6 py-4 flex flex-col gap-4 transition-all duration-300 animate-fade-in shrink-0",
             div { class: "flex items-center justify-between",
@@ -35,7 +33,6 @@ pub fn VoiceHeader(is_listening: bool, on_terminate: Callback<()>) -> Element {
                     }
                 }
             }
-
             // Sleek audio waveform visualizer lines
             div { class: "flex items-center justify-between gap-1 h-14 bg-white/70 border border-slate-200/50 rounded-2xl px-6 py-2 shadow-inner",
                 for (i, &h) in [24, 42, 64, 28, 12, 54, 72, 36, 18, 58, 48, 16, 28, 62, 52, 24, 8, 48, 68, 30].iter().enumerate() {
@@ -48,7 +45,6 @@ pub fn VoiceHeader(is_listening: bool, on_terminate: Callback<()>) -> Element {
         }
     }
 }
-
 #[component]
 pub fn OverseerBottomWidget(is_listening: bool, on_refresh: Callback<()>) -> Element {
     rsx! {
@@ -73,7 +69,6 @@ pub fn OverseerBottomWidget(is_listening: bool, on_refresh: Callback<()>) -> Ele
         }
     }
 }
-
 #[component]
 pub fn TelemetrySummary(uptime: String, session_id: String) -> Element {
     rsx! {
