@@ -66,6 +66,10 @@ impl BrowserPool {
         Ok(())
     }
 
+    pub async fn get_profile_path(&self, id: i64) -> Option<std::path::PathBuf> {
+        self.inner.lock().await.sessions.get(&id).map(|s| s.profile_path.clone())
+    }
+
     pub async fn session_count(&self) -> usize {
         self.inner.lock().await.sessions.len()
     }
