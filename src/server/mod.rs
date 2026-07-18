@@ -36,6 +36,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(artifacts::router())
         .merge(misc::router())
         .merge(browser::router())
+        .merge(auth::router())
         .merge(browser_recording::router())
         .merge(browser_hitl::router())
         .layer(GovernorLayer {
@@ -73,6 +74,7 @@ pub mod planners;
 pub mod supervision;
 pub mod versions;
 pub mod artifacts;
+pub mod auth;
 pub mod browser;
 pub mod browser_hitl;
 pub mod browser_recording;
