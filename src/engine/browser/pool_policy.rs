@@ -1,5 +1,4 @@
 use super::action_types::ActionPolicy;
-use super::audit_log::AuditLog;
 use super::pool::BrowserPool;
 use super::session::SessionState;
 

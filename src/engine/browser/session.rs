@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use tokio::process::Child;
 use super::action_types::ActionPolicy;

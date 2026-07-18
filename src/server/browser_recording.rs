@@ -28,7 +28,7 @@ async fn start_recording(
     Path(id): Path<i64>,
     Json(payload): Json<StartPayload>,
 ) -> Result<Json<serde_json::Value>, String> {
-    let rx = state.browser_pool.start_recording(id, payload.quality.unwrap_or(75))
+    let _rx = state.browser_pool.start_recording(id, payload.quality.unwrap_or(75))
         .await.map_err(|e| e.to_string())?;
     Ok(Json(serde_json::json!({"recording": true})))
 }
@@ -78,7 +78,7 @@ async fn live_view(
     ws.on_upgrade(move |client_ws| stream_live(client_ws, state, id))
 }
 
-async fn stream_live(mut client_ws: WebSocket, state: Arc<ServerState>, id: i64) {
+async fn stream_live(client_ws: WebSocket, state: Arc<ServerState>, id: i64) {
     let mut rx = match state.browser_pool.start_recording(id, 75).await {
         Ok(r) => r,
         Err(_) => return,

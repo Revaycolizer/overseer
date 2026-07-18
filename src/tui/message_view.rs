@@ -7,7 +7,7 @@ use crate::engine::orchestrator::{StructuredResponse, SupervisorExecutionResult,
 use crate::engine::orchestrator::utils::json_strip::strip_embedded_json;
 
 pub fn format_message(m: &Message) -> Vec<Line<'static>> {
-    let (role_label, role_style) = if m.role == "user" {
+    let (role_label, _role_style) = if m.role == "user" {
         ("You", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
     } else {
         ("Overseer", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD))

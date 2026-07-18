@@ -11,8 +11,10 @@ impl AuditLog {
 
     pub async fn write(&self, entry: &serde_json::Value) {
         let line = format!("{}\n", entry);
-        let _ = tokio::fs::OpenOptions::new()
+        if let Ok(mut f) = tokio::fs::OpenOptions::new()
             .create(true).append(true).open(&self.path).await
-            .and_then(|mut f| tokio::io::AsyncWriteExt::write_all(&mut f, line.as_bytes()));
+        {
+            let _ = tokio::io::AsyncWriteExt::write_all(&mut f, line.as_bytes()).await;
+        }
     }
 }

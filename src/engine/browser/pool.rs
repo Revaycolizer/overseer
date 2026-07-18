@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use serde_json::Value;
 use tokio::sync::Mutex;
 
 use super::memory_monitor;
 use super::port_alloc;
-use super::session::{BrowserSession, SessionState};
+use super::session::BrowserSession;
 use super::session_init;
 use super::spawner;
 use super::pool_config::PoolConfig;
@@ -73,7 +72,7 @@ impl BrowserPool {
 
     pub async fn shutdown(&self) {
         let mut inner = self.inner.lock().await;
-        for (_, mut session) in inner.sessions.drain() {
+        for (_, session) in inner.sessions.drain() {
             if let Some(ref cdp) = session.cdp {
                 let _ = cdp.call("Page.stopScreencast", serde_json::json!({})).await;
                 let _ = cdp.call("Browser.close", serde_json::json!({})).await;

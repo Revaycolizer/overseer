@@ -33,6 +33,7 @@ pub async fn set_conversation_setting(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn delete_conversation_setting(
     db: &Database,
     conversation_id: i64,

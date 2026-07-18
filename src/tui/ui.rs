@@ -103,7 +103,7 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(input_line).block(Block::default().borders(Borders::ALL).title(" Type Message (←/→ to move cursor, ENTER to send) ")), right_layout[1]);
 }
 
-fn draw_browser(f: &mut Frame, app: &App, area: Rect) {
+fn draw_browser(f: fn draw_browser(f: &mut Frame, app: &App,mut Frame, _app: fn draw_browser(f: &mut Frame, app: &App,App, area: Rect) {
     let text = vec![
         Line::from(Span::styled("BROWSER SESSIONS", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD))),
         Line::from(""),

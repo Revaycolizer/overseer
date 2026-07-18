@@ -13,7 +13,6 @@ pub fn router() -> Router<Arc<ServerState>> {
 }
 
 #[derive(Deserialize)]
-struct PausePayload { reason: String }
 
 async fn resume_session(
     State(state): State<Arc<ServerState>>,

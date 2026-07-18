@@ -1,10 +1,10 @@
 use axum::{
-    routing::{get, post, delete},
+    routing::{get, post},
     extract::{Path, State, Json, ws::WebSocketUpgrade},
     response::IntoResponse,
     Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 use super::ServerState;
 

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::PathBuf;
 
 const GITHUB_REPO: &str = "h4ckf0r0day/obscura";
