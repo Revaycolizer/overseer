@@ -1,8 +1,8 @@
 use crate::backend;
-use crate::routes::conversations::helpers::build_query_with_context;
 use crate::state::use_global_state;
 use dioxus::prelude::*;
 use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
+use super::artifact_workspace::ArtifactWorkspaceSurface;
 use super::chat_composer::ChatComposer;
 
 #[derive(Props, Clone, PartialEq)]
@@ -206,5 +206,3 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
         }
     }
 }
-
-#[component]
