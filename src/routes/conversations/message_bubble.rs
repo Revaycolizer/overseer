@@ -35,20 +35,17 @@ pub fn MessageBubble(msg: backend::Message, on_copy: EventHandler<String>) -> El
     }
     
     rsx! {
-        // V4.17.7: content-visibility: auto lets the browser skip
-        // rendering for messages that aren't in the viewport. This
-        // keeps the chat panel cheap when the conversation is hundreds
-        // of messages long; combined with the existing paged fetch
-        // (50 per page) the DOM stays bounded.
         div {
-            class: "flex items-start gap-4 mb-6",
+            class: "flex items-start gap-3 mb-5 animate-fade-in",
             style: "content-visibility: auto; contain-intrinsic-size: auto 200px;",
-            div { class: "size-8 shrink-0 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-soft transition-transform hover:scale-105",
-                MaterialIcon { name: "smart_toy", color: MaterialIconColor::Light, size: 20 }
+            div { class: "size-7 shrink-0 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-[0_2px_8px_rgba(59,130,246,0.3)] transition-all duration-200 hover:scale-110 hover:shadow-[0_4px_12px_rgba(59,130,246,0.4)]",
+                MaterialIcon { name: "smart_toy", color: MaterialIconColor::Light, size: 18 }
             }
-            div { class: "space-y-4 flex-1 min-w-0",
+            div { class: "space-y-3 flex-1 min-w-0",
                 div { class: "flex items-center gap-2",
-                    span { class: "text-[11px] font-bold uppercase tracking-widest text-slate-500", "Overseer" }
+                    span { class: "text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-400", "Overseer" }
+                    span { class: "size-1 rounded-full bg-slate-300" }
+                    span { class: "text-[10px] text-slate-400", "just now" }
                 }
                 if let Some(res) = structured {
                     StructuredView { res, hide_evidence: msg.hide_evidence }
@@ -65,12 +62,12 @@ fn UserBubble(msg: backend::Message, on_copy: EventHandler<String>) -> Element {
     let content = msg.content.clone();
     let attachments = msg.attachments.clone();
     rsx! {
-        div { class: "flex items-start gap-4 flex-row-reverse",
-            div { class: "size-8 shrink-0 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shadow-soft",
+        div { class: "flex items-start gap-3 flex-row-reverse animate-fade-in",
+            div { class: "size-7 shrink-0 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)]",
                 img { class: "w-full h-full object-cover", src: "https://lh3.googleusercontent.com/aida-public/AB6AXuBqMBjxuGBSeYlBYQz3ehCFqzRwa9Wyq9eVwMYy09GJ935PrL_9J9Nm026Ma8JaIJeKfVWN7hdeIFL0gi4M4lOputd5eqoppoLRMUGbZnFachbwDjykRgdxvZCEKJojPy5zMgRnDuAjxuLndEN_6WYnHU9MPtepRB2SOYmZ_WbKPgUjNyE5Z8A9NuRt-cff_feV6mAy2VkbTR38GeWrNCj20LzICJCLsrMqsI68pBlMyS4UV1ORb1_pYK5tyDwjtOlKMwPP2uuBrtw" }
             }
-            div { class: "group relative max-w-[85%] text-right",
-                div { class: "bg-[var(--user-bubble)] p-4 rounded-2xl rounded-tl-none border border-slate-200 text-sm shadow-bubble",
+            div { class: "group relative max-w-[80%] sm:max-w-[70%] text-right",
+                div { class: "bg-[var(--user-bubble)] p-3.5 rounded-2xl rounded-tr-none border border-slate-200 text-sm leading-relaxed shadow-[0_1px_4px_rgba(0,0,0,0.04)] transition-shadow duration-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]",
                     p { class: "select-text", "{content}" }
                 }
                 if !attachments.is_empty() {
@@ -80,8 +77,10 @@ fn UserBubble(msg: backend::Message, on_copy: EventHandler<String>) -> Element {
                         }
                     }
                 }
-                button { class: "absolute -left-10 top-2 p-1.5 opacity-0 group-hover:opacity-100 transition-all shadow-sm", onclick: move |_| on_copy.call(content.clone()),
-                    MaterialIcon { name: "content_copy", size: 16 }
+                button {
+                    class: "absolute -left-9 top-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 ease-out hover:bg-slate-100 active:scale-90",
+                    onclick: move |_| on_copy.call(content.clone()),
+                    MaterialIcon { name: "content_copy", size: 14 }
                 }
             }
         }
@@ -93,9 +92,9 @@ fn LegacyAssistantBubble(msg: backend::Message, on_copy: EventHandler<String>) -
     let raw = clean_content(&msg.content);
     let (text, blocks) = parse_content(&raw);
     rsx! {
-        div { class: "space-y-4",
+        div { class: "space-y-3",
             if let Some(t) = text {
-                div { class: "bg-[var(--assistant-bubble)] p-4 rounded-2xl rounded-tl-none border border-blue-50/50 shadow-bubble max-w-[95%] w-fit",
+                div { class: "bg-[var(--assistant-bubble)] p-3.5 rounded-2xl rounded-tl-none border border-blue-50/40 shadow-[0_1px_4px_rgba(0,0,0,0.03)] max-w-[95%] w-fit transition-shadow duration-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)]",
                     MarkdownText { content: t, is_user: false }
                 }
             }

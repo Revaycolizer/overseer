@@ -43,9 +43,9 @@ pub fn Sidebar(props: SidebarProps) -> Element {
 
     rsx! {
         aside { class: "w-72 border-r border-slate-200 bg-white flex flex-col shrink-0",
-            div { class: "p-5 space-y-3",
+            div { class: "p-4 space-y-3",
                 button {
-                    class: "w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg shadow-soft transition-all text-xs",
+                    class: "w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl shadow-[0_2px_8px_rgba(59,130,246,0.25)] transition-all duration-200 ease-out text-xs active:scale-[0.97] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)]",
                     onclick: {
                         let db = db.clone();
                         move |_| {
@@ -63,14 +63,14 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                 }
                 div { class: "relative",
                     input {
-                        class: "w-full border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-3 py-2 text-xs transition-all outline-none",
+                        class: "w-full border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 rounded-xl px-3 py-2 text-xs transition-all duration-200 ease-out outline-none placeholder:text-slate-400",
                         placeholder: "Search messages...",
                         value: "{search_query}",
                         oninput: move |evt| search_query.set(evt.value().clone())
                     }
                 }
             }
-            div { class: "flex-1 overflow-y-auto px-4 space-y-6",
+            div { class: "flex-1 overflow-y-auto px-3 space-y-4",
                 div {
                     if !search_query().trim().is_empty() {
                         h3 { class: "px-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3",
@@ -105,11 +105,11 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                             for conv in &props.conversations {
                             div {
                                 class: format!(
-                                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {}",
+                                    "w-full flex items-center gap-2 px-3 py-2 rounded-xl border transition-all duration-150 ease-out group {}",
                                     if selected_conversation_id() == Some(conv.id) {
-                                        "bg-blue-50 text-blue-700 border-blue-100"
+                                        "bg-blue-50 text-blue-700 border-blue-100 shadow-[0_1px_3px_rgba(59,130,246,0.08)]"
                                     } else {
-                                        "hover:bg-slate-50 text-slate-600 border-transparent"
+                                        "hover:bg-slate-50 text-slate-600 border-transparent hover:border-slate-200"
                                     }
                                 ),
                                 button {
@@ -118,13 +118,13 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                                         let id = conv.id;
                                         move |_| selected_conversation_id.set(Some(id))
                                     },
-                                    MaterialIcon { name: "chat_bubble", size: 20 }
-                                    span { class: "text-xs font-semibold truncate text-left flex-1",
+                                    MaterialIcon { name: "chat_bubble", size: 18 }
+                                    span { class: "text-xs font-medium truncate text-left flex-1",
                                         "{conv.title}"
                                     }
                                 }
                                 button {
-                                    class: "shrink-0 p-1 text-slate-400 hover:text-red-500 transition-colors",
+                                    class: "shrink-0 p-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all duration-150",
                                     title: "Delete conversation",
                                     onclick: {
                                         let db = db.clone();
@@ -147,7 +147,7 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                                             });
                                         }
                                     },
-                                    MaterialIcon { name: "delete", size: 18 }
+                                    MaterialIcon { name: "delete", size: 16 }
                                 }
                             }
                         }
