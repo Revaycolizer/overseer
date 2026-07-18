@@ -60,6 +60,7 @@ pub async fn execute_tool(
         "web_browse",
         "http_request",
         "web_extract",
+        "write_file",
     ]
     .iter()
     .any(|&t| t == tname);
