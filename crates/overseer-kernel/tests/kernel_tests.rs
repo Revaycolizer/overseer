@@ -186,6 +186,33 @@ fn policy_high_risk_hint_escalates_but_never_authorizes() {
     ));
 }
 
+#[test]
+fn policy_filesystem_write_requires_approval() {
+    // A granted filesystem write is not denied, but it must require approval.
+    let mut cfg = base_cfg(&["write_file"]);
+    cfg.require_approval_kinds = [ActionKind::FilesystemWrite].into_iter().collect();
+    let req = ActionRequest::new(
+        1,
+        ActionKind::FilesystemWrite,
+        "write_file",
+        serde_json::json!({"path": "/tmp/x/proof.txt", "content": "hi"}),
+        vec!["write_file".to_string()],
+        5_000,
+        "write proof.txt",
+    );
+    assert!(matches!(
+        evaluate(&cfg, &req),
+        PolicyDecision::RequireApproval { .. }
+    ));
+
+    // Without the capability granted it is denied outright (never auto-run).
+    let cfg_nocap = base_cfg(&[]);
+    assert!(matches!(
+        evaluate(&cfg_nocap, &req),
+        PolicyDecision::Deny { .. }
+    ));
+}
+
 // ---------- required scenario 1 ----------
 
 #[tokio::test]
