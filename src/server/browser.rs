@@ -15,6 +15,8 @@ pub fn router() -> Router<Arc<ServerState>> {
         .route("/v1/browser/sessions/{id}/navigate", post(navigate))
         .route("/v1/browser/sessions/{id}/screenshot", get(screenshot))
         .route("/v1/browser/sessions/{id}/cdp", get(cdp_relay))
+        .route("/v1/browser/sessions/{id}/policy", post(set_policy))
+        .route("/v1/browser/sessions/{id}/audit", get(get_audit))
         .route("/v1/browser/memory", get(memory_report))
 }
 
@@ -70,6 +72,23 @@ async fn cdp_relay(
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
     super::browser_relay::handler(ws, state, id).await
+}
+
+async fn set_policy(
+    State(state): State<Arc<ServerState>>,
+    Path(id): Path<i64>,
+    Json(policy): Json<crate::engine::browser::action_types::ActionPolicy>,
+) -> Result<Json<()>, String> {
+    state.browser_pool.set_policy(id, policy).await.map_err(|e| e.to_string())?;
+    Ok(Json(()))
+}
+
+async fn get_audit(
+    State(state): State<Arc<ServerState>>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<serde_json::Value>>, String> {
+    let entries = state.browser_pool.get_audit_log(id).await.map_err(|e| e.to_string())?;
+    Ok(Json(entries))
 }
 
 async fn memory_report(

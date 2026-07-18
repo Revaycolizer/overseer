@@ -15,6 +15,7 @@ pub mod obscura_resolver;
 pub mod pool;
 pub mod pool_cdp;
 pub mod pool_config;
+pub mod pool_policy;
 pub mod pool_recording;
 pub mod port_alloc;
 pub mod session;

@@ -2,6 +2,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::process::Child;
+use super::action_types::ActionPolicy;
+use super::audit_log::AuditLog;
 use super::cdp::CdpConnection;
 use super::recorder::FrameRecorder;
 
@@ -22,6 +24,8 @@ pub struct BrowserSession {
     pub cdp_ws_url: String,
     pub cdp: Option<Arc<CdpConnection>>,
     pub recorder: Option<FrameRecorder>,
+    pub policy: ActionPolicy,
+    pub audit_log: Option<AuditLog>,
     pub action_count: Arc<AtomicU32>,
     pub navigation_depth: Arc<AtomicU32>,
     pub created_at: chrono::NaiveDateTime,
@@ -39,6 +43,8 @@ impl BrowserSession {
             cdp_ws_url,
             cdp: None,
             recorder: None,
+            policy: ActionPolicy::default(),
+            audit_log: None,
             action_count: Arc::new(AtomicU32::new(0)),
             navigation_depth: Arc::new(AtomicU32::new(0)),
             created_at: chrono::Utc::now().naive_utc(),
