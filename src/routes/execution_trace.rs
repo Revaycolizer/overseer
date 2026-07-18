@@ -314,6 +314,13 @@ fn classify_event(event: &ExecutionEvent) -> String {
         "macro_plan" | "single_domain_route" | "micro_step" | "planning" => "Planning".to_string(),
         "tool_call" | "tool_execution" | "tool_result" => "Tool".to_string(),
         "direct_chat" | "final_response" | "synthesis" => "Synthesis".to_string(),
+        "approval_requested" | "approval_approved" | "approval_rejected" | "approval_cancelled" => {
+            "Approval".to_string()
+        }
+        "action_requested" | "policy_allowed" | "policy_denied" | "action_started"
+        | "action_completed" | "action_failed" | "action_timed_out" | "emergency_stop" => {
+            "Kernel".to_string()
+        }
         _ if event.tool_name.is_some() => "Tool".to_string(),
         _ => "System".to_string(),
     }
@@ -331,6 +338,19 @@ fn describe_event_type(event_type: &str) -> String {
         "direct_chat" => "Direct Chat Response".to_string(),
         "final_response" => "Final Response".to_string(),
         "synthesis" => "Synthesis".to_string(),
+        // Overseer Kernel v0.1 action-lifecycle events.
+        "action_requested" => "Action Requested".to_string(),
+        "policy_allowed" => "Policy · Allowed".to_string(),
+        "policy_denied" => "Policy · Denied".to_string(),
+        "approval_requested" => "Approval Requested".to_string(),
+        "approval_approved" => "Approval · Approved".to_string(),
+        "approval_rejected" => "Approval · Rejected".to_string(),
+        "approval_cancelled" => "Approval · Cancelled".to_string(),
+        "action_started" => "Action Started".to_string(),
+        "action_completed" => "Action Completed".to_string(),
+        "action_failed" => "Action Failed".to_string(),
+        "action_timed_out" => "Action Timed Out".to_string(),
+        "emergency_stop" => "Emergency Stop".to_string(),
         other => prettify_token(other),
     }
 }
