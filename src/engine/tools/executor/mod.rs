@@ -8,14 +8,18 @@ use native::call_native_builtin_tool;
 use python::execute_python_tool;
 use rust::execute_rust_tool;
 
-pub async fn call_dynamic_tool(
+// Kernel v0.1: the low-level executor is crate-internal. The single governed
+// entry point is `crate::engine::kernel::kernel_execute`; nothing outside the
+// crate may reach tool execution. A static test (overseer-kernel
+// `no_ungoverned_execution_calls`) enforces the in-crate call allowlist.
+pub(crate) async fn call_dynamic_tool(
     info: &ToolInfo,
     args: serde_json::Value,
 ) -> Result<String, DynamicToolError> {
     call_dynamic_tool_logic(info, args).await
 }
 
-pub async fn call_dynamic_tool_logic(
+pub(crate) async fn call_dynamic_tool_logic(
     info: &ToolInfo,
     args: serde_json::Value,
 ) -> Result<String, DynamicToolError> {
