@@ -172,12 +172,12 @@ fn send_message(
                 });
             }
         });
-        messages_resource.restart();
-        conversations_resource.restart();
 
         if let Err(_) = handle.await {
             // orchestrate cancelled
         }
+        messages_resource.restart();
+        conversations_resource.restart();
         is_local_executing.set(false);
         is_thinking.set(false);
         conversations_resource.restart();

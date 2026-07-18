@@ -33,7 +33,7 @@ pub fn ChatPanel(
                     load_more.call(());
                 }
             },
-            div { class: "max-w-3xl mx-auto py-10 px-6 space-y-8",
+            div { class: "w-full max-w-3xl mx-auto py-6 sm:py-10 px-3 sm:px-6 space-y-6 sm:space-y-8",
                 if !messages.is_empty() {
                     div { class: "mx-auto text-center text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400",
                         "~{total_tokens} tokens in view"

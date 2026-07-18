@@ -66,7 +66,7 @@ fn UserBubble(msg: backend::Message, on_copy: EventHandler<String>) -> Element {
             div { class: "size-7 shrink-0 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)]",
                 img { class: "w-full h-full object-cover", src: "https://lh3.googleusercontent.com/aida-public/AB6AXuBqMBjxuGBSeYlBYQz3ehCFqzRwa9Wyq9eVwMYy09GJ935PrL_9J9Nm026Ma8JaIJeKfVWN7hdeIFL0gi4M4lOputd5eqoppoLRMUGbZnFachbwDjykRgdxvZCEKJojPy5zMgRnDuAjxuLndEN_6WYnHU9MPtepRB2SOYmZ_WbKPgUjNyE5Z8A9NuRt-cff_feV6mAy2VkbTR38GeWrNCj20LzICJCLsrMqsI68pBlMyS4UV1ORb1_pYK5tyDwjtOlKMwPP2uuBrtw" }
             }
-            div { class: "group relative max-w-[80%] sm:max-w-[70%] text-right",
+            div { class: "group relative w-full sm:w-auto sm:max-w-[80%] text-right",
                 div { class: "bg-[var(--user-bubble)] p-3.5 rounded-2xl rounded-tr-none border border-slate-200 text-sm leading-relaxed shadow-[0_1px_4px_rgba(0,0,0,0.04)] transition-shadow duration-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]",
                     p { class: "select-text", "{content}" }
                 }
@@ -94,7 +94,7 @@ fn LegacyAssistantBubble(msg: backend::Message, on_copy: EventHandler<String>) -
     rsx! {
         div { class: "space-y-3",
             if let Some(t) = text {
-                div { class: "bg-[var(--assistant-bubble)] p-3.5 rounded-2xl rounded-tl-none border border-blue-50/40 shadow-[0_1px_4px_rgba(0,0,0,0.03)] max-w-[95%] w-fit transition-shadow duration-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)]",
+                div { class: "bg-[var(--assistant-bubble)] p-3.5 rounded-2xl rounded-tl-none border border-blue-50/40 shadow-[0_1px_4px_rgba(0,0,0,0.03)] w-full sm:max-w-[95%] transition-shadow duration-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)]",
                     MarkdownText { content: t, is_user: false }
                 }
             }

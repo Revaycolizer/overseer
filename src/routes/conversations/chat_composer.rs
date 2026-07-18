@@ -16,7 +16,7 @@ pub fn ChatComposer(props: ChatInputProps) -> Element {
     let stop_fn = state.stop.clone();
 
     rsx! {
-        div { class: "border-t border-slate-200/80 bg-white/96 px-4 pt-3 pb-5",
+        div { class: "border-t border-slate-200/80 bg-white/96 px-2 sm:px-4 pt-2 sm:pt-3 pb-3 sm:pb-5",
             if !pending_attachments().is_empty() {
                 div { class: "mb-3 flex flex-wrap gap-2",
                     for (i, (name, _, _)) in pending_attachments().iter().enumerate() {

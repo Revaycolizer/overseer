@@ -65,8 +65,8 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
     };
 
     rsx! {
-        div { class: "p-6 bg-gradient-to-t from-[var(--workspace-bg)] via-[var(--workspace-bg)]/95 to-transparent",
-            div { class: "max-w-3xl mx-auto",
+        div { class: "p-3 sm:p-6 bg-gradient-to-t from-[var(--workspace-bg)] via-[var(--workspace-bg)]/95 to-transparent",
+            div { class: "w-full max-w-3xl mx-auto",
                 if selected_artifact_count > 0 {
                     ArtifactWorkspaceSurface {
                         selected_artifacts: selected_artifacts,
