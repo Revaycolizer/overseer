@@ -1,3 +1,4 @@
+pub mod browser;
 pub mod charting;
 pub mod document_gen;
 pub mod document_generation;

@@ -19,6 +19,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         data_dir,
     );
     let browser_pool = Arc::new(pool);
+    crate::engine::browser::global::init(browser_pool.clone());
     let state = Arc::new(ServerState { db, agent_system, browser_pool: browser_pool.clone() });
 
     let app = Router::new()

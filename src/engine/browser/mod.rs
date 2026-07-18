@@ -1,6 +1,7 @@
 pub mod cdp;
 pub mod dom_cache;
 pub mod ffmpeg_installer;
+pub mod global;
 pub mod image_optimizer;
 pub mod memory_monitor;
 pub mod recorder;
