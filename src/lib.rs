@@ -1,3 +1,7 @@
+// Dioxus + deeply-nested async resources (e.g. workflow local-client futures)
+// push type layout past the default query depth; raise the limit for the crate.
+#![recursion_limit = "256"]
+
 use dioxus::prelude::*;
 
 pub mod backend;
