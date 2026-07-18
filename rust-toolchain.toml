@@ -1,0 +1,10 @@
+# The locked dependency tree requires rustc >= 1.82 (wry -> 1.77; yoke/zerovec/
+# zerotrie -> 1.82). The build fails with the system rustc 1.75.0 on PATH
+# (/usr/bin/rustc). Pinning the rustup `stable` toolchain forces cargo to use a
+# compiler new enough for the locked crates. `stable` is used (rather than a
+# specific 1.82.x) because this environment is offline and only `stable`
+# (currently 1.95.0) is installed; 1.82 could not be fetched. Any stable >= 1.82
+# satisfies the tree.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
