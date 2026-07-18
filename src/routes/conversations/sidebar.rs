@@ -4,6 +4,7 @@ use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 #[derive(Props, Clone, PartialEq)]
 pub struct SidebarProps {
+    pub class: Option<String>,
     pub conversations: Vec<backend::Conversation>,
     pub selected_conversation_id: Signal<Option<i64>>,
     pub conversations_resource: Resource<Vec<backend::Conversation>>,
@@ -42,7 +43,7 @@ pub fn Sidebar(props: SidebarProps) -> Element {
     });
 
     rsx! {
-        aside { class: "w-72 border-r border-slate-200 bg-white flex flex-col shrink-0",
+        aside { class: format!("w-72 border-r border-slate-200 bg-white flex flex-col shrink-0 {}", props.class.as_deref().unwrap_or("")),
             div { class: "p-4 space-y-3",
                 button {
                     class: "w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl shadow-[0_2px_8px_rgba(59,130,246,0.25)] transition-all duration-200 ease-out text-xs active:scale-[0.97] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)]",

@@ -81,7 +81,7 @@ pub fn Conversations() -> Element {
     rsx! {
         div { class: "flex-1 flex flex-col min-w-0 min-h-0 relative",
             div { class: "flex flex-1 overflow-hidden",
-                Sidebar { conversations: conversations, selected_conversation_id: selected_conversation_id, conversations_resource: conversations_resource.clone(), db: db.clone() }
+                Sidebar { class: "hidden md:flex", conversations: conversations, selected_conversation_id: selected_conversation_id, conversations_resource: conversations_resource.clone(), db: db.clone() }
                 main { class: "flex-1 relative bg-[var(--workspace-bg)] overflow-hidden min-h-0",
                     div { class: "flex flex-col min-w-0 min-h-0 h-full",
                         ConversationsHeader { state: state, conversation_title: conversation_title, route_reason: route_reason, route_label: route_label, personality_label: personality_label, latest_run: latest_run, selected_run: selected_run }
