@@ -3,7 +3,6 @@ use rig::client::CompletionClient;
 use rig::completion::Prompt;
 use rig::providers::ollama;
 
-const COMPACTION_THRESHOLD: usize = 6000;
 const KEEP_RECENT_TURNS: usize = 4;
 
 pub struct CompactResult {
@@ -11,13 +10,24 @@ pub struct CompactResult {
     pub compacted: usize,
 }
 
+async fn compaction_threshold(db: &crate::db::Database) -> usize {
+    let raw = crate::backend::get_setting(db, "compaction_token_threshold").await
+        .unwrap_or_else(|| "4096".to_string());
+    raw.trim().parse::<usize>().unwrap_or(4096)
+}
+
+async fn compaction_model_name(db: &crate::db::Database) -> String {
+    crate::backend::resolve_model_name(db, None, "compaction_model", "qwen2.5:7b-instruct").await
+}
+
 pub async fn maybe_compact(
     messages: Vec<crate::backend::Message>,
     ollama_client: &ollama::Client,
     db: &crate::db::Database,
 ) -> CompactResult {
+    let threshold = compaction_threshold(db).await;
     let total_tokens = count_messages_tokens(&messages);
-    if total_tokens <= COMPACTION_THRESHOLD || messages.len() < KEEP_RECENT_TURNS + 2 {
+    if total_tokens <= threshold || messages.len() < KEEP_RECENT_TURNS + 2 {
         return CompactResult { messages, compacted: 0 };
     }
 
@@ -60,7 +70,7 @@ async fn summarize_turns(
         text
     );
 
-    let model = crate::backend::resolve_model_name(db, None, "title_generator_model", "qwen2.5:7b-instruct").await;
+    let model = compaction_model_name(db).await;
     let agent = rig::agent::AgentBuilder::new(ollama_client.completion_model(&model))
         .preamble("You are a precise summarizer.")
         .build();
