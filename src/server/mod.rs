@@ -57,4 +57,5 @@ pub mod supervision;
 pub mod versions;
 pub mod artifacts;
 pub mod browser;
+pub mod browser_relay;
 pub mod misc;
