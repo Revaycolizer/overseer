@@ -230,10 +230,32 @@ fn clean_text_markers(text: &str) -> String {
     text.trim().to_string()
 }
 
+fn fts5_escape(query: &str) -> String {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    // Escape FTS5 special characters and wrap as a phrase so the
+    // user's input is treated as a literal search term.
+    let escaped: String = trimmed
+        .chars()
+        .map(|c| match c {
+            '"' | '^' | '*' | '(' | ')' | '+' | '-' | '~' => ' ',
+            _ => c,
+        })
+        .collect();
+    format!("\"{}\"", escaped)
+}
+
 pub async fn search_messages(
     db: &Database,
     query: &str,
 ) -> anyhow::Result<Vec<ConversationSearchResult>> {
+    let fts_query = fts5_escape(query);
+    if fts_query.is_empty() {
+        return Ok(vec![]);
+    }
+
     let sql = r#"
         SELECT 
             m.conversation_id as conversation_id,
@@ -241,16 +263,16 @@ pub async fn search_messages(
             m.id as message_id,
             m.content as content,
             m.created_at as created_at
-        FROM messages m
+        FROM messages_fts
+        JOIN messages m ON messages_fts.rowid = m.id
         JOIN conversations c ON m.conversation_id = c.id
-        WHERE m.content LIKE ?1
-        ORDER BY m.created_at DESC
+        WHERE messages_fts MATCH ?1
+        ORDER BY rank
         LIMIT 50
     "#;
 
-    let search_pattern = format!("%{}%", query);
     let mut results = sqlx::query_as::<_, ConversationSearchResult>(sql)
-        .bind(search_pattern)
+        .bind(&fts_query)
         .fetch_all(&db.pool)
         .await?;
 
