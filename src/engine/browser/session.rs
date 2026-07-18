@@ -12,6 +12,7 @@ pub enum SessionState {
     Active,
     Idle,
     Suspended,
+    Paused,
     Closed,
 }
 

@@ -37,6 +37,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(misc::router())
         .merge(browser::router())
         .merge(browser_recording::router())
+        .merge(browser_hitl::router())
         .layer(GovernorLayer {
             config: crate::engine::resilience::server_governor(),
         })
@@ -73,6 +74,7 @@ pub mod supervision;
 pub mod versions;
 pub mod artifacts;
 pub mod browser;
+pub mod browser_hitl;
 pub mod browser_recording;
 pub mod browser_relay;
 pub mod misc;

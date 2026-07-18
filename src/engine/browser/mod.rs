@@ -7,6 +7,7 @@ pub mod wait_strategies;
 pub mod dom_cache;
 pub mod ffmpeg_installer;
 pub mod global;
+pub mod hitl;
 pub mod image_optimizer;
 pub mod memory_monitor;
 pub mod recorder;
