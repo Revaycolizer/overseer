@@ -1,3 +1,12 @@
+[workspace]
+# The root `overseer` package is the workspace root and a member. The kernel is a
+# separate library crate so the deterministic policy + approval runtime can be
+# built and tested WITHOUT the desktop GUI stack (dioxus-desktop, enigo, cpal),
+# which is exactly what the milestone asks for ("test policy and runtime
+# coordination independently from Dioxus UI code").
+members = ["crates/overseer-kernel"]
+resolver = "2"
+
 [package]
 name = "overseer"
 version = "0.1.4"
@@ -41,6 +50,7 @@ docx-rs = "0.4"
 genpdf = "0.2"
 rust_xlsxwriter = "0.79"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "macros", "chrono"] }
+overseer-kernel = { path = "crates/overseer-kernel" }
 rs-snowflake = "0.6.0"
 tempfile = "3.27.0"
 log = "0.4.29"
