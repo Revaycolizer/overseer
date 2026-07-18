@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use crate::state::use_global_state;
 
-mod execution_log; mod control_center; mod supervisor_panel; mod voice_header;
+mod execution_log; mod control_center; mod supervisor_panel; mod supervisor_intervention; mod voice_header;
 mod interaction_log; mod widgets_panel; mod header; mod single_widget;
 
 #[component]
