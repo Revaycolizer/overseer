@@ -19,7 +19,7 @@ pub mod executor;
 pub mod os_tool;
 
 pub use error::DynamicToolError;
-pub use executor::call_dynamic_tool;
+pub(crate) use executor::call_dynamic_tool;
 pub use router::{DynamicToolRouter, StructuredPerceptionTool};
 pub use os_tool::native_os_tool;
 pub use export_asset::native_export_asset;
