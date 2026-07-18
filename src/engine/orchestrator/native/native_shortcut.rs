@@ -30,12 +30,24 @@ pub async fn try_native_computer_shortcut(
     let input_json = serde_json::json!({ "query": query });
     record_event(db, run_id, event_sequence, "native_computer_shortcut_started", "running", Some("computer"), Some(query), Some("os_tool"), None, Some("Handling native computer request."), Some(&input_json.to_string())).await;
 
-    let raw = match crate::engine::tools::call_dynamic_tool(&tool, input_json).await {
-        Ok(raw) => raw,
-        Err(e) => {
-            let error_msg = format!("Native shortcut failed: {}", e);
-            record_event(db, run_id, event_sequence, "native_computer_shortcut_failed", "failed", Some("computer"), Some(query), Some("os_tool"), None, Some(&error_msg), None).await;
-            return Some(error_msg);
+    // Route the native fast-path through the kernel too — this is a real
+    // computer action and must not bypass policy/approval enforcement.
+    let raw = match crate::engine::kernel::kernel_execute(
+        db,
+        run_id,
+        "computer",
+        query,
+        &tool,
+        input_json,
+        &[tool.name.clone()],
+    )
+    .await
+    {
+        overseer_kernel::ExecutionOutcome::Executed { output } => output,
+        other => {
+            let msg = other.agent_response();
+            record_event(db, run_id, event_sequence, "native_computer_shortcut_blocked", "failed", Some("computer"), Some(query), Some("os_tool"), None, Some("Native computer shortcut blocked by kernel policy."), Some(&msg)).await;
+            return Some(msg);
         }
     };
 
