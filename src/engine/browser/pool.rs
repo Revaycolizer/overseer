@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use serde_json::Value;
 use tokio::sync::Mutex;
 
+use super::cdp::CdpConnection;
 use super::port_alloc;
 use super::session::{BrowserSession, SessionState};
 use super::spawner;
@@ -47,16 +49,32 @@ impl BrowserPool {
 
         let (process, cdp_ws_url) = spawner::spawn_obscura(port, &profile_path, self.config.stealth).await?;
 
-        let session = BrowserSession::new(id, port, profile_path, Some(process), cdp_ws_url);
-        let ws_url = session.cdp_ws_url.clone();
-        inner.sessions.insert(id, session);
-        drop(inner);
+        let mut session = BrowserSession::new(id, port, profile_path, Some(process), cdp_ws_url);
 
-        // Resource blocking in the background — non-critical
-        let ws = ws_url.clone();
-        tokio::spawn(async move {
-            let _ = super::cdp::block_resources(&ws).await;
-        });
+        // Establish persistent CDP connection
+        match CdpConnection::connect(&session.cdp_ws_url).await {
+            Ok(cdp) => {
+                let cdp = Arc::new(cdp);
+                cdp.clone().start_heartbeat();
+                // Block resources in the background
+                let bg_cdp = cdp.clone();
+                tokio::spawn(async move {
+                    let _ = bg_cdp.call("Network.enable", serde_json::json!({})).await;
+                    let _ = bg_cdp.call("Network.setBlockedURLs", serde_json::json!({
+                        "urls": [
+                            "*.png", "*.jpg", "*.gif", "*.svg", "*.ico",
+                            "*.woff", "*.woff2", "*.ttf", "*.eot",
+                            "*.mp4", "*.mp3", "*.webm",
+                            "*/analytics/*", "*/tracking/*", "*/ads/*", "*/beacon/*",
+                        ]
+                    })).await;
+                });
+                session.cdp = Some(cdp);
+            }
+            Err(e) => tracing::warn!(?e, "Failed to connect CDP for session {id}"),
+        }
+
+        inner.sessions.insert(id, session);
 
         Ok(id)
     }
@@ -68,11 +86,28 @@ impl BrowserPool {
     pub async fn close_session(&self, id: i64) -> anyhow::Result<()> {
         let mut inner = self.inner.lock().await;
         if let Some(mut session) = inner.sessions.remove(&id) {
+            drop(session.cdp.take());
             if let Some(mut child) = session.process.take() {
                 let _ = child.kill().await;
             }
         }
         Ok(())
+    }
+
+    pub async fn cdp_call(&self, session_id: i64, method: &str, params: Value) -> anyhow::Result<Value> {
+        let inner = self.inner.lock().await;
+        if let Some(s) = inner.sessions.get(&session_id) {
+            if let Some(ref cdp) = s.cdp {
+                return cdp.call(method, params).await;
+            }
+            // No persistent connection: fall back to one-shot
+            drop(inner);
+            return super::cdp::cdp_call(
+                &format!("ws://127.0.0.1:{}/devtools/browser", 9300 + session_id as u16),
+                method, params,
+            ).await;
+        }
+        anyhow::bail!("Session {session_id} not found")
     }
 
     pub async fn session_count(&self) -> usize {
