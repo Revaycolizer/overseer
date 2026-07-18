@@ -48,6 +48,8 @@ pub fn WorkflowCanvas(
     let mut zoom = use_signal(|| 1.0f64);
     let mut panning = use_signal(|| false);
     let mut drag_nid = use_signal(|| None::<i64>);
+    let mut connect_from = use_signal(|| None::<i64>);
+    let mut mouse_pos = use_signal(|| (0.0f64, 0.0f64));
     let mut last_mouse = use_signal(|| (0.0f64, 0.0f64));
 
     let sel = selected_node();
@@ -63,6 +65,11 @@ pub fn WorkflowCanvas(
             (e.id, d)
         }).collect()
     };
+    let connect_line = connect_from().and_then(|from_id| {
+        nodes_v.iter().find(|(id, _, _, _, _, _, _, _)| *id == from_id).map(|(_, _, _, x, y, _, _, _)| {
+            format!("M{:.0} {:.0} L{:.0} {:.0}", x + 90.0, y + 80.0, mouse_pos().0, mouse_pos().1)
+        })
+    });
 
     rsx! {
         div {
@@ -71,10 +78,12 @@ pub fn WorkflowCanvas(
             onmousedown: move |e| {
                 let c = e.data().client_coordinates();
                 last_mouse.set((c.x as f64, c.y as f64));
+                connect_from.set(None);
             },
             onmousemove: move |e| {
-                let (lx, ly) = last_mouse();
                 let c = e.data().client_coordinates();
+                mouse_pos.set((c.x as f64, c.y as f64));
+                let (lx, ly) = last_mouse();
                 let dx = c.x as f64 - lx;
                 let dy = c.y as f64 - ly;
                 if panning() { pan_x += dx; pan_y += dy; }
@@ -87,7 +96,23 @@ pub fn WorkflowCanvas(
                 }
                 last_mouse.set((c.x as f64, c.y as f64));
             },
-            onmouseup: move |_| { panning.set(false); drag_nid.set(None); },
+            onmouseup: move |_| {
+                panning.set(false); drag_nid.set(None);
+                if let Some(from_id) = connect_from() {
+                    let c = mouse_pos();
+                    let target = nodes_v.iter().find(|(_, _, _, x, y, _, _, _)| {
+                        (c.0 - (x + 90.0)).abs() < 90.0 && (c.1 - (y + 40.0)).abs() < 50.0
+                    }).map(|(id, _, _, _, _, _, _, _)| *id);
+                    if let Some(to_id) = target {
+                        if from_id != to_id {
+                            let mut e = edges.write();
+                            let max_id = e.iter().map(|e| e.id).max().unwrap_or(0);
+                            e.push(CanvasEdge { id: max_id + 1, from: from_id, to: to_id });
+                        }
+                    }
+                    connect_from.set(None);
+                }
+            },
             // Zoom buttons instead of wheel — wheel delta API varies by platform
             div { class: "absolute top-12 left-3 z-10 flex flex-col gap-1",
                 button { class: "bg-white border border-slate-200 rounded-lg size-7 flex items-center justify-center text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm",
@@ -111,6 +136,9 @@ pub fn WorkflowCanvas(
                         path { d: "{d}", fill: "none", stroke: "#94a3b8", stroke_width: 1.5, opacity: 0.6, marker_end: "url(#arrow)",
                             style: "transition: stroke 0.15s, opacity 0.15s; cursor: pointer;" }
                     }
+                    {connect_line.map(|d| rsx! {
+                        path { d: "{d}", fill: "none", stroke: "#3b82f6", stroke_width: 2, stroke_dasharray: "6,3" }
+                    })}
                     for (nid, nt, label, x, y, is_sel, color, icon) in nodes_v.clone() {
                         g {
                             transform: format!("translate({x:.0},{y:.0})"),
@@ -123,8 +151,10 @@ pub fn WorkflowCanvas(
                             text { x: 10, y: 22, fill: "white", font_size: 14, "{icon}" }
                             text { x: 30, y: 22, fill: "white", font_size: 12, font_weight: "bold", "{label}" }
                             text { x: 12, y: 56, fill: "#64748b", font_size: 10, "{nt}" }
-                            circle { cx: 90, cy: 0, r: 5, fill: color, stroke: "white", stroke_width: 2, cursor: "crosshair" }
-                            circle { cx: 90, cy: 80, r: 5, fill: color, stroke: "white", stroke_width: 2, cursor: "crosshair" }
+                            circle { cx: 90, cy: 0, r: 5, fill: color, stroke: "white", stroke_width: 2, cursor: "crosshair",
+                                onclick: move |e| { e.stop_propagation(); connect_from.set(Some(nid)); } }
+                            circle { cx: 90, cy: 80, r: 5, fill: color, stroke: "white", stroke_width: 2, cursor: "crosshair",
+                                onclick: move |e| { e.stop_propagation(); connect_from.set(Some(nid)); } }
                         }
                     }
                 }
