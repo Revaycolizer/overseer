@@ -1,6 +1,8 @@
 pub mod activity;
 pub mod app;
+pub mod chat_panel;
 pub mod handlers;
+pub mod info_panels;
 pub mod message_view;
 pub mod send;
 pub mod tab;
