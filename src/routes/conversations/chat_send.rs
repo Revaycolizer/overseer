@@ -160,12 +160,20 @@ fn send_message(
                 let agent_title = agent_ref.clone();
                 let db_t = db.clone();
                 let q_t = q.clone();
+                let conv_id_t = conv_id;
+                let (title_tx, mut title_rx) = tokio::sync::oneshot::channel::<()>();
+                let mut convs_for_title = conversations_resource.clone();
+                spawn(async move {
+                    if title_rx.await.is_ok() {
+                        convs_for_title.restart();
+                    }
+                });
                 tokio::spawn(async move {
                     let title = agent_title.generate_title(&db_t, &q_t).await;
-                    if title.is_empty() {
-                        tracing::warn!("Title generation returned empty string");
-                    } else {
-                        tracing::info!(?title, "Generated conversation title");
+                    if !title.is_empty() {
+                        let _ = crate::backend::update_conversation_title(&db_t, conv_id_t, &title).await;
+                        let _ = title_tx.send(());
+                        crate::engine::activity::engine_activity().bump();
                     }
                 });
             }
