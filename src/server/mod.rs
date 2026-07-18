@@ -42,6 +42,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(browser_recording::router())
         .merge(browser_hitl::router())
         .merge(credentials::router())
+        .merge(workflow_templates::router())
         .merge(workflow_triggers::router())
         .layer(GovernorLayer {
             config: crate::engine::resilience::server_governor(),
@@ -81,6 +82,7 @@ pub mod versions;
 pub mod artifacts;
 pub mod auth;
 pub mod browser;
+pub mod workflow_templates;
 pub mod credentials;
 pub mod browser_hitl;
 pub mod browser_recording;
