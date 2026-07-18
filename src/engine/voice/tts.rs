@@ -33,7 +33,7 @@ pub fn speak_locally(text: &str) {
         .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '.' || *c == ',' || *c == '!' || *c == '?')
         .collect::<String>();
     
-    println!("🔊 Local TTS Synthesis: {}", clean_text);
+    tracing::info!("Local TTS synthesis");
 
     TTS_SPEAKING_COUNT.fetch_add(1, Ordering::SeqCst);
     std::thread::spawn(move || {

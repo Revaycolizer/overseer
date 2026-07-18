@@ -1,4 +1,5 @@
 pub mod discovery;
+pub mod image_optimizer;
 pub mod system_idle;
 
 use tokio::process::Command;
@@ -10,10 +11,7 @@ pub async fn get_browser_dom_tree() -> Option<String> {
 }
 
 pub async fn focus_window_by_pid(pid: i32) {
-    println!(
-        "🎯 TARGET-FOCUS: Attempting to focus window for PID {}...",
-        pid
-    );
+    tracing::debug!(?pid, "TARGET-FOCUS: attempting to focus window");
     // wmctrl -lp returns: <window_id> <desktop> <pid> <machine> <title>
     let output = Command::new("wmctrl").arg("-lp").output().await;
 
@@ -23,10 +21,7 @@ pub async fn focus_window_by_pid(pid: i32) {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 3 && parts[2] == pid.to_string() {
                 let xid = parts[0];
-                println!(
-                    "🎯 TARGET-FOCUS: Found XID {} for PID {}. Focusing...",
-                    xid, pid
-                );
+                tracing::debug!(?xid, ?pid, "TARGET-FOCUS: found XID, focusing");
                 let _ = Command::new("wmctrl")
                     .arg("-i")
                     .arg("-a")

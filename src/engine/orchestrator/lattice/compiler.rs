@@ -10,7 +10,7 @@ pub async fn compile_response(
     result: &SupervisorExecutionResult,
     state: &StructuredState,
 ) -> Option<SupervisorExecutionResult> {
-    println!("🛡️ COMPILING RESPONSE for grounding enforcement (Regex Optimized)...");
+    tracing::debug!("Compiling response for grounding enforcement");
     let preview = preview_state_update(state, db, &result.findings, &result.summary, &result.evidence).await;
     
     let sentence_regex = Regex::new(r"(?m)([^.!?]+(?:[.!?](?:\s|$)|$))").unwrap();

@@ -4,6 +4,7 @@ use crate::engine::orchestrator::state::StructuredState;
 use crate::engine::utils::discovery::ToolInfo;
 use overseer_kernel::ExecutionOutcome;
 use serde_json::Value;
+use tokio::sync::mpsc::UnboundedSender;
 
 use super::grounding::expand_markers;
 
@@ -22,6 +23,7 @@ pub async fn execute_tool(
     input: Value,
     tools: &[ToolInfo],
     state: &StructuredState,
+    token_sender: Option<&UnboundedSender<String>>,
 ) -> Result<(String, bool, Value), SupervisorExecutionResult> {
     let tool = match tools.iter().find(|t| t.name == tname) {
         Some(t) => t,
@@ -30,7 +32,7 @@ pub async fn execute_tool(
 
     // --- ARCHITECTURE V3.3: AUTOMATIC GROUNDING EXPANSION ---
     let expanded_input = expand_markers(input, state);
-    println!("🛡️ KERNEL AUTHORIZING TOOL: {}", tname);
+    tracing::debug!(?tname, "Authorizing tool via kernel");
 
     // The agent's capability set for this domain is exactly the tool list it was
     // given. All authorization runs inside the kernel.
@@ -63,7 +65,11 @@ pub async fn execute_tool(
     .any(|&t| t == tname);
 
     match outcome {
-        ExecutionOutcome::Executed { output } => Ok((output, is_action, expanded_input)),
+        ExecutionOutcome::Executed { output } => {
+            // Stream the executed tool's output to the UI (per-token sink).
+            crate::engine::streaming::stream_tool_output(tname, &output, token_sender);
+            Ok((output, is_action, expanded_input))
+        }
         // Denied / rejected / cancelled / timed out / emergency-stopped: the tool
         // did NOT run. Return a structured decision so the agent can react, and
         // mark it as a non-action so downstream logic does not treat it as work.

@@ -16,7 +16,7 @@ pub async fn discover_fast_path_domain(
          ORDER BY routing_priority DESC",
     ).fetch_all(&db.pool).await {
         Ok(s) => s,
-        Err(e) => { eprintln!("Error fetching supervisors: {}", e); return None; }
+        Err(e) => { tracing::error!(?e, "Error fetching supervisors"); return None; }
     };
 
     let mut best_match: Option<(String, usize, i32)> = None;
@@ -45,7 +45,7 @@ pub async fn discover_fast_path_domain(
     }
 
     if let Some((domain, _, _)) = best_match {
-        println!("FAST-PATH: Query matched best keyword cluster for domain '{}'", domain);
+        tracing::info!(?domain, "FAST-PATH query matched keyword cluster");
         return Some(domain);
     }
     None

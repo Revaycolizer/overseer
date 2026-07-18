@@ -12,6 +12,12 @@ impl SettingsClient for LocalClient {
     async fn get_all_settings(&self) -> HashMap<String, String> { crate::backend::get_all_settings(&self.db).await }
     async fn resolve_model_name(&self, prov: Option<&str>, key: &str, def: &str) -> String { crate::backend::resolve_model_name(&self.db, prov, key, def).await }
     async fn resolve_model_with_fallbacks(&self, key: &str, def: &str) -> String { crate::backend::resolve_model_with_fallbacks(&self.db, key, def).await }
+    async fn get_conversation_setting(&self, conversation_id: i64, key: &str) -> Option<String> {
+        crate::backend::conversations::settings::get_conversation_setting(&self.db, conversation_id, key).await
+    }
+    async fn set_conversation_setting(&self, conversation_id: i64, key: &str, value: &str) -> anyhow::Result<()> {
+        crate::backend::conversations::settings::set_conversation_setting(&self.db, conversation_id, key, value).await
+    }
 }
 
 #[async_trait::async_trait]
@@ -68,7 +74,7 @@ impl SystemClient for LocalClient {
             }
             let path = download_dir.join(filename);
             std::fs::write(&path, content)?;
-            Ok(filename.to_string())
+            Ok(path.to_string_lossy().to_string())
         }
     }
     async fn save_chart_export(&self, _cid: i64, ch: &str) -> anyhow::Result<String> {

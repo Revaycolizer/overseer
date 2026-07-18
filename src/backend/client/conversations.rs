@@ -6,4 +6,5 @@ pub trait ConversationClient {
     async fn add_conversation(&self, title: &str) -> anyhow::Result<i64>;
     async fn update_conversation_title(&self, id: i64, title: &str) -> anyhow::Result<()>;
     async fn delete_conversation(&self, id: i64) -> anyhow::Result<()>;
+    async fn search_messages(&self, query: &str) -> anyhow::Result<Vec<crate::backend::ConversationSearchResult>>;
 }

@@ -30,4 +30,10 @@ impl ConversationClient for RemoteClient {
         self.http_client.post(&url).json(&payload).send().await?;
         Ok(())
     }
+
+    async fn search_messages(&self, query: &str) -> anyhow::Result<Vec<crate::backend::ConversationSearchResult>> {
+        let url = format!("{}/api/conversations/search?q={}", self.base_url, urlencoding::encode(query));
+        let res = self.http_client.get(&url).send().await?.json::<Vec<crate::backend::ConversationSearchResult>>().await?;
+        Ok(res)
+    }
 }

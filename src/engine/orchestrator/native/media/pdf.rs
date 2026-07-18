@@ -3,7 +3,7 @@ use std::path::Path;
 
 /// Extracts text from a PDF file natively.
 pub fn extract_text(path: &Path) -> anyhow::Result<String> {
-    println!("📄 [Native] Extracting PDF: {:?}", path);
+    tracing::info!(?path, "Extracting PDF");
     
     // pdf-extract uses a very simple API to get all text
     let out = pdf_extract::extract_text(path)?;

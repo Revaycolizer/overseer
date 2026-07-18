@@ -32,3 +32,45 @@ static ENGINE_ACTIVITY: EngineActivity = EngineActivity::new();
 pub fn engine_activity() -> &'static EngineActivity {
     &ENGINE_ACTIVITY
 }
+
+static RUN_CANCELLATIONS: std::sync::OnceLock<std::sync::RwLock<std::collections::HashMap<i64, tokio::sync::watch::Sender<bool>>>> = std::sync::OnceLock::new();
+
+pub fn register_cancellation(run_id: i64) -> tokio::sync::watch::Receiver<bool> {
+    let (tx, rx) = tokio::sync::watch::channel(false);
+    let lock = RUN_CANCELLATIONS.get_or_init(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+    if let Ok(mut map) = lock.write() {
+        map.insert(run_id, tx);
+    }
+    rx
+}
+
+pub fn trigger_cancellation(run_id: i64) {
+    if let Some(lock) = RUN_CANCELLATIONS.get() {
+        if let Ok(map) = lock.read() {
+            if let Some(tx) = map.get(&run_id) {
+                let _ = tx.send(true);
+            }
+        }
+    }
+}
+
+pub fn remove_cancellation(run_id: i64) {
+    if let Some(lock) = RUN_CANCELLATIONS.get() {
+        if let Ok(mut map) = lock.write() {
+            map.remove(&run_id);
+        }
+    }
+}
+
+pub async fn force_unload_ollama_model(model_name: &str) {
+    let base = std::env::var("OLLAMA_API_BASE")
+        .unwrap_or_else(|_| "http://localhost:11434".to_string());
+    let client = reqwest::Client::new();
+    let _ = client.post(format!("{}/api/chat", base))
+        .json(&serde_json::json!({
+            "model": model_name,
+            "keep_alive": 0
+        }))
+        .send()
+        .await;
+}

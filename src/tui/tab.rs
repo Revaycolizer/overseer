@@ -2,4 +2,5 @@
 pub enum ActiveTab {
     Chat,
     Metrics,
+    Browser,
 }

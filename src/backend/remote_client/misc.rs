@@ -81,8 +81,34 @@ impl RegistryClient for RemoteClient {
 #[async_trait::async_trait]
 impl SystemClient for RemoteClient {
     async fn get_system_load(&self) -> anyhow::Result<SystemLoad> { Ok(self.http_client.get(format!("{}/api/system/load", self.base_url)).send().await?.json().await?) }
-    async fn open_local_path(&self, p: &str) -> anyhow::Result<()> { self.http_client.post(format!("{}/api/system/open_path", self.base_url)).json(&serde_json::json!({ "path": p })).send().await?; Ok(()) }
-    async fn export_to_downloads(&self, n: &str, c: &str) -> anyhow::Result<String> { Ok(self.http_client.post(format!("{}/api/system/export", self.base_url)).json(&serde_json::json!({ "filename": n, "content": c })).send().await?.json().await?) }
+    async fn open_local_path(&self, p: &str) -> anyhow::Result<()> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            Ok(())
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            crate::backend::open_local_path(p).await
+        }
+    }
+    async fn export_to_downloads(&self, n: &str, c: &str) -> anyhow::Result<String> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            Ok(n.to_string())
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let download_dir = dirs::download_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("assets/exports"))
+                .join("Overseer");
+            if !download_dir.exists() {
+                let _ = std::fs::create_dir_all(&download_dir);
+            }
+            let path = download_dir.join(n);
+            std::fs::write(&path, c)?;
+            Ok(path.to_string_lossy().to_string())
+        }
+    }
     async fn export_conversation_markdown(&self, conversation_id: i64) -> anyhow::Result<String> {
         // The remote server exposes the same conversion; the route
         // name follows the existing /api/system/* convention.

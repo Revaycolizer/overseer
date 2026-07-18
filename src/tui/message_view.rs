@@ -7,17 +7,18 @@ use crate::engine::orchestrator::{StructuredResponse, SupervisorExecutionResult,
 use crate::engine::orchestrator::utils::json_strip::strip_embedded_json;
 
 pub fn format_message(m: &Message) -> Vec<Line<'static>> {
-    let role_style = if m.role == "user" {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+    let (role_label, _role_style) = if m.role == "user" {
+        ("You", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
     } else {
-        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+        ("Overseer", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD))
     };
 
     if m.role == "user" {
-        return vec![Line::from(vec![
-            Span::styled("[USER] ", role_style),
-            Span::styled(strip_embedded_json(&m.content), Style::default().fg(Color::White)),
-        ])];
+        return vec![
+            Line::from(Span::styled(format!(" {} ", role_label), Style::default().bg(Color::Green).fg(Color::Black).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(format!(" {}", strip_embedded_json(&m.content)), Style::default().fg(Color::White))),
+            Line::from(""),
+        ];
     }
 
     let mut structured: Option<StructuredResponse> = serde_json::from_str(&m.content).ok();
@@ -28,17 +29,12 @@ pub fn format_message(m: &Message) -> Vec<Line<'static>> {
     }
 
     if let Some(res) = structured {
-        let mut lines = Vec::new();
+        let mut lines = vec![Line::from(Span::styled(" Overseer ", Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD)))];
         for sub_msg in res.messages {
-            let sub_role_style = if sub_msg.role == "user" {
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
-            };
-            lines.push(Line::from(vec![
-                Span::styled(format!("[{}] ", sub_msg.role.to_uppercase()), sub_role_style),
-                Span::styled(strip_embedded_json(&sub_msg.message), Style::default().fg(Color::White)),
-            ]));
+            lines.push(Line::from(Span::styled(
+                format!(" {}", strip_embedded_json(&sub_msg.message)),
+                Style::default().fg(Color::White),
+            )));
         }
         for chart in res.charts {
             lines.extend(format_chart(&chart));
@@ -51,10 +47,11 @@ pub fn format_message(m: &Message) -> Vec<Line<'static>> {
         }
         lines
     } else {
-        vec![Line::from(vec![
-            Span::styled(format!("[{}] ", m.role.to_uppercase()), role_style),
-            Span::styled(strip_embedded_json(&m.content), Style::default().fg(Color::White)),
-        ])]
+        vec![
+            Line::from(Span::styled(" Overseer ", Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(format!(" {}", strip_embedded_json(&m.content)), Style::default().fg(Color::White))),
+            Line::from(""),
+        ]
     }
 }
 

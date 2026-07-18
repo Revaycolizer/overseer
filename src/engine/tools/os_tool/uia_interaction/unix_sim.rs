@@ -46,7 +46,7 @@ pub async fn simulate_unix_type_text(text: &str) -> Result<String, DynamicToolEr
     if crate::engine::tools::os_tool::wayland_compat::is_wayland() {
         match crate::engine::tools::os_tool::wayland_compat::wayland_type_text(text) {
             Ok(_) => return Ok("Text typed via Wayland simulator".to_string()),
-            Err(e) => eprintln!("Wayland type_text failed: {}. Falling back to xdotool...", e),
+            Err(e) => tracing::warn!(?e, "Wayland type_text failed, falling back to xdotool"),
         }
     }
     let escaped = text.replace("'", "'\\''");
@@ -58,7 +58,7 @@ pub async fn simulate_unix_press_key(key: &str) -> Result<String, DynamicToolErr
     if crate::engine::tools::os_tool::wayland_compat::is_wayland() {
         match crate::engine::tools::os_tool::wayland_compat::wayland_press_key(key) {
             Ok(_) => return Ok("Key pressed via Wayland simulator".to_string()),
-            Err(e) => eprintln!("Wayland press_key failed: {}. Falling back to xdotool...", e),
+            Err(e) => tracing::warn!(?e, "Wayland press_key failed, falling back to xdotool"),
         }
     }
     let cmd = format!("xdotool key '{}'", key);

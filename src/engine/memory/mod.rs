@@ -49,7 +49,7 @@ pub async fn get_embedding(_client: &ollama::Client, text: &str) -> Option<Vec<f
             None
         }
         Err(e) => {
-            eprintln!("⚠️ Embedding request failed: {}", e);
+            tracing::warn!(?e, "Embedding request failed");
             None
         }
     }
@@ -71,7 +71,7 @@ pub async fn setup_memory_table(db: &lancedb::Connection) -> Option<lancedb::Tab
 
     // Try to open existing table first
     if let Ok(table) = db.open_table("memories").execute().await {
-        println!("📚 Memory table loaded.");
+        tracing::info!("Memory table loaded");
         return Some(table);
     }
 
@@ -105,11 +105,11 @@ pub async fn setup_memory_table(db: &lancedb::Connection) -> Option<lancedb::Tab
         .await
     {
         Ok(table) => {
-            println!("📚 Memory table created.");
+            tracing::info!("Memory table created");
             Some(table)
         }
         Err(e) => {
-            eprintln!("⚠️ Failed to create memory table: {}", e);
+            tracing::error!(?e, "Failed to create memory table");
             None
         }
     }
@@ -125,7 +125,7 @@ pub async fn store_memory(
     let embedding = match get_embedding(client, &content).await {
         Some(e) => e,
         None => {
-            eprintln!("⚠️ Could not generate embedding, skipping memory storage.");
+            tracing::warn!("Could not generate embedding, skipping memory storage");
             return;
         }
     };
@@ -168,12 +168,12 @@ pub async fn store_memory(
         Ok(b) => {
             let batches = RecordBatchIterator::new(vec![Ok(b)], schema);
             if let Err(e) = table.add(Box::new(batches)).execute().await {
-                eprintln!("⚠️ Failed to store memory: {}", e);
+                tracing::error!(?e, "Failed to store memory");
             } else {
-                println!("💾 Memory stored successfully.");
+                tracing::info!("Memory stored successfully");
             }
         }
-        Err(e) => eprintln!("⚠️ Failed to create memory batch: {}", e),
+        Err(e) => tracing::error!(?e, "Failed to create memory batch"),
     }
 }
 
@@ -214,7 +214,7 @@ pub async fn retrieve_memories(
             memories
         }
         Err(e) => {
-            eprintln!("⚠️ Memory search failed: {}", e);
+            tracing::warn!(?e, "Memory search failed");
             vec![]
         }
     }

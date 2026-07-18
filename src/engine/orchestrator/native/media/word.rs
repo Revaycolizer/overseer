@@ -4,7 +4,7 @@ use docx_rs::*;
 
 /// Extracts text from a Word (.docx) file natively.
 pub fn extract_text(path: &Path) -> anyhow::Result<String> {
-    println!("📝 [Native] Extracting Word: {:?}", path);
+    tracing::info!(?path, "Extracting Word document");
     
     let file = std::fs::read(path)?;
     let docx = read_docx(&file)?;

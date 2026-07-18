@@ -15,7 +15,7 @@ impl LatticeCoordinator {
     }
 
     pub async fn decompose_and_run(&mut self, goal: &str) -> String {
-        println!("LATTICE: Decomposing goal into swarm tasks: {}", goal);
+        tracing::debug!(?goal, "LATTICE decomposing goal");
         
         // V3.1 logic: Identify required cells and dispatch.
         // For Phase 1, we decompose into Research and Synthesis steps for context testing.

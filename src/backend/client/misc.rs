@@ -13,6 +13,9 @@ pub trait SettingsClient {
     /// chain stored at `<setting_key>_fallbacks` if the primary isn't
     /// available. Returns the hard default if neither resolves.
     async fn resolve_model_with_fallbacks(&self, setting_key: &str, hard_default: &str) -> String;
+    /// Per-conversation setting overrides. Default returns None.
+    async fn get_conversation_setting(&self, _conversation_id: i64, _key: &str) -> Option<String> { None }
+    async fn set_conversation_setting(&self, _conversation_id: i64, _key: &str, _value: &str) -> anyhow::Result<()> { Ok(()) }
 }
 
 #[async_trait::async_trait]

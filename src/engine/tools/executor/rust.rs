@@ -21,7 +21,7 @@ pub async fn execute_rust_tool(
             .trim()
             .to_string();
 
-            println!("📊 CHARTING INPUT: {}", input_str);
+            tracing::debug!("CHARTING INPUT received");
 
             let req: crate::engine::tools::charting::ChartRequest = serde_json::from_str(&input_str)
                 .or_else(|_| {

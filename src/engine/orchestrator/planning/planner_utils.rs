@@ -46,7 +46,7 @@ pub fn sanitize_plan(plan: &str, query: &str) -> Vec<MacroTask> {
 }
 
 pub fn force_decompose_artifact_plan(query: &str) -> Vec<MacroTask> {
-    println!("🛡️ SILICON GUARDRAIL: Forcing synthetic Research -> Generation decomposition.");
+    tracing::info!("Guardrail: forcing synthetic Research -> Generation decomposition");
     vec![
         MacroTask {
             domain: "stealth".to_string(),

@@ -11,7 +11,7 @@ pub fn sync_cell_to_global(cell: &CellState, global: &mut GlobalState) {
         global.commit_source(source.clone());
     }
     
-    println!("LATTICE: Synced Cell '{}' findings to Global State.", cell.cell_id);
+    tracing::debug!(cell_id = %cell.cell_id, "LATTICE synced cell to global state");
 }
 
 pub fn filter_relevant_facts(global: &GlobalState, query: &str) -> Vec<String> {

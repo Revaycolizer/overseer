@@ -68,6 +68,12 @@ pub fn Sidebar() -> Element {
                     title: "Settings",
                     MaterialIcon { name: "settings", size: 22 }
                 }
+                Link {
+                    class: if route == (Route::BrowserSessions {}) { "nav-link active" } else { "nav-link" },
+                    to: Route::BrowserSessions {},
+                    title: "Browser",
+                    MaterialIcon { name: "language", size: 22 }
+                }
             }
             div { class: "mt-auto flex flex-col items-center gap-4",
                 div { class: "h-8 w-8 rounded-full border border-slate-200 overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-slate-200 transition-all",
@@ -178,7 +184,7 @@ pub fn Layout() -> Element {
             }
             div { class: "flex flex-1 overflow-hidden",
                 Sidebar {}
-                div { class: "flex-1 flex flex-col min-w-0 min-h-0 bg-background-light overflow-hidden",
+                div { class: "flex-1 flex flex-col min-w-0 min-h-0 bg-background-light overflow-hidden route-enter",
                     Outlet::<Route> {}
                 }
             }

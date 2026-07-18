@@ -41,7 +41,7 @@ pub fn start_wake_word_listener() {
         let _ = super::training::rebuild_model_if_needed(&model_path_str);
         let res = run_listener(&model_path_str);
         IS_LISTENING.store(false, Ordering::SeqCst);
-        if let Err(e) = res { eprintln!("❌ Wake-word listener error: {}", e); }
+        if let Err(e) = res { tracing::error!(?e, "Wake-word listener error"); }
     });
 }
 
@@ -74,9 +74,9 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
 
     if std::path::Path::new(model_path).exists() {
         detector.add_wakeword_from_file("hey_overseer", model_path).map_err(|e| anyhow::anyhow!(e))?;
-        println!("🎙️ Loaded personal wake-word model");
+        tracing::info!("Loaded personal wake-word model");
     } else {
-        println!("⚠️ No wake-word model found — voice activation disabled");
+        tracing::warn!("No wake-word model found — voice activation disabled");
         return Ok(());
     }
 
@@ -104,7 +104,7 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
                     resample_index -= 1.0;
                     prev_sample = sample;
                 }
-            }, |err| eprintln!("Audio stream error: {}", err), None)?
+            }, |err| tracing::error!(?err, "Audio stream error"), None)?
         }
         cpal::SampleFormat::I16 => {
             let mut resample_index = 0.0f32;
@@ -126,13 +126,13 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
                     resample_index -= 1.0;
                     prev_sample = sample;
                 }
-            }, |err| eprintln!("Audio stream error: {}", err), None)?
+            }, |err| tracing::error!(?err, "Audio stream error"), None)?
         }
         _ => return Err(anyhow::anyhow!("Unsupported audio format")),
     };
 
     stream.play()?;
-    println!("🎙️ Wake-word listener active and monitoring (Resampled from {}Hz)...", native_rate);
+    tracing::info!(?native_rate, "Wake-word listener active");
 
     let mut audio_buffer = Vec::new();
     let mut speech_buffer = Vec::new();
@@ -184,7 +184,7 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
                 let rms = (sum_sq / calibration_samples.len() as f32).sqrt();
                 let val = (rms * 3.0).clamp(0.005, 0.15);
                 set_vad_threshold(val);
-                println!("🎙️ Audio Calibration Complete | Ambient RMS: {:.5} | Dynamic VAD Threshold: {:.5}", rms, val);
+                tracing::info!(?rms, threshold = ?val, "Audio calibration complete");
             }
             is_calibrated = true;
         }
@@ -192,7 +192,7 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
         let vad_threshold = get_vad_threshold();
 
         if last_print.elapsed() >= std::time::Duration::from_secs(2) {
-            println!("🎙️ Telemetry: Processed {} samples | Max Mic Amplitude: {:.5} | VAD Threshold: {:.5} | VAD: {}", sample_count, max_amp, vad_threshold, is_speaking);
+            tracing::debug!(?sample_count, ?max_amp, ?vad_threshold, ?is_speaking, "Audio telemetry");
             max_amp = 0.0; sample_count = 0; last_print = std::time::Instant::now();
         }
 
@@ -221,7 +221,7 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
                     if let Ok(text) = super::local_stt::transcribe_samples_sync(&samples) {
                         let lower = text.to_lowercase();
                         if lower.contains("system reset") || lower.contains("exit overseer") {
-                            println!("🚨 EMERGENCY VOICE PANIC TRIGGERED: Exiting Lock Screen!");
+                            tracing::warn!("Emergency voice panic triggered — exiting lock screen");
                             EMERGENCY_PANIC_TRIGGERED.store(true, Ordering::SeqCst);
                         }
                     }
@@ -233,7 +233,7 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
             let frame: Vec<f32> = audio_buffer.drain(0..detector.get_samples_per_frame()).collect();
             if let Some(detection) = detector.process_samples(frame) {
                 if last_trigger.elapsed() >= cooldown {
-                    println!("🚀 WAKE WORD DETECTED: {:?}", detection.name);
+                    tracing::info!(name = ?detection.name, "Wake word detected");
                     last_trigger = std::time::Instant::now();
                     if let Ok(guard) = WAKE_TX.lock() {
                         if let Some(tx) = guard.as_ref() { let _ = tx.send(()); }

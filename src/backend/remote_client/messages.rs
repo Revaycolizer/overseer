@@ -43,4 +43,11 @@ impl MessageClient for RemoteClient {
         self.http_client.post(&url).json(&payload).send().await?;
         Ok(())
     }
+
+    async fn delete_message(&self, id: i64) -> anyhow::Result<()> {
+        let url = format!("{}/api/messages/delete", self.base_url);
+        let payload = serde_json::json!({ "id": id });
+        self.http_client.post(&url).json(&payload).send().await?;
+        Ok(())
+    }
 }

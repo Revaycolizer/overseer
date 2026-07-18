@@ -143,18 +143,18 @@ impl AgentOrchestrator {
                     PolicyDecision::Allow => {
                         match crate::engine::tools::call_dynamic_tool(&tool, args).await {
                             Ok(output) => {
-                                println!("Dynamic tool output: {}", output);
+                                tracing::debug!(?output, "Dynamic tool output");
                                 self.is_tts_speaking.store(true, Ordering::SeqCst);
                                 crate::engine::voice::tts::speak_locally(&format!("Executed tool {}", tool.name));
                                 self.is_tts_speaking.store(false, Ordering::SeqCst);
                             }
                             Err(e) => {
-                                println!("Dynamic tool execution error: {}", e);
+                                tracing::error!(?e, "Dynamic tool execution error");
                             }
                         }
                     }
                     _ => {
-                        println!("🛡️ Kernel blocked voice tool '{}' — requires approval or not authorized.", tool.name);
+                        tracing::warn!(tool = %tool.name, "Kernel blocked voice tool — requires approval or not authorized");
                         self.is_tts_speaking.store(true, Ordering::SeqCst);
                         crate::engine::voice::tts::speak_locally("That action requires approval and can't be run by voice.");
                         self.is_tts_speaking.store(false, Ordering::SeqCst);

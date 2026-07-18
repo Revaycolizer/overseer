@@ -71,3 +71,19 @@ pub async fn update_attachment_content(db: &Database, attachment_id: i64, conten
     }
     crate::backend::messages::update_attachment_content(db, attachment_id, content).await
 }
+
+pub async fn search_messages(db: &Database, query: &str) -> anyhow::Result<Vec<crate::backend::ConversationSearchResult>> {
+    if db.is_remote() {
+        return db.remote_client().search_messages(query).await;
+    }
+    crate::backend::conversations::search_messages(db, query).await
+}
+
+pub async fn delete_message(db: &Database, id: i64) -> anyhow::Result<()> {
+    if db.is_remote() {
+        return db.remote_client().delete_message(id).await;
+    }
+    crate::backend::messages::delete_message(db, id).await
+}
+
+

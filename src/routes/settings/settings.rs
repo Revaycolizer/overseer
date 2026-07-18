@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::MaterialIcon;
+use crate::routes::settings::connection::ConnectionSection;
 use crate::routes::settings::health_summary::HealthSummary;
 use crate::routes::settings::health_details::HealthDetails;
 use crate::routes::settings::intelligence::IntelligenceSection;
@@ -81,6 +82,7 @@ pub fn Settings() -> Element {
                         runtime_dir,
                         on_change
                     }
+                    ConnectionSection {}
                 }
 
                 div { class: "mt-20 pt-8 border-t border-slate-200 text-center",

@@ -11,6 +11,10 @@ pub async fn build_history(
     messages: Vec<crate::backend::Message>,
     user_query: &str,
 ) -> Vec<Message> {
+    let compacted = crate::engine::orchestrator::memory_compactor::maybe_compact(
+        messages, ollama_client, db,
+    ).await;
+    let messages = compacted.messages;
     let mut history = Vec::new();
     let msg_count = messages.len();
     

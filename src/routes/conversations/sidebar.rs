@@ -4,6 +4,7 @@ use dioxus_material_icons::{MaterialIcon, MaterialIconColor};
 
 #[derive(Props, Clone, PartialEq)]
 pub struct SidebarProps {
+    pub class: Option<String>,
     pub conversations: Vec<backend::Conversation>,
     pub selected_conversation_id: Signal<Option<i64>>,
     pub conversations_resource: Resource<Vec<backend::Conversation>>,
@@ -25,11 +26,27 @@ pub fn Sidebar(props: SidebarProps) -> Element {
     let mut selected_conversation_id = props.selected_conversation_id.clone();
     let db = props.db.clone();
 
+    let global_state = crate::state::use_global_state();
+    let client = global_state.read().client.clone();
+
+    let mut search_query = use_signal(String::new);
+    let search_results = use_resource(move || {
+        let client = client.clone();
+        let q = search_query();
+        async move {
+            if q.trim().is_empty() {
+                vec![]
+            } else {
+                client.search_messages(&q).await.unwrap_or_default()
+            }
+        }
+    });
+
     rsx! {
-        aside { class: "w-72 border-r border-slate-200 bg-white flex flex-col shrink-0",
-            div { class: "p-5",
+        aside { class: format!("w-72 border-r border-slate-200 bg-white flex flex-col shrink-0 {}", props.class.as_deref().unwrap_or("")),
+            div { class: "p-4 space-y-3",
                 button {
-                    class: "w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg shadow-soft transition-all text-xs",
+                    class: "w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl shadow-[0_2px_8px_rgba(59,130,246,0.25)] transition-all duration-200 ease-out text-xs active:scale-[0.97] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)]",
                     onclick: {
                         let db = db.clone();
                         move |_| {
@@ -45,21 +62,55 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                     MaterialIcon { name: "add", color: MaterialIconColor::Light, size: 20 }
                     span { "New Conversation" }
                 }
-            }
-            div { class: "flex-1 overflow-y-auto px-4 space-y-6",
-                div {
-                    h3 { class: "px-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3",
-                        "Recent History"
+                div { class: "relative",
+                    input {
+                        class: "w-full border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 rounded-xl px-3 py-2 text-xs transition-all duration-200 ease-out outline-none placeholder:text-slate-400",
+                        placeholder: "Search messages...",
+                        value: "{search_query}",
+                        oninput: move |evt| search_query.set(evt.value().clone())
                     }
-                    div { class: "space-y-1",
-                        for conv in &props.conversations {
+                }
+            }
+            div { class: "flex-1 overflow-y-auto px-3 space-y-4",
+                div {
+                    if !search_query().trim().is_empty() {
+                        h3 { class: "px-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3",
+                            "Search Results"
+                        }
+                        div { class: "space-y-2",
+                            if let Some(results) = search_results.read().as_ref() {
+                                if results.is_empty() {
+                                    div { class: "px-3 py-2 text-xs italic text-slate-400", "No matches found" }
+                                } else {
+                                    for r in results {
+                                        button {
+                                            class: "w-full text-left px-3 py-2 rounded-lg border border-slate-100 hover:bg-slate-50 transition-all flex flex-col gap-1",
+                                            onclick: {
+                                                let id = r.conversation_id;
+                                                move |_| selected_conversation_id.set(Some(id))
+                                            },
+                                            span { class: "text-[10px] font-bold text-blue-600 truncate uppercase tracking-wider", "{r.conversation_title}" }
+                                            span { class: "text-xs text-slate-600 line-clamp-2 leading-relaxed", "{r.content}" }
+                                        }
+                                    }
+                                }
+                            } else {
+                                div { class: "px-3 py-2 text-xs text-slate-400", "Searching..." }
+                            }
+                        }
+                    } else {
+                        h3 { class: "px-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3",
+                            "Recent History"
+                        }
+                        div { class: "space-y-1",
+                            for conv in &props.conversations {
                             div {
                                 class: format!(
-                                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {}",
+                                    "w-full flex items-center gap-2 px-3 py-2 rounded-xl border transition-all duration-150 ease-out group {}",
                                     if selected_conversation_id() == Some(conv.id) {
-                                        "bg-blue-50 text-blue-700 border-blue-100"
+                                        "bg-blue-50 text-blue-700 border-blue-100 shadow-[0_1px_3px_rgba(59,130,246,0.08)]"
                                     } else {
-                                        "hover:bg-slate-50 text-slate-600 border-transparent"
+                                        "hover:bg-slate-50 text-slate-600 border-transparent hover:border-slate-200"
                                     }
                                 ),
                                 button {
@@ -68,13 +119,13 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                                         let id = conv.id;
                                         move |_| selected_conversation_id.set(Some(id))
                                     },
-                                    MaterialIcon { name: "chat_bubble", size: 20 }
-                                    span { class: "text-xs font-semibold truncate text-left flex-1",
+                                    MaterialIcon { name: "chat_bubble", size: 18 }
+                                    span { class: "text-xs font-medium truncate text-left flex-1",
                                         "{conv.title}"
                                     }
                                 }
                                 button {
-                                    class: "shrink-0 p-1 text-slate-400 hover:text-red-500 transition-colors",
+                                    class: "shrink-0 p-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all duration-150",
                                     title: "Delete conversation",
                                     onclick: {
                                         let db = db.clone();
@@ -97,10 +148,11 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                                             });
                                         }
                                     },
-                                    MaterialIcon { name: "delete", size: 18 }
+                                    MaterialIcon { name: "delete", size: 16 }
                                 }
                             }
                         }
+                    }
                     }
                 }
             }

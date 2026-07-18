@@ -43,4 +43,11 @@ pub mod work_item_panel;
 pub mod work_item_panel_parts;
 pub mod work_item_panel_extras;
 
+pub mod state;
+pub mod hooks;
+pub mod prefetch;
+pub mod chip;
+pub mod layout;
+pub mod content;
+
 pub use conversations::Conversations;

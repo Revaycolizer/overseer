@@ -21,13 +21,23 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
 
     match key.code {
         KeyCode::Tab => {
-            app.active_tab = match app.active_tab {
-                ActiveTab::Chat => ActiveTab::Metrics,
-                ActiveTab::Metrics => {
-                    let _ = app.refresh_metrics().await;
-                    ActiveTab::Chat
+            if app.active_tab == ActiveTab::Chat && app.input.starts_with('/') {
+                let suggestions = crate::engine::commands::get_suggestions(&app.input);
+                if let Some(first_match) = suggestions.first() {
+                    app.input = first_match.to_string();
+                    app.input_cursor = app.input.len();
+                    app.activity.bump();
                 }
-            };
+            } else {
+                app.active_tab = match app.active_tab {
+                    ActiveTab::Chat => ActiveTab::Metrics,
+                    ActiveTab::Metrics => ActiveTab::Browser,
+                    ActiveTab::Browser => {
+                        let _ = app.refresh_metrics().await;
+                        ActiveTab::Chat
+                    }
+                };
+            }
         }
         KeyCode::Up => {
             if app.active_tab == ActiveTab::Chat {
@@ -51,142 +61,39 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         }
         KeyCode::Enter => {
             if app.active_tab == ActiveTab::Chat && !is_orch {
-                // V4.17.10: slash command dispatch. The send
-                // message is the default; `/export md` and `/help`
-                // are intercepted here so the input doesn't get
-                // treated as a chat query. New commands can be added
-                // by extending this match.
-                let trimmed = app.input.trim();
-                if trimmed == "/help" {
-                    app.status_message = "Commands: /export md, /export json, /help".to_string();
-                } else if let Some(arg) = trimmed.strip_prefix("/export ") {
-                    let fmt = arg.trim();
-                    if fmt != "md" && fmt != "json" {
-                        app.status_message = "Only `/export md` and `/export json` are supported".to_string();
-                    } else if let Some(conv_id) = app.selected_conv_id {
-                        let (content, extension) = match fmt {
-                            "md" => (
-                                app.client.export_conversation_markdown(conv_id).await,
-                                "md",
-                            ),
-                            "json" => (
-                                app.client.export_conversation_json(conv_id).await,
-                                "json",
-                            ),
-                            _ => unreachable!(),
-                        };
-                        let content = match content {
-                            Ok(s) => s,
-                            Err(e) => {
-                                app.status_message = format!("Export failed: {e}");
-                                String::new()
-                            }
-                        };
-                        if !content.is_empty() {
-                            let safe = app
-                                .conversations
-                                .iter()
-                                .find(|c| c.id == conv_id)
-                                .map(|c| c.title.clone())
-                                .unwrap_or_else(|| format!("conv_{conv_id}"));
-                            let safe = safe
-                                .chars()
-                                .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
-                                .collect::<String>();
-                            let filename = format!("{safe}.{extension}");
-                            let _ = app.client.export_to_downloads(&filename, &content).await;
-                            app.status_message = format!("Exported to Downloads/{filename}");
-                        }
-                    } else {
-                        app.status_message = "No conversation selected".to_string();
-                    }
+                if let Some(cmd) = crate::engine::commands::parse(&app.input) {
+                    super::command_handler::handle_slash(app, cmd).await?;
                 } else {
                     app.send_message().await?;
                 }
             }
         }
-        KeyCode::Left => {
-            if app.active_tab == ActiveTab::Chat && app.input_cursor > 0 {
-                // Move cursor back over the previous UTF-8 char.
-                let prev = app
-                    .input
-                    .char_indices()
-                    .rfind(|(i, _)| *i < app.input_cursor)
-                    .map(|(i, _)| i)
-                    .unwrap_or(0);
-                app.input_cursor = prev;
-            }
-        }
-        KeyCode::Right => {
-            if app.active_tab == ActiveTab::Chat && app.input_cursor < app.input.len() {
-                // Move cursor forward over the next UTF-8 char.
-                let next = app
-                    .input
-                    .char_indices()
-                    .find(|(i, _)| *i > app.input_cursor)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                app.input_cursor = next;
-            }
-        }
-        KeyCode::Home => {
-            if app.active_tab == ActiveTab::Chat {
-                app.input_cursor = 0;
-            }
-        }
-        KeyCode::End => {
-            if app.active_tab == ActiveTab::Chat {
-                app.input_cursor = app.input.len();
-            }
-        }
-        KeyCode::Delete => {
-            if app.active_tab == ActiveTab::Chat && app.input_cursor < app.input.len() {
-                // Delete the char under the cursor (forward delete).
-                let next = app
-                    .input
-                    .char_indices()
-                    .find(|(i, _)| *i > app.input_cursor)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                app.input.replace_range(app.input_cursor..next, "");
-            }
-        }
-        KeyCode::Backspace => {
-            if app.active_tab == ActiveTab::Chat && app.input_cursor > 0 {
-                // Delete the char before the cursor.
-                let prev = app
-                    .input
-                    .char_indices()
-                    .rfind(|(i, _)| *i < app.input_cursor)
-                    .map(|(i, _)| i)
-                    .unwrap_or(0);
-                let cur = app
-                    .input
-                    .char_indices()
-                    .find(|(i, _)| *i > prev)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                app.input.replace_range(prev..cur, "");
-                app.input_cursor = prev;
-            }
-        }
-        KeyCode::Char(c) => {
+        KeyCode::Backspace | KeyCode::Delete | KeyCode::Left | KeyCode::Right
+            | KeyCode::Home | KeyCode::End | KeyCode::Char(_) => {
             if app.active_tab == ActiveTab::Chat && !is_orch {
-                // Insert at cursor position (UTF-8 safe).
-                app.input.insert(app.input_cursor, c);
-                app.input_cursor += c.len_utf8();
+                super::input_handler::app(&key, app);
             }
         }
-        // V4.17.14: Esc cancels the current in-flight orchestrate
-        // task (drops the underlying HTTP stream to Ollama). The
-        // spawn itself sets is_orch = false when it unwinds.
         KeyCode::Esc => {
             if app.is_orchestrating.load(std::sync::atomic::Ordering::SeqCst) {
                 app.cancel_current_orchestrate();
                 app.status_message = "Cancelling…".to_string();
+            } else if app.search_results.is_some() {
+                app.search_results = None;
+                app.search_query.clear();
+                app.status_message = "Search cleared".to_string();
+                app.activity.bump();
             }
         }
         _ => {}
+    }
+    if app.input.starts_with('/') {
+        let suggestions = crate::engine::commands::get_suggestions(&app.input);
+        if !suggestions.is_empty() {
+            app.status_message = format!("Suggestions: {} (TAB to autocomplete)", suggestions.join(", "));
+        } else {
+            app.status_message = "No matching command".to_string();
+        }
     }
     Ok(())
 }

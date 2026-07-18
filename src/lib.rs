@@ -10,8 +10,8 @@ pub mod server;
 pub mod tui;
 
 use routes::{
-    AgentsWorkshop, ComputerControl, Conversations, DeviceControl, Layout, PlannersWorkshop,
-    Settings, SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation, Listening,
+    AgentsWorkshop, BrowserSessions, ComputerControl, Conversations, DeviceControl, Layout,
+    PlannersWorkshop, Settings, SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation, Listening,
     SystemIdleSecureLockScreen, IdleWatcher, VoiceTraining
 };
 
@@ -37,6 +37,8 @@ pub enum Route {
             PlannersWorkshop {},
             #[route("/settings")]
             Settings {},
+            #[route("/browser")]
+            BrowserSessions {},
             #[route("/settings/voice-training")]
             VoiceTraining {},
         #[end_layout]

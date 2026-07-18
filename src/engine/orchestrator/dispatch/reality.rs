@@ -26,10 +26,7 @@ pub fn enforce_physical_reality(
     let no_tool_no_artifact = !action_tool_executed && last_artifacts.is_empty() && !has_grounding;
 
     if res.status == "completed" && is_action_domain && no_tool_no_artifact {
-        println!(
-            "⚠️ PHYSICAL REALITY FAILURE in domain '{}': Task completed without physical tool execution. Forcing status to 'stalled'.",
-            domain
-        );
+        tracing::warn!(?domain, "Physical reality failure — no tool execution, forcing stalled");
         res.status = "stalled".to_string();
     }
 }

@@ -55,7 +55,7 @@ pub async fn native_stealth_search(args: &serde_json::Value) -> Result<String, D
         }
 
         if attempt < 3 {
-            println!("⚠️ Search attempt {} failed, retrying in 1s...", attempt);
+            tracing::warn!(?attempt, "Search attempt failed, retrying");
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }

@@ -11,7 +11,7 @@ impl SwarmScheduler {
 
     pub async fn dispatch_cell_task(&mut self, task: &str, cell: &mut CellState) {
         self.active_cell_count += 1;
-        println!("SCHEDULER: Dispatching Task to Cell {}: {}", self.active_cell_count, task);
+        tracing::debug!(count = self.active_cell_count, task, "SCHEDULER dispatching task");
         
         // V3 Parallel Swarm Loop: Dispatch to multiple agents and wait for consensus
         // Simulating 3 agents running in parallel
@@ -22,7 +22,7 @@ impl SwarmScheduler {
         ];
 
         if let Some(consensus) = crate::engine::orchestrator::swarm::calculate_consensus(&agent_outputs) {
-            println!("SCHEDULER: Reached consensus for Cell {}.", self.active_cell_count);
+            tracing::debug!(count = self.active_cell_count, "SCHEDULER reached consensus");
             cell.add_fact(consensus);
         }
         
@@ -31,6 +31,6 @@ impl SwarmScheduler {
 
     pub async fn wait_for_all(&self) {
         // Simulation of waiting for all active cells to resolve their barriers.
-        println!("SCHEDULER: Waiting for all cells to reach consensus...");
+        tracing::debug!("SCHEDULER waiting for consensus");
     }
 }

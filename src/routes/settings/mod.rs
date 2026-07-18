@@ -1,3 +1,4 @@
+mod connection;
 mod settings;
 mod voice_training;
 mod components;

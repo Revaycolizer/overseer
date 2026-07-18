@@ -65,3 +65,12 @@ pub async fn update_attachment_content(
     .await?;
     Ok(())
 }
+
+pub async fn delete_message(db: &Database, id: i64) -> anyhow::Result<()> {
+    sqlx::query("DELETE FROM messages WHERE id = ?1")
+        .bind(id)
+        .execute(&db.pool)
+        .await?;
+    Ok(())
+}
+
