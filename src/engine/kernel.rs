@@ -49,7 +49,10 @@ fn is_observation_verb(action: &str) -> bool {
 
 /// Classify a tool invocation into a typed [`ActionKind`].
 pub fn classify_action_kind(tool: &ToolInfo, domain: &str) -> ActionKind {
-    if tool.language.eq_ignore_ascii_case("python") {
+    if tool.name == "write_file" {
+        // Typed filesystem write — governed as its own action kind, never shell.
+        ActionKind::FilesystemWrite
+    } else if tool.language.eq_ignore_ascii_case("python") {
         ActionKind::PythonTool
     } else if tool.name == "os_tool" || matches!(domain, "computer" | "desktop") {
         ActionKind::ComputerControl
@@ -132,9 +135,13 @@ fn build_policy_config(
         action_count: 0, // injected by the kernel from its per-run counter
         timeout_ms_cap: state.timeout_ms.max(0) as u64,
         emergency_stopped: state.session_state == "emergency_stopped",
-        require_approval_kinds: [ActionKind::ComputerControl, ActionKind::ShellCommand]
-            .into_iter()
-            .collect(),
+        require_approval_kinds: [
+            ActionKind::ComputerControl,
+            ActionKind::ShellCommand,
+            ActionKind::FilesystemWrite,
+        ]
+        .into_iter()
+        .collect(),
         approval_required_default: false,
         observation_tools: ["vision_analysis"].iter().map(|s| s.to_string()).collect(),
         escalate_high_risk: true,
@@ -540,6 +547,80 @@ mod bridge_tests {
             assert_eq!(count_c.load(Ordering::SeqCst), 0, "emergency-stopped action never executes");
             let evs = event_types(&db, run_c).await;
             assert!(evs.contains(&"emergency_stop".to_string()));
+        }
+
+        // ---------- Phase D: end-to-end kernel-governed filesystem write ----------
+        // A real write_file action must be classified FilesystemWrite, require
+        // approval, and only write the file to disk AFTER a human approves — the
+        // full proof.txt acceptance path, in-process and safe.
+        let run_d = new_run(&db, "phase-d").await;
+        {
+            let tmp = std::env::temp_dir()
+                .join(format!("overseer-kernel-test-{}-{}", std::process::id(), run_d));
+            let proof = tmp.join("proof.txt");
+            let _ = std::fs::remove_dir_all(&tmp);
+
+            let write_tool = ToolInfo {
+                id: 2,
+                name: "write_file".to_string(),
+                description: "filesystem write".to_string(),
+                code: String::new(),
+                language: "rust".to_string(),
+                script_path: None,
+                required_intent: None,
+                safety_level: "high".to_string(),
+                version: "1.0.0".to_string(),
+            };
+            let wf_args = serde_json::json!({
+                "path": proof.to_string_lossy(),
+                "content": "KERNEL_OK"
+            });
+
+            let db2 = db.clone();
+            let tool2 = write_tool.clone();
+            let args2 = wf_args.clone();
+            let handle = tokio::spawn(async move {
+                kernel_execute_with(
+                    &db2,
+                    Some(run_d),
+                    "office",
+                    "write proof",
+                    &tool2,
+                    args2,
+                    &["write_file".to_string()],
+                    move |req: ActionRequest| async move {
+                        crate::engine::tools::write_file::native_write_file(&req.arguments)
+                            .await
+                            .map_err(|e| e.to_string())
+                    },
+                )
+                .await
+            });
+
+            // Must suspend for approval; nothing on disk yet.
+            let mut approval_id = String::new();
+            for _ in 0..200 {
+                if let Some(r) = list_pending_approvals(&db, Some(run_d)).await.first() {
+                    approval_id = r.id.clone();
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert!(!approval_id.is_empty(), "filesystem write must require approval");
+            assert!(!proof.exists(), "file must NOT exist before approval");
+
+            // The persisted approval is typed as a filesystem write.
+            let pending = list_pending_approvals(&db, Some(run_d)).await;
+            assert_eq!(pending[0].action_kind, "filesystem_write");
+
+            // Approve -> the immutable staged action runs and writes the file.
+            assert!(approve(&db, &approval_id, "tester"));
+            let outcome = handle.await.unwrap();
+            assert!(matches!(outcome, ExecutionOutcome::Executed { .. }));
+            assert!(proof.exists(), "file MUST exist after approval");
+            assert_eq!(std::fs::read_to_string(&proof).unwrap(), "KERNEL_OK");
+
+            let _ = std::fs::remove_dir_all(&tmp);
         }
     }
 }
