@@ -30,14 +30,20 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(tools::router())
         .merge(workflows::router())
         .merge(work_items::router())
+        .merge(workflow_triggers::router())
         .merge(planners::router())
+        .merge(workflow_triggers::router())
         .merge(supervision::router())
         .merge(versions::router())
         .merge(artifacts::router())
         .merge(misc::router())
         .merge(browser::router())
+        .merge(auth::router())
         .merge(browser_recording::router())
         .merge(browser_hitl::router())
+        .merge(credentials::router())
+        .merge(workflow_templates::router())
+        .merge(workflow_triggers::router())
         .layer(GovernorLayer {
             config: crate::engine::resilience::server_governor(),
         })
@@ -67,13 +73,17 @@ pub mod messages;
 pub mod agents;
 pub mod supervisors;
 pub mod tools;
+pub mod workflow_triggers;
 pub mod workflows;
 pub mod work_items;
 pub mod planners;
 pub mod supervision;
 pub mod versions;
 pub mod artifacts;
+pub mod auth;
 pub mod browser;
+pub mod workflow_templates;
+pub mod credentials;
 pub mod browser_hitl;
 pub mod browser_recording;
 pub mod browser_relay;

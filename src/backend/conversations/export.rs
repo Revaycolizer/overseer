@@ -1,6 +1,5 @@
 use crate::backend::conversations::crud::Conversation;
 use serde::Serialize;
-
 pub async fn export_conversation_markdown(
     db: &crate::db::Database,
     conversation_id: i64,
@@ -12,13 +11,11 @@ pub async fn export_conversation_markdown(
     .fetch_optional(&db.pool)
     .await?
     .ok_or_else(|| anyhow::anyhow!("conversation {conversation_id} not found"))?;
-
     let messages = crate::backend::routing_wrappers::conversations::get_messages_page(
         db, conversation_id, None, 1_000_000,
     )
     .await
     .unwrap_or_default();
-
     let mut out = String::new();
     out.push_str(&format!("# {}\n\n", conv.title));
     out.push_str(&format!(
@@ -26,7 +23,6 @@ pub async fn export_conversation_markdown(
         chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
     ));
     out.push_str("---\n\n");
-
     for (i, m) in messages.iter().enumerate() {
         let header = match m.role.as_str() {
             "user" => format!("## {}. {}", i + 1, "User"),
@@ -46,10 +42,8 @@ pub async fn export_conversation_markdown(
         }
         out.push_str("\n\n---\n\n");
     }
-
     Ok(out)
 }
-
 pub async fn export_conversation_json(
     db: &crate::db::Database,
     conversation_id: i64,
@@ -61,20 +55,17 @@ pub async fn export_conversation_json(
     .fetch_optional(&db.pool)
     .await?
     .ok_or_else(|| anyhow::anyhow!("conversation {conversation_id} not found"))?;
-
     let messages = crate::backend::routing_wrappers::conversations::get_messages_page(
         db, conversation_id, None, 1_000_000,
     )
     .await
     .unwrap_or_default();
-
     #[derive(Serialize)]
     struct ExportedMessage {
         role: String,
         structured: Option<serde_json::Value>,
         raw: String,
     }
-
     let exported: Vec<ExportedMessage> = messages
         .iter()
         .map(|m| {
@@ -86,7 +77,6 @@ pub async fn export_conversation_json(
             }
         })
         .collect();
-
     #[derive(Serialize)]
     struct ExportedConversation {
         id: i64,
@@ -94,13 +84,11 @@ pub async fn export_conversation_json(
         exported_at: String,
         messages: Vec<ExportedMessage>,
     }
-
     let payload = ExportedConversation {
         id: conv.id,
         title: conv.title,
         exported_at: chrono::Local::now().to_rfc3339(),
         messages: exported,
     };
-
     serde_json::to_string_pretty(&payload).map_err(Into::into)
 }

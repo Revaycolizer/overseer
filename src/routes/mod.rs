@@ -1,6 +1,7 @@
 mod agents_workshop;
 mod browser;
 mod computer_control;
+mod login;
 mod conversations;
 mod device_control;
 mod execution_trace;
@@ -18,6 +19,7 @@ mod root;
 pub use agents_workshop::AgentsWorkshop;
 pub use browser::BrowserSessions;
 pub use computer_control::ComputerControl;
+pub use login::LoginScreen;
 pub use conversations::Conversations;
 pub use device_control::DeviceControl;
 pub use layout::Layout;

@@ -1,3 +1,4 @@
+pub mod canvas;
 mod workflow_automation;
 mod workflow_widgets;
 
