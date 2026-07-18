@@ -1,5 +1,7 @@
 pub mod action_types;
+pub mod audit_log;
 pub mod cdp;
+pub mod dom_snapshot;
 pub mod wait_strategies;
 pub mod dom_cache;
 pub mod ffmpeg_installer;
