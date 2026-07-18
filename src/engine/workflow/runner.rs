@@ -50,6 +50,27 @@ impl WorkflowRunner {
                 Ok(serde_json::json!({"text": text}))
             }
             "set" => Ok(cfg),
+            "http_request" => {
+                let url = cfg.get("url").and_then(|v| v.as_str()).ok_or_else(|| anyhow::anyhow!("http_request: missing url"))?;
+                let method = cfg.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+                let headers: Value = cfg.get("headers").cloned().unwrap_or(Value::Object(Default::default()));
+                let body = cfg.get("body");
+                let client = reqwest::Client::new();
+                let req = match method {
+                    "POST" => client.post(url).json(&body),
+                    "PUT" => client.put(url).json(&body),
+                    "DELETE" => client.delete(url),
+                    _ => client.get(url),
+                };
+                let resp = req.headers(reqwest::header::HeaderMap::new()).send().await.map_err(|e| anyhow::anyhow!("http: {e}"))?;
+                let status = resp.status().as_u16();
+                let text = resp.text().await.unwrap_or_default();
+                Ok(serde_json::json!({"status": status, "body": text}))
+            }
+            "if" => {
+                let condition = cfg.get("condition").and_then(|v| v.as_str()).unwrap_or("");
+                Ok(serde_json::json!({"condition": condition, "result": !condition.is_empty()}))
+            }
             _ => Ok(serde_json::json!({"error": format!("Unknown node type: {}", node.node_type)})),
         }
     }
