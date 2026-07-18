@@ -33,5 +33,6 @@ pub use core::errors::OrchestratorError;
 
 
 
+pub mod memory_compactor;
 pub mod r#loop;
 pub use r#loop::{AgentOrchestrator, Action};
