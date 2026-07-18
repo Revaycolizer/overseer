@@ -25,6 +25,17 @@ pub async fn stage_computer_approval_request(
 pub async fn approve_pending_computer_action(db: &Database) -> anyhow::Result<()> {
     let pending_tool = super::super::get_setting_or(db, "computer_pending_tool", "").await;
     let pending_action = super::super::get_setting_or(db, "computer_pending_action", "").await;
+
+    // Kernel authority: release the oldest pending kernel approval so the paused
+    // execution actually resumes. (Single-user desktop: at most one at a time.)
+    if let Some(rec) = crate::engine::kernel::list_pending_approvals(db, None)
+        .await
+        .into_iter()
+        .next()
+    {
+        crate::engine::kernel::approve(db, &rec.id, "user");
+    }
+
     super::super::set_setting(db, "computer_approval_state", "approved_once").await?;
     super::super::set_setting(
         db,
@@ -48,6 +59,16 @@ pub async fn approve_pending_computer_action(db: &Database) -> anyhow::Result<()
 }
 
 pub async fn reject_pending_computer_action(db: &Database) -> anyhow::Result<()> {
+    // Kernel authority: reject the oldest pending kernel approval so the paused
+    // execution resumes with a structured rejection (and does not run).
+    if let Some(rec) = crate::engine::kernel::list_pending_approvals(db, None)
+        .await
+        .into_iter()
+        .next()
+    {
+        crate::engine::kernel::reject(db, &rec.id, "user");
+    }
+
     super::session::clear_computer_pending_action(db).await?;
     super::super::set_setting(
         db,
