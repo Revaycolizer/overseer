@@ -1,3 +1,4 @@
+pub mod action_types;
 pub mod cdp;
 pub mod dom_cache;
 pub mod ffmpeg_installer;
