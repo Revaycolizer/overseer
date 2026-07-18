@@ -153,31 +153,34 @@ fn send_message(
         let _ = backend::add_message(&db_for_msg, conv_id, "user", &query_with_context, false).await;
 
         let agent_ref = agent.clone();
+        let db_for_orch = db.clone();
+        let q_for_orch = q.clone();
         let handle = tokio::spawn(async move {
-            let response = agent_ref.orchestrate(&db, conv_id, &q, Some(token_tx)).await;
-            let _ = backend::add_message(&db, conv_id, "assistant", &response, false).await;
-            if spawn_llm_refinement {
-                let agent_title = agent_ref.clone();
-                let db_t = db.clone();
-                let q_t = q.clone();
-                let conv_id_t = conv_id;
-                let (title_tx, mut title_rx) = tokio::sync::oneshot::channel::<()>();
-                let mut convs_for_title = conversations_resource.clone();
-                spawn(async move {
-                    if title_rx.await.is_ok() {
-                        convs_for_title.restart();
-                    }
-                });
-                tokio::spawn(async move {
-                    let title = agent_title.generate_title(&db_t, &q_t).await;
-                    if !title.is_empty() {
-                        let _ = crate::backend::update_conversation_title(&db_t, conv_id_t, &title).await;
-                        let _ = title_tx.send(());
-                        crate::engine::activity::engine_activity().bump();
-                    }
-                });
-            }
+            let response = agent_ref.orchestrate(&db_for_orch, conv_id, &q_for_orch, Some(token_tx)).await;
+            let _ = backend::add_message(&db_for_orch, conv_id, "assistant", &response, false).await;
         });
+
+        if spawn_llm_refinement {
+            let agent_title = agent.clone();
+            let db_t = db.clone();
+            let q_t = q.clone();
+            let conv_id_t = conv_id;
+            let (title_tx, mut title_rx) = tokio::sync::oneshot::channel::<()>();
+            let mut convs_for_title = conversations_resource.clone();
+            spawn(async move {
+                if title_rx.await.is_ok() {
+                    convs_for_title.restart();
+                }
+            });
+            tokio::spawn(async move {
+                let title = agent_title.generate_title(&db_t, &q_t).await;
+                if !title.is_empty() {
+                    let _ = crate::backend::update_conversation_title(&db_t, conv_id_t, &title).await;
+                    let _ = title_tx.send(());
+                    crate::engine::activity::engine_activity().bump();
+                }
+            });
+        }
 
         if let Err(_) = handle.await {
             // orchestrate cancelled
@@ -186,7 +189,6 @@ fn send_message(
         conversations_resource.restart();
         is_local_executing.set(false);
         is_thinking.set(false);
-        conversations_resource.restart();
         selected_artifacts.set(Vec::new());
         selected_work_item.set(None);
     });
