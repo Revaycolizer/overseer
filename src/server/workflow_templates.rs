@@ -43,7 +43,7 @@ async fn install_template(
     State(state): State<Arc<ServerState>>,
     Path(id): Path<i64>,
 ) -> Result<Json<i64>, String> {
-    let graph: Option<(String,)> = sqlx::query_as("SELECT graph_json FROM workflow_templates WHERE id = ?")
+    let graph: String = sqlx::query_scalar("SELECT graph_json FROM workflow_templates WHERE id = ?")
         .bind(id).fetch_optional(&state.db.pool).await.map_err(|e| e.to_string())?
         .ok_or_else(|| "Template not found".to_string())?;
 
@@ -52,7 +52,7 @@ async fn install_template(
         .bind(wf_id).bind(format!("From Template {}", id))
         .execute(&state.db.pool).await.map_err(|e| e.to_string())?;
 
-    let data: serde_json::Value = serde_json::from_str(&graph.0).map_err(|e| e.to_string())?;
+    let data: serde_json::Value = serde_json::from_str(&graph).map_err(|e| e.to_string())?;
     if let Some(nodes) = data.get("nodes").and_then(|v| v.as_array()) {
         for node in nodes {
             let nid = state.db.next_id().await;

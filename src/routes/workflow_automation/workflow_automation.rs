@@ -103,4 +103,6 @@ const NODE_TYPES: &[(&str, &str, &str)] = &[
     ("browser_click", "Click", "touch_app"),
     ("browser_screenshot", "Screenshot", "screenshot"),
     ("browser_extract", "Extract Text", "text_snippet"),
+    ("rss_feed", "RSS Feed", "rss_feed"),
+    ("csv_parse", "Parse CSV", "table_chart"),
 ];

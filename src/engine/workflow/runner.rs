@@ -107,6 +107,19 @@ impl WorkflowRunner {
                 })).await?;
                 Ok(result)
             }
+            "rss_feed" => {
+                let url = cfg.get("url").and_then(|v| v.as_str()).ok_or_else(|| anyhow::anyhow!("missing url"))?;
+                let resp = reqwest::get(url).await.map_err(|e| anyhow::anyhow!("rss: {e}"))?;
+                let text = resp.text().await.unwrap_or_default();
+                Ok(serde_json::json!({"feed": text}))
+            }
+            "csv_parse" => {
+                let data = cfg.get("data").and_then(|v| v.as_str()).unwrap_or("");
+                let mut reader = csv::Reader::from_reader(data.as_bytes());
+                let headers: Vec<String> = reader.headers().map(|h| h.iter().map(|s| s.to_string()).collect()).unwrap_or_default();
+                let rows: Vec<Vec<String>> = reader.records().filter_map(|r| r.ok().map(|r| r.iter().map(|s| s.to_string()).collect())).collect();
+                Ok(serde_json::json!({"headers": headers, "rows": rows}))
+            }
             "if" => {
                 let condition = cfg.get("condition").and_then(|v| v.as_str()).unwrap_or("");
                 Ok(serde_json::json!({"condition": condition, "result": !condition.is_empty()}))
