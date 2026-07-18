@@ -1,6 +1,4 @@
-use crate::db::Database;
 use serde_json::Value;
-use super::native::{ToolGateDecision};
 
 pub fn is_computer_observation_tool(tool_name: &str) -> bool {
     matches!(tool_name, "vision_analysis")
@@ -68,28 +66,4 @@ pub fn computer_strategy_hint(query: &str, step: &str, tools: &[crate::engine::u
         guidance.push("To launch apps: {\"action\":\"launch\",\"target\":\"firefox\"}. To open URLs: {\"action\":\"open_url\",\"target\":\"https://example.com\"}.");
     }
     if guidance.is_empty() { None } else { Some(guidance.join(" ")) }
-}
-
-pub async fn evaluate_computer_tool_gate(db: &Database, domain: &str, tool_name: &str, safety_level: &str, input_json: &Value) -> ToolGateDecision {
-    let action_tool = is_computer_action_tool(domain, tool_name, safety_level);
-    let touches_computer = matches!(domain, "computer" | "desktop") || action_tool || is_computer_observation_tool(tool_name);
-    if !touches_computer { return ToolGateDecision { allowed: true, reason: None, action_summary: None, action_tool: false }; }
-
-    let state = match crate::backend::get_computer_supervision_state(db).await {
-        Ok(s) => s,
-        Err(e) => return ToolGateDecision { allowed: false, reason: Some(format!("Failed to get supervision state: {}", e)), action_summary: None, action_tool },
-    };
-    let action_summary = summarize_computer_action(tool_name, input_json);
-
-    if state.session_state == "emergency_stopped" {
-        return ToolGateDecision { allowed: false, reason: Some("Computer supervision is in emergency stop.".to_string()), action_summary: Some(action_summary), action_tool };
-    }
-    if state.session_state == "paused" {
-        return ToolGateDecision { allowed: false, reason: Some("Computer supervision is paused.".to_string()), action_summary: Some(action_summary), action_tool };
-    }
-    if action_tool && state.session_state == "idle" {
-        return ToolGateDecision { allowed: false, reason: Some("No supervised computer session is active.".to_string()), action_summary: Some(action_summary), action_tool };
-    }
-    
-    ToolGateDecision { allowed: true, reason: None, action_summary: Some(action_summary), action_tool }
 }
