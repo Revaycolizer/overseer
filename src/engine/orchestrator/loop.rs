@@ -70,16 +70,59 @@ impl AgentOrchestrator {
     }
 
     async fn execute_action(&self, action: Action) -> Result<(), Box<dyn std::error::Error>> {
+        use overseer_kernel::{ActionKind, PolicyDecision};
         match action {
-            Action::LaunchApp(app) => { std::process::Command::new(app).spawn()?; }
+            Action::LaunchApp(app) => {
+                // Launching an app is a computer action; it must pass kernel
+                // policy. The voice loop cannot wait for approval, so it only
+                // proceeds on a deterministic Allow.
+                let args = serde_json::json!({ "action": "launch", "target": app });
+                match crate::engine::kernel::evaluate_named(
+                    &self.db_conn, "computer", ActionKind::ComputerControl, "app_launcher", &args, &["app_launcher".to_string()],
+                )
+                .await
+                {
+                    PolicyDecision::Allow => { std::process::Command::new(&app).spawn()?; }
+                    _ => {
+                        println!("🛡️ Kernel blocked voice LaunchApp('{}') — not authorized.", app);
+                    }
+                }
+            }
             Action::ExecuteShell(cmd) => {
-                #[cfg(target_os = "linux")]
-                std::process::Command::new("sh").arg("-c").arg(&cmd).output()?;
-                #[cfg(target_os = "windows")]
-                std::process::Command::new("powershell").arg("-Command").arg(&cmd).output()?;
+                // No `sh -c` / `powershell -Command`. Shell commands are gated by
+                // the kernel and, when permitted, run as an executable + argument
+                // array (never a shell-interpreted string).
+                let args = serde_json::json!({ "action": "shell", "command": cmd });
+                match crate::engine::kernel::evaluate_named(
+                    &self.db_conn, "computer", ActionKind::ShellCommand, "shell", &args, &[],
+                )
+                .await
+                {
+                    PolicyDecision::Allow => {
+                        let mut parts = cmd.split_whitespace();
+                        if let Some(program) = parts.next() {
+                            let rest: Vec<&str> = parts.collect();
+                            let _ = std::process::Command::new(program).args(&rest).output()?;
+                        }
+                    }
+                    _ => {
+                        println!("🛡️ Kernel blocked voice shell command — not authorized.");
+                    }
+                }
             }
             Action::CaptureScreenVerify => {
-                let _ = crate::engine::tools::native_os_tool(&serde_json::json!({ "action": "screenshot" })).await;
+                let args = serde_json::json!({ "action": "screenshot" });
+                if matches!(
+                    crate::engine::kernel::evaluate_named(
+                        &self.db_conn, "computer", ActionKind::ComputerControl, "os_tool", &args, &["os_tool".to_string()],
+                    )
+                    .await,
+                    PolicyDecision::Allow
+                ) {
+                    let _ = crate::engine::tools::native_os_tool(&args).await;
+                } else {
+                    println!("🛡️ Kernel blocked voice screenshot — not authorized.");
+                }
             }
             Action::SpeakFeedback(text) => {
                 self.is_tts_speaking.store(true, Ordering::SeqCst);
@@ -91,15 +134,30 @@ impl AgentOrchestrator {
                     "tool_name": tool.name.clone(),
                     "input": goal
                 });
-                match crate::engine::tools::call_dynamic_tool(&tool, args).await {
-                    Ok(output) => {
-                        println!("Dynamic tool output: {}", output);
-                        self.is_tts_speaking.store(true, Ordering::SeqCst);
-                        crate::engine::voice::tts::speak_locally(&format!("Executed tool {}", tool.name));
-                        self.is_tts_speaking.store(false, Ordering::SeqCst);
+                let kind = crate::engine::kernel::classify_action_kind(&tool, "computer");
+                match crate::engine::kernel::evaluate_named(
+                    &self.db_conn, "computer", kind, &tool.name, &args, &[tool.name.clone()],
+                )
+                .await
+                {
+                    PolicyDecision::Allow => {
+                        match crate::engine::tools::call_dynamic_tool(&tool, args).await {
+                            Ok(output) => {
+                                println!("Dynamic tool output: {}", output);
+                                self.is_tts_speaking.store(true, Ordering::SeqCst);
+                                crate::engine::voice::tts::speak_locally(&format!("Executed tool {}", tool.name));
+                                self.is_tts_speaking.store(false, Ordering::SeqCst);
+                            }
+                            Err(e) => {
+                                println!("Dynamic tool execution error: {}", e);
+                            }
+                        }
                     }
-                    Err(e) => {
-                        println!("Dynamic tool execution error: {}", e);
+                    _ => {
+                        println!("🛡️ Kernel blocked voice tool '{}' — requires approval or not authorized.", tool.name);
+                        self.is_tts_speaking.store(true, Ordering::SeqCst);
+                        crate::engine::voice::tts::speak_locally("That action requires approval and can't be run by voice.");
+                        self.is_tts_speaking.store(false, Ordering::SeqCst);
                     }
                 }
             }
