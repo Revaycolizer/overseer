@@ -1,6 +1,6 @@
 {
   "product": "Overseer",
-  "updated_at": "2026-05-09T06:01:57Z",
+  "updated_at": "2026-07-18T00:00:00Z",
   "latest": "v0.1.4",
   "channels": {
     "latest": "v0.1.4",
@@ -10,7 +10,7 @@
     {
       "key": "latest",
       "label": "Latest",
-      "value": "v0.1.3",
+      "value": "v0.1.4",
       "color": "2563eb"
     },
     {
@@ -27,6 +27,21 @@
     }
   ],
   "releases": [
+    {
+      "version": "0.1.5",
+      "tag": "v0.1.5",
+      "channel": "preview",
+      "is_latest": false,
+      "is_stable": false,
+      "labels": [
+        "preview",
+        "kernel"
+      ],
+      "published_at": "2026-07-18T00:00:00Z",
+      "summary": "Overseer Kernel v0.1 (preview): deterministic policy enforcement, human approval gates, and full action tracing at a single governed execution chokepoint. Kernel crate independently verified; desktop integration in progress. No packaged binaries in this preview.",
+      "notes_file": "releases/notes/v0.1.5.md",
+      "assets": []
+    },
     {
       "version": "0.1.4",
       "tag": "v0.1.4",
