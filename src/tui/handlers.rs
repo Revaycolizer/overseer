@@ -127,8 +127,12 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
                             let m = name.trim().to_string();
                             if m.is_empty() {
                                 app.status_message = "Please specify a model: /model <name>".to_string();
-                            } else if app.client.set_setting("planner_model", &m).await.is_ok() {
-                                app.status_message = format!("Planner model updated to '{}'", m);
+                            } else {
+                                let _ = app.client.set_setting("planner_model", &m).await;
+                                if let Some(cid) = app.selected_conv_id {
+                                    let _ = app.client.set_conversation_setting(cid, "model", &m).await;
+                                }
+                                app.status_message = format!("Planner model updated to '{}' (per-conversation)", m);
                                 app.input.clear();
                                 app.input_cursor = 0;
                             }
