@@ -68,9 +68,8 @@ async fn navigate(
     Json(payload): Json<NavigatePayload>,
 ) -> Result<Json<serde_json::Value>, String> {
     let ws_url = format!("ws://127.0.0.1:{}/devtools/browser", 9300 + id as u16);
-    let result = crate::engine::browser::cdp::cdp_call(
-        &ws_url, "Page.navigate",
-        serde_json::json!({"url": payload.url}),
+    let result = crate::engine::browser::cdp::navigate_and_wait(
+        &ws_url, &payload.url,
     ).await.map_err(|e| e.to_string())?;
     Ok(Json(result))
 }
