@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use serde_json::Value;
 use tokio::sync::Mutex;
 
@@ -8,7 +9,7 @@ use super::port_alloc;
 use super::session::{BrowserSession, SessionState};
 use super::session_init;
 use super::spawner;
-pub use super::pool_config::PoolConfig;
+use super::pool_config::PoolConfig;
 
 pub(super) struct Inner {
     pub(super) sessions: HashMap<i64, BrowserSession>,
@@ -17,13 +18,13 @@ pub(super) struct Inner {
 
 pub struct BrowserPool {
     config: PoolConfig,
-    pub(super) inner: Mutex<Inner>,
+    pub(super) inner: Arc<Mutex<Inner>>,
     data_dir: PathBuf,
 }
 
 impl BrowserPool {
     pub fn new(config: PoolConfig, data_dir: PathBuf) -> Self {
-        Self { config, inner: Mutex::new(Inner { sessions: HashMap::new(), next_id: 1 }), data_dir }
+        Self { config, inner: Arc::new(Mutex::new(Inner { sessions: HashMap::new(), next_id: 1 })), data_dir }
     }
 
     pub async fn create_session(&self, _conversation_id: Option<i64>) -> anyhow::Result<i64> {
@@ -68,6 +69,19 @@ impl BrowserPool {
 
     pub async fn get_profile_path(&self, id: i64) -> Option<std::path::PathBuf> {
         self.inner.lock().await.sessions.get(&id).map(|s| s.profile_path.clone())
+    }
+
+    pub async fn shutdown(&self) {
+        let mut inner = self.inner.lock().await;
+        for (_, mut session) in inner.sessions.drain() {
+            if let Some(ref cdp) = session.cdp {
+                let _ = cdp.call("Page.stopScreencast", serde_json::json!({})).await;
+                let _ = cdp.call("Browser.close", serde_json::json!({})).await;
+            }
+            if let Some(mut child) = session.process {
+                let _ = child.kill().await;
+            }
+        }
     }
 
     pub async fn session_count(&self) -> usize {

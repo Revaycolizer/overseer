@@ -21,7 +21,7 @@ impl LocalClient {
     pub fn new(db: Arc<Database>, agent_system: Arc<AgentSystem>) -> Self {
         let data_dir = crate::db::get_overseer_data_dir();
         let browser_pool = Arc::new(crate::engine::browser::pool::BrowserPool::new(
-            crate::engine::browser::pool::PoolConfig::default(),
+            crate::engine::browser::pool_config::PoolConfig::default(),
             data_dir,
         ));
         Self { db, agent_system, browser_pool }

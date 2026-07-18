@@ -3,6 +3,7 @@ use crate::db::Database;
 use crate::engine::system::AgentSystem;
 use std::sync::Arc;
 use std::net::SocketAddr;
+use tokio::signal;
 use tower_governor::GovernorLayer;
 
 pub struct ServerState {
@@ -13,11 +14,12 @@ pub struct ServerState {
 
 pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port: u16) -> anyhow::Result<()> {
     let data_dir = crate::db::get_overseer_data_dir();
-    let browser_pool = Arc::new(crate::engine::browser::pool::BrowserPool::new(
-        crate::engine::browser::pool::PoolConfig::default(),
+    let pool = crate::engine::browser::pool::BrowserPool::new(
+        crate::engine::browser::pool_config::PoolConfig::default(),
         data_dir,
-    ));
-    let state = Arc::new(ServerState { db, agent_system, browser_pool });
+    );
+    let browser_pool = Arc::new(pool);
+    let state = Arc::new(ServerState { db, agent_system, browser_pool: browser_pool.clone() });
 
     let app = Router::new()
         .merge(conversations::router())
@@ -42,7 +44,19 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     println!("🚀 Overseer Server running on http://{}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+
+    let shutdown = {
+        let bp = browser_pool.clone();
+        async move {
+            signal::ctrl_c().await.ok();
+            tracing::info!("Shutting down browser sessions...");
+            bp.shutdown().await;
+        }
+    };
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await?;
     Ok(())
 }
 
