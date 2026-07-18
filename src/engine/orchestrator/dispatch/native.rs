@@ -1,14 +1,3 @@
-use crate::db::Database;
-use serde_json::Value;
-
-#[derive(Debug, Clone)]
-pub struct ToolGateDecision {
-    pub allowed: bool,
-    pub reason: Option<String>,
-    pub action_summary: Option<String>,
-    pub action_tool: bool,
-}
-
 pub fn is_native_screenshot_request(query: &str, step: &str, domain: &str) -> bool {
     if !matches!(domain, "computer" | "desktop") { return false; }
     let combined = format!("{} {}", query.to_lowercase(), step.to_lowercase());
@@ -66,10 +55,4 @@ pub fn native_selector_action(query: &str, step: &str, domain: &str) -> Option<&
     if combined.contains("focus element") || combined.contains("focus button") { return Some("focus_element"); }
     if combined.contains("invoke ") || combined.contains("click element") || combined.contains("click button") { return Some("invoke_element"); }
     None
-}
-
-pub async fn evaluate_computer_tool_gate(_db: &Database, _domain: &str, _tool_name: &str, _safety_level: &str, _input_json: &Value) -> ToolGateDecision {
-    // Logic from dispatcher's evaluate_computer_tool_gate...
-    // Simplified for now, will copy full logic if needed.
-    ToolGateDecision { allowed: true, reason: None, action_summary: None, action_tool: false }
 }
