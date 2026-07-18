@@ -1,6 +1,7 @@
 pub mod cdp;
 pub mod dom_cache;
 pub mod image_optimizer;
+pub mod memory_monitor;
 pub mod session_init;
 pub mod obscura_resolver;
 pub mod pool;

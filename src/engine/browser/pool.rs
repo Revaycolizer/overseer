@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use serde_json::Value;
 use tokio::sync::Mutex;
 
+use super::memory_monitor;
 use super::port_alloc;
 use super::session::{BrowserSession, SessionState};
 use super::session_init;
@@ -39,6 +40,11 @@ impl BrowserPool {
         let mut inner = self.inner.lock().await;
         if inner.sessions.len() >= self.config.max_sessions {
             anyhow::bail!("Max browser sessions ({}) reached", self.config.max_sessions);
+        }
+        let count = inner.sessions.len();
+        let report = memory_monitor::current_report(count as u64 * 90, count);
+        if !report.can_create_session {
+            anyhow::bail!("Memory too low to create browser session");
         }
 
         let id = inner.next_id;

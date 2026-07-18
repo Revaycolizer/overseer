@@ -72,14 +72,10 @@ async fn cdp_relay(
     super::browser_relay::handler(ws, state, id).await
 }
 
-async fn memory_report() -> Json<serde_json::Value> {
-    let mut sys = sysinfo::System::new();
-    sys.refresh_memory();
-    let total = sys.total_memory() / 1024 / 1024;
-    let used = sys.used_memory() / 1024 / 1024;
-    Json(serde_json::json!({
-        "total_ram_mb": total,
-        "used_ram_mb": used,
-        "available_ram_mb": total.saturating_sub(used),
-    }))
+async fn memory_report(
+    State(state): State<Arc<ServerState>>,
+) -> Json<serde_json::Value> {
+    let count = state.browser_pool.session_count().await;
+    let report = crate::engine::browser::memory_monitor::current_report(count as u64 * 90, count);
+    Json(serde_json::json!(report))
 }
