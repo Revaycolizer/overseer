@@ -17,6 +17,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         format!("OVERSEER v0.1.4 | Mode: {}", match app.active_tab {
             ActiveTab::Chat => " [CHAT CONVERSATIONS] ",
             ActiveTab::Metrics => " [SYSTEM METRICS] ",
+            ActiveTab::Browser => " [BROWSER SESSIONS] ",
         }),
         Style::default().add_modifier(Modifier::BOLD).fg(Color::White),
     )).block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)).title(" Overseer Mission Control ")), chunks[0]);
@@ -29,6 +30,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     match app.active_tab {
         ActiveTab::Chat => draw_chat(f, app, chunks[1]),
         ActiveTab::Metrics => draw_metrics(f, app, chunks[1]),
+        ActiveTab::Browser => draw_browser(f, app, chunks[1]),
     }
 }
 
@@ -99,6 +101,18 @@ fn draw_chat(f: &mut Frame, app: &App, area: Rect) {
         Span::styled(right.to_string(), Style::default().fg(Color::DarkGray)),
     ]);
     f.render_widget(Paragraph::new(input_line).block(Block::default().borders(Borders::ALL).title(" Type Message (←/→ to move cursor, ENTER to send) ")), right_layout[1]);
+}
+
+fn draw_browser(f: &mut Frame, app: &App, area: Rect) {
+    let text = vec![
+        Line::from(Span::styled("BROWSER SESSIONS", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("Use the Dioxus Web UI to create and manage browser sessions."),
+        Line::from("Or use the REST API at /v1/browser/sessions"),
+        Line::from(""),
+        Line::from(Span::styled("Coming soon: TUI browser session management.", Style::default().fg(Color::DarkGray))),
+    ];
+    f.render_widget(Paragraph::new(text).block(Block::default().borders(Borders::ALL).title(" Browser ")), area);
 }
 
 fn draw_metrics(f: &mut Frame, app: &App, area: Rect) {

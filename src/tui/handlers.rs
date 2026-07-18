@@ -31,7 +31,8 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
             } else {
                 app.active_tab = match app.active_tab {
                     ActiveTab::Chat => ActiveTab::Metrics,
-                    ActiveTab::Metrics => {
+                    ActiveTab::Metrics => ActiveTab::Browser,
+                    ActiveTab::Browser => {
                         let _ = app.refresh_metrics().await;
                         ActiveTab::Chat
                     }
