@@ -13,12 +13,14 @@ pub mod tui;
 
 use routes::{
     AgentsWorkshop, BrowserSessions, ComputerControl, Conversations, DeviceControl, Layout,
-    PlannersWorkshop, Settings, SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation, Listening,
-    SystemIdleSecureLockScreen, IdleWatcher, VoiceTraining
+    LoginScreen, PlannersWorkshop, Settings, SupervisorsWorkshop, ToolsWorkshop, WorkflowAutomation,
+    Listening, SystemIdleSecureLockScreen, IdleWatcher, VoiceTraining
 };
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 pub enum Route {
+    #[route("/login")]
+    LoginScreen {},
     #[layout(IdleWatcher)]
         #[layout(Layout)]
             #[route("/")]

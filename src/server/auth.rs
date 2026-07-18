@@ -1,7 +1,9 @@
 use axum::{
     routing::{get, post},
-    extract::{State, Json},
-    http::{HeaderMap, StatusCode},
+    extract::{State, Json, Path},
+    http::{HeaderMap, StatusCode, header},
+    response::IntoResponse,
+    body::Bytes,
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -26,6 +28,7 @@ pub fn router() -> Router<Arc<ServerState>> {
         .route("/v1/auth/login", post(login))
         .route("/v1/auth/logout", post(logout))
         .route("/v1/auth/me", get(me))
+        .route("/v1/users/{id}/avatar", get(get_avatar))
 }
 
 async fn get_user_from_token(state: &Arc<ServerState>, headers: &HeaderMap) -> Result<UserProfile, StatusCode> {
@@ -89,4 +92,16 @@ async fn logout(State(state): State<Arc<ServerState>>, headers: HeaderMap) -> St
 async fn me(State(state): State<Arc<ServerState>>, headers: HeaderMap) -> Result<Json<UserProfile>, StatusCode> {
     let user = get_user_from_token(&state, &headers).await?;
     Ok(Json(user))
+}
+
+async fn get_avatar(
+    State(state): State<Arc<ServerState>>,
+    Path(id): Path<i64>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let data = sqlx::query_scalar::<_, Vec<u8>>("SELECT avatar_data FROM users WHERE id = ?")
+        .bind(id).fetch_optional(&state.db.pool).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .flatten()
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(([(header::CONTENT_TYPE, "image/png")], Bytes::from(data)))
 }
