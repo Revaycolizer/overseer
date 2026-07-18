@@ -184,7 +184,7 @@ pub fn Layout() -> Element {
             }
             div { class: "flex flex-1 overflow-hidden",
                 Sidebar {}
-                div { class: "flex-1 flex flex-col min-w-0 min-h-0 bg-background-light overflow-hidden",
+                div { class: "flex-1 flex flex-col min-w-0 min-h-0 bg-background-light overflow-hidden route-enter",
                     Outlet::<Route> {}
                 }
             }

@@ -81,6 +81,7 @@ pub fn Settings() -> Element {
                         runtime_dir,
                         on_change
                     }
+                    ConnectionSection {}
                 }
 
                 div { class: "mt-20 pt-8 border-t border-slate-200 text-center",
