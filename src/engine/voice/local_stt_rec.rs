@@ -31,7 +31,7 @@ pub async fn record_samples(vad_threshold: f32) -> Result<Vec<f32>, String> {
                     }
                     res_idx -= 1.0; prev = sample;
                 }
-            }, |err| eprintln!("Audio stream error: {}", err), None)
+            }, |err| tracing::error!(?err, "Audio stream error"), None)
         }
         cpal::SampleFormat::I16 => {
             let (mut res_idx, mut prev) = (0.0f32, 0.0f32);
@@ -47,7 +47,7 @@ pub async fn record_samples(vad_threshold: f32) -> Result<Vec<f32>, String> {
                     }
                     res_idx -= 1.0; prev = sample;
                 }
-            }, |err| eprintln!("Audio stream error: {}", err), None)
+            }, |err| tracing::error!(?err, "Audio stream error"), None)
         }
         _ => return Err("Unsupported format".to_string()),
     }.map_err(|e| format!("Failed to build stream: {}", e))?;

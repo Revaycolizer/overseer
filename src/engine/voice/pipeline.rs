@@ -7,7 +7,7 @@ pub async fn execute_voice_command(
     agent: &Arc<AgentSystem>,
     command: &str,
 ) -> anyhow::Result<String> {
-    println!("🧠 Processing voice command: \"{}\"", command);
+    tracing::info!(?command, "Processing voice command");
 
     // Create or reuse a voice conversation
     let conversation_id = get_voice_conversation(db).await;
@@ -24,7 +24,7 @@ pub async fn execute_voice_command(
         ).await;
         // Speak the response using Piper/TTS!
         crate::engine::voice::tts::speak_locally(&fast_result);
-        println!("✅ Voice command fast-path result: {}", &fast_result);
+        tracing::info!("Voice command fast-path result");
         return Ok(fast_result);
     }
 
@@ -44,7 +44,7 @@ pub async fn execute_voice_command(
     // Speak the response using Piper/TTS!
     crate::engine::voice::tts::speak_locally(&response);
 
-    println!("✅ Voice command result: {}", &response[..response.len().min(200)]);
+    tracing::info!("Voice command result processed");
     Ok(response)
 }
 
@@ -188,7 +188,7 @@ async fn try_voice_fast_path(command: &str) -> Option<String> {
         return None;
     };
 
-    println!("⚡ Fast-path matched voice command: \"{}\"", command);
+    tracing::info!(?command, "Fast-path matched voice command");
     match crate::engine::tools::native_os_tool(&args).await {
         Ok(res_json) => {
             // Parse response to find a human-readable description
@@ -226,7 +226,7 @@ async fn try_voice_fast_path(command: &str) -> Option<String> {
             Some("Done.".to_string())
         }
         Err(e) => {
-            eprintln!("❌ Fast-path tool failed: {}", e);
+            tracing::error!(?e, "Fast-path tool failed");
             Some(format!("Sorry, I couldn't complete that action. Error: {}", e))
         }
     }

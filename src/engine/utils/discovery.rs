@@ -233,15 +233,12 @@ pub async fn prepare_runtime_env(db: &crate::db::Database) -> anyhow::Result<Str
         };
 
         if source.is_empty() {
-            println!(
-                "⚠️  Skipping runtime staging for '{}' because no Python source was available.",
-                tool.name
-            );
+            tracing::warn!(tool = %tool.name, "Skipping runtime staging — no Python source");
             continue;
         }
 
         if let Err(e) = std::fs::write(&file_path, source) {
-            println!("⚠️  Failed to stage tool '{}' to runtime: {}", tool.name, e);
+            tracing::error!(tool = %tool.name, ?e, "Failed to stage tool to runtime");
         }
     }
 
