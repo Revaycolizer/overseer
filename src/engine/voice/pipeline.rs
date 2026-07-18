@@ -13,7 +13,7 @@ pub async fn execute_voice_command(
     let conversation_id = get_voice_conversation(db).await;
 
     // 1. Voice Fast-path check
-    if let Some(fast_result) = try_voice_fast_path(command).await {
+    if let Some(fast_result) = try_voice_fast_path(db, command).await {
         // Save the user message
         let _ = crate::backend::add_message(
             db, conversation_id, "user", command, false,
@@ -48,7 +48,7 @@ pub async fn execute_voice_command(
     Ok(response)
 }
 
-async fn try_voice_fast_path(command: &str) -> Option<String> {
+async fn try_voice_fast_path(db: &Database, command: &str) -> Option<String> {
     let lower = command.trim().trim_end_matches('.').to_lowercase();
     
     if let Some(vol_res) = super::fast_path_utils::handle_volume_fast_path(&lower).await {
@@ -189,6 +189,28 @@ async fn try_voice_fast_path(command: &str) -> Option<String> {
     };
 
     println!("⚡ Fast-path matched voice command: \"{}\"", command);
+
+    // Governance: the voice fast-path is user-triggerable, so its computer
+    // action must pass kernel policy. The voice loop cannot wait for approval,
+    // so it proceeds only on a deterministic Allow (observations like get_state
+    // are allowed; mutating actions in approval mode are refused here).
+    if !matches!(
+        crate::engine::kernel::evaluate_named(
+            db,
+            "computer",
+            overseer_kernel::ActionKind::ComputerControl,
+            "os_tool",
+            &args,
+            &["os_tool".to_string()],
+        )
+        .await,
+        overseer_kernel::PolicyDecision::Allow
+    ) {
+        return Some(
+            "That action requires approval and can't be run by voice fast-path.".to_string(),
+        );
+    }
+
     match crate::engine::tools::native_os_tool(&args).await {
         Ok(res_json) => {
             // Parse response to find a human-readable description
