@@ -18,6 +18,7 @@ pub async fn call_native_builtin_tool(
         "browser_navigate" => Some(crate::engine::tools::browser::navigate(args).await?),
         "browser_screenshot" => Some(crate::engine::tools::browser::screenshot(args).await?),
         "app_launcher" => Some(crate::engine::tools::app_launcher::native_app_launcher(args).await?),
+        "write_file" => Some(crate::engine::tools::write_file::native_write_file(args).await?),
         "document_writer" => {
             tracing::debug!("Calling native_document_writer");
             match crate::engine::tools::document_generation::native_document_writer(args).await {
