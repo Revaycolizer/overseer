@@ -27,10 +27,7 @@ pub fn sanitize_plan(plan_text: &str, query: &str) -> Vec<MacroTask> {
         Ok(tasks) => tasks,
         Err(e) => {
             // Default fallback if JSON fails
-            println!(
-                "⚠️ Failed to parse master planner JSON: {}. Routing raw query to 'chat' as fallback.",
-                e
-            );
+            tracing::warn!(?e, "Failed to parse master planner JSON, routing to chat fallback");
             vec![MacroTask {
                 domain: "chat".to_string(),
                 task: query.to_string(),

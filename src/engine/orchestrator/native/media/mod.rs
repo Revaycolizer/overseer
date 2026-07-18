@@ -56,7 +56,7 @@ async fn invoke_vision_assistant(
         
         let agent = VisionGeneralAgent::new(ollama_client, &model, &info.instructions);
         
-        println!("👁️  [Vision] Executing deep perception for: {}", path_str);
+        tracing::info!(?path_str, "Vision: executing deep perception");
         
         // ARCHITECTURE V3.6: GUIDED PERCEPTION
         let prompt = if let Some(q) = query {

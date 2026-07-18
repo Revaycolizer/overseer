@@ -16,7 +16,7 @@ pub fn extract_text(path: &Path) -> anyhow::Result<String> {
         anyhow::bail!("Tesseract OCR not found in system PATH");
     }
 
-    println!("🖼️ [Native] Performing OCR on image: {:?}", path);
+    tracing::info!(?path, "Performing OCR on image");
     
     // Run tesseract: tesseract [input] stdout
     let output = Command::new("tesseract")
