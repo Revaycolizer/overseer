@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 use super::app::{ActiveTab, App};
-use super::{agents, chat_panel, computer, info_panels, mcp, settings, skills, supervisors, tools, workflows};
+use super::{agents, chat_panel, computer, help as help_panel, info_panels, mcp, search as search_panel, settings, skills, supervisors, tools, workflows};
 
 pub const ACCENT: Color = Color::Rgb(59, 130, 246);
 pub const SURFACE: Color = Color::Rgb(30, 41, 59);
@@ -101,6 +101,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .block(Block::default().borders(Borders::ALL).border_style(Style::new().fg(SURFACE))),
         chunks[3],
     );
+
+    // Overlays (drawn last for z-order)
+    if app.show_help {
+        help_panel::draw_help(f, app, f.size());
+    }
+    if app.show_search {
+        search_panel::draw_search(f, app, f.size());
+    }
 }
 
 fn draw_placeholder(f: &mut Frame, title: &str, area: Rect) {

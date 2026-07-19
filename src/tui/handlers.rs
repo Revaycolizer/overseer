@@ -37,20 +37,40 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Ctrl+F — search
+    // Ctrl+F — open universal search
     if key.code == KeyCode::Char('f') && key.modifiers.contains(KeyModifiers::CONTROL) {
-        app.active_tab = ActiveTab::SearchResults;
-        app.status_message = "Search: Ctrl+F to search messages (coming in Phase 5)".to_string();
+        app.show_search = !app.show_search;
+        if app.show_search {
+            app.search_query.clear();
+            app.search_results = None;
+        }
         app.activity.bump();
         return Ok(());
     }
 
-    // F1 — help
+    // F1 — help overlay
     if key.code == KeyCode::F(1) {
-        let tab_name = app.active_tab.label();
-        app.status_message = format!("Help: {} tab. Ctrl+Left/Right=switch tabs, Alt+1..9,0=direct jump, F5=refresh, Q=quit", tab_name);
+        app.show_help = !app.show_help;
+        if !app.show_help {
+            app.status_message = "Help closed.".to_string();
+        }
         app.activity.bump();
         return Ok(());
+    }
+
+    // If help is open, only Esc closes it
+    if app.show_help {
+        if key.code == KeyCode::Esc || key.code == KeyCode::F(1) {
+            app.show_help = false;
+            app.status_message = "Help closed.".to_string();
+            app.activity.bump();
+        }
+        return Ok(());
+    }
+
+    // If search is open, route all keys to search input
+    if app.show_search {
+        return handle_search_key(app, key).await;
     }
 
     // Ctrl+N / F2 — new conversation (Chat only)
@@ -197,6 +217,43 @@ async fn handle_skills_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         KeyCode::Esc => { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
         _ => {}
     }
+    Ok(())
+}
+
+async fn handle_search_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
+    match key.code {
+        KeyCode::Esc => {
+            app.show_search = false;
+            app.search_query.clear();
+            app.search_results = None;
+            app.status_message = "Search closed.".to_string();
+        }
+        KeyCode::Enter => {
+            if !app.search_query.is_empty() {
+                let q = app.search_query.clone();
+                match app.client.search_messages(&q).await {
+                    Ok(results) => { app.search_results = Some(results); app.status_message = "Search complete.".to_string(); }
+                    Err(e) => { app.status_message = format!("Search failed: {}", e); }
+                }
+            }
+        }
+        KeyCode::Backspace => {
+            app.search_query.pop();
+            if !app.search_query.is_empty() {
+                let q = app.search_query.clone();
+                app.search_results = app.client.search_messages(&q).await.ok();
+            } else { app.search_results = None; }
+        }
+        KeyCode::Char(c) => {
+            app.search_query.push(c);
+            if app.search_query.len() >= 2 {
+                let q = app.search_query.clone();
+                app.search_results = app.client.search_messages(&q).await.ok();
+            }
+        }
+        _ => {}
+    }
+    app.activity.bump();
     Ok(())
 }
 

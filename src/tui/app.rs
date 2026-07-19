@@ -61,6 +61,10 @@ pub struct App {
     // Phase 4: Skills state
     pub installed_skills: Vec<InstalledSkill>,
     pub skill_registry: Option<crate::skills::registry::SkillRegistry>,
+
+    // Phase 5: UI state
+    pub show_help: bool,
+    pub show_search: bool,
 }
 
 impl App {
@@ -99,6 +103,8 @@ impl App {
             mcp_resources: vec![],
             installed_skills: vec![],
             skill_registry: None,
+            show_help: false,
+            show_search: false,
         };
         app.refresh_conversations().await?;
         app.refresh_metrics().await?;
