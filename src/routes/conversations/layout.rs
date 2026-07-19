@@ -13,6 +13,7 @@ pub fn ConversationsHeader(
     personality_label: Option<String>,
     latest_run: Option<backend::ExecutionRun>,
     selected_run: Option<backend::ExecutionRun>,
+    is_first_msg: bool,
 ) -> Element {
     let global_state = crate::state::use_global_state();
     let client = global_state.read().client.clone();
@@ -23,15 +24,13 @@ pub fn ConversationsHeader(
     let id_opt = (state.selected_conversation_id)();
 
     rsx! {
-        div { class: "border-b border-slate-200 bg-white/90 backdrop-blur-sm px-3 sm:px-6 py-3 sm:py-4",
-            div { class: "max-w-3xl mx-auto flex items-start justify-between gap-4",
+        if !is_first_msg {
+        div { class: "border-b border-slate-200 bg-white/90 backdrop-blur-sm px-3 sm:px-6 py-3",
+            div { class: "max-w-3xl mx-auto flex items-center justify-between gap-4",
                 div { class: "min-w-0",
-                    p { class: "text-[10px] font-black uppercase tracking-[0.24em] text-slate-400", if id_opt.is_some() { "Conversation Workspace" } else { "Ready to Start" } }
-                    h1 { class: "text-lg font-black text-slate-900 truncate mt-1", "{conversation_title}" }
-                    p { class: "text-xs text-slate-500 mt-1 leading-relaxed",
-                        if let Some(reason) = route_reason { "{reason}" }
-                        else if id_opt.is_some() { "Send a message to route work through the orchestrator and capture the execution trace." }
-                        else { "Type anything below and Overseer will create a conversation automatically, route the request, and keep the run trace attached." }
+                    h1 { class: "text-base font-semibold text-slate-900 truncate", "{conversation_title}" }
+                    if let Some(reason) = route_reason {
+                        p { class: "text-xs text-slate-400 mt-0.5 truncate", "{reason}" }
                     }
                 }
                 div { class: "flex flex-wrap items-center justify-end gap-2 shrink-0",
@@ -88,6 +87,7 @@ pub fn ConversationsHeader(
                     }
                 }
             }
+        }
         }
     }
 }
