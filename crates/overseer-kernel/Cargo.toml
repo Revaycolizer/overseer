@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 description = "Overseer Kernel: deterministic policy enforcement, approval persistence and runtime coordination for agent actions."
+authors = ["Revaycolizer <albinuslucas@gmail.com>"]
+homepage = "https://github.com/revaycolizer/overseer"
+repository = "https://github.com/revaycolizer/overseer"
+keywords = ["ai", "agent", "orchestration", "policy", "approval"]
+categories = ["development-tools::debugging", "embedded" ]
+readme = "README.md"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

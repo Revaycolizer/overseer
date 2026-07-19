@@ -89,4 +89,3 @@ async fn search_messages(
         .map(Json)
         .map_err(|e| e.to_string())
 }
-

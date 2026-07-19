@@ -46,6 +46,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(workflow_triggers::router())
         .merge(crate::mcp::server::router())
         .merge(crate::server::metrics::router())
+        .merge(crate::server::openapi::router())
         .layer(GovernorLayer {
             config: crate::engine::resilience::server_governor(),
         })
@@ -91,3 +92,4 @@ pub mod browser_recording;
 pub mod browser_relay;
 pub mod metrics;
 pub mod misc;
+pub mod openapi;
