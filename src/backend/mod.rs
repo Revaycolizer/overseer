@@ -1,7 +1,7 @@
 pub mod auth;
 mod agents;
 pub mod artifacts;
-mod computer_supervision;
+pub mod computer_supervision;
 mod conversations;
 mod execution;
 mod health;
