@@ -17,6 +17,8 @@ pub fn Conversations() -> Element {
 
     let state = use_conversations_state(&conversations);
     let load_more = setup_prefetching_and_pagination(db.clone(), state);
+    // Top tabs: "conversation" (chat) | "workspace" (work items / workflow).
+    let active_tab = use_signal(|| "conversation".to_string());
 
     let db_for_msg = db.clone();
     let selected_conversation_id = state.selected_conversation_id;
@@ -85,7 +87,7 @@ pub fn Conversations() -> Element {
                 main { class: "flex-1 relative bg-[var(--workspace-bg)] overflow-hidden min-h-0",
                     div { class: "flex flex-col min-w-0 min-h-0 h-full",
                         ConversationsHeader { state: state, conversation_title: conversation_title, route_reason: route_reason, route_label: route_label, personality_label: personality_label, latest_run: latest_run, selected_run: selected_run, is_first_msg: is_first_msg }
-                        ConversationsContent { db: db.clone(), agent_system: agent_system.clone(), state: state, messages: messages, messages_resource: messages_resource, conversations_resource: conversations_resource, is_first_msg: is_first_msg, load_more_cb: Callback::new(move |_| load_more()), workspace_sessions: (state.workspace_sessions)(), artifacts: artifacts, work_items: work_items, work_items_resource: work_items_resource, execution_runs_resource: execution_runs_resource, artifacts_resource: artifacts_resource, work_item_events: work_item_events, work_item_events_resource: work_item_events_resource, selected_execution_run_id: selected_execution_run_id, runtime_registry_status: runtime_registry_status, execution_runs: execution_runs, execution_events: execution_events, runs_loading: runs_loading, events_loading: events_loading }
+                        ConversationsContent { db: db.clone(), agent_system: agent_system.clone(), state: state, messages: messages, messages_resource: messages_resource, conversations_resource: conversations_resource, is_first_msg: is_first_msg, load_more_cb: Callback::new(move |_| load_more()), workspace_sessions: (state.workspace_sessions)(), artifacts: artifacts, work_items: work_items, work_items_resource: work_items_resource, execution_runs_resource: execution_runs_resource, artifacts_resource: artifacts_resource, work_item_events: work_item_events, work_item_events_resource: work_item_events_resource, selected_execution_run_id: selected_execution_run_id, runtime_registry_status: runtime_registry_status, execution_runs: execution_runs, execution_events: execution_events, runs_loading: runs_loading, events_loading: events_loading, active_tab: active_tab }
                     }
                 }
             }
