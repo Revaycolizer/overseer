@@ -169,7 +169,11 @@ impl fmt::Debug for AgentSystem {
     }
 }
 
-#[cfg(test)]
+// Provider-dependent: these drive `orchestrate`, which talks to the Ollama model
+// backend. Gated behind `live-provider-tests` so the default suite needs no
+// Ollama / network. Run with:
+//   cargo test --workspace --features live-provider-tests -- --nocapture
+#[cfg(all(test, feature = "live-provider-tests"))]
 mod send_pipeline_tests {
     //! Integration tests for the conversation send pipeline at the engine level
     //! (independent of Dioxus). They prove that invoking orchestration creates an
