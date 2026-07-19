@@ -74,6 +74,8 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         ActiveTab::Tools => { nav_list(key, &app.tools, &mut app.selected_tool_id, &mut app.active_tab); app.activity.bump(); }
         ActiveTab::Workflows => { nav_list(key, &app.workflows, &mut app.selected_workflow_id, &mut app.active_tab); app.activity.bump(); }
         ActiveTab::Computer => { handle_computer_key(app, key).await?; }
+        ActiveTab::MCP => { handle_mcp_key(app, key).await?; }
+        ActiveTab::Skills => { handle_skills_key(app, key).await?; }
         ActiveTab::Settings => {
             if key.code == KeyCode::Esc { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
         }
@@ -151,6 +153,53 @@ async fn handle_computer_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()>
     Ok(())
 }
 
+async fn handle_mcp_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
+    match key.code {
+        KeyCode::F(2) => {
+            // Connect to MCP server
+            let url = app.mcp_server_url.clone();
+            let mut client = crate::mcp::client::McpClient::new(&url);
+            match client.list_tools().await {
+                Ok(tools) => {
+                    app.mcp_tools = tools;
+                    if let Ok(resources) = client.list_resources().await {
+                        app.mcp_resources = resources;
+                    }
+                    app.mcp_connected = true;
+                    app.status_message = format!("Connected to MCP server at {}", url);
+                }
+                Err(e) => {
+                    app.status_message = format!("Failed to connect: {}", e);
+                }
+            }
+            app.activity.bump();
+        }
+        KeyCode::F(3) => {
+            app.mcp_connected = false;
+            app.mcp_tools.clear();
+            app.mcp_resources.clear();
+            app.status_message = "Disconnected from MCP server.".to_string();
+            app.activity.bump();
+        }
+        KeyCode::Esc => { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
+        _ => {}
+    }
+    Ok(())
+}
+
+async fn handle_skills_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
+    match key.code {
+        KeyCode::F(2) => {
+            // Install placeholder (DB-backed install coming when backend supports it)
+            app.status_message = "Skill install: requires database access from TUI context (Phase 5).".to_string();
+            app.activity.bump();
+        }
+        KeyCode::Esc => { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
+        _ => {}
+    }
+    Ok(())
+}
+
 async fn refresh_current_tab(app: &mut App) {
     match app.active_tab {
         ActiveTab::Agents => { let _ = app.refresh_agents().await; }
@@ -159,6 +208,14 @@ async fn refresh_current_tab(app: &mut App) {
         ActiveTab::Workflows => { let _ = app.refresh_workflows().await; }
         ActiveTab::Computer => { let _ = app.refresh_computer().await; }
         ActiveTab::Settings => { let _ = app.refresh_settings_map().await; }
+        ActiveTab::MCP => {
+            if app.mcp_connected {
+                let url = app.mcp_server_url.clone();
+                let mut client = crate::mcp::client::McpClient::new(&url);
+                if let Ok(tools) = client.list_tools().await { app.mcp_tools = tools; }
+                if let Ok(resources) = client.list_resources().await { app.mcp_resources = resources; }
+            }
+        }
         ActiveTab::Metrics => { let _ = app.refresh_metrics().await; }
         ActiveTab::Chat => { let _ = app.refresh_conversations().await; }
         _ => {}

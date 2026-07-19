@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 use super::app::{ActiveTab, App};
-use super::{agents, chat_panel, computer, info_panels, settings, supervisors, tools, workflows};
+use super::{agents, chat_panel, computer, info_panels, mcp, settings, skills, supervisors, tools, workflows};
 
 pub const ACCENT: Color = Color::Rgb(59, 130, 246);
 pub const SURFACE: Color = Color::Rgb(30, 41, 59);
@@ -75,8 +75,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         ActiveTab::Workflows => workflows::draw_workflows(f, app, chunks[2]),
         ActiveTab::Computer => computer::draw_computer(f, app, chunks[2]),
         ActiveTab::Settings => settings::draw_settings(f, app, chunks[2]),
-        ActiveTab::MCP => draw_placeholder(f, "MCP Protocol — coming in Phase 3", chunks[2]),
-        ActiveTab::Skills => draw_placeholder(f, "Skill System — coming in Phase 4", chunks[2]),
+        ActiveTab::MCP => mcp::draw_mcp(f, app, chunks[2]),
+        ActiveTab::Skills => skills::draw_skills(f, app, chunks[2]),
     }
 
     // Status bar

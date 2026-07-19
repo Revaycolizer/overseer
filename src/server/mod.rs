@@ -44,6 +44,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(credentials::router())
         .merge(workflow_templates::router())
         .merge(workflow_triggers::router())
+        .merge(crate::mcp::server::router())
         .layer(GovernorLayer {
             config: crate::engine::resilience::server_governor(),
         })

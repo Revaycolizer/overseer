@@ -8,6 +8,7 @@ use crate::backend::computer_supervision::ComputerSupervisionState;
 use crate::backend::workflows::models::Workflow;
 use crate::db::Supervisor;
 use crate::engine::utils::discovery::{AgentInfo, ToolInfo};
+use crate::skills::registry::InstalledSkill;
 
 pub use super::activity::ActivityCounter;
 pub use super::tab::ActiveTab;
@@ -50,6 +51,16 @@ pub struct App {
     pub computer_state: Option<ComputerSupervisionState>,
     pub computer_actions: Vec<ActionEntry>,
     pub settings_map: std::collections::HashMap<String, String>,
+
+    // Phase 3: MCP state
+    pub mcp_connected: bool,
+    pub mcp_server_url: String,
+    pub mcp_tools: Vec<crate::mcp::types::McpTool>,
+    pub mcp_resources: Vec<crate::mcp::types::McpResource>,
+
+    // Phase 4: Skills state
+    pub installed_skills: Vec<InstalledSkill>,
+    pub skill_registry: Option<crate::skills::registry::SkillRegistry>,
 }
 
 impl App {
@@ -82,6 +93,12 @@ impl App {
             computer_state: None,
             computer_actions: vec![],
             settings_map: std::collections::HashMap::new(),
+            mcp_connected: false,
+            mcp_server_url: "http://localhost:8080/mcp".to_string(),
+            mcp_tools: vec![],
+            mcp_resources: vec![],
+            installed_skills: vec![],
+            skill_registry: None,
         };
         app.refresh_conversations().await?;
         app.refresh_metrics().await?;
