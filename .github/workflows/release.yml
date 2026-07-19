@@ -1,249 +1,249 @@
-name: Release
+# name: Release
 
-on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag, for example v0.1.0"
-        required: true
-        type: string
+# on:
+#   push:
+#     tags:
+#       - "v*"
+#   workflow_dispatch:
+#     inputs:
+#       tag:
+#         description: "Release tag, for example v0.1.0"
+#         required: true
+#         type: string
 
-jobs:
-  build-windows:
-    runs-on: windows-latest
-    permissions:
-      contents: write
+# jobs:
+#   build-windows:
+#     runs-on: windows-latest
+#     permissions:
+#       contents: write
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
 
-      - name: Resolve tag
-        id: tag
-        shell: powershell
-        run: |
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $tag = "${{ inputs.tag }}"
-          } else {
-            $tag = "${{ github.ref_name }}"
-          }
-          echo "value=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+#       - name: Resolve tag
+#         id: tag
+#         shell: powershell
+#         run: |
+#           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+#             $tag = "${{ inputs.tag }}"
+#           } else {
+#             $tag = "${{ github.ref_name }}"
+#           }
+#           echo "value=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+#       - name: Set up Rust
+#         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+#       - name: Cache cargo
+#         uses: Swatinem/rust-cache@v2
 
-      - name: Install Dioxus CLI
-        shell: powershell
-        run: |
-          cargo install dioxus-cli --locked
+#       - name: Install Dioxus CLI
+#         shell: powershell
+#         run: |
+#           cargo install dioxus-cli --locked
 
-      - name: Install protoc and NSIS
-        shell: powershell
-        run: |
-          choco install protoc nsis --no-progress -y
-          echo "PROTOC=C:\ProgramData\chocolatey\bin\protoc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+#       - name: Install protoc and NSIS
+#         shell: powershell
+#         run: |
+#           choco install protoc nsis --no-progress -y
+#           echo "PROTOC=C:\ProgramData\chocolatey\bin\protoc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Build release package
-        shell: powershell
-        run: |
-          .\scripts\build-release-windows.ps1 -Tag "${{ steps.tag.outputs.value }}"
+#       - name: Build release package
+#         shell: powershell
+#         run: |
+#           .\scripts\build-release-windows.ps1 -Tag "${{ steps.tag.outputs.value }}"
 
-      - name: Read release notes
-        id: notes
-        shell: powershell
-        run: |
-          $tag = "${{ steps.tag.outputs.value }}"
-          $notesPath = Join-Path $PWD "releases\notes\$tag.md"
-          if (Test-Path $notesPath) {
-            $content = Get-Content $notesPath -Raw
-          } else {
-            $content = "Automated release for $tag."
-          }
-          "body<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          $content | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+#       - name: Read release notes
+#         id: notes
+#         shell: powershell
+#         run: |
+#           $tag = "${{ steps.tag.outputs.value }}"
+#           $notesPath = Join-Path $PWD "releases\notes\$tag.md"
+#           if (Test-Path $notesPath) {
+#             $content = Get-Content $notesPath -Raw
+#           } else {
+#             $content = "Automated release for $tag."
+#           }
+#           "body<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+#           $content | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+#           "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Upload Windows manifest
-        uses: actions/upload-artifact@v4
-        with:
-          name: manifest-windows-x64
-          path: dist/${{ steps.tag.outputs.value }}/release-windows-x64.json
+#       - name: Upload Windows manifest
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: manifest-windows-x64
+#           path: dist/${{ steps.tag.outputs.value }}/release-windows-x64.json
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.value }}
-          body: ${{ steps.notes.outputs.body }}
-          files: |
-            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-windows-x64-setup.exe
-            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-windows-x64.zip
-            dist/${{ steps.tag.outputs.value }}/install-overseer.ps1
-            dist/${{ steps.tag.outputs.value }}/uninstall-overseer.ps1
-            dist/${{ steps.tag.outputs.value }}/SHA256SUMS-windows-x64.txt
-            dist/${{ steps.tag.outputs.value }}/release-windows-x64.json
+#       - name: Publish GitHub release
+#         uses: softprops/action-gh-release@v2
+#         with:
+#           tag_name: ${{ steps.tag.outputs.value }}
+#           body: ${{ steps.notes.outputs.body }}
+#           files: |
+#             dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-windows-x64-setup.exe
+#             dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-windows-x64.zip
+#             dist/${{ steps.tag.outputs.value }}/install-overseer.ps1
+#             dist/${{ steps.tag.outputs.value }}/uninstall-overseer.ps1
+#             dist/${{ steps.tag.outputs.value }}/SHA256SUMS-windows-x64.txt
+#             dist/${{ steps.tag.outputs.value }}/release-windows-x64.json
 
-  build-linux:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+#   build-linux:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: write
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
 
-      - name: Resolve tag
-        id: tag
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag="${{ inputs.tag }}"
-          else
-            tag="${{ github.ref_name }}"
-          fi
-          echo "value=$tag" >> "$GITHUB_OUTPUT"
+#       - name: Resolve tag
+#         id: tag
+#         shell: bash
+#         run: |
+#           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+#             tag="${{ inputs.tag }}"
+#           else
+#             tag="${{ github.ref_name }}"
+#           fi
+#           echo "value=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Install Dioxus CLI
-        run: |
-          cargo install dioxus-cli --locked
+#       - name: Install Dioxus CLI
+#         run: |
+#           cargo install dioxus-cli --locked
 
-      - name: Install Linux desktop dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            protobuf-compiler \
-            libwebkit2gtk-4.1-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf
+#       - name: Install Linux desktop dependencies
+#         run: |
+#           sudo apt-get update
+#           sudo apt-get install -y \
+#             protobuf-compiler \
+#             libwebkit2gtk-4.1-dev \
+#             libssl-dev \
+#             libayatana-appindicator3-dev \
+#             librsvg2-dev \
+#             patchelf
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+#       - name: Set up Rust
+#         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+#       - name: Cache cargo
+#         uses: Swatinem/rust-cache@v2
 
-      - name: Build Linux release package
-        shell: bash
-        run: |
-          chmod +x ./scripts/build-release-linux.sh
-          ./scripts/build-release-linux.sh --tag "${{ steps.tag.outputs.value }}"
+#       - name: Build Linux release package
+#         shell: bash
+#         run: |
+#           chmod +x ./scripts/build-release-linux.sh
+#           ./scripts/build-release-linux.sh --tag "${{ steps.tag.outputs.value }}"
 
-      - name: Upload Linux manifest
-        uses: actions/upload-artifact@v4
-        with:
-          name: manifest-linux-x64
-          path: dist/${{ steps.tag.outputs.value }}/release-linux-x64.json
+#       - name: Upload Linux manifest
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: manifest-linux-x64
+#           path: dist/${{ steps.tag.outputs.value }}/release-linux-x64.json
 
-      - name: Publish Linux assets to GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.value }}
-          files: |
-            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-amd64.deb
-            dist/${{ steps.tag.outputs.value }}/SHA256SUMS-linux-x64.txt
-            dist/${{ steps.tag.outputs.value }}/release-linux-x64.json
+#       - name: Publish Linux assets to GitHub release
+#         uses: softprops/action-gh-release@v2
+#         with:
+#           tag_name: ${{ steps.tag.outputs.value }}
+#           files: |
+#             dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}-amd64.deb
+#             dist/${{ steps.tag.outputs.value }}/SHA256SUMS-linux-x64.txt
+#             dist/${{ steps.tag.outputs.value }}/release-linux-x64.json
 
-  build-macos:
-    runs-on: macos-latest
-    permissions:
-      contents: write
+#   build-macos:
+#     runs-on: macos-latest
+#     permissions:
+#       contents: write
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
 
-      - name: Resolve tag
-        id: tag
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag="${{ inputs.tag }}"
-          else
-            tag="${{ github.ref_name }}"
-          fi
-          echo "value=$tag" >> "$GITHUB_OUTPUT"
+#       - name: Resolve tag
+#         id: tag
+#         shell: bash
+#         run: |
+#           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+#             tag="${{ inputs.tag }}"
+#           else
+#             tag="${{ github.ref_name }}"
+#           fi
+#           echo "value=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+#       - name: Set up Rust
+#         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+#       - name: Cache cargo
+#         uses: Swatinem/rust-cache@v2
 
-      - name: Install Dioxus CLI
-        run: |
-          cargo install dioxus-cli --locked
+#       - name: Install Dioxus CLI
+#         run: |
+#           cargo install dioxus-cli --locked
 
-      - name: Install macOS dependencies
-        run: |
-          brew install protobuf
+#       - name: Install macOS dependencies
+#         run: |
+#           brew install protobuf
 
-      - name: Build macOS release package
-        shell: bash
-        run: |
-          chmod +x ./scripts/build-release-macos.sh
-          ./scripts/build-release-macos.sh --tag "${{ steps.tag.outputs.value }}"
+#       - name: Build macOS release package
+#         shell: bash
+#         run: |
+#           chmod +x ./scripts/build-release-macos.sh
+#           ./scripts/build-release-macos.sh --tag "${{ steps.tag.outputs.value }}"
 
-      - name: Upload macOS manifest
-        uses: actions/upload-artifact@v4
-        with:
-          name: manifest-macos-x64
-          path: dist/${{ steps.tag.outputs.value }}/release-macos-x64.json
+#       - name: Upload macOS manifest
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: manifest-macos-x64
+#           path: dist/${{ steps.tag.outputs.value }}/release-macos-x64.json
 
-      - name: Publish macOS assets to GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.value }}
-          files: |
-            dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}.dmg
-            dist/${{ steps.tag.outputs.value }}/SHA256SUMS-macos-x64.txt
-            dist/${{ steps.tag.outputs.value }}/release-macos-x64.json
+#       - name: Publish macOS assets to GitHub release
+#         uses: softprops/action-gh-release@v2
+#         with:
+#           tag_name: ${{ steps.tag.outputs.value }}
+#           files: |
+#             dist/${{ steps.tag.outputs.value }}/Overseer-${{ steps.tag.outputs.value }}.dmg
+#             dist/${{ steps.tag.outputs.value }}/SHA256SUMS-macos-x64.txt
+#             dist/${{ steps.tag.outputs.value }}/release-macos-x64.json
 
-  update-registry:
-    needs: [build-windows, build-linux, build-macos]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+#   update-registry:
+#     needs: [build-windows, build-linux, build-macos]
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: write
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
 
-      - name: Download all manifests
-        uses: actions/download-artifact@v4
-        with:
-          path: manifests
-          pattern: manifest-*
-          merge-multiple: true
+#       - name: Download all manifests
+#         uses: actions/download-artifact@v4
+#         with:
+#           path: manifests
+#           pattern: manifest-*
+#           merge-multiple: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: '3.x'
 
-      - name: Update registry
-        run: |
-          chmod +x ./scripts/update-registry.py
-          find manifests -name "*.json" -exec python3 ./scripts/update-registry.py {} \;
+#       - name: Update registry
+#         run: |
+#           chmod +x ./scripts/update-registry.py
+#           find manifests -name "*.json" -exec python3 ./scripts/update-registry.py {} \;
 
-      - name: Commit and push changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add releases/releases.json
-          git commit -m "chore: auto-update release registry [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
+#       - name: Commit and push changes
+#         run: |
+#           git config --global user.name "github-actions[bot]"
+#           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+#           git add releases/releases.json
+#           git commit -m "chore: auto-update release registry [skip ci]" || echo "No changes to commit"
+#           git push origin HEAD:main
