@@ -13,6 +13,7 @@ pub fn ChatComposer(props: ChatInputProps) -> Element {
     let selected_conversation_id = props.selected_conversation_id;
     let send_fn = state.send.clone();
     let stop_fn = state.stop.clone();
+    let large = props.large;
 
     rsx! {
         div { class: "border-t border-slate-200/80 bg-white/96 px-2 sm:px-4 pt-2 sm:pt-3 pb-3 sm:pb-5",
@@ -30,7 +31,7 @@ pub fn ChatComposer(props: ChatInputProps) -> Element {
                     }
                 }
             }
-            div { class: "relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white/94 p-2 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-all focus-within:border-blue-400 focus-within:shadow-[0_12px_32px_rgba(59,130,246,0.15)]",
+            div { class: if large { "relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-3 shadow-[0_16px_44px_rgba(15,23,42,0.10)] backdrop-blur-sm transition-all focus-within:border-blue-400 focus-within:shadow-[0_18px_50px_rgba(59,130,246,0.18)]" } else { "relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white/94 p-2 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-all focus-within:border-blue-400 focus-within:shadow-[0_12px_32px_rgba(59,130,246,0.15)]" },
                 if input_text().starts_with('/') && !crate::engine::commands::get_suggestions(&input_text()).is_empty() {
                     div { class: "flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-100 overflow-x-auto select-none",
                         span { class: "text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1 shrink-0", "Suggestions" }
@@ -50,7 +51,7 @@ pub fn ChatComposer(props: ChatInputProps) -> Element {
                         }
                     }
                     div { class: "flex-1 relative",
-                        textarea { class: "custom-scrollbar w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-3 text-sm leading-relaxed text-[var(--text-main)] placeholder:text-slate-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 max-h-48",
+                        textarea { class: if large { "custom-scrollbar w-full resize-none overflow-y-auto border-0 bg-transparent px-3 py-4 text-base leading-relaxed text-[var(--text-main)] placeholder:text-slate-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 min-h-[60px] max-h-64" } else { "custom-scrollbar w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-3 text-sm leading-relaxed text-[var(--text-main)] placeholder:text-slate-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 max-h-48" },
                             style: "border: none; outline: none; box-shadow: none;",
                             rows: format!("{}", (input_text().split('\n').count() as u32).min(8)),
                             value: "{input_text}",
