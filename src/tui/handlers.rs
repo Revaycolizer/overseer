@@ -4,13 +4,73 @@ use super::app::{ActiveTab, App};
 pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
     let is_orch = app.is_orchestrating.load(std::sync::atomic::Ordering::SeqCst);
 
-    if key.code == KeyCode::F(2) || (key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)) {
+    // ── Global shortcuts (always active) ──
+
+    // Ctrl+Left / Ctrl+Right / Shift+Left / Shift+Right — cycle tabs
+    if (key.code == KeyCode::Left && key.modifiers.contains(KeyModifiers::CONTROL))
+        || (key.code == KeyCode::Left && key.modifiers.contains(KeyModifiers::SHIFT))
+    {
+        app.active_tab = app.active_tab.prev();
+        app.activity.bump();
+        return Ok(());
+    }
+    if (key.code == KeyCode::Right && key.modifiers.contains(KeyModifiers::CONTROL))
+        || (key.code == KeyCode::Right && key.modifiers.contains(KeyModifiers::SHIFT))
+    {
+        app.active_tab = app.active_tab.next();
+        app.activity.bump();
+        return Ok(());
+    }
+
+    // Alt+1..Alt+9, Alt+0 — jump directly to a tab by number
+    if let KeyCode::Char(c) = key.code {
+        if key.modifiers.contains(KeyModifiers::ALT) {
+            let idx = c.to_digit(10).map(|d| {
+                if d == 0 { 9 } else { d as usize - 1 }
+            });
+            if let Some(i) = idx {
+                if i < ActiveTab::ALL.len() {
+                    app.active_tab = ActiveTab::from_index(i);
+                    if app.active_tab == ActiveTab::Metrics {
+                        let _ = app.refresh_metrics().await;
+                    }
+                    app.activity.bump();
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    // F5 — refresh current view
+    if key.code == KeyCode::F(5) {
+        let _ = app.refresh_conversations().await;
+        let _ = app.refresh_metrics().await;
+        app.status_message = "Refreshed.".to_string();
+        app.activity.bump();
+        return Ok(());
+    }
+
+    // Ctrl+F — search (placeholder for Phase 5)
+    if key.code == KeyCode::Char('f') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.active_tab = ActiveTab::SearchResults;
+        app.status_message = "Search: not yet implemented (Phase 5)".to_string();
+        app.activity.bump();
+        return Ok(());
+    }
+
+    // F1 — help (placeholder for Phase 5)
+    if key.code == KeyCode::F(1) {
+        app.status_message = "Help: not yet implemented (Phase 5). Available tabs: Chat, Agents, Supervisors, Tools, Workflows, Browser, Computer, Settings, MCP, Skills, Metrics. Use Alt+1..0 to jump.".to_string();
+        app.activity.bump();
+        return Ok(());
+    }
+
+    // Ctrl+N / F2 — new conversation (only in Chat tab)
+    if app.active_tab == ActiveTab::Chat
+        && (key.code == KeyCode::F(2)
+            || (key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)))
+    {
         let new_id = app.client.add_conversation("New Conversation").await?;
-        // Immediately anchor selection to the new conversation's ID —
-        // before any refresh that might re-sort the list. This prevents
-        // the race where refresh_conversations() returns before the INSERT
-        // is visible, causing unwrap_or(0) to silently select the wrong
-        // conversation.
         app.selected_conv_id = Some(new_id);
         app.activity.bump();
         app.input.clear();
@@ -19,48 +79,60 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // ── Tab-specific handling ──
+    match app.active_tab {
+        ActiveTab::Chat => handle_chat_key(app, key, is_orch).await?,
+        ActiveTab::Metrics => {
+            // Metrics tab: just refresh on any key
+            let _ = app.refresh_metrics().await;
+        }
+        _ => {
+            // Placeholder tabs — any key shows coming-soon message
+            if key.code == KeyCode::Enter || key.code == KeyCode::Char(' ') {
+                app.status_message = format!(
+                    "{} tab is not yet implemented — coming in a future phase.",
+                    app.active_tab.label()
+                );
+                app.activity.bump();
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_chat_key(app: &mut App, key: KeyEvent, is_orch: bool) -> anyhow::Result<()> {
     match key.code {
         KeyCode::Tab => {
-            if app.active_tab == ActiveTab::Chat && app.input.starts_with('/') {
+            if app.input.starts_with('/') {
                 let suggestions = crate::engine::commands::get_suggestions(&app.input);
                 if let Some(first_match) = suggestions.first() {
                     app.input = first_match.to_string();
                     app.input_cursor = app.input.len();
                     app.activity.bump();
                 }
-            } else {
-                app.active_tab = match app.active_tab {
-                    ActiveTab::Chat => ActiveTab::Metrics,
-                    ActiveTab::Metrics => ActiveTab::Browser,
-                    ActiveTab::Browser => {
-                        let _ = app.refresh_metrics().await;
-                        ActiveTab::Chat
-                    }
-                };
             }
+            // Tab in chat cycles to next tab (moved to Ctrl+Right for tab cycle,
+            // but bare Tab in chat input should insert spaces or autocomplete)
         }
         KeyCode::Up => {
-            if app.active_tab == ActiveTab::Chat {
-                if let Some(idx) = app.selected_conv_idx() {
-                    if idx > 0 {
-                        app.selected_conv_id = Some(app.conversations[idx - 1].id);
-                        app.refresh_conversations().await?;
-                    }
+            if let Some(idx) = app.selected_conv_idx() {
+                if idx > 0 {
+                    app.selected_conv_id = Some(app.conversations[idx - 1].id);
+                    app.refresh_conversations().await?;
                 }
             }
         }
         KeyCode::Down => {
-            if app.active_tab == ActiveTab::Chat {
-                if let Some(idx) = app.selected_conv_idx() {
-                    if idx + 1 < app.conversations.len() {
-                        app.selected_conv_id = Some(app.conversations[idx + 1].id);
-                        app.refresh_conversations().await?;
-                    }
+            if let Some(idx) = app.selected_conv_idx() {
+                if idx + 1 < app.conversations.len() {
+                    app.selected_conv_id = Some(app.conversations[idx + 1].id);
+                    app.refresh_conversations().await?;
                 }
             }
         }
         KeyCode::Enter => {
-            if app.active_tab == ActiveTab::Chat && !is_orch {
+            if !is_orch {
                 if let Some(cmd) = crate::engine::commands::parse(&app.input) {
                     super::command_handler::handle_slash(app, cmd).await?;
                 } else {
@@ -70,12 +142,12 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         }
         KeyCode::Backspace | KeyCode::Delete | KeyCode::Left | KeyCode::Right
             | KeyCode::Home | KeyCode::End | KeyCode::Char(_) => {
-            if app.active_tab == ActiveTab::Chat && !is_orch {
+            if !is_orch {
                 super::input_handler::app(&key, app);
             }
         }
         KeyCode::Esc => {
-            if app.is_orchestrating.load(std::sync::atomic::Ordering::SeqCst) {
+            if is_orch {
                 app.cancel_current_orchestrate();
                 app.status_message = "Cancelling…".to_string();
             } else if app.search_results.is_some() {

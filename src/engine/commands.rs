@@ -12,6 +12,10 @@ pub enum SlashCommand {
     Rename { title: String },
     Clear,
     Quit,
+    Settings,
+    Agents,
+    Supervisors,
+    Tools,
 }
 
 pub fn parse(input: &str) -> Option<SlashCommand> {
@@ -34,6 +38,19 @@ pub fn parse(input: &str) -> Option<SlashCommand> {
     }
     if trimmed == "/quit" {
         return Some(SlashCommand::Quit);
+    }
+
+    if trimmed == "/settings" {
+        return Some(SlashCommand::Settings);
+    }
+    if trimmed == "/agents" {
+        return Some(SlashCommand::Agents);
+    }
+    if trimmed == "/supervisors" {
+        return Some(SlashCommand::Supervisors);
+    }
+    if trimmed == "/tools" {
+        return Some(SlashCommand::Tools);
     }
 
     if let Some(arg) = trimmed.strip_prefix("/export ") {
@@ -63,6 +80,10 @@ pub fn get_suggestions(input: &str) -> Vec<&'static str> {
         "/regen",
         "/rename ",
         "/clear",
+        "/settings",
+        "/agents",
+        "/supervisors",
+        "/tools",
         "/quit",
     ];
     if input.is_empty() {

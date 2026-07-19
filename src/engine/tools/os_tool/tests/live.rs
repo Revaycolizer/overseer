@@ -2,7 +2,6 @@ use crate::engine::tools::os_tool::native_os_tool;
 
 #[cfg(windows)]
 #[tokio::test]
-#[ignore = "smoke test for live Windows desktop session"]
 async fn native_os_tool_lists_processes() {
     let raw = native_os_tool(&serde_json::json!({"action":"list_processes"}))
         .await
@@ -24,7 +23,6 @@ async fn native_os_tool_lists_processes() {
 
 #[cfg(windows)]
 #[tokio::test]
-#[ignore = "smoke test for live Windows desktop session"]
 async fn native_os_tool_finds_repo_files() {
     let raw = native_os_tool(&serde_json::json!({
         "action":"find_files",
@@ -45,7 +43,6 @@ async fn native_os_tool_finds_repo_files() {
 
 #[cfg(windows)]
 #[tokio::test]
-#[ignore = "smoke test for live Windows desktop session"]
 async fn native_os_tool_reads_repo_file() {
     let path = std::env::current_dir()
         .expect("cwd")
@@ -69,7 +66,6 @@ async fn native_os_tool_reads_repo_file() {
 
 #[cfg(windows)]
 #[tokio::test]
-#[ignore = "smoke test for live Windows desktop session"]
 async fn native_os_tool_reports_desktop_state() {
     let raw = native_os_tool(&serde_json::json!({"action":"get_state"}))
         .await
@@ -84,7 +80,6 @@ async fn native_os_tool_reports_desktop_state() {
 
 #[cfg(windows)]
 #[tokio::test]
-#[ignore = "smoke test for live Windows desktop session"]
 async fn native_os_tool_captures_screenshot() {
     let raw = native_os_tool(&serde_json::json!({"action":"screenshot"}))
         .await
@@ -98,7 +93,6 @@ async fn native_os_tool_captures_screenshot() {
 
 #[cfg(windows)]
 #[tokio::test]
-#[ignore = "smoke test for live Windows desktop session"]
 async fn native_os_tool_reports_browser_state() {
     let raw = native_os_tool(&serde_json::json!({"action":"browser_state"}))
         .await
