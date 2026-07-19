@@ -3,7 +3,7 @@ requires = ["setuptools>=69.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "overseer-client"
+name = "overseer-pysdk"
 version = "0.1.0"
 description = "HTTP client for the Overseer AI orchestration platform"
 readme = "README.md"

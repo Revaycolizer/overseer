@@ -1,4 +1,7 @@
-"""Overseer Client — Python SDK for the Overseer AI orchestration platform.
+"""Overseer Python SDK — Python client for the Overseer AI orchestration platform.
+
+Install:
+    pip install overseer-pysdk
 
 Usage:
     async with OverseerClient("http://localhost:8080", token="...") as client:
