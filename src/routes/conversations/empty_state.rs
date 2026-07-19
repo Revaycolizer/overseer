@@ -19,19 +19,15 @@ pub fn EmptyConversationState(on_prompt: EventHandler<String>) -> Element {
     ];
 
     rsx! {
-        div { class: "flex flex-col items-center justify-center text-center gap-7 px-4 py-16 sm:py-24",
-            h1 { class: "text-4xl sm:text-5xl font-semibold tracking-tight text-slate-900", "Overseer" }
-            p { class: "text-base text-slate-400", "Ask anything, or task an agent." }
-            div { class: "flex flex-wrap items-center justify-center gap-2",
-                for (label, prompt) in prompts {
-                    button {
-                        class: "rounded-full border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors px-4 py-2 text-sm font-medium text-slate-600",
-                        onclick: {
-                            let prompt = prompt.to_string();
-                            move |_| on_prompt.call(prompt.clone())
-                        },
-                        "{label}"
-                    }
+        div { class: "flex flex-wrap items-center justify-center gap-2",
+            for (label, prompt) in prompts {
+                button {
+                    class: "rounded-full border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors px-4 py-2 text-sm font-medium text-slate-600",
+                    onclick: {
+                        let prompt = prompt.to_string();
+                        move |_| on_prompt.call(prompt.clone())
+                    },
+                    "{label}"
                 }
             }
         }
