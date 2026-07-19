@@ -51,7 +51,7 @@ pub fn ChatComposer(props: ChatInputProps) -> Element {
                         }
                     }
                     div { class: "flex-1 relative",
-                        textarea { class: if large { "custom-scrollbar w-full resize-none overflow-y-auto border-0 bg-transparent px-3 py-4 text-base leading-relaxed text-[var(--text-main)] placeholder:text-slate-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 min-h-[60px] max-h-64" } else { "custom-scrollbar w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-3 text-sm leading-relaxed text-[var(--text-main)] placeholder:text-slate-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 max-h-48" },
+                        textarea { class: if large { "custom-scrollbar w-full resize-none overflow-y-auto border-0 bg-transparent px-4 py-5 text-lg leading-relaxed text-[var(--text-main)] placeholder:text-slate-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 min-h-[140px] max-h-[60vh]" } else { "custom-scrollbar w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-3 text-sm leading-relaxed text-[var(--text-main)] placeholder:text-slate-400 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 max-h-48" },
                             style: "border: none; outline: none; box-shadow: none;",
                             rows: format!("{}", (input_text().split('\n').count() as u32).min(8)),
                             value: "{input_text}",

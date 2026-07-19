@@ -34,7 +34,7 @@ pub fn ChatPanel(
                     h1 { class: "text-4xl sm:text-5xl font-semibold tracking-tight text-slate-900", "Overseer" }
                     p { class: "text-base text-slate-400", "Ask anything, or task an agent." }
                 }
-                div { class: "w-full max-w-2xl",
+                div { class: "w-full max-w-3xl",
                     ChatInput {
                         selected_conversation_id: selected_conversation_id,
                         messages_resource: messages_resource.clone(),
