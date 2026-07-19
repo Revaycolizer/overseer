@@ -5,6 +5,7 @@ use std::time::Instant;
 use crate::backend::client::BackendClient;
 use crate::backend::{Conversation, Message, SystemLoad};
 
+use crate::engine::utils::discovery::AgentInfo;
 pub use super::activity::ActivityCounter;
 pub use super::tab::ActiveTab;
 
@@ -37,6 +38,10 @@ pub struct App {
     pub current_orchestrate: Arc<std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
     pub search_results: Option<Vec<crate::backend::ConversationSearchResult>>,
     pub search_query: String,
+
+    // Phase 2: Management panel state
+    pub agents: Vec<AgentInfo>,
+    pub selected_agent_id: Option<i64>,
 }
 
 impl App {
@@ -58,6 +63,8 @@ impl App {
             current_orchestrate: Arc::new(std::sync::Mutex::new(None)),
             search_results: None,
             search_query: String::new(),
+            agents: vec![],
+            selected_agent_id: None,
         };
         app.refresh_conversations().await?;
         app.refresh_metrics().await?;
