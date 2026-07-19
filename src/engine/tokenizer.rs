@@ -53,8 +53,10 @@ pub fn get_model_context_size(model: &str) -> usize {
         return size;
     }
 
-    // Check known models
-    for (prefix, size) in KNOWN_CONTEXT_SIZES {
+    // Check known models (longest prefix first to avoid "llama3" matching before "llama3.1")
+    let mut sorted: Vec<_> = KNOWN_CONTEXT_SIZES.iter().collect();
+    sorted.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    for (prefix, size) in sorted {
         if model_lower.contains(prefix) {
             return *size;
         }
@@ -216,9 +218,11 @@ mod tests {
 
     #[test]
     fn test_token_budget_warning_approaching() {
-        let text = "a".repeat(20000);
+        // qwen2.5 context = 32768. 50% = 16384 tokens.
+        // Need > 16384 * 4 = 65536 chars to be "approaching"
+        let text = "a".repeat(70000);
         let warning = token_budget_warning(&text, "qwen2.5:7b-instruct");
-        assert!(warning.is_some());
+        assert!(warning.is_some(), "Expected warning for text ~{} chars", text.len());
     }
 
     #[test]

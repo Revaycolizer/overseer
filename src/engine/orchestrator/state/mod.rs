@@ -3,11 +3,13 @@ pub mod global;
 pub mod sync;
 pub mod update;
 pub mod consistency;
+pub mod evidence;
 
 pub use cell::CellState;
 pub use global::GlobalState;
 pub use sync::sync_cell_to_global;
 pub use update::{update_state_from_findings, preview_state_update};
+pub use evidence::{EvidenceDag, EvidenceNode, EvidenceStatus};
 
 use serde::{Deserialize, Serialize};
 
