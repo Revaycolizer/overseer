@@ -35,7 +35,7 @@ impl AgentSystem {
         // warning is logged via the `log` crate so it doesn't surface
         // stdout in the TUI (V4.17.1 follow-up: the user asked us
         // to drop the LLM debug prints from the TUI output).
-        if crate::engine::tokenizer::check_token_budget(user_query, 8192) {
+        if crate::engine::tokenizer::check_token_budget_against(user_query, 8192) {
             log::warn!(
                 "overseer.orchestrate: user_query at ~{} tokens (>8192 estimate); \
                  Ollama may truncate the prompt at num_ctx. Consider V4.17.16 \

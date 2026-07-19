@@ -1,0 +1,63 @@
+{
+  "name": "overseer-vscode",
+  "displayName": "Overseer AI",
+  "description": "Overseer AI agent integration for VS Code",
+  "version": "0.1.0",
+  "publisher": "revaycolizer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/revaycolizer/overseer"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "overseer.listConversations",
+        "title": "Overseer: List Conversations"
+      },
+      {
+        "command": "overseer.orchestrateSelection",
+        "title": "Overseer: Run AI on Selection"
+      },
+      {
+        "command": "overseer.createConversation",
+        "title": "Overseer: Create Conversation"
+      }
+    ],
+    "configuration": {
+      "title": "Overseer",
+      "properties": {
+        "overseer.baseUrl": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "Base URL of the Overseer server"
+        },
+        "overseer.token": {
+          "type": "string",
+          "default": "",
+          "description": "Bearer token for authentication"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "overseer-client": "^0.1.0"
+  }
+}

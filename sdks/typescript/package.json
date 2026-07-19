@@ -1,0 +1,34 @@
+{
+  "name": "overseer-client",
+  "version": "0.1.1",
+  "description": "TypeScript client for the Overseer AI orchestration platform — zero dependencies",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "node --test dist/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "orchestration",
+    "client",
+    "overseer"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/revaycolizer/overseer.git"
+  },
+  "homepage": "https://github.com/revaycolizer/overseer",
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

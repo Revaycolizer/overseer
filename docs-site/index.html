@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Overseer SDK Documentation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --code-bg: #1c2128;
+    --sidebar-width: 260px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  pre, code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+  pre { background: var(--code-bg); padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; border: 1px solid var(--border); margin: 12px 0; }
+  code { font-size: 0.9em; padding: 2px 6px; background: var(--code-bg); border-radius: 4px; }
+  pre code { padding: 0; background: none; }
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar { width: var(--sidebar-width); background: var(--bg2); border-right: 1px solid var(--border); padding: 24px 0; position: fixed; top: 0; left: 0; bottom: 0; overflow-y: auto; }
+  .sidebar h2 { padding: 0 20px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 8px; }
+  .sidebar a { display: block; padding: 8px 20px; color: var(--muted); text-decoration: none; font-size: 14px; transition: 0.15s; }
+  .sidebar a:hover, .sidebar a.active { color: var(--accent); background: rgba(88,166,255,0.08); }
+  .sidebar .logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .sidebar .logo h1 { font-size: 18px; color: var(--text); }
+  .sidebar .logo span { font-size: 12px; color: var(--muted); }
+  .content { margin-left: var(--sidebar-width); padding: 40px 60px; max-width: 960px; flex: 1; }
+  .content h1 { font-size: 32px; margin-bottom: 8px; }
+  .content h2 { font-size: 24px; margin: 40px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .content h3 { font-size: 18px; margin: 24px 0 8px; }
+  .content p { margin: 12px 0; color: var(--muted); }
+  .content ul, .content ol { margin: 12px 0; padding-left: 24px; color: var(--muted); }
+  .content li { margin: 6px 0; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .tab-bar { display: flex; gap: 0; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
+  .tab-btn { padding: 10px 20px; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent; transition: 0.15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
+  th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }
+  td { color: var(--text); }
+  .method { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-right: 6px; }
+  .method-get { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .method-post { background: rgba(63,185,80,0.15); color: var(--green); }
+  .method-delete { background: rgba(248,81,73,0.15); color: var(--red); }
+  .method-patch { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .sdk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 20px 0; }
+  .sdk-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+  .sdk-card h3 { margin: 0 0 4px; }
+  .sdk-card .install { font-size: 13px; color: var(--accent); margin: 8px 0 12px; }
+  .api-url { font-family: monospace; color: var(--accent); }
+  .section { display: none; }
+  .section.active { display: block; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar">
+    <div class="logo">
+      <h1>Overseer SDK</h1>
+      <span>AI Orchestration Platform</span>
+    </div>
+    <h2>Getting Started</h2>
+    <a href="#" class="active" onclick="showSection('overview')">Overview</a>
+    <a href="#" onclick="showSection('quickstart')">Quickstart</a>
+    <a href="#" onclick="showSection('install')">Installation</a>
+    <h2>SDK Reference</h2>
+    <a href="#" onclick="showSection('rust-sdk')">Rust</a>
+    <a href="#" onclick="showSection('python-sdk')">Python</a>
+    <a href="#" onclick="showSection('typescript-sdk')">TypeScript</a>
+    <h2>API Reference</h2>
+    <a href="#" onclick="showSection('api-conversations')">Conversations</a>
+    <a href="#" onclick="showSection('api-messages')">Messages</a>
+    <a href="#" onclick="showSection('api-agents')">Agents & Tools</a>
+    <a href="#" onclick="showSection('api-workflows')">Workflows</a>
+    <a href="#" onclick="showSection('api-supervision')">Supervision</a>
+    <a href="#" onclick="showSection('api-browser')">Browser</a>
+    <a href="#" onclick="showSection('api-system')">System</a>
+    <h2>Guides</h2>
+    <a href="#" onclick="showSection('migration')">Migration Guide</a>
+    <a href="#" onclick="showSection('examples')">Examples</a>
+    <h2>Links</h2>
+    <a href="https://github.com/revaycolizer/overseer" target="_blank">GitHub</a>
+    <a href="https://crates.io/crates/overseer-client" target="_blank">crates.io</a>
+    <a href="https://pypi.org/project/overseer-pysdk/" target="_blank">PyPI</a>
+    <a href="https://www.npmjs.com/package/overseer-client" target="_blank">npm</a>
+  </nav>
+
+  <main class="content">
+    <!-- OVERVIEW -->
+    <div id="section-overview" class="section active">
+      <h1>Overseer SDK</h1>
+      <p>Programmatic access to the Overseer AI orchestration platform. Available in Rust, Python, and TypeScript.</p>
+      <div class="sdk-grid">
+        <div class="sdk-card">
+          <h3>🦀 Rust</h3>
+          <p class="install">cargo add overseer-client</p>
+          <p>Type-safe HTTP client with 100+ methods covering all API endpoints.</p>
+        </div>
+        <div class="sdk-card">
+          <h3>🐍 Python</h3>
+          <p class="install">pip install overseer-pysdk</p>
+          <p>Async SDK with Pydantic models, rich CLI, and 16 namespaced API modules.</p>
+        </div>
+        <div class="sdk-card">
+          <h3>📦 TypeScript</h3>
+          <p class="install">npm install overseer-client</p>
+          <p>Zero-dependency client with native fetch, full type declarations, works in browser and Node.js.</p>
+        </div>
+      </div>
+      <h2>Quick Example</h2>
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('overview-rust', this)">Rust</button>
+        <button class="tab-btn" onclick="switchTab('overview-py', this)">Python</button>
+        <button class="tab-btn" onclick="switchTab('overview-ts', this)">TypeScript</button>
+      </div>
+      <div id="tab-overview-rust" class="tab-content active">
+<pre><code>use overseer_client::OverseerClient;
+
+let client = OverseerClient::new("http://localhost:8080")?
+    .with_token("my-token");
+let conversations = client.list_conversations(10).await?;
+let agents = client.list_agents().await?;</code></pre>
+      </div>
+      <div id="tab-overview-py" class="tab-content">
+<pre><code>from overseer import OverseerClient
+
+async with OverseerClient("http://localhost:8080", token="...") as c:
+    conversations = await c.conversations.list()
+    agents = await c.agents.list()</code></pre>
+      </div>
+      <div id="tab-overview-ts" class="tab-content">
+<pre><code>import { OverseerClient } from 'overseer-client';
+
+const client = new OverseerClient({ baseUrl: 'http://localhost:8080' });
+const conversations = await client.conversations.list();
+const agents = await client.agents.list();</code></pre>
+      </div>
+
+      <h2>SDK Status</h2>
+      <table>
+        <tr><th>Package</th><th>Registry</th><th>Version</th><th>Status</th></tr>
+        <tr><td>overseer-client</td><td>crates.io</td><td>0.1.0</td><td><span class="badge badge-green">Published</span></td></tr>
+        <tr><td>overseer-kernel</td><td>crates.io</td><td>0.1.0</td><td><span class="badge badge-green">Published</span></td></tr>
+        <tr><td>overseer-pysdk</td><td>PyPI</td><td>0.1.1</td><td><span class="badge badge-green">Published</span></td></tr>
+        <tr><td>overseer-client</td><td>npm</td><td>0.1.1</td><td><span class="badge badge-green">Published</span></td></tr>
+      </table>
+    </div>
+
+    <!-- QUICKSTART -->
+    <div id="section-quickstart" class="section">
+      <h1>Quickstart</h1>
+      <p>Get started with the Overseer SDK in under 5 minutes.</p>
+
+      <h3>1. Install the SDK</h3>
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('qs-install-rust', this)">Rust</button>
+        <button class="tab-btn" onclick="switchTab('qs-install-py', this)">Python</button>
+        <button class="tab-btn" onclick="switchTab('qs-install-ts', this)">TypeScript</button>
+      </div>
+      <div id="tab-qs-install-rust" class="tab-content active"><pre><code>cargo add overseer-client</code></pre></div>
+      <div id="tab-qs-install-py" class="tab-content"><pre><code>pip install overseer-pysdk</code></pre></div>
+      <div id="tab-qs-install-ts" class="tab-content"><pre><code>npm install overseer-client</code></pre></div>
+
+      <h3>2. Connect and verify</h3>
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('qs-code-rust', this)">Rust</button>
+        <button class="tab-btn" onclick="switchTab('qs-code-py', this)">Python</button>
+        <button class="tab-btn" onclick="switchTab('qs-code-ts', this)">TypeScript</button>
+      </div>
+      <div id="tab-qs-code-rust" class="tab-content active">
+<pre><code>use overseer_client::OverseerClient;
+
+#[tokio::main]
+async fn main() -> Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let client = OverseerClient::new("http://localhost:8080")?
+        .with_token("my-token");
+
+    // Check health
+    let health = client.health().await?;
+    println!("Server: {} (v{})", health.status, health.version);
+
+    // List conversations
+    for conv in client.list_conversations(10).await? {
+        println!("#{}: {}", conv.id, conv.title);
+    }
+    Ok(())
+}</code></pre>
+      </div>
+      <div id="tab-qs-code-py" class="tab-content">
+<pre><code>import asyncio
+from overseer import OverseerClient
+
+async def main():
+    async with OverseerClient("http://localhost:8080", token="...") as c:
+        health = await c.system.health()
+        print(f"Server: {health.status} (v{health.version})")
+
+        for conv in await c.conversations.list():
+            print(f"#{conv.id}: {conv.title}")
+
+asyncio.run(main())</code></pre>
+      </div>
+      <div id="tab-qs-code-ts" class="tab-content">
+<pre><code>import { OverseerClient } from 'overseer-client';
+
+const client = new OverseerClient({ baseUrl: 'http://localhost:8080' });
+const health = await client.system.health();
+console.log(`Server: ${health.status} (v${health.version})`);
+
+const conversations = await client.conversations.list();
+for (const conv of conversations) {
+    console.log(`#${conv.id}: ${conv.title}`);
+}</code></pre>
+      </div>
+    </div>
+
+    <!-- INSTALLATION -->
+    <div id="section-install" class="section">
+      <h1>Installation</h1>
+      <table>
+        <tr><th>Package</th><th>Command</th><th>Requires</th></tr>
+        <tr><td><code>overseer-client</code> (Rust)</td><td><code>cargo add overseer-client</code></td><td>Rust 1.78+</td></tr>
+        <tr><td><code>overseer-kernel</code> (Rust)</td><td><code>cargo add overseer-kernel</code></td><td>Rust 1.78+</td></tr>
+        <tr><td><code>overseer-pysdk</code> (Python)</td><td><code>pip install overseer-pysdk</code></td><td>Python 3.10+</td></tr>
+        <tr><td><code>overseer-client</code> (TypeScript)</td><td><code>npm install overseer-client</code></td><td>Node.js 18+</td></tr>
+      </table>
+      <h3>Authentication</h3>
+      <p>Set the token via environment variable or in code:</p>
+      <pre><code># Environment variable
+export OVESEER_TOKEN="your-token-here"</code></pre>
+      <p>Or get a token programmatically:</p>
+<pre><code>// All SDKs support login
+let token = client.login("username", "password").await?;</code></pre>
+    </div>
+
+    <!-- RUST SDK -->
+    <div id="section-rust-sdk" class="section">
+      <h1>Rust SDK</h1>
+      <p><span class="badge badge-green">crates.io</span> <code>cargo add overseer-client</code></p>
+      <pre><code>use overseer_client::OverseerClient;
+
+let client = OverseerClient::new("http://localhost:8080")?
+    .with_token("token");</code></pre>
+      <h3>API Modules</h3>
+      <table>
+        <tr><th>Method</th><th>Description</th></tr>
+        <tr><td><code>list_conversations(n)</code></td><td>List conversations</td></tr>
+        <tr><td><code>create_conversation(title)</code></td><td>Create a conversation</td></tr>
+        <tr><td><code>list_messages(conv_id)</code></td><td>List messages</td></tr>
+        <tr><td><code>send_message(conv_id, role, content, hide)</code></td><td>Send a message</td></tr>
+        <tr><td><code>list_agents()</code></td><td>List agents</td></tr>
+        <tr><td><code>list_tools()</code></td><td>List tools</td></tr>
+        <tr><td><code>list_workflows()</code></td><td>List workflows</td></tr>
+        <tr><td><code>run_workflow(id)</code></td><td>Execute a workflow</td></tr>
+        <tr><td><code>orchestrate(conv_id, query)</code></td><td>Send query to agent system</td></tr>
+        <tr><td><code>health()</code></td><td>Check server health</td></tr>
+      </table>
+      <p>Full docs: <code>cargo doc --open -p overseer-client</code></p>
+    </div>
+
+    <!-- PYTHON SDK -->
+    <div id="section-python-sdk" class="section">
+      <h1>Python SDK</h1>
+      <p><span class="badge badge-green">PyPI</span> <code>pip install overseer-pysdk</code></p>
+<pre><code>from overseer import OverseerClient
+
+async with OverseerClient("http://localhost:8080", token="...") as client:
+    conversations = await client.conversations.list()
+    agents = await client.agents.list()</code></pre>
+      <h3>Module Reference</h3>
+      <table>
+        <tr><th>Module</th><th>Key Methods</th></tr>
+        <tr><td><code>client.conversations</code></td><td>list, create, update_title, delete, search</td></tr>
+        <tr><td><code>client.messages</code></td><td>list, send, delete, list_attachments, add_attachment</td></tr>
+        <tr><td><code>client.agents</code></td><td>list, list_all, create, update, get_by_domain</td></tr>
+        <tr><td><code>client.tools</code></td><td>list, create, update, link_to_agent, unlink_from_agent</td></tr>
+        <tr><td><code>client.supervisors</code></td><td>list, create, update, delete, get_tools, get_agents</td></tr>
+        <tr><td><code>client.workflows</code></td><td>list, create, run, publish, get_versions, restore_version</td></tr>
+        <tr><td><code>client.work_items</code></td><td>list, create, update_status, log_event, get_events</td></tr>
+        <tr><td><code>client.artifacts</code></td><td>list, create, get_by_ids, get_by_run</td></tr>
+        <tr><td><code>client.supervision</code></td><td>get_state, approve_action, reject_action, kernel_approve</td></tr>
+        <tr><td><code>client.browser</code></td><td>create_session, navigate, screenshot, start_recording</td></tr>
+        <tr><td><code>client.credentials</code></td><td>list, create, update, delete</td></tr>
+        <tr><td><code>client.settings</code></td><td>get, set, get_all</td></tr>
+        <tr><td><code>client.system</code></td><td>health, load, models, registry_status</td></tr>
+      </table>
+      <h3>CLI Usage</h3>
+      <pre><code># Login
+overseer login --username admin --password secret
+
+# List resources
+overseer conversations list
+overseer agents
+overseor tools
+overseer health
+overseer models
+
+# Send query
+overseer orchestrate --conversation-id 1 --query "Hello"</code></pre>
+    </div>
+
+    <!-- TYPESCRIPT SDK -->
+    <div id="section-typescript-sdk" class="section">
+      <h1>TypeScript SDK</h1>
+      <p><span class="badge badge-green">npm</span> <code>npm install overseer-client</code></p>
+<pre><code>import { OverseerClient } from 'overseer-client';
+
+const client = new OverseerClient({
+    baseUrl: 'http://localhost:8080',
+    token: 'my-token',
+});</code></pre>
+      <h3>Module Reference</h3>
+      <table>
+        <tr><th>Module</th><th>Key Methods</th></tr>
+        <tr><td><code>client.conversations</code></td><td>list, create, updateTitle, delete, search</td></tr>
+        <tr><td><code>client.messages</code></td><td>list, send, delete, listAttachments</td></tr>
+        <tr><td><code>client.agents</code></td><td>list, listAll, create, update, getByDomain</td></tr>
+        <tr><td><code>client.tools</code></td><td>list, create, linkToAgent, unlinkFromAgent</td></tr>
+        <tr><td><code>client.workflows</code></td><td>list, create, run, publish, getVersions</td></tr>
+        <tr><td><code>client.system</code></td><td>health, load, models, registryStatus</td></tr>
+      </table>
+      <h3>Browser Usage</h3>
+      <pre><code>&lt;script type="module"&gt;
+import { OverseerClient } from 'https://cdn.jsdelivr.net/npm/overseer-client/+esm';
+const client = new OverseerClient({ baseUrl: 'http://localhost:8080' });
+const tools = await client.tools.list();
+console.log(tools);
+&lt;/script&gt;</code></pre>
+    </div>
+
+    <!-- API: Conversations -->
+    <div id="section-api-conversations" class="section">
+      <h1>Conversations API</h1>
+      <table>
+        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/conversations?limit=N</td><td>List conversations</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/conversations</td><td>Create conversation. Body: <code>{title}</code></td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/conversations/update_title</td><td>Rename. Body: <code>{id, title}</code></td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/conversations/delete</td><td>Delete. Body: <code>{id}</code></td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/conversations/search?q=...</td><td>Full-text search</td></tr>
+      </table>
+    </div>
+
+    <!-- API: Messages -->
+    <div id="section-api-messages" class="section">
+      <h1>Messages & Attachments API</h1>
+      <table>
+        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/messages?conversation_id=N</td><td>List messages</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/messages</td><td>Send message. Body: <code>{conversation_id, role, content}</code></td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/messages/delete</td><td>Delete. Body: <code>{id}</code></td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/attachments?message_id=N</td><td>List attachments</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/attachments</td><td>Add attachment</td></tr>
+      </table>
+    </div>
+
+    <!-- API: Agents & Tools -->
+    <div id="section-api-agents" class="section">
+      <h1>Agents & Tools API</h1>
+      <table>
+        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/agents</td><td>List agents</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/agents</td><td>Create agent</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/tools</td><td>List tools</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/tools</td><td>Create tool</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/tools/link</td><td>Link tool to agent</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/tools/unlink</td><td>Unlink tool from agent</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/supervisors</td><td>List supervisors</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/supervisors</td><td>Create supervisor</td></tr>
+      </table>
+    </div>
+
+    <!-- API: Workflows -->
+    <div id="section-api-workflows" class="section">
+      <h1>Workflows API</h1>
+      <table>
+        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/workflows</td><td>List workflows</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/workflows</td><td>Create workflow</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/workflows/{id}/steps</td><td>List steps</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/workflows/{id}/runs</td><td>List runs</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/workflows/{id}/run</td><td>Execute workflow</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/v1/workflows/{id}/publish</td><td>Publish version</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/v1/workflows/{id}/versions</td><td>List versions</td></tr>
+      </table>
+    </div>
+
+    <!-- API: Supervision -->
+    <div id="section-api-supervision" class="section">
+      <h1>Supervision & Kernel API</h1>
+      <table>
+        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/supervision/state</td><td>Current supervision state</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/supervision/approve</td><td>Approve pending action</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/supervision/reject</td><td>Reject pending action</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/kernel/approvals</td><td>List pending approvals</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/kernel/approve</td><td>Approve kernel action</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/kernel/reject</td><td>Reject kernel action</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/kernel/emergency_stop</td><td>Emergency stop</td></tr>
+      </table>
+    </div>
+
+    <!-- API: Browser -->
+    <div id="section-api-browser" class="section">
+      <h1>Browser API</h1>
+      <table>
+        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/v1/browser/sessions</td><td>Create session</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/v1/browser/sessions/{id}</td><td>Get session</td></tr>
+        <tr><td><span class="method method-delete">DELETE</span></td><td class="api-url">/v1/browser/sessions/{id}</td><td>Close session</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/v1/browser/sessions/{id}/navigate</td><td>Navigate to URL</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/v1/browser/sessions/{id}/screenshot</td><td>Take screenshot</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/v1/browser/sessions/{id}/recording/start</td><td>Start recording</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/v1/browser/sessions/{id}/recording/stop</td><td>Stop recording</td></tr>
+      </table>
+    </div>
+
+    <!-- API: System -->
+    <div id="section-api-system" class="section">
+      <h1>System & Settings API</h1>
+      <table>
+        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/health</td><td>Server health</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/system/load</td><td>System load</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/settings?key=...</td><td>Get setting</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/settings</td><td>Set setting</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/models/available</td><td>List models</td></tr>
+        <tr><td><span class="method method-post">POST</span></td><td class="api-url">/api/orchestrate</td><td>Send agent query</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/api/registry/status</td><td>Registry status</td></tr>
+        <tr><td><span class="method method-get">GET</span></td><td class="api-url">/metrics</td><td>Prometheus metrics</td></tr>
+      </table>
+    </div>
+
+    <!-- MIGRATION -->
+    <div id="section-migration" class="section">
+      <h1>Migration Guide</h1>
+      <p>Transition from raw HTTP to the SDK clients.</p>
+      <h3>Rust: reqwest → overseer-client</h3>
+      <p><strong>Before:</strong></p>
+<pre><code>let resp = reqwest::Client::new()
+    .get("http://localhost:8080/api/conversations")
+    .header("Authorization", "Bearer token")
+    .send().await?;
+let data: Vec&lt;Value&gt; = resp.json().await?;</code></pre>
+      <p><strong>After:</strong></p>
+<pre><code>let client = OverseerClient::new("http://localhost:8080")?
+    .with_token("token");
+let conversations = client.list_conversations(10).await?;</code></pre>
+
+      <h3>Python: httpx → overseer-pysdk</h3>
+      <p><strong>Before:</strong></p>
+<pre><code>async with httpx.AsyncClient() as http:
+    r = await http.get("http://localhost:8080/api/agents",
+        headers={"Authorization": "Bearer token"})
+    agents = r.json()</code></pre>
+      <p><strong>After:</strong></p>
+<pre><code>async with OverseerClient("http://localhost:8080", token="...") as c:
+    agents = await c.agents.list()</code></pre>
+    </div>
+
+    <!-- EXAMPLES -->
+    <div id="section-examples" class="section">
+      <h1>Examples</h1>
+      <p>Complete working examples in the repository:</p>
+      <table>
+        <tr><th>Language</th><th>Location</th><th>What it does</th></tr>
+        <tr><td>Rust</td><td><code>sdks/examples/rust-quickstart/</code></td><td>Health check, list conversations, agents, tools, send message</td></tr>
+        <tr><td>Python</td><td><code>sdks/examples/python-quickstart/</code></td><td>Health check, list conversations, agents, tools, send message</td></tr>
+        <tr><td>TypeScript</td><td><code>sdks/examples/vscode-extension/</code></td><td>VS Code extension with 3 commands</td></tr>
+      </table>
+      <h3>Run the Rust Example</h3>
+<pre><code>cd sdks/examples/rust-quickstart
+cargo run</code></pre>
+      <h3>Run the Python Example</h3>
+<pre><code>cd sdks/examples/python-quickstart
+python main.py</code></pre>
+    </div>
+
+  </main>
+</div>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+  document.getElementById('section-' + id).classList.add('active');
+  document.querySelector(`.sidebar a[onclick*="'${id}'"]`).classList.add('active');
+  window.scrollTo(0, 0);
+}
+function switchTab(id, btn) {
+  const parent = btn.closest('.tab-bar').parentElement;
+  parent.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  parent.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+// Auto-highlight sidebar based on hash
+window.addEventListener('hashchange', () => {
+  if (window.location.hash) showSection(window.location.hash.slice(1));
+});
+if (window.location.hash) showSection(window.location.hash.slice(1));
+</script>
+</body>
+</html>

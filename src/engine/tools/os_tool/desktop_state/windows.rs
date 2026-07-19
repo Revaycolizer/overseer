@@ -42,14 +42,21 @@ function Convert-UiElement($element) {
     if ($null -eq $element) { return $null }
     $rect = $null
     try { $rect = $element.Current.BoundingRectangle } catch {}
+    $e_name = $null; try { $e_name = $element.Current.Name } catch {}
+    $e_aid = $null; try { $e_aid = $element.Current.AutomationId } catch {}
+    $e_class = $null; try { $e_class = $element.Current.ClassName } catch {}
+    $e_ctrl = $null; try { $e_ctrl = $element.Current.ControlType.ProgrammaticName } catch {}
+    $e_pid = $null; try { $e_pid = $element.Current.ProcessId } catch {}
+    $e_enabled = $null; try { $e_enabled = $element.Current.IsEnabled } catch {}
+    $e_focus = $null; try { $e_focus = $element.Current.HasKeyboardFocus } catch {}
     [pscustomobject]@{
-        name = try { $element.Current.Name } catch { $null }
-        automation_id = try { $element.Current.AutomationId } catch { $null }
-        class_name = try { $element.Current.ClassName } catch { $null }
-        control_type = try { $element.Current.ControlType.ProgrammaticName } catch { $null }
-        process_id = try { $element.Current.ProcessId } catch { $null }
-        is_enabled = try { $element.Current.IsEnabled } catch { $null }
-        has_keyboard_focus = try { $element.Current.HasKeyboardFocus } catch { $null }
+        name = $e_name
+        automation_id = $e_aid
+        class_name = $e_class
+        control_type = $e_ctrl
+        process_id = $e_pid
+        is_enabled = $e_enabled
+        has_keyboard_focus = $e_focus
         bounding_rectangle = if ($rect) {
             [pscustomobject]@{
                 left = [int]$rect.Left

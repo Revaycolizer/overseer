@@ -15,14 +15,15 @@ $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
 $graphics = [System.Drawing.Graphics]::FromImage($bmp)
 $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-$bmp.Save("{path}", [System.Drawing.Imaging::ImageFormat]::Png)
+$bmp.Save("{path}", [System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bmp.Dispose()
-[Convert]::ToBase64String([System.IO.File]::ReadAllBytes("{path}")) | @{{
+$base64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes("{path}"))
+@{{
     "status" = "success"
     "path" = "{path}"
     "mime" = "image/png"
-    "base64" = $_
+    "base64" = $base64
 }} | ConvertTo-Json -Compress
 "#,
         path = output_path_str

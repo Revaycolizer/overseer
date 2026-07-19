@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(client).await?;
+    let mut app = App::new(client, db).await?;
     let res = run_app(&mut terminal, &mut app).await;
 
     disable_raw_mode()?;

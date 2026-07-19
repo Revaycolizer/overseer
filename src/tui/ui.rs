@@ -1,13 +1,12 @@
 use ratatui::{
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Tabs},
     Frame,
 };
 use super::app::{ActiveTab, App};
-use super::chat_panel;
-use super::info_panels;
+use super::{agents, chat_panel, computer, help as help_panel, info_panels, mcp, search as search_panel, settings, skills, supervisors, tools, workflows};
 
 pub const ACCENT: Color = Color::Rgb(59, 130, 246);
 pub const SURFACE: Color = Color::Rgb(30, 41, 59);
@@ -24,42 +23,102 @@ pub fn block(title: &str) -> Block {
 }
 
 pub fn draw(f: &mut Frame, app: &mut App) {
-    let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0), Constraint::Length(3)])
-        .split(f.size());
+    let chunks = Layout::vertical([
+        Constraint::Length(3),  // header
+        Constraint::Length(3),  // tab bar
+        Constraint::Min(0),     // main content
+        Constraint::Length(3),  // status bar
+    ])
+    .split(f.size());
 
-    let mode_label = match app.active_tab {
-        ActiveTab::Chat => " Chat ",
-        ActiveTab::Metrics => " Metrics ",
-        ActiveTab::Browser => " Browser ",
-    };
+    // Header
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(" Overseer ", Style::new().fg(Color::White).bg(ACCENT).add_modifier(Modifier::BOLD)),
             Span::styled(" v0.1.4 ", Style::new().fg(MUTED)),
-            Span::raw(" │ "),
-            Span::styled(mode_label, Style::new().fg(ACCENT).add_modifier(Modifier::BOLD)),
         ]))
         .block(Block::default().borders(Borders::ALL).border_style(Style::new().fg(SURFACE))),
         chunks[0],
     );
 
+    // Tab bar
+    let tab_titles: Vec<Line> = ActiveTab::ALL.iter().map(|t| {
+        let selected = t == &app.active_tab;
+        let prefix = if selected { " ● " } else { "   " };
+        let style = if selected {
+            Style::new().fg(ACCENT).add_modifier(Modifier::BOLD)
+        } else {
+            Style::new().fg(MUTED)
+        };
+        Line::from(Span::styled(format!("{}{}", prefix, t.label()), style))
+    }).collect();
+
+    f.render_widget(
+        Tabs::new(tab_titles)
+            .select(app.active_tab.index())
+            .block(Block::default().borders(Borders::ALL).border_style(Style::new().fg(SURFACE)))
+            .style(Style::new().fg(MUTED))
+            .highlight_style(Style::new().fg(ACCENT).add_modifier(Modifier::BOLD))
+            .divider(Span::styled(" │ ", Style::new().fg(SURFACE))),
+        chunks[1],
+    );
+
+    // Main content
     match app.active_tab {
-        ActiveTab::Chat => chat_panel::draw_chat(f, app, chunks[1]),
-        ActiveTab::Metrics => info_panels::draw_metrics(f, app, chunks[1]),
-        ActiveTab::Browser => info_panels::draw_browser(f, app, chunks[1]),
+        ActiveTab::Chat => chat_panel::draw_chat(f, app, chunks[2]),
+        ActiveTab::Metrics => info_panels::draw_metrics(f, app, chunks[2]),
+        ActiveTab::Browser => info_panels::draw_browser(f, app, chunks[2]),
+        ActiveTab::SearchResults => draw_placeholder(f, "Search Results (Ctrl+F to search)", chunks[2]),
+        ActiveTab::Agents => agents::draw_agents(f, app, chunks[2]),
+        ActiveTab::Supervisors => supervisors::draw_supervisors(f, app, chunks[2]),
+        ActiveTab::Tools => tools::draw_tools(f, app, chunks[2]),
+        ActiveTab::Workflows => workflows::draw_workflows(f, app, chunks[2]),
+        ActiveTab::Computer => computer::draw_computer(f, app, chunks[2]),
+        ActiveTab::Settings => settings::draw_settings(f, app, chunks[2]),
+        ActiveTab::MCP => mcp::draw_mcp(f, app, chunks[2]),
+        ActiveTab::Skills => skills::draw_skills(f, app, chunks[2]),
     }
+
+    // Status bar
+    let status_text = if app.is_orchestrating.load(std::sync::atomic::Ordering::SeqCst) {
+        format!(" ◆ {}  │  [Esc] Cancel  │  [Q]uit", app.status_message)
+    } else {
+        app.status_message.clone()
+    };
 
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(" ◆ ", Style::new().fg(ACCENT)),
-            Span::styled(&app.status_message, Style::new().fg(TEXT)),
+            Span::styled(status_text, Style::new().fg(TEXT)),
             Span::raw("  │  "),
-            Span::styled("[Q]uit", Style::new().fg(MUTED)),
-            Span::raw("  "),
-            Span::styled("[Tab]", Style::new().fg(ACCENT)),
-            Span::styled(" Switch ", Style::new().fg(MUTED)),
+            Span::styled("[Ctrl+Left/Right]", Style::new().fg(ACCENT)),
+            Span::styled(" Tabs  ", Style::new().fg(MUTED)),
+            Span::styled("[F1]", Style::new().fg(ACCENT)),
+            Span::styled(" Help  ", Style::new().fg(MUTED)),
+            Span::styled("[Q]", Style::new().fg(ACCENT)),
+            Span::styled("uit", Style::new().fg(MUTED)),
         ]))
         .block(Block::default().borders(Borders::ALL).border_style(Style::new().fg(SURFACE))),
-        chunks[2],
+        chunks[3],
+    );
+
+    // Overlays (drawn last for z-order)
+    if app.show_help {
+        help_panel::draw_help(f, app, f.size());
+    }
+    if app.show_search {
+        search_panel::draw_search(f, app, f.size());
+    }
+}
+
+fn draw_placeholder(f: &mut Frame, title: &str, area: Rect) {
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(" ⏳ ", Style::new().fg(ACCENT)),
+            Span::styled(title, Style::new().fg(MUTED)),
+        ]))
+        .block(block(""))
+        .style(Style::new().fg(MUTED)),
+        area,
     );
 }

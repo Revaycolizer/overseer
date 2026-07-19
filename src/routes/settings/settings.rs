@@ -82,6 +82,8 @@ pub fn Settings() -> Element {
                         runtime_dir,
                         on_change
                     }
+                    crate::routes::settings::CredentialsSection {}
+                    crate::routes::settings::CachingSection {}
                     ConnectionSection {}
                 }
 

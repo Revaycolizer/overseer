@@ -101,16 +101,18 @@ where
     Fut: Future<Output = Result<T, E>>,
 {
     if breaker.is_open() { return Err(ResilienceError::CircuitOpen); }
-    for attempt in 0..max_attempts {
+    let safe_attempts = max_attempts.max(1);
+    for attempt in 0..safe_attempts {
         match f().await {
             Ok(v) => { breaker.record_success(); return Ok(v); }
             Err(e) => {
                 breaker.record_failure();
-                if attempt + 1 < max_attempts {
+                if attempt + 1 < safe_attempts {
                     tokio::time::sleep(Duration::from_millis(backoff_ms(attempt))).await;
                 } else { return Err(ResilienceError::Inner(e)); }
             }
         }
     }
-    unreachable!()
+    // Safety: the loop always returns on every iteration because safe_attempts >= 1.
+    Err(ResilienceError::CircuitOpen)
 }

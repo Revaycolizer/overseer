@@ -1,10 +1,34 @@
-use super::app::App;
+use super::app::{ActiveTab, App};
 use crate::engine::commands::SlashCommand;
 
 pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()> {
     match cmd {
         SlashCommand::Help => {
-            app.status_message = "Commands: /new, /export md|json, /search <q>, /model <name>, /regen, /rename <title>, /clear, /help".to_string();
+            app.status_message = "Commands: /new, /export md|json, /search <q>, /model <name>, /regen, /rename <title>, /clear, /settings, /agents, /supervisors, /tools, /help".to_string();
+            app.input.clear();
+            app.input_cursor = 0;
+        }
+        SlashCommand::Settings => {
+            app.active_tab = ActiveTab::Settings;
+            app.status_message = "Switched to Settings tab.".to_string();
+            app.input.clear();
+            app.input_cursor = 0;
+        }
+        SlashCommand::Agents => {
+            app.active_tab = ActiveTab::Agents;
+            app.status_message = "Switched to Agents tab.".to_string();
+            app.input.clear();
+            app.input_cursor = 0;
+        }
+        SlashCommand::Supervisors => {
+            app.active_tab = ActiveTab::Supervisors;
+            app.status_message = "Switched to Supervisors tab.".to_string();
+            app.input.clear();
+            app.input_cursor = 0;
+        }
+        SlashCommand::Tools => {
+            app.active_tab = ActiveTab::Tools;
+            app.status_message = "Switched to Tools tab.".to_string();
             app.input.clear();
             app.input_cursor = 0;
         }
@@ -86,7 +110,7 @@ pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()
         SlashCommand::Rename { title } => {
             if let Some(conv_id) = app.selected_conv_id {
                 let _ = app.client.update_conversation_title(conv_id, &title).await;
-                        app.status_message = format!("Renamed to '{}'", title);
+                app.status_message = format!("Renamed to '{}'", title);
                 app.activity.bump();
             }
         }

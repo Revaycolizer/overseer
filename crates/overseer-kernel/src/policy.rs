@@ -84,6 +84,7 @@ impl PolicyConfig {
     }
 
     /// A compact, non-sensitive snapshot of the policy for the audit ledger.
+    #[must_use]
     pub fn snapshot(&self) -> String {
         serde_json::json!({
             "policy_version": KERNEL_POLICY_VERSION,
@@ -99,6 +100,7 @@ impl PolicyConfig {
     }
 
     /// The effective, capped execution timeout for an action.
+    #[must_use]
     pub fn effective_timeout_ms(&self, requested: u64) -> u64 {
         let requested = if requested == 0 {
             self.timeout_ms_cap
@@ -118,6 +120,7 @@ impl PolicyConfig {
 /// Ordering is intentional and defense-in-depth: hard stops (emergency,
 /// capability, denylist, allowlist, action cap) are checked before any
 /// approval path, so a `deny` can never be softened into `require_approval`.
+#[must_use]
 pub fn evaluate(cfg: &PolicyConfig, req: &ActionRequest) -> PolicyDecision {
     // 1. Emergency stop halts everything.
     if cfg.emergency_stopped {
