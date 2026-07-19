@@ -85,23 +85,20 @@ pub fn WorkflowCanvas(
                 if connect_from().is_none() { panning.set(true); }
             },
             onmousemove: move |e| {
-                let c = e.data().element_coordinates();
-                let sx = c.x as f64;
-                let sy = c.y as f64;
+                let c = e.data().client_coordinates();
                 let (lx, ly) = last_screen();
-                let dx = sx - lx;
-                let dy = sy - ly;
-                if panning() { pan_x += dx; pan_y += dy; }
+                let dx = c.x as f64 - lx;
+                let dy = c.y as f64 - ly;
                 if let Some(nid) = drag_nid() {
                     let mut n = nodes.write();
                     if let Some(node) = n.iter_mut().find(|n| n.id == nid) {
                         node.x += dx / zoom();
                         node.y += dy / zoom();
                     }
+                } else if panning() {
+                    pan_x += dx; pan_y += dy;
                 }
-                let (svx, svy) = screen_to_svg(sx, sy, pan_x(), pan_y(), zoom());
-                svg_cursor.set((svx, svy));
-                last_screen.set((sx, sy));
+                last_screen.set((c.x as f64, c.y as f64));
             },
             onmouseup: move |_| {
                 panning.set(false); drag_nid.set(None);
