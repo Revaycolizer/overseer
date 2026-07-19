@@ -147,10 +147,12 @@ pub fn WorkflowCanvas(
                     {connect_line.map(|d| rsx! {
                         path { d: "{d}", fill: "none", stroke: "#3b82f6", stroke_width: 2, stroke_dasharray: "6,3" }
                     })}
-                    for (nid, nt, label, x, y, is_sel, color, icon) in nodes_v.clone() {
+                    for (i, (nid, nt, label, x, y, is_sel, color, icon)) in nodes_v.clone().into_iter().enumerate() {
+                        let node_id = nid;
                         g {
+                            key: "{i}",
                             transform: format!("translate({x:.0},{y:.0})"),
-                            onpointerdown: move |e| { e.stop_propagation(); drag_nid.set(Some(nid)); selected_node.set(Some(nid)); },
+                            onpointerdown: move |e| { e.stop_propagation(); drag_nid.set(Some(node_id)); selected_node.set(Some(node_id)); },
                             rect { x: -1, y: -1, width: 182, height: 82, rx: 11, ry: 11, fill: "rgba(0,0,0,0.04)" }
                             rect { width: 180, height: 80, rx: 10, ry: 10, fill: "white", stroke: if is_sel { "#3b82f6" } else { "#e2e8f0" }, stroke_width: if is_sel { 2 } else { 1 } }
                             rect { width: 180, height: 32, rx: 10, ry: 10, fill: color }
@@ -160,12 +162,13 @@ pub fn WorkflowCanvas(
                             text { x: 12, y: 56, fill: "#64748b", font_size: 10, "{nt}" }
                             circle { cx: 90, cy: 80, r: 6, fill: color, stroke: "white", stroke_width: 2.5, cursor: "crosshair",
                                 onpointerdown: move |e| { e.stop_propagation(); e.prevent_default();
-                                    if connect_from().is_none() { connect_from.set(Some(nid)); }
-                                    else if connect_from() != Some(nid) {
+                                    let target_id = node_id;
+                                    if connect_from().is_none() { connect_from.set(Some(target_id)); }
+                                    else if connect_from() != Some(target_id) {
                                         let from_id = connect_from().unwrap();
-                                        if from_id != nid && !edges.read().iter().any(|e| e.from == from_id && e.to == nid) {
+                                        if from_id != target_id && !edges.read().iter().any(|e| e.from == from_id && e.to == target_id) {
                                             let max_id = edges.read().iter().map(|e| e.id).max().unwrap_or(0);
-                                            edges.write().push(CanvasEdge { id: max_id + 1, from: from_id, to: nid });
+                                            edges.write().push(CanvasEdge { id: max_id + 1, from: from_id, to: target_id });
                                         }
                                         connect_from.set(None);
                                     }
