@@ -1,8 +1,0 @@
-{
-  "name": "hello-world",
-  "version": "1.0.0",
-  "description": "A minimal skill that demonstrates the skill system — contains one agent that responds to greetings",
-  "author": "Overseer Team",
-  "license": "MIT",
-  "tags": ["example", "tutorial", "hello-world"]
-}
