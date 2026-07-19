@@ -50,6 +50,12 @@ pub struct App {
     pub computer_state: Option<ComputerSupervisionState>,
     pub computer_actions: Vec<ActionEntry>,
     pub settings_map: std::collections::HashMap<String, String>,
+
+    // Phase 3: MCP state
+    pub mcp_connected: bool,
+    pub mcp_server_url: String,
+    pub mcp_tools: Vec<crate::mcp::types::McpTool>,
+    pub mcp_resources: Vec<crate::mcp::types::McpResource>,
 }
 
 impl App {
@@ -82,6 +88,10 @@ impl App {
             computer_state: None,
             computer_actions: vec![],
             settings_map: std::collections::HashMap::new(),
+            mcp_connected: false,
+            mcp_server_url: "http://localhost:8080/mcp".to_string(),
+            mcp_tools: vec![],
+            mcp_resources: vec![],
         };
         app.refresh_conversations().await?;
         app.refresh_metrics().await?;

@@ -6,6 +6,7 @@ pub mod backend;
 #[path = "db/mod.rs"]
 pub mod db;
 pub mod engine;
+pub mod mcp;
 pub mod routes;
 pub mod state;
 pub mod server;

@@ -7,6 +7,7 @@ pub mod computer;
 pub mod handlers;
 pub mod info_panels;
 pub mod input_handler;
+pub mod mcp;
 pub mod message_view;
 pub mod refresh;
 pub mod send;
