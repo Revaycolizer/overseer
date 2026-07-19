@@ -94,6 +94,7 @@ impl ActionRequest {
     /// Canonical, immutable serialization of the action payload. This is what is
     /// persisted with the approval request and what is executed on approval, so
     /// the approved action can never be swapped for a different one.
+    #[must_use]
     pub fn canonical_payload(&self) -> String {
         serde_json::to_string(self).unwrap_or_default()
     }

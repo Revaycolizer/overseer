@@ -89,6 +89,7 @@ impl ApprovalRecord {
     /// Reconstruct the immutable [`ActionRequest`] that was approved. Executing
     /// this — rather than a freshly generated action — is what guarantees the
     /// approved payload is the one that runs.
+    #[must_use]
     pub fn action(&self) -> KernelResult<ActionRequest> {
         Ok(serde_json::from_str(&self.action_payload)?)
     }
@@ -96,6 +97,7 @@ impl ApprovalRecord {
 
 /// Stable, non-cryptographic content hash (FNV-1a 64) for payload integrity /
 /// deduplication. Deterministic across processes (unlike std's `DefaultHasher`).
+#[must_use]
 pub fn payload_hash(payload: &str) -> String {
     let mut hash: u64 = 0xcbf29ce484222325;
     for b in payload.as_bytes() {

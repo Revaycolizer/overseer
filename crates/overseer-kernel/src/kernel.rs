@@ -50,12 +50,14 @@ pub enum ExecutionOutcome {
 
 impl ExecutionOutcome {
     /// True only when the tool actually executed.
+    #[must_use]
     pub fn executed(&self) -> bool {
         matches!(self, ExecutionOutcome::Executed { .. })
     }
 
     /// A structured JSON message describing this outcome, suitable for feeding
     /// back to the agent so it can react to a denial/rejection.
+    #[must_use]
     pub fn agent_response(&self) -> String {
         let v = match self {
             ExecutionOutcome::Executed { output } => {
@@ -134,6 +136,7 @@ impl Kernel {
         &self.store
     }
 
+    #[must_use]
     pub fn current_action_count(&self, run_id: i64) -> u64 {
         let inner = self.inner.lock().unwrap();
         inner.runs.get(&run_id).map(|r| r.action_count).unwrap_or(0)

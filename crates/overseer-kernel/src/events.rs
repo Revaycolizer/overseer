@@ -46,6 +46,7 @@ impl KernelEventKind {
     }
 
     /// A reasonable trace `status` for this event kind.
+    #[must_use]
     pub fn status(&self) -> &'static str {
         match self {
             KernelEventKind::ActionRequested | KernelEventKind::ActionStarted => "running",
