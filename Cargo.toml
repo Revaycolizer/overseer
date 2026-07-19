@@ -110,6 +110,13 @@ desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
 memory = ["dep:lancedb", "dep:arrow"]
 whisper = ["dep:whisper-rs"]
+# Opt-in test suites. `cargo test --workspace` (no features) is fully
+# deterministic: no display server, no keyboard/mouse, no Ollama, no internet,
+# no user interaction. These features enable tests that need real resources.
+#   cargo test --workspace --features live-hardware-tests -- --nocapture
+#   cargo test --workspace --features live-provider-tests  -- --nocapture
+live-hardware-tests = []   # real desktop session (screenshots, window state, input)
+live-provider-tests = []   # a running Ollama / network model backend
 
 [package.metadata.bundle]
 name = "Overseer"
