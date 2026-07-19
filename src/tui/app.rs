@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use crate::backend::client::BackendClient;
 use crate::backend::{Conversation, Message, SystemLoad};
+use crate::db::Database;
 use crate::backend::computer_supervision::ComputerSupervisionState;
 use crate::backend::workflows::models::Workflow;
 use crate::db::Supervisor;
@@ -23,6 +24,7 @@ pub struct ActionEntry {
 
 pub struct App {
     pub client: Arc<dyn BackendClient + Send + Sync>,
+    pub db: Option<Arc<Database>>,
     pub conversations: Vec<Conversation>,
     pub selected_conv_id: Option<i64>,
     pub messages: Vec<Message>,
@@ -68,9 +70,10 @@ pub struct App {
 }
 
 impl App {
-    pub async fn new(client: Arc<dyn BackendClient + Send + Sync>) -> anyhow::Result<Self> {
+    pub async fn new(client: Arc<dyn BackendClient + Send + Sync>, db: Arc<Database>) -> anyhow::Result<Self> {
         let mut app = Self {
             client,
+            db: Some(db),
             conversations: vec![],
             selected_conv_id: None,
             messages: vec![],

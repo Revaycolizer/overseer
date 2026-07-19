@@ -210,8 +210,42 @@ async fn handle_mcp_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
 async fn handle_skills_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
     match key.code {
         KeyCode::F(2) => {
-            // Install placeholder (DB-backed install coming when backend supports it)
-            app.status_message = "Skill install: requires database access from TUI context (Phase 5).".to_string();
+            if let Some(ref db) = app.db {
+                let registry = crate::skills::registry::SkillRegistry::new((**db).clone());
+                let mut installed = 0;
+                for skill in crate::skills::loader::builtin_skills() {
+                    if !registry.is_installed(&skill.manifest.name).await {
+                        match registry.install(&skill).await {
+                            Ok(_) => {
+                                installed += 1;
+                                app.status_message = format!("Installed '{}' v{}", skill.manifest.name, skill.manifest.version);
+                            }
+                            Err(e) => {
+                                app.status_message = format!("Install failed: {}", e);
+                                break;
+                            }
+                        }
+                    } else {
+                        app.status_message = format!("'{}' is already installed.", skill.manifest.name);
+                    }
+                }
+                // Refresh installed list
+                let registry = crate::skills::registry::SkillRegistry::new((**db).clone());
+                app.installed_skills = registry.list_installed().await;
+                if installed > 0 {
+                    app.status_message = format!("Installed {} skill(s) successfully.", installed);
+                }
+            } else {
+                app.status_message = "Database not available in remote mode.".to_string();
+            }
+            app.activity.bump();
+        }
+        KeyCode::F(3) => {
+            if let Some(ref db) = app.db {
+                let registry = crate::skills::registry::SkillRegistry::new((**db).clone());
+                app.installed_skills = registry.list_installed().await;
+                app.status_message = format!("Skills refreshed ({} installed).", app.installed_skills.len());
+            }
             app.activity.bump();
         }
         KeyCode::Esc => { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
