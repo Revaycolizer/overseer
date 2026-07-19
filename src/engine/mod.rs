@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod browser;
 #[cfg(feature = "memory")]
 pub mod memory;
