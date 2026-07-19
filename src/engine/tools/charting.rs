@@ -176,9 +176,20 @@ fn render_pie(title: &str, labels: &[String], data: &[f64]) -> Result<String, St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // charming's `ImageRenderer` renders via a V8/deno_core engine (SSR), which is
+    // NOT safe to initialize from multiple threads at once — doing so segfaults.
+    // Serialize the chart tests so the default parallel `cargo test` is stable.
+    static CHART_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn chart_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        CHART_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
 
     #[test]
     fn test_bar_chart() {
+        let _guard = chart_test_guard();
         let req = ChartRequest {
             chart_type: "bar".to_string(),
             title: "Fruit Sales".to_string(),
@@ -195,6 +206,7 @@ mod tests {
 
     #[test]
     fn test_line_chart() {
+        let _guard = chart_test_guard();
         let req = ChartRequest {
             chart_type: "line".to_string(),
             title: "Next.js Growth".to_string(),
@@ -207,6 +219,7 @@ mod tests {
 
     #[test]
     fn test_pie_chart() {
+        let _guard = chart_test_guard();
         let req = ChartRequest {
             chart_type: "pie".to_string(),
             title: "Market Share".to_string(),
