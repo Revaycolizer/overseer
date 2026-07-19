@@ -82,37 +82,59 @@ impl LatticeCoordinator {
 
     /// Decompose a goal into sub-tasks and execute them through the swarm.
     ///
+    /// Tasks are dispatched **in parallel** using `tokio::spawn` with concurrency
+    /// limited by `self.config.max_concurrency`. Results are merged into global
+    /// state after all cells complete.
+    ///
     /// Returns a structured prompt string containing all findings and synthesis.
     pub async fn decompose_and_run(&mut self, goal: &str) -> String {
         let span = tracing::info_span!("lattice_decompose", ?goal, task_count = 0);
-        {
-            let _enter = span.enter();
-            tracing::debug!("LATTICE decomposing goal");
-            let tasks = self.decompose_goal(goal);
-            span.record("task_count", tasks.len());
-            tracing::info!(count = tasks.len(), "LATTICE decomposed goal into tasks");
-            drop(_enter);
+        let _enter = span.enter();
 
-            for (i, task) in tasks.iter().enumerate() {
-                let cell_span = tracing::info_span!("cell_execution", index = i, ?task);
-                let _cell_guard = cell_span.enter();
-                let mut cell = crate::engine::orchestrator::state::CellState::new(task);
-                let context = crate::engine::orchestrator::state::sync::filter_relevant_facts(
-                    &self.global_state,
-                    task,
-                );
-                for fact in context {
-                    cell.add_fact(fact);
-                }
-                self.scheduler.dispatch_cell_task(task, &mut cell).await;
+        let tasks = self.decompose_goal(goal);
+        span.record("task_count", tasks.len());
+        tracing::info!(count = tasks.len(), "LATTICE decomposed goal into tasks");
+
+        if tasks.is_empty() {
+            return String::new();
+        }
+
+        // Single task — fast path, no parallel overhead
+        if tasks.len() == 1 {
+            let mut cell = crate::engine::orchestrator::state::CellState::new(&tasks[0]);
+            let context = crate::engine::orchestrator::state::sync::filter_relevant_facts(
+                &self.global_state,
+                &tasks[0],
+            );
+            for fact in context {
+                cell.add_fact(fact);
+            }
+            self.scheduler.dispatch_cell_task(&tasks[0], &mut cell).await;
+            crate::engine::orchestrator::state::sync::sync_cell_to_global(
+                &cell,
+                &mut self.global_state,
+            );
+        } else {
+            // Multiple tasks — parallel dispatch via SwarmScheduler
+            let cells = self.scheduler.dispatch_parallel(&tasks).await;
+
+            // Merge all cell results into global state
+            for cell in &cells {
                 crate::engine::orchestrator::state::sync::sync_cell_to_global(
-                    &cell,
+                    cell,
                     &mut self.global_state,
                 );
-                tracing::debug!(fact_count = cell.facts.len(), "cell completed");
-                drop(_cell_guard);
             }
+
+            tracing::debug!(
+                dispatched = tasks.len(),
+                completed = cells.len(),
+                facts = self.global_state.verified_facts.len(),
+                "LATTICE parallel dispatch complete"
+            );
         }
+
+        drop(_enter);
 
         let result = self.global_state.to_prompt_string();
         tracing::info!(result_len = result.len(), "LATTICE completed");

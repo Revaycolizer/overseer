@@ -75,6 +75,82 @@ pub fn enforce_truthful_response(response: &str, executed_action: bool) -> Strin
     }
 }
 
+/// Run the full truthfulness pipeline: deterministic guard + semantic verification.
+///
+/// Layer 1 (deterministic): rewrites unverified side-effect claims.
+/// Layer 2 (semantic): when an `EvidenceDag` is provided, extracts factual claims
+/// from the response and cross-references them against verified evidence.
+/// Unverifiable or refuted claims are flagged in the response by appending
+/// a transparency notice.
+///
+/// Returns the (possibly modified) response with a verification suffix appended
+/// when semantic verification finds issues.
+pub fn verify_response_semantic(
+    response: &str,
+    executed_action: bool,
+    dag: Option<&crate::engine::orchestrator::state::EvidenceDag>,
+) -> String {
+    // Layer 1: deterministic guard always runs
+    let guarded = enforce_truthful_response(response, executed_action);
+
+    // Layer 2: semantic verification
+    let Some(dag) = dag else {
+        return guarded;
+    };
+    if dag.is_empty() {
+        return guarded;
+    }
+
+    // Extract the text content from the response
+    let text = if let Ok(sr) = serde_json::from_str::<crate::engine::orchestrator::core::response::StructuredResponse>(&guarded) {
+        sr.messages.iter().map(|m| m.message.as_str()).collect::<Vec<_>>().join(" ")
+    } else {
+        guarded.clone()
+    };
+
+    let claims = extract_claims(&text);
+    if claims.is_empty() {
+        return guarded;
+    }
+
+    let report = verify_claims_against_dag(&claims, dag);
+    if report.all_supported() {
+        return guarded;
+    }
+
+    // Append a transparency suffix for any problematic claims
+    let mut note = String::new();
+    if report.refuted > 0 {
+        note.push_str(&format!(
+            "\n\n[Truthfulness: {} claim(s) contradict available evidence — verification confidence {:.0}%]",
+            report.refuted,
+            report.confidence() * 100.0,
+        ));
+    }
+    if report.unverifiable > 0 {
+        note.push_str(&format!(
+            "\n[Truthfulness: {} claim(s) could not be verified against evidence — confidence {:.0}%]",
+            report.unverifiable,
+            report.confidence() * 100.0,
+        ));
+    }
+
+    if note.is_empty() {
+        guarded
+    } else if let Ok(mut sr) = serde_json::from_str::<crate::engine::orchestrator::core::response::StructuredResponse>(&guarded) {
+        sr.messages.push(
+            crate::engine::orchestrator::core::response::MessagePart {
+                role: "system".to_string(),
+                message: format!("Truthfulness Notice:{} [total claims: {}, supported: {}, refuted: {}, unverifiable: {}]",
+                    note, report.total_claims, report.supported, report.refuted, report.unverifiable),
+            }
+        );
+        serde_json::to_string(&sr).unwrap_or(guarded)
+    } else {
+        format!("{}\n{}\n", guarded, note)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Layer 2: Semantic Verification (evidence-backed)
 // ---------------------------------------------------------------------------

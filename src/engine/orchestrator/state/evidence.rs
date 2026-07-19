@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
+use super::EvidenceChunk;
 
 /// Verification status of an evidence node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -197,6 +198,33 @@ impl EvidenceDag {
                 entry.insert(child);
             }
         }
+    }
+
+    /// Build an EvidenceDAG from a slice of `EvidenceChunk`s.
+    ///
+    /// Each chunk becomes a `Verified` evidence node. Chunks with IDs
+    /// referencing each other (via ID prefix matching) get parent links.
+    pub fn from_evidence_chunks(chunks: &[EvidenceChunk]) -> Self {
+        let mut dag = EvidenceDag::new();
+        for chunk in chunks {
+            let mut node = EvidenceNode::new(
+                chunk.id.clone(),
+                chunk.text.clone(),
+                chunk.source.clone(),
+            );
+            node.status = EvidenceStatus::Verified;
+            node.confidence = 0.9; // High confidence for directly recorded evidence
+
+            // Link derived evidence to parents by ID prefix relationship
+            // e.g., "E1.1" is a child of "E1"
+            if let Some(dot_pos) = chunk.id.rfind('.') {
+                let parent_id = &chunk.id[..dot_pos];
+                node.parent_ids.push(parent_id.to_string());
+            }
+
+            dag.add_node(node);
+        }
+        dag
     }
 }
 

@@ -85,10 +85,13 @@ pub async fn orchestrate_request(
     event_logger::simple(db, run_id, &mut seq, "macro_plan", "completed", &format!("Orchestrator planned {} step(s).", macro_tasks.len()), Some(&macro_plan_details)).await;
 
     let res = executor::execute_macro_tasks(db, conversation_id, run_id, &mut seq, all_agents, macro_tasks, &clean_query, &history, &enriched_memory_context, perception_tool, ollama_client, 60000, token_sender).await;
-    // Truthfulness guard: only allow a claimed side effect if a real tool actually
-    // succeeded in this run (derived from the execution trace).
+    // Truthfulness guard: two-layer verification
+    // Layer 1: deterministic side-effect claim detection
+    // Layer 2: semantic claim verification against evidence DAG
     let executed_action = crate::backend::run_produced_action(db, run_id).await;
-    let res = truthfulness::enforce_truthful_response(&res, executed_action);
+    // Build evidence DAG from the run's execution trace for semantic verification
+    let dag = crate::backend::build_evidence_dag_from_run(db, run_id).await;
+    let res = truthfulness::verify_response_semantic(&res, executed_action, dag.as_ref());
     completed.store(true, std::sync::atomic::Ordering::SeqCst);
     res
 }

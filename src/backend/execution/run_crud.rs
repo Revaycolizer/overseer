@@ -1,4 +1,5 @@
 use crate::db::Database;
+use crate::engine::orchestrator::state::EvidenceDag;
 
 /// Did this run actually execute a tool / action successfully?
 ///
@@ -80,6 +81,48 @@ pub async fn cancel_latest_execution_run_for_conversation(
     .execute(&db.pool)
     .await?;
     Ok(())
+}
+
+/// Build an Evidence DAG from a run's execution trace.
+///
+/// Queries the execution events for tool results and artefact records,
+/// converting them into verified evidence nodes. Returns `None` when
+/// `run_id` is `None` or no evidence is found.
+pub async fn build_evidence_dag_from_run(
+    db: &Database,
+    run_id: Option<i64>,
+) -> Option<EvidenceDag> {
+    let rid = run_id?;
+
+    // Collect tool result summaries as evidence chunks
+    let tool_results: Vec<(String, String)> = sqlx::query_as(
+        "SELECT event_type, summary FROM execution_events \
+         WHERE run_id = ? \
+           AND event_type IN ('tool_result', 'action_completed', 'artifact_created') \
+           AND summary IS NOT NULL \
+         ORDER BY event_id",
+    )
+    .bind(rid)
+    .fetch_all(&db.pool)
+    .await
+    .ok()?;
+
+    if tool_results.is_empty() {
+        return None;
+    }
+
+    let chunks: Vec<crate::engine::orchestrator::state::EvidenceChunk> = tool_results
+        .into_iter()
+        .enumerate()
+        .map(|(i, (event_type, summary))| crate::engine::orchestrator::state::EvidenceChunk {
+            id: format!("E{}", i + 1),
+            snowflake_id: (i + 1) as i64,
+            text: summary,
+            source: format!("execution_run:{}:{}", rid, event_type),
+        })
+        .collect();
+
+    Some(EvidenceDag::from_evidence_chunks(&chunks))
 }
 
 #[cfg(test)]
