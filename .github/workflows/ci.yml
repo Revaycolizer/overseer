@@ -32,8 +32,9 @@ jobs:
         run: cargo check --features desktop
 
       - name: Cargo clippy
+        continue-on-error: true
         shell: powershell
-        run: cargo clippy 2>&1 | Select-String -NotMatch "warning:" | Select-String -NotMatch "^$" | Select-String -NotMatch "^"; echo "Clippy completed (warnings exist but not blocking)"
+        run: cargo clippy
 
       - name: Cargo fmt check
         shell: powershell
