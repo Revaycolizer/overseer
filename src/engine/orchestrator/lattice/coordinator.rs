@@ -1,7 +1,27 @@
 use super::scheduler::SwarmScheduler;
-use crate::engine::orchestrator::atlas::search::search_atlas;
 use crate::engine::orchestrator::atlas::indexer::AgentAtlas;
 use crate::engine::orchestrator::state::GlobalState;
+
+/// Configuration for the Lattice Coordinator.
+#[derive(Debug, Clone)]
+pub struct LatticeConfig {
+    /// Maximum parallel cell executions.
+    pub max_concurrency: usize,
+    /// Minimum Jaccard overlap for evidence grounding (0.0–1.0).
+    pub grounding_threshold: f32,
+    /// Enable V3 lattice path. When false, falls back to V2 dispatch.
+    pub enabled: bool,
+}
+
+impl Default for LatticeConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrency: 4,
+            grounding_threshold: 0.3,
+            enabled: true,
+        }
+    }
+}
 
 /// Decomposes a high-level goal into a set of sub-tasks, dispatches them to
 /// agent cells, and synthesises the results into a coherent response.
@@ -13,6 +33,7 @@ pub struct LatticeCoordinator {
     pub scheduler: SwarmScheduler,
     pub global_state: GlobalState,
     pub atlas: Option<AgentAtlas>,
+    pub config: LatticeConfig,
 }
 
 impl LatticeCoordinator {
@@ -21,6 +42,7 @@ impl LatticeCoordinator {
             scheduler: SwarmScheduler::new(),
             global_state: GlobalState::new(),
             atlas: None,
+            config: LatticeConfig::default(),
         }
     }
 
@@ -30,34 +52,71 @@ impl LatticeCoordinator {
         self
     }
 
+    /// Apply configuration.
+    pub fn with_config(mut self, config: LatticeConfig) -> Self {
+        if config.max_concurrency > 0 {
+            self.scheduler = SwarmScheduler::new().with_concurrency(config.max_concurrency);
+        }
+        self.config = config;
+        self
+    }
+
+    /// Load configuration from database settings.
+    pub async fn from_settings(db: &crate::db::Database) -> Self {
+        let max_conc = crate::backend::get_setting_i64(db, "lattice_max_concurrency", 4).await as usize;
+        let threshold = crate::backend::get_setting_or(db, "lattice_grounding_threshold", "0.3").await
+            .parse::<f32>().unwrap_or(0.3);
+        let enabled = crate::backend::get_setting_or(db, "lattice_enabled", "true").await == "true";
+
+        Self {
+            scheduler: SwarmScheduler::new().with_concurrency(max_conc),
+            global_state: GlobalState::new(),
+            atlas: None,
+            config: LatticeConfig {
+                max_concurrency: max_conc,
+                grounding_threshold: threshold,
+                enabled,
+            },
+        }
+    }
+
     /// Decompose a goal into sub-tasks and execute them through the swarm.
     ///
     /// Returns a structured prompt string containing all findings and synthesis.
     pub async fn decompose_and_run(&mut self, goal: &str) -> String {
-        tracing::debug!(?goal, "LATTICE decomposing goal");
+        let span = tracing::info_span!("lattice_decompose", ?goal, task_count = 0);
+        {
+            let _enter = span.enter();
+            tracing::debug!("LATTICE decomposing goal");
+            let tasks = self.decompose_goal(goal);
+            span.record("task_count", tasks.len());
+            tracing::info!(count = tasks.len(), "LATTICE decomposed goal into tasks");
+            drop(_enter);
 
-        // 1. Dynamic task decomposition based on goal analysis
-        let tasks = self.decompose_goal(goal);
-
-        // 2. Execute each task through the swarm
-        for task in &tasks {
-            let mut cell =
-                crate::engine::orchestrator::state::CellState::new(task);
-            let context = crate::engine::orchestrator::state::sync::filter_relevant_facts(
-                &self.global_state,
-                task,
-            );
-            for fact in context {
-                cell.add_fact(fact);
+            for (i, task) in tasks.iter().enumerate() {
+                let cell_span = tracing::info_span!("cell_execution", index = i, ?task);
+                let _cell_guard = cell_span.enter();
+                let mut cell = crate::engine::orchestrator::state::CellState::new(task);
+                let context = crate::engine::orchestrator::state::sync::filter_relevant_facts(
+                    &self.global_state,
+                    task,
+                );
+                for fact in context {
+                    cell.add_fact(fact);
+                }
+                self.scheduler.dispatch_cell_task(task, &mut cell).await;
+                crate::engine::orchestrator::state::sync::sync_cell_to_global(
+                    &cell,
+                    &mut self.global_state,
+                );
+                tracing::debug!(fact_count = cell.facts.len(), "cell completed");
+                drop(_cell_guard);
             }
-            self.scheduler.dispatch_cell_task(task, &mut cell).await;
-            crate::engine::orchestrator::state::sync::sync_cell_to_global(
-                &cell,
-                &mut self.global_state,
-            );
         }
 
-        self.global_state.to_prompt_string()
+        let result = self.global_state.to_prompt_string();
+        tracing::info!(result_len = result.len(), "LATTICE completed");
+        result
     }
 
     /// Dynamically decompose a user goal into sub-tasks based on domain and intent.
@@ -67,7 +126,7 @@ impl LatticeCoordinator {
     /// - **Creative/Content** → `[Ideation, Drafting, Review]`
     /// - **Technical/Coding** → `[Requirements, Implementation, Validation]`
     /// - **Simple/Conversational** → `[Direct Response]`
-    fn decompose_goal(&self, goal: &str) -> Vec<String> {
+    pub fn decompose_goal(&self, goal: &str) -> Vec<String> {
         let lower = goal.to_lowercase();
         let atlas_agents = self.atlas.as_ref().map(|a| &a.agents);
 
