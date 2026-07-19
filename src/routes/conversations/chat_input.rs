@@ -16,6 +16,9 @@ pub struct ChatInputProps {
     pub is_first_msg: bool,
     pub is_thinking: Signal<bool>,
     pub starter_prompt: Signal<Option<String>>,
+    /// Render the composer large and centered (empty / landing state).
+    #[props(default)]
+    pub large: bool,
 }
 
 #[component]
@@ -100,47 +103,10 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                     is_first_msg: props.is_first_msg,
                 }
 
-                div { class: "mt-3 flex flex-wrap items-center gap-2 px-1",
-                    div { class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 shadow-sm",
-                        MaterialIcon { name: "policy", size: 14 }
-                        span { class: "font-bold text-slate-500", "Mode" }
-                        select {
-                            class: "border-0 bg-transparent pr-5 text-[11px] font-semibold text-slate-700 outline-none",
-                            value: "{supervision_mode}",
-                            onchange: {
-                                let db = db.clone();
-                                let computer_state_resource = computer_state_resource.clone();
-                                move |evt| {
-                                    let db = db.clone();
-                                    let mut computer_state_resource = computer_state_resource.clone();
-                                    let value = evt.value();
-                                    spawn(async move {
-                                        let _ = backend::set_setting(
-                                            &db,
-                                            "computer_supervision_mode",
-                                            &value,
-                                        )
-                                        .await;
-                                        computer_state_resource.restart();
-                                    });
-                                }
-                            },
-                            option { value: "approval_required", "Approval Required" }
-                            option { value: "observe_only", "Observe Only" }
-                            option { value: "session_trusted", "Trusted Session" }
-                            option { value: "trusted_auto_run", "Trusted Auto-Run" }
-                        }
-                    }
-                    div { class: "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 shadow-sm",
-                        MaterialIcon { name: "verified_user", size: 14 }
-                        span { class: "font-semibold text-slate-700", "{session_label}" }
-                        if approval_state == "pending" {
-                            span { class: "rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-amber-700",
-                                "Pending approval"
-                            }
-                        }
-                    }
-                    if approval_state == "pending" && !pending_action.trim().is_empty() {
+                // Mode / session controls moved to Settings. Only the per-action
+                // approval prompt appears here, and only when an action is pending.
+                if approval_state == "pending" && !pending_action.trim().is_empty() {
+                    div { class: "mt-3 flex flex-wrap items-center gap-2 px-1",
                         div { class: "flex items-center gap-2 min-w-full rounded-2xl border border-amber-200 bg-amber-50/80 px-3 py-3 text-[11px] text-amber-900 shadow-sm",
                             MaterialIcon { name: "fact_check", size: 16, color: MaterialIconColor::Custom("#b45309".into()) }
                             p { class: "flex-1 leading-relaxed break-words", "{pending_action}" }
