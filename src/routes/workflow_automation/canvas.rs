@@ -79,9 +79,11 @@ pub fn WorkflowCanvas(
         div {
             class: "flex-1 relative overflow-hidden bg-[#f1f5f9]",
             style: "background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 24px 24px;",
-            onmousedown: move |e| {
-                let c = e.data().element_coordinates();
+            onpointerdown: move |e| {
+                let c = e.data().client_coordinates();
                 last_screen.set((c.x as f64, c.y as f64));
+                // Pointerdown on a node is stopped by the node's handler.
+                // If we get here, the background was clicked — start pan.
                 if connect_from().is_none() { panning.set(true); }
             },
             onmousemove: move |e| {
