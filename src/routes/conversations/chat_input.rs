@@ -181,26 +181,17 @@ pub fn ChatInput(props: ChatInputProps) -> Element {
                         }
                     }
                 }
-                div { class: "mt-3 flex items-center justify-between gap-3 px-1 text-[11px] text-slate-500",
+                div { class: "mt-2 flex items-center justify-between gap-3 px-1 text-[11px] text-slate-400",
                     div { class: "flex items-center gap-2 min-w-0",
-                        MaterialIcon { name: "radar", size: 14 }
-                        span {
-                            if has_active_work_item {
-                                "Your next message will include the active work item as structured coordination context."
-                            } else if selected_artifact_count > 0 {
-                                "Your next message will include {selected_artifact_count} selected artifact(s) as structured context."
-                            } else if matches!(supervision_mode.as_str(), "approval_required" | "observe_only" | "session_trusted" | "trusted_auto_run") {
-                                "Desktop sessions will start automatically when a computer task needs them."
-                            } else if (props.is_thinking)() {
-                                "Overseer is processing the current request."
-                            } else if selected_conversation_id().is_some() {
-                                "Conversation is active. Trace events will appear automatically."
-                            } else {
-                                "A new conversation will be created automatically when you send."
-                            }
+                        if has_active_work_item {
+                            MaterialIcon { name: "radar", size: 14 }
+                            span { "Includes the active work item as context." }
+                        } else if selected_artifact_count > 0 {
+                            MaterialIcon { name: "radar", size: 14 }
+                            span { "Includes {selected_artifact_count} selected artifact(s)." }
                         }
                     }
-                    span { class: "shrink-0", "Enter to send • Shift+Enter for newline" }
+                    span { class: "shrink-0", "Enter to send" }
                 }
             }
         }
