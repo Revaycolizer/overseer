@@ -142,7 +142,7 @@ pub fn WorkflowCanvas(
                     }
                     for (_, d) in edges_v.clone() {
                         path { d: "{d}", fill: "none", stroke: "#94a3b8", stroke_width: 1.5, opacity: 0.6, marker_end: "url(#arrow)",
-                            style: "transition: stroke 0.15s, opacity 0.15s; cursor: pointer;" }
+                            style: "pointer-events: none; transition: stroke 0.15s, opacity 0.15s;" }
                     }
                     {connect_line.map(|d| rsx! {
                         path { d: "{d}", fill: "none", stroke: "#3b82f6", stroke_width: 2, stroke_dasharray: "6,3" }
