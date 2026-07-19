@@ -12,6 +12,7 @@ pub mod message_view;
 pub mod refresh;
 pub mod send;
 pub mod settings;
+pub mod skills;
 pub mod supervisors;
 pub mod tab;
 pub mod tools;

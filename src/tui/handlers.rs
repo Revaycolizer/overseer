@@ -75,6 +75,7 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         ActiveTab::Workflows => { nav_list(key, &app.workflows, &mut app.selected_workflow_id, &mut app.active_tab); app.activity.bump(); }
         ActiveTab::Computer => { handle_computer_key(app, key).await?; }
         ActiveTab::MCP => { handle_mcp_key(app, key).await?; }
+        ActiveTab::Skills => { handle_skills_key(app, key).await?; }
         ActiveTab::Settings => {
             if key.code == KeyCode::Esc { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
         }
@@ -178,6 +179,19 @@ async fn handle_mcp_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
             app.mcp_tools.clear();
             app.mcp_resources.clear();
             app.status_message = "Disconnected from MCP server.".to_string();
+            app.activity.bump();
+        }
+        KeyCode::Esc => { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
+        _ => {}
+    }
+    Ok(())
+}
+
+async fn handle_skills_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
+    match key.code {
+        KeyCode::F(2) => {
+            // Install placeholder (DB-backed install coming when backend supports it)
+            app.status_message = "Skill install: requires database access from TUI context (Phase 5).".to_string();
             app.activity.bump();
         }
         KeyCode::Esc => { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
