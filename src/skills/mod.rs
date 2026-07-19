@@ -1,68 +1,60 @@
-//! Skill system — composable agent+tool+prompt bundles.
+//! Skill system — open-standard agentic skill format.
 //!
-//! A skill is a versioned, self-describing package that can include agents,
-//! supervisors, tools, and settings overrides. Skills can be installed from
-//! local files or a remote registry, and are stored in the database.
+//! Skills follow the standard directory format:
+//!
+//! ```text
+//! my-skill/
+//! ├── SKILL.md         # YAML frontmatter + markdown instructions (required)
+//! ├── scripts/         # Executable code the agent can call (optional)
+//! ├── references/      # Documentation or reference materials (optional)
+//! └── assets/          # Templates and resources (optional)
+//! ```
+//!
+//! The SKILL.md file contains YAML frontmatter (name, description, etc.)
+//! followed by detailed markdown instructions that teach the AI how to
+//! perform the skill's task.
 
 pub mod registry;
 pub mod loader;
+pub use registry::InstalledSkill;
 
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
-/// A fully resolved, installable skill.
+/// A fully resolved, installable skill in the open-standard format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Skill {
+pub struct StandardSkill {
     pub manifest: SkillManifest,
-    pub agents: Vec<SkillAgentDef>,
-    pub supervisors: Vec<SkillSupervisorDef>,
-    pub settings: HashMap<String, String>,
+    /// The full markdown body from SKILL.md (after frontmatter).
+    pub instructions: String,
+    /// Paths to optional directories relative to the skill root.
+    pub scripts_dir: Option<String>,
+    pub references_dir: Option<String>,
+    pub assets_dir: Option<String>,
 }
 
-/// Metadata about a skill (the manifest file).
+/// Metadata parsed from YAML frontmatter in SKILL.md.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillManifest {
+    /// Unique skill identifier (kebab-case).
     pub name: String,
-    pub version: String,
+    /// Human-readable description.
     pub description: String,
+    /// What platforms or tools the skill requires.
+    #[serde(default)]
+    pub compatibility: String,
+    /// Arbitrary key-value metadata (e.g. agent types, venue configs).
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+    /// Version (semver).
+    #[serde(default = "default_version")]
+    pub version: String,
     #[serde(default)]
     pub author: String,
     #[serde(default)]
     pub license: String,
     #[serde(default)]
-    pub dependencies: Vec<SkillDependency>,
-    #[serde(default)]
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillDependency {
-    pub name: String,
-    pub version_req: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillAgentDef {
-    pub name: String,
-    pub description: String,
-    pub domain: String,
-    pub instructions: String,
-    #[serde(default)]
-    pub model: Option<String>,
-    #[serde(default)]
-    pub tools: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillSupervisorDef {
-    pub name: String,
-    pub domain: String,
-    pub description: String,
-    pub instructions: String,
-    #[serde(default)]
-    pub model: Option<String>,
-    #[serde(default)]
-    pub agents: Vec<String>,
-    #[serde(default)]
-    pub routing_priority: i32,
-}
+fn default_version() -> String { "1.0.0".into() }

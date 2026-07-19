@@ -1,8 +1,31 @@
 //! Skill registry — install, list, uninstall, and resolve skills.
+//!
+//! Skills stored in the `installed_skills` table with their full metadata
+//! and instructions from SKILL.md.
 
-use std::collections::HashMap;
+use super::StandardSkill;
 
-use super::{Skill, SkillAgentDef, SkillSupervisorDef};
+/// Summary of an installed skill for listing.
+#[derive(Debug, Clone)]
+pub struct InstalledSkill {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub tags: Vec<String>,
+    pub installed_at: String,
+}
+
+impl From<&StandardSkill> for InstalledSkill {
+    fn from(s: &StandardSkill) -> Self {
+        Self {
+            name: s.manifest.name.clone(),
+            version: s.manifest.version.clone(),
+            description: s.manifest.description.clone(),
+            tags: s.manifest.tags.clone(),
+            installed_at: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+}
 
 /// Manages installed skills in the database.
 pub struct SkillRegistry {
@@ -16,71 +39,47 @@ impl SkillRegistry {
 
     /// List all installed skills.
     pub async fn list_installed(&self) -> Vec<InstalledSkill> {
-        sqlx::query_as::<_, (String, String, String, String)>(
-            "SELECT name, version, description, installed_at FROM installed_skills ORDER BY name"
+        #[derive(sqlx::FromRow)]
+        struct Row { name: String, version: String, description: String, tags: String, installed_at: String }
+        let rows = sqlx::query_as::<_, Row>(
+            "SELECT name, version, description, tags, installed_at FROM installed_skills ORDER BY name"
         )
         .fetch_all(&self.db.pool)
         .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(name, version, description, installed_at)| InstalledSkill {
-            name, version, description, installed_at,
-        })
-        .collect()
+        .unwrap_or_default();
+
+        rows.into_iter().map(|r| InstalledSkill {
+            name: r.name,
+            version: r.version,
+            description: r.description,
+            tags: r.tags.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            installed_at: r.installed_at,
+        }).collect()
     }
 
-    /// Install a skill, creating all its agents and supervisors.
-    pub async fn install(&self, skill: &Skill) -> anyhow::Result<()> {
-        // Create agents
-        for agent_def in &skill.agents {
-            let id = self.db.next_id().await;
-            sqlx::query(
-                "INSERT INTO agents (id, name, description, domain, instructions, model, tools) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?)"
-            )
-            .bind(id)
-            .bind(agent_def.name.clone())
-            .bind(agent_def.description.clone())
-            .bind(agent_def.domain.clone())
-            .bind(agent_def.instructions.clone())
-            .bind(agent_def.model.clone().unwrap_or_default())
-            .bind(agent_def.tools.join(","))
-            .execute(&self.db.pool)
-            .await?;
-        }
+    /// Install a standard skill (SKILL.md format).
+    pub async fn install(&self, skill: &StandardSkill) -> anyhow::Result<()> {
+        let instructions_json = serde_json::json!({
+            "markdown": skill.instructions,
+            "scripts_dir": skill.scripts_dir,
+            "references_dir": skill.references_dir,
+            "assets_dir": skill.assets_dir,
+        });
 
-        // Create supervisors
-        for sup_def in &skill.supervisors {
-            let id = self.db.next_id().await;
-            sqlx::query(
-                "INSERT INTO supervisors (id, name, domain, description, instructions, model, routing_priority) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?)"
-            )
-            .bind(id)
-            .bind(sup_def.name.clone())
-            .bind(sup_def.domain.clone())
-            .bind(sup_def.description.clone())
-            .bind(sup_def.instructions.clone())
-            .bind(sup_def.model.clone().unwrap_or_default())
-            .bind(sup_def.routing_priority)
-            .execute(&self.db.pool)
-            .await?;
-        }
-
-        // Apply settings
-        for (key, value) in &skill.settings {
-            let _ = crate::backend::set_setting(&self.db, key, value).await;
-        }
-
-        // Record installation
         sqlx::query(
-            "INSERT OR REPLACE INTO installed_skills (name, version, description, manifest_json) \
-             VALUES (?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO installed_skills \
+             (name, version, description, tags, metadata_json, instructions_json, author, license, compatibility) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        .bind(skill.manifest.name.clone())
-        .bind(skill.manifest.version.clone())
-        .bind(skill.manifest.description.clone())
-        .bind(serde_json::to_string(&skill.manifest).unwrap_or_default())
+        .bind(&skill.manifest.name)
+        .bind(&skill.manifest.version)
+        .bind(&skill.manifest.description)
+        .bind(skill.manifest.tags.join(","))
+        .bind(serde_json::to_string(&skill.manifest.metadata).unwrap_or_default())
+        .bind(instructions_json.to_string())
+        .bind(&skill.manifest.author)
+        .bind(&skill.manifest.license)
+        .bind(&skill.manifest.compatibility)
         .execute(&self.db.pool)
         .await?;
 
@@ -90,7 +89,7 @@ impl SkillRegistry {
     /// Uninstall a skill by name.
     pub async fn uninstall(&self, name: &str) -> anyhow::Result<()> {
         sqlx::query("DELETE FROM installed_skills WHERE name = ?")
-            .bind(name.to_string())
+            .bind(name)
             .execute(&self.db.pool)
             .await?;
         Ok(())
@@ -98,21 +97,13 @@ impl SkillRegistry {
 
     /// Check if a skill is installed.
     pub async fn is_installed(&self, name: &str) -> bool {
-        sqlx::query_scalar::<_, i64>(
+        let count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM installed_skills WHERE name = ?"
         )
-        .bind(name.to_string())
+        .bind(name)
         .fetch_one(&self.db.pool)
         .await
-        .unwrap_or(0) > 0
+        .unwrap_or(0);
+        count > 0
     }
-}
-
-/// Summary of an installed skill for listing.
-#[derive(Debug, Clone)]
-pub struct InstalledSkill {
-    pub name: String,
-    pub version: String,
-    pub description: String,
-    pub installed_at: String,
 }
