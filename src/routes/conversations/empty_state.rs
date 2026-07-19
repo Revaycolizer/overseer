@@ -19,24 +19,18 @@ pub fn EmptyConversationState(on_prompt: EventHandler<String>) -> Element {
     ];
 
     rsx! {
-        div { class: "rounded-3xl border border-slate-200 bg-white shadow-sm p-8 space-y-6",
-            div { class: "space-y-3",
-                p { class: "text-[10px] font-black uppercase tracking-[0.24em] text-slate-400", "Mission Control" }
-                h2 { class: "text-2xl font-black text-slate-900", "Start a conversation and let Overseer route the work." }
-                p { class: "text-sm text-slate-500 leading-relaxed max-w-2xl",
-                    "Chat is the front door. The orchestrator decides whether your request should stay conversational, go to a single domain, or expand into a multi-step execution run with traceability."
-                }
-            }
-            div { class: "grid grid-cols-1 md:grid-cols-3 gap-3",
+        div { class: "flex flex-col items-center justify-center text-center gap-7 px-4 py-16 sm:py-24",
+            h1 { class: "text-4xl sm:text-5xl font-semibold tracking-tight text-slate-900", "Overseer" }
+            p { class: "text-base text-slate-400", "Ask anything, or task an agent." }
+            div { class: "flex flex-wrap items-center justify-center gap-2",
                 for (label, prompt) in prompts {
                     button {
-                        class: "text-left rounded-2xl border border-slate-200 bg-slate-50 hover:bg-white hover:border-blue-200 transition-all p-4 space-y-2",
+                        class: "rounded-full border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors px-4 py-2 text-sm font-medium text-slate-600",
                         onclick: {
                             let prompt = prompt.to_string();
                             move |_| on_prompt.call(prompt.clone())
                         },
-                        p { class: "text-xs font-black uppercase tracking-[0.18em] text-slate-500", "{label}" }
-                        p { class: "text-sm text-slate-700 leading-relaxed", "{prompt}" }
+                        "{label}"
                     }
                 }
             }
