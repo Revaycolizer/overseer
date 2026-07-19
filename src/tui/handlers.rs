@@ -4,36 +4,24 @@ use super::app::{ActiveTab, App};
 pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
     let is_orch = app.is_orchestrating.load(std::sync::atomic::Ordering::SeqCst);
 
-    // ── Global shortcuts (always active) ──
+    // ── Global shortcuts ──
 
-    // Ctrl+Left / Ctrl+Right / Shift+Left / Shift+Right — cycle tabs
-    if (key.code == KeyCode::Left && key.modifiers.contains(KeyModifiers::CONTROL))
-        || (key.code == KeyCode::Left && key.modifiers.contains(KeyModifiers::SHIFT))
-    {
-        app.active_tab = app.active_tab.prev();
-        app.activity.bump();
-        return Ok(());
+    // Ctrl+Left / Ctrl+Right — cycle tabs
+    if key.code == KeyCode::Left && (key.modifiers.contains(KeyModifiers::CONTROL) || key.modifiers.contains(KeyModifiers::SHIFT)) {
+        app.active_tab = app.active_tab.prev(); app.activity.bump(); return Ok(());
     }
-    if (key.code == KeyCode::Right && key.modifiers.contains(KeyModifiers::CONTROL))
-        || (key.code == KeyCode::Right && key.modifiers.contains(KeyModifiers::SHIFT))
-    {
-        app.active_tab = app.active_tab.next();
-        app.activity.bump();
-        return Ok(());
+    if key.code == KeyCode::Right && (key.modifiers.contains(KeyModifiers::CONTROL) || key.modifiers.contains(KeyModifiers::SHIFT)) {
+        app.active_tab = app.active_tab.next(); app.activity.bump(); return Ok(());
     }
 
-    // Alt+1..Alt+9, Alt+0 — jump directly to a tab by number
+    // Alt+1..9,0 — jump to tab
     if let KeyCode::Char(c) = key.code {
         if key.modifiers.contains(KeyModifiers::ALT) {
-            let idx = c.to_digit(10).map(|d| {
-                if d == 0 { 9 } else { d as usize - 1 }
-            });
+            let idx = c.to_digit(10).map(|d| if d == 0 { 9 } else { d as usize - 1 });
             if let Some(i) = idx {
                 if i < ActiveTab::ALL.len() {
                     app.active_tab = ActiveTab::from_index(i);
-                    if app.active_tab == ActiveTab::Metrics {
-                        let _ = app.refresh_metrics().await;
-                    }
+                    refresh_current_tab(app).await;
                     app.activity.bump();
                     return Ok(());
                 }
@@ -41,183 +29,180 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         }
     }
 
-    // F5 — refresh current view
+    // F5 — refresh
     if key.code == KeyCode::F(5) {
-        let _ = app.refresh_conversations().await;
-        let _ = app.refresh_metrics().await;
+        refresh_current_tab(app).await;
         app.status_message = "Refreshed.".to_string();
         app.activity.bump();
         return Ok(());
     }
 
-    // Ctrl+F — search (placeholder for Phase 5)
+    // Ctrl+F — search
     if key.code == KeyCode::Char('f') && key.modifiers.contains(KeyModifiers::CONTROL) {
         app.active_tab = ActiveTab::SearchResults;
-        app.status_message = "Search: not yet implemented (Phase 5)".to_string();
+        app.status_message = "Search: Ctrl+F to search messages (coming in Phase 5)".to_string();
         app.activity.bump();
         return Ok(());
     }
 
-    // F1 — help (placeholder for Phase 5)
+    // F1 — help
     if key.code == KeyCode::F(1) {
-        app.status_message = "Help: not yet implemented (Phase 5). Available tabs: Chat, Agents, Supervisors, Tools, Workflows, Browser, Computer, Settings, MCP, Skills, Metrics. Use Alt+1..0 to jump.".to_string();
+        let tab_name = app.active_tab.label();
+        app.status_message = format!("Help: {} tab. Ctrl+Left/Right=switch tabs, Alt+1..9,0=direct jump, F5=refresh, Q=quit", tab_name);
         app.activity.bump();
         return Ok(());
     }
 
-    // Ctrl+N / F2 — new conversation (only in Chat tab)
+    // Ctrl+N / F2 — new conversation (Chat only)
     if app.active_tab == ActiveTab::Chat
-        && (key.code == KeyCode::F(2)
-            || (key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)))
+        && (key.code == KeyCode::F(2) || (key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)))
     {
         let new_id = app.client.add_conversation("New Conversation").await?;
         app.selected_conv_id = Some(new_id);
         app.activity.bump();
-        app.input.clear();
-        app.input_cursor = 0;
+        app.input.clear(); app.input_cursor = 0;
         let _ = app.refresh_conversations().await;
         return Ok(());
     }
 
-    // ── Tab-specific handling ──
+    // ── Tab-specific ──
     match app.active_tab {
         ActiveTab::Chat => handle_chat_key(app, key, is_orch).await?,
-        ActiveTab::Metrics => {
-            // Metrics tab: just refresh on any key
-            let _ = app.refresh_metrics().await;
+        ActiveTab::Metrics => { let _ = app.refresh_metrics().await; }
+        ActiveTab::Agents => { nav_list(key, &app.agents, &mut app.selected_agent_id, &mut app.active_tab); app.activity.bump(); }
+        ActiveTab::Supervisors => { nav_list(key, &app.supervisors, &mut app.selected_supervisor_id, &mut app.active_tab); app.activity.bump(); }
+        ActiveTab::Tools => { nav_list(key, &app.tools, &mut app.selected_tool_id, &mut app.active_tab); app.activity.bump(); }
+        ActiveTab::Workflows => { nav_list(key, &app.workflows, &mut app.selected_workflow_id, &mut app.active_tab); app.activity.bump(); }
+        ActiveTab::Computer => { handle_computer_key(app, key).await?; }
+        ActiveTab::Settings => {
+            if key.code == KeyCode::Esc { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
         }
-        ActiveTab::Agents => {
-            handle_agent_keys(app, key).await?;
-        }
+        ActiveTab::Browser => {}
         _ => {
-            // Placeholder tabs — any key shows coming-soon message
             if key.code == KeyCode::Enter || key.code == KeyCode::Char(' ') {
-                app.status_message = format!(
-                    "{} tab is not yet implemented — coming in a future phase.",
-                    app.active_tab.label()
-                );
+                app.status_message = format!("{} tab — coming in a future phase.", app.active_tab.label());
                 app.activity.bump();
             }
         }
     }
-
     Ok(())
+}
+
+/// Navigate a list with Up/Down keys. Returns true if the selection changed.
+fn nav_list<T>(
+    key: KeyEvent,
+    items: &[T],
+    selected_id: &mut Option<i64>,
+    active_tab: &mut ActiveTab,
+) where T: HasId {
+    match key.code {
+        KeyCode::Up => {
+            let idx = items.iter().position(|x| Some(x.id()) == *selected_id);
+            if let Some(i) = idx { if i > 0 { *selected_id = Some(items[i - 1].id()); } }
+            else if !items.is_empty() { *selected_id = Some(items[0].id()); }
+        }
+        KeyCode::Down => {
+            let idx = items.iter().position(|x| Some(x.id()) == *selected_id);
+            if let Some(i) = idx { if i + 1 < items.len() { *selected_id = Some(items[i + 1].id()); } }
+            else if !items.is_empty() { *selected_id = Some(items[0].id()); }
+        }
+        KeyCode::Esc => { *active_tab = ActiveTab::Chat; }
+        _ => {}
+    }
+}
+
+trait HasId { fn id(&self) -> i64; }
+impl HasId for crate::engine::utils::discovery::AgentInfo { fn id(&self) -> i64 { self.id } }
+impl HasId for crate::db::Supervisor { fn id(&self) -> i64 { self.id } }
+impl HasId for crate::engine::utils::discovery::ToolInfo { fn id(&self) -> i64 { self.id } }
+impl HasId for crate::backend::workflows::models::Workflow { fn id(&self) -> i64 { self.id } }
+
+async fn handle_computer_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
+    match key.code {
+        KeyCode::F(2) => {
+            let _ = app.client.activate_computer_session(true, "").await;
+            app.computer_actions.push(super::app::ActionEntry { status: "info".into(), tool: "system".into(), detail: "Session activated".into() });
+            let _ = app.refresh_computer().await;
+            app.status_message = "Computer control activated.".to_string();
+        }
+        KeyCode::F(3) => {
+            let _ = app.client.activate_computer_session(false, "").await;
+            app.computer_actions.push(super::app::ActionEntry { status: "info".into(), tool: "system".into(), detail: "Session deactivated".into() });
+            let _ = app.refresh_computer().await;
+            app.status_message = "Computer control deactivated.".to_string();
+        }
+        KeyCode::F(4) => {
+            let _ = app.client.approve_pending_computer_action().await;
+            app.computer_actions.push(super::app::ActionEntry { status: "approved".into(), tool: "user".into(), detail: "Action approved".into() });
+            app.status_message = "Action approved.".to_string();
+        }
+        KeyCode::F(5) => {
+            let _ = app.client.reject_pending_computer_action().await;
+            app.computer_actions.push(super::app::ActionEntry { status: "rejected".into(), tool: "user".into(), detail: "Action rejected".into() });
+            app.status_message = "Action rejected.".to_string();
+        }
+        KeyCode::F(6) => {
+            app.computer_actions.push(super::app::ActionEntry { status: "emergency".into(), tool: "system".into(), detail: "EMERGENCY STOP".into() });
+            app.status_message = "EMERGENCY STOP — all actions blocked.".to_string();
+        }
+        KeyCode::Esc => { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
+        _ => {}
+    }
+    Ok(())
+}
+
+async fn refresh_current_tab(app: &mut App) {
+    match app.active_tab {
+        ActiveTab::Agents => { let _ = app.refresh_agents().await; }
+        ActiveTab::Supervisors => { let _ = app.refresh_supervisors().await; }
+        ActiveTab::Tools => { let _ = app.refresh_tools().await; }
+        ActiveTab::Workflows => { let _ = app.refresh_workflows().await; }
+        ActiveTab::Computer => { let _ = app.refresh_computer().await; }
+        ActiveTab::Settings => { let _ = app.refresh_settings_map().await; }
+        ActiveTab::Metrics => { let _ = app.refresh_metrics().await; }
+        ActiveTab::Chat => { let _ = app.refresh_conversations().await; }
+        _ => {}
+    }
 }
 
 async fn handle_chat_key(app: &mut App, key: KeyEvent, is_orch: bool) -> anyhow::Result<()> {
     match key.code {
         KeyCode::Tab => {
             if app.input.starts_with('/') {
-                let suggestions = crate::engine::commands::get_suggestions(&app.input);
-                if let Some(first_match) = suggestions.first() {
-                    app.input = first_match.to_string();
-                    app.input_cursor = app.input.len();
-                    app.activity.bump();
+                if let Some(f) = crate::engine::commands::get_suggestions(&app.input).first() {
+                    app.input = f.to_string(); app.input_cursor = app.input.len(); app.activity.bump();
                 }
             }
-            // Tab in chat cycles to next tab (moved to Ctrl+Right for tab cycle,
-            // but bare Tab in chat input should insert spaces or autocomplete)
         }
         KeyCode::Up => {
             if let Some(idx) = app.selected_conv_idx() {
-                if idx > 0 {
-                    app.selected_conv_id = Some(app.conversations[idx - 1].id);
-                    app.refresh_conversations().await?;
-                }
+                if idx > 0 { app.selected_conv_id = Some(app.conversations[idx - 1].id); app.refresh_conversations().await?; }
             }
         }
         KeyCode::Down => {
             if let Some(idx) = app.selected_conv_idx() {
-                if idx + 1 < app.conversations.len() {
-                    app.selected_conv_id = Some(app.conversations[idx + 1].id);
-                    app.refresh_conversations().await?;
-                }
+                if idx + 1 < app.conversations.len() { app.selected_conv_id = Some(app.conversations[idx + 1].id); app.refresh_conversations().await?; }
             }
         }
         KeyCode::Enter => {
             if !is_orch {
                 if let Some(cmd) = crate::engine::commands::parse(&app.input) {
                     super::command_handler::handle_slash(app, cmd).await?;
-                } else {
-                    app.send_message().await?;
-                }
+                } else { app.send_message().await?; }
             }
         }
-        KeyCode::Backspace | KeyCode::Delete | KeyCode::Left | KeyCode::Right
-            | KeyCode::Home | KeyCode::End | KeyCode::Char(_) => {
-            if !is_orch {
-                super::input_handler::app(&key, app);
-            }
+        KeyCode::Backspace | KeyCode::Delete | KeyCode::Left | KeyCode::Right | KeyCode::Home | KeyCode::End | KeyCode::Char(_) => {
+            if !is_orch { super::input_handler::app(&key, app); }
         }
         KeyCode::Esc => {
-            if is_orch {
-                app.cancel_current_orchestrate();
-                app.status_message = "Cancelling…".to_string();
-            } else if app.search_results.is_some() {
-                app.search_results = None;
-                app.search_query.clear();
-                app.status_message = "Search cleared".to_string();
-                app.activity.bump();
-            }
+            if is_orch { app.cancel_current_orchestrate(); app.status_message = "Cancelling…".to_string(); }
+            else if app.search_results.is_some() { app.search_results = None; app.search_query.clear(); app.status_message = "Search cleared".to_string(); app.activity.bump(); }
         }
         _ => {}
     }
     if app.input.starts_with('/') {
-        let suggestions = crate::engine::commands::get_suggestions(&app.input);
-        if !suggestions.is_empty() {
-            app.status_message = format!("Suggestions: {} (TAB to autocomplete)", suggestions.join(", "));
-        } else {
-            app.status_message = "No matching command".to_string();
-        }
-    }
-    Ok(())
-}
-
-async fn handle_agent_keys(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
-    match key.code {
-        KeyCode::Up => {
-            if let Some(idx) = app.agents.iter().position(|a| Some(a.id) == app.selected_agent_id) {
-                if idx > 0 {
-                    app.selected_agent_id = Some(app.agents[idx - 1].id);
-                    app.activity.bump();
-                }
-            } else if !app.agents.is_empty() {
-                app.selected_agent_id = Some(app.agents[0].id);
-            }
-        }
-        KeyCode::Down => {
-            if let Some(idx) = app.agents.iter().position(|a| Some(a.id) == app.selected_agent_id) {
-                if idx + 1 < app.agents.len() {
-                    app.selected_agent_id = Some(app.agents[idx + 1].id);
-                    app.activity.bump();
-                }
-            } else if !app.agents.is_empty() {
-                app.selected_agent_id = Some(app.agents[0].id);
-            }
-        }
-        KeyCode::F(3) => {
-            // New agent (placeholder)
-            app.status_message = "New Agent: not yet implemented (will open creation form)".to_string();
-            app.activity.bump();
-        }
-        KeyCode::F(2) => {
-            // Edit agent (placeholder)
-            app.status_message = "Edit Agent: not yet implemented (will open edit form)".to_string();
-            app.activity.bump();
-        }
-        KeyCode::Delete => {
-            // Delete agent (placeholder)
-            if let Some(id) = app.selected_agent_id {
-                app.status_message = format!("Delete agent {}: not yet implemented", id);
-                app.activity.bump();
-            }
-        }
-        KeyCode::Esc => {
-            // Switch back to chat
-            app.active_tab = ActiveTab::Chat;
-            app.activity.bump();
-        }
-        _ => {}
+        let s = crate::engine::commands::get_suggestions(&app.input);
+        app.status_message = if s.is_empty() { "No matching command".into() } else { format!("Suggestions: {} (TAB to autocomplete)", s.join(", ")) };
     }
     Ok(())
 }
