@@ -27,7 +27,10 @@
 body {
     background-color: #020617; /* Tailwind slate-950 */
     color: #ffffff;
-    font-family: 'RobotoCustom', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', 'RobotoCustom', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.006em;
     margin: 0;
     padding: 0;
     height: 100vh;
