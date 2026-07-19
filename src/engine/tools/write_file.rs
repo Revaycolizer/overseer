@@ -39,8 +39,13 @@ pub async fn native_write_file(args: &Value) -> Result<String, DynamicToolError>
     // Create parent directories as needed.
     if let Some(parent) = p.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| fail(format!("failed to create directory {}: {}", parent.display(), e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                fail(format!(
+                    "failed to create directory {}: {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
         }
     }
 
@@ -69,7 +74,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
 
         let args = json!({ "path": path.to_string_lossy(), "content": "KERNEL_OK" });
-        let out = native_write_file(&args).await.expect("write should succeed");
+        let out = native_write_file(&args)
+            .await
+            .expect("write should succeed");
 
         assert!(path.exists(), "file must exist after write");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "KERNEL_OK");
@@ -89,7 +96,9 @@ mod tests {
         let path = dir.join("a.txt");
         let _ = std::fs::remove_dir_all(&dir);
         let args = json!({ "input": { "path": path.to_string_lossy(), "content": "hi" } });
-        native_write_file(&args).await.expect("nested input should work");
+        native_write_file(&args)
+            .await
+            .expect("nested input should work");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hi");
         let _ = std::fs::remove_dir_all(&dir);
     }
