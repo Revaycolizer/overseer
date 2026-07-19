@@ -73,7 +73,7 @@ fn tokenise(text: &str) -> Vec<String> {
         "its", "this", "that", "these", "those", "i", "we", "you", "he",
         "she", "they", "me", "him", "her", "us", "them", "my", "your",
         "his", "her", "our", "their", "not", "no", "nor", "so", "if",
-        "then", "than", "too", "very", "just", "about", "also", "more",
+        "then", "than", "too", "very", "just", "about", "also", "more", "over",
     ];
     let stop_set: HashSet<&str> = STOP_WORDS.iter().copied().collect();
 
