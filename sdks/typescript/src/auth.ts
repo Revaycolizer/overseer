@@ -1,6 +1,6 @@
 /** Authentication management for the Overseer client. */
 
-import type { AuthResponse, UserProfile } from './types';
+import type { AuthResponse, UserProfile } from './types.js';
 
 export class AuthManager {
   private _token?: string;

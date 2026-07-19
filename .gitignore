@@ -19,5 +19,7 @@ overseer_files/assistant-*.png
 /software.md
 /assets/voice/
 
+**/node_modules/
+
 
 

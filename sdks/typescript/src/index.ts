@@ -17,8 +17,8 @@
  * ```
  */
 
-export { OverseerClient } from './client';
-export type { OverseerClientOptions } from './client';
+export { OverseerClient } from './client.js';
+export type { OverseerClientOptions } from './client.js';
 export {
   ConversationsAPI,
   MessagesAPI,
@@ -36,11 +36,11 @@ export {
   TemplatesAPI,
   SettingsAPI,
   SystemAPI,
-} from './client';
+} from './client.js';
 
 export {
   ApiError,
-} from './types';
+} from './types.js';
 
 export type {
   // Auth
@@ -83,4 +83,4 @@ export type {
   WorkflowTemplate,
   // Browser
   BrowserSessionInfo,
-} from './types';
+} from './types.js';

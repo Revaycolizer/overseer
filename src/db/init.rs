@@ -142,10 +142,9 @@ impl Database {
     }
 
     /// Test-only: a fresh in-memory database with all migrations applied (no seed
-    /// data, no runtime staging). Used by the main-crate kernel bridge integration
-    /// test so it can exercise the real glue without touching the user's DB.
-    #[cfg(test)]
-    pub(crate) async fn new_in_memory() -> anyhow::Result<Self> {
+    /// data, no runtime staging). Used by integration tests so they can exercise
+    /// routes without touching the user's DB or depending on Ollama.
+    pub async fn new_in_memory() -> anyhow::Result<Self> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
