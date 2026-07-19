@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "overseer-client"
+version = "0.1.0"
+description = "Python client for the Overseer AI orchestration platform"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Revaycolizer", email = "albinuslucas@gmail.com" },
+]
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.5.0",
+    "rich>=13.7.0",
+    "click>=8.1.0",
+]
+keywords = ["ai", "agent", "orchestration", "client", "overseer"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/revaycolizer/overseer"
+Repository = "https://github.com/revaycolizer/overseer"
+Documentation = "https://github.com/revaycolizer/overseer/blob/main/sdks/python/README.md"
+
+[project.scripts]
+overseer = "overseer.__main__:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["overseer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

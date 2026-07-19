@@ -1,0 +1,9 @@
+[package]
+name = "overseer-rust-quickstart"
+version = "0.1.0"
+edition = "2021"
+description = "Quickstart example for the Overseer Rust SDK"
+
+[dependencies]
+overseer-client = { path = "../../../crates/overseer-client" }
+tokio = { version = "1.49", features = ["full"] }

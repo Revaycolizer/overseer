@@ -1,10 +1,11 @@
-# Publish crates to crates.io and PyPI on version tags.
+# Publish SDK packages to all registries.
 #
 # Triggered by:
-#   git tag v0.1.0       # Publish overseer-kernel + overseer-client
-#   git tag kernel-v0.1.0 # Publish only overseer-kernel
-#   git tag client-v0.1.0 # Publish only overseer-client
-#   git tag py-v0.1.0     # Publish Python client to PyPI
+#   git tag v0.1.0           Publish all packages
+#   git tag kernel-v0.1.0    Publish only overseer-kernel
+#   git tag client-v0.1.0    Publish only overseer-client
+#   git tag py-v0.1.0        Publish Python client to PyPI
+#   git tag npm-v0.1.0       Publish TypeScript client to npm
 
 name: Publish SDK packages
 
@@ -15,15 +16,16 @@ on:
       - "kernel-*"
       - "client-*"
       - "py-*"
+      - "npm-*"
 
 jobs:
-  # ── Determine which packages to publish ──────────────────────────────
   select:
     runs-on: ubuntu-latest
     outputs:
       publish_kernel: ${{ steps.check.outputs.kernel }}
       publish_client: ${{ steps.check.outputs.client }}
       publish_python: ${{ steps.check.outputs.python }}
+      publish_npm: ${{ steps.check.outputs.npm }}
     steps:
       - name: Parse tag
         id: check
@@ -32,14 +34,19 @@ jobs:
           echo "kernel=false" >> $GITHUB_OUTPUT
           echo "client=false" >> $GITHUB_OUTPUT
           echo "python=false" >> $GITHUB_OUTPUT
+          echo "npm=false" >> $GITHUB_OUTPUT
           case "$TAG" in
-            v*) echo "kernel=true" >> $GITHUB_OUTPUT ; echo "client=true" >> $GITHUB_OUTPUT ;;
+            v*) echo "kernel=true" >> $GITHUB_OUTPUT
+                echo "client=true" >> $GITHUB_OUTPUT
+                echo "python=true" >> $GITHUB_OUTPUT
+                echo "npm=true" >> $GITHUB_OUTPUT ;;
             kernel-*) echo "kernel=true" >> $GITHUB_OUTPUT ;;
             client-*) echo "client=true" >> $GITHUB_OUTPUT ;;
-            py-*) echo "python=true" >> $GITHUB_OUTPUT ;;
+            py-*)    echo "python=true" >> $GITHUB_OUTPUT ;;
+            npm-*)   echo "npm=true" >> $GITHUB_OUTPUT ;;
           esac
 
-  # ── Publish overseer-kernel to crates.io ─────────────────────────────
+  # ── overseer-kernel → crates.io ─────────────────────────────────────
   publish-kernel:
     needs: [select]
     if: needs.select.outputs.publish_kernel == 'true'
@@ -47,12 +54,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish -p overseer-kernel
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
 
-  # ── Publish overseer-client to crates.io ─────────────────────────────
+  # ── overseer-client → crates.io ─────────────────────────────────────
   publish-client:
     needs: [select]
     if: needs.select.outputs.publish_client == 'true'
@@ -60,19 +66,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
       - run: cargo publish -p overseer-client
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
 
-  # ── Publish Python client to PyPI ────────────────────────────────────
+  # ── Python SDK → PyPI ────────────────────────────────────────────────
   publish-python:
     needs: [select]
     if: needs.select.outputs.publish_python == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: scripts
+        working-directory: sdks/python
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -81,3 +86,23 @@ jobs:
       - run: pip install build twine
       - run: python -m build
       - run: twine upload dist/* -u __token__ -p ${{ secrets.PYPI_TOKEN }}
+
+  # ── TypeScript SDK → npm ─────────────────────────────────────────────
+  publish-npm:
+    needs: [select]
+    if: needs.select.outputs.publish_npm == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
