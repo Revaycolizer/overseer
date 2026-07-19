@@ -1,7 +1,8 @@
 use dioxus::prelude::*;
 use dioxus_material_icons::MaterialIcon;
+use std::sync::Arc;
+use crate::db::Database;
 
-/// A managed credential displayed in the settings panel.
 #[derive(Clone, PartialEq)]
 struct Credential {
     id: i64,
@@ -9,33 +10,71 @@ struct Credential {
     cred_type: String,
 }
 
-/// Settings section for managing API keys and credentials.
-///
-/// Credentials are stored encrypted in the database and used by
-/// workflow steps and tool executions that require external service auth.
-/// The encrypted values are never displayed — only the name and type.
+#[component]
+fn CredentialRow(cred: Credential, db: Arc<Database>, reload: Signal<u32>) -> Element {
+    let on_delete = move |_| {
+        let db = db.clone();
+        let cid = cred.id;
+        spawn(async move {
+            let _ = sqlx::query("DELETE FROM credentials WHERE id = ?")
+                .bind(cid)
+                .execute(&db.pool)
+                .await;
+            reload += 1;
+        });
+    };
+
+    rsx! {
+        div { class: "flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 px-4 py-3",
+            div { class: "flex items-center gap-3",
+                MaterialIcon {
+                    name: match cred.cred_type.as_str() {
+                        "api_key" => "vpn_key",
+                        "password" => "lock",
+                        "token" => "confirmation_number",
+                        _ => "key",
+                    },
+                    size: 16
+                }
+                div {
+                    p { class: "text-sm font-medium text-slate-900", "{cred.name}" }
+                    p { class: "text-xs text-slate-400", "{cred.cred_type}" }
+                }
+            }
+            button {
+                class: "rounded-lg px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 transition-all",
+                onclick: on_delete,
+                "Delete"
+            }
+        }
+    }
+}
+
 #[component]
 pub fn CredentialsSection() -> Element {
     let state = crate::state::use_global_state();
     let db = state.read().db.clone();
+    let db_signal = use_signal(move || db);
 
-    // Reload trigger
-    let mut reload = use_signal(|| 0u32);
-
-    let credentials = use_resource({
-        let db = db.clone();
-        move || {
-            let _ = *reload.read(); // subscribe to reloads
-            load_credentials(db.clone())
-        }
+    let credentials_data = use_resource({
+        let db_s = db_signal.clone();
+        move || load_credentials((*db_s.read()).clone())
     });
 
-    let mut show_add_form = use_signal(|| false);
-    let mut new_name = use_signal(|| String::new());
-    let mut new_value = use_signal(|| String::new());
-    let mut new_type = use_signal(|| "api_key".to_string());
+    let mut show_add = use_signal(|| false);
+    let mut cred_name = use_signal(|| String::new());
+    let mut cred_value = use_signal(|| String::new());
+    let mut cred_type = use_signal(|| "api_key".to_string());
     let mut error_msg = use_signal(|| String::new());
     let mut status_msg = use_signal(|| String::new());
+    let mut reload_flag = use_signal(|| 0u32);
+    let _ = *reload_flag.read();
+
+    let cred_list: Vec<Credential> = match credentials_data.read().clone() {
+        Some(Ok(list)) => list,
+        _ => vec![],
+    };
+    drop(credentials_data);
 
     rsx! {
         div { class: "rounded-2xl border border-slate-200 bg-white p-6 space-y-5",
@@ -46,7 +85,7 @@ pub fn CredentialsSection() -> Element {
                 }
                 button {
                     class: "inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 transition-all",
-                    onclick: move |_| show_add_form.set(true),
+                    onclick: move |_| show_add.set(true),
                     MaterialIcon { name: "add", size: 14 }
                     "Add Credential"
                 }
@@ -56,7 +95,6 @@ pub fn CredentialsSection() -> Element {
                 "Encrypted API keys and secrets used by tools and workflow steps."
             }
 
-            // Status / Error display
             if !error_msg.read().is_empty() {
                 div { class: "rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700",
                     "{error_msg}"
@@ -68,22 +106,20 @@ pub fn CredentialsSection() -> Element {
                 }
             }
 
-            // Add form
-            if *show_add_form.read() {
+            if *show_add.read() {
                 div { class: "rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3",
                     h4 { class: "text-sm font-semibold text-slate-700", "New Credential" }
-                    
                     div { class: "grid grid-cols-1 md:grid-cols-3 gap-3",
                         input {
                             class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400",
                             placeholder: "Name (e.g. OPENAI_API_KEY)",
-                            value: "{new_name}",
-                            oninput: move |e| new_name.set(e.value()),
+                            value: "{cred_name}",
+                            oninput: move |e| cred_name.set(e.value()),
                         }
                         select {
                             class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400",
-                            value: "{new_type}",
-                            onchange: move |e| new_type.set(e.value()),
+                            value: "{cred_type}",
+                            onchange: move |e| cred_type.set(e.value()),
                             option { value: "api_key", "API Key" }
                             option { value: "password", "Password" }
                             option { value: "token", "Token" }
@@ -92,19 +128,18 @@ pub fn CredentialsSection() -> Element {
                         input {
                             class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400",
                             placeholder: "Value (will be encrypted)",
-                            value: "{new_value}",
-                            oninput: move |e| new_value.set(e.value()),
+                            value: "{cred_value}",
+                            oninput: move |e| cred_value.set(e.value()),
                             r#type: "password",
                         }
                     }
-
                     div { class: "flex justify-end gap-2",
                         button {
                             class: "rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-all",
                             onclick: move |_| {
-                                show_add_form.set(false);
-                                new_name.set(String::new());
-                                new_value.set(String::new());
+                                show_add.set(false);
+                                cred_name.set(String::new());
+                                cred_value.set(String::new());
                                 error_msg.set(String::new());
                                 status_msg.set(String::new());
                             },
@@ -113,38 +148,30 @@ pub fn CredentialsSection() -> Element {
                         button {
                             class: "rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 transition-all",
                             onclick: move |_| {
-                                let name = new_name.read().clone();
-                                let value = new_value.read().clone();
-                                let ct = new_type.read().clone();
+                                let name = cred_name.read().clone();
+                                let value = cred_value.read().clone();
+                                let ct = cred_type.read().clone();
+                                let db = (*db_signal.read()).clone();
                                 if name.trim().is_empty() || value.trim().is_empty() {
                                     error_msg.set("Name and value are required.".to_string());
                                     return;
                                 }
-                                let db = db.clone();
-                                let name_c = name.clone();
-                                let ct_c = ct.clone();
-                                let value_c = value.clone();
+                                let nc = name.clone();
                                 spawn(async move {
-                                    match crate::engine::workflow::credentials::encrypt(&value_c) {
+                                    match crate::engine::workflow::credentials::encrypt(&value) {
                                         Ok(encrypted) => {
                                             let id = db.next_id().await;
-                                            let result = sqlx::query(
+                                            let r = sqlx::query(
                                                 "INSERT INTO credentials (id, name, cred_type, encrypted_value, owner_id) VALUES (?, ?, ?, ?, 1)"
-                                            )
-                                            .bind(id)
-                                            .bind(&name_c)
-                                            .bind(&ct_c)
-                                            .bind(&encrypted)
-                                            .execute(&db.pool)
-                                            .await;
-                                            match result {
+                                            ).bind(id).bind(&name).bind(&ct).bind(&encrypted).execute(&db.pool).await;
+                                            match r {
                                                 Ok(_) => {
-                                                    new_name.set(String::new());
-                                                    new_value.set(String::new());
-                                                    show_add_form.set(false);
+                                                    cred_name.set(String::new());
+                                                    cred_value.set(String::new());
+                                                    show_add.set(false);
                                                     error_msg.set(String::new());
-                                                    status_msg.set(format!("Credential '{}' saved.", name_c));
-                                                    reload += 1;
+                                                    status_msg.set(format!("Credential '{}' saved.", nc));
+                                                    reload_flag += 1;
                                                 }
                                                 Err(e) => error_msg.set(e.to_string()),
                                             }
@@ -159,61 +186,20 @@ pub fn CredentialsSection() -> Element {
                 }
             }
 
-            // Credential list
-            match credentials.read().as_ref() {
-                Some(Ok(list)) if list.is_empty() => {
-                    div { class: "rounded-xl border-2 border-dashed border-slate-200 p-6 text-center",
-                        p { class: "text-xs font-medium text-slate-400",
-                            "No credentials stored. Add an API key or secret above."
+            if cred_list.is_empty() {
+                div { class: "rounded-xl border-2 border-dashed border-slate-200 p-6 text-center",
+                    p { class: "text-xs font-medium text-slate-400",
+                        "No credentials stored. Add an API key or secret above."
+                    }
+                }
+            } else {
+                div { class: "space-y-2",
+                    for cred in cred_list {
+                        CredentialRow {
+                            cred: cred,
+                            db: (*db_signal.read()).clone(),
+                            reload: reload_flag,
                         }
-                    }
-                }
-                Some(Ok(list)) => {
-                    div { class: "space-y-2",
-                        for cred in list {
-                            div { class: "flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 px-4 py-3",
-                                div { class: "flex items-center gap-3",
-                                    MaterialIcon { 
-                                        name: match cred.cred_type.as_str() {
-                                            "api_key" => "vpn_key",
-                                            "password" => "lock",
-                                            "token" => "confirmation_number",
-                                            _ => "key",
-                                        }, 
-                                        size: 16 
-                                    }
-                                    div {
-                                        p { class: "text-sm font-medium text-slate-900", "{cred.name}" }
-                                        p { class: "text-xs text-slate-400", "{cred.cred_type}" }
-                                    }
-                                }
-                                button {
-                                    class: "rounded-lg px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 transition-all",
-                                    onclick: move |_| {
-                                        let db = db.clone();
-                                        let id = cred.id;
-                                        spawn(async move {
-                                            let _ = sqlx::query("DELETE FROM credentials WHERE id = ?")
-                                                .bind(id)
-                                                .execute(&db.pool)
-                                                .await;
-                                            reload += 1;
-                                        });
-                                    },
-                                    "Delete"
-                                }
-                            }
-                        }
-                    }
-                }
-                Some(Err(e)) => {
-                    div { class: "rounded-lg bg-red-50 p-4 text-sm text-red-700",
-                        "Failed to load credentials: {e}"
-                    }
-                }
-                None => {
-                    div { class: "text-center py-4",
-                        p { class: "text-sm text-slate-400", "Loading credentials..." }
                     }
                 }
             }
@@ -221,13 +207,12 @@ pub fn CredentialsSection() -> Element {
     }
 }
 
-async fn load_credentials(db: std::sync::Arc<crate::db::Database>) -> Result<Vec<Credential>, String> {
+async fn load_credentials(db: Arc<Database>) -> Result<Vec<Credential>, String> {
     let rows = sqlx::query_as::<_, (i64, String, String)>(
         "SELECT id, name, cred_type FROM credentials ORDER BY created_at DESC"
     )
     .fetch_all(&db.pool)
     .await
     .map_err(|e| e.to_string())?;
-    
-    Ok(rows.into_iter().map(|(id, name, cred_type)| Credential { id, name, cred_type }).collect())
+    Ok(rows.into_iter().map(|(id, name, ct)| Credential { id, name, cred_type: ct }).collect())
 }

@@ -10,21 +10,28 @@ pub fn CachingSection() -> Element {
     let state = crate::state::use_global_state();
     let db = state.read().db.clone();
 
-    let mut redis_url = use_resource({
-        let db = db.clone();
-        move || crate::backend::get_setting_or(&db, "redis_url", "")
-    });
-
     let mut url_input = use_signal(|| String::new());
     let mut saved_msg = use_signal(|| String::new());
 
-    // Initialise input field when redis_url loads
-    {
-        let url = redis_url.read().clone();
-        if !url.is_empty() && url_input.read().is_empty() {
-            url_input.set(url);
+    let db_for_resource = db.clone();
+    // Load redis_url setting on first render
+    let stored_url = use_resource(move || {
+        let db = db_for_resource.clone();
+        async move {
+            crate::backend::get_setting(&db, "redis_url").await
+        }
+    });
+
+    // Initialise input field when stored_url loads
+    let stored_val = stored_url.read().clone();
+    if let Some(ref url) = stored_val {
+        if url_input.read().is_empty() {
+            url_input.set(url.clone());
         }
     }
+
+    let use_redis = stored_val.as_ref().map_or(false, |s| !s.is_empty());
+    let db_clone = db.clone();
 
     rsx! {
         div { class: "rounded-2xl border border-slate-200 bg-white p-6 space-y-5",
@@ -48,18 +55,15 @@ pub fn CachingSection() -> Element {
             div { class: "rounded-xl bg-slate-50 p-4 space-y-2",
                 div { class: "flex items-center justify-between",
                     span { class: "text-sm font-medium text-slate-700", "Cache Backend" }
-                    match redis_url.read().as_str() {
-                        "" | "null" => {
-                            span { class: "inline-flex items-center gap-1 rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-600",
-                                MaterialIcon { name: "memory", size: 12 }
-                                "In-Memory LRU"
-                            }
+                    if use_redis {
+                        span { class: "inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700",
+                            MaterialIcon { name: "hub", size: 12 }
+                            "Redis"
                         }
-                        _ => {
-                            span { class: "inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700",
-                                MaterialIcon { name: "hub", size: 12 }
-                                "Redis"
-                            }
+                    } else {
+                        span { class: "inline-flex items-center gap-1 rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-600",
+                            MaterialIcon { name: "memory", size: 12 }
+                            "In-Memory LRU"
                         }
                     }
                 }
@@ -94,13 +98,12 @@ pub fn CachingSection() -> Element {
                     button {
                         class: "rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 transition-all",
                         onclick: move |_| {
-                            let db = db.clone();
+                            let db = db_clone.clone();
                             let val = url_input.read().clone();
                             saved_msg.set(String::new());
                             spawn(async move {
                                 match crate::backend::set_setting(&db, "redis_url", &val).await {
                                     Ok(_) => {
-                                        redis_url.restart();
                                         saved_msg.set("Redis URL saved. Restart Overseer to apply the new cache backend.".to_string());
                                     }
                                     Err(e) => {

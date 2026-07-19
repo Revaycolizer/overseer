@@ -188,13 +188,13 @@ impl LatticeCoordinator {
         ];
 
         let mut research_score =
-            research_keywords.iter().filter(|kw| lower.contains(kw)).count();
+            research_keywords.iter().filter(|kw| lower.contains(*kw)).count();
         let creative_score =
-            creative_keywords.iter().filter(|kw| lower.contains(kw)).count();
+            creative_keywords.iter().filter(|kw| lower.contains(*kw)).count();
         let technical_score =
-            technical_keywords.iter().filter(|kw| lower.contains(kw)).count();
+            technical_keywords.iter().filter(|kw| lower.contains(*kw)).count();
         let analysis_score =
-            analysis_keywords.iter().filter(|kw| lower.contains(kw)).count();
+            analysis_keywords.iter().filter(|kw| lower.contains(*kw)).count();
 
         // Short queries are typically simple
         if lower.split_whitespace().count() <= 3 && research_score == 0 && creative_score == 0 {

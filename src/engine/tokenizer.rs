@@ -111,7 +111,7 @@ pub async fn fetch_model_context_size(model: &str) -> Option<usize> {
                                 .and_then(|n| n.parse::<usize>().ok())
                         })
                     {
-                        let _ = model_cache().map(|mut c| c.insert(model_lower, ctx));
+                        let _ = model_cache().write().map(|mut c| c.insert(model_lower, ctx));
                         return Some(ctx);
                     }
                     None
