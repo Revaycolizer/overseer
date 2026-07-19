@@ -86,6 +86,9 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
             // Metrics tab: just refresh on any key
             let _ = app.refresh_metrics().await;
         }
+        ActiveTab::Agents => {
+            handle_agent_keys(app, key).await?;
+        }
         _ => {
             // Placeholder tabs — any key shows coming-soon message
             if key.code == KeyCode::Enter || key.code == KeyCode::Char(' ') {
@@ -166,6 +169,55 @@ async fn handle_chat_key(app: &mut App, key: KeyEvent, is_orch: bool) -> anyhow:
         } else {
             app.status_message = "No matching command".to_string();
         }
+    }
+    Ok(())
+}
+
+async fn handle_agent_keys(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
+    match key.code {
+        KeyCode::Up => {
+            if let Some(idx) = app.agents.iter().position(|a| Some(a.id) == app.selected_agent_id) {
+                if idx > 0 {
+                    app.selected_agent_id = Some(app.agents[idx - 1].id);
+                    app.activity.bump();
+                }
+            } else if !app.agents.is_empty() {
+                app.selected_agent_id = Some(app.agents[0].id);
+            }
+        }
+        KeyCode::Down => {
+            if let Some(idx) = app.agents.iter().position(|a| Some(a.id) == app.selected_agent_id) {
+                if idx + 1 < app.agents.len() {
+                    app.selected_agent_id = Some(app.agents[idx + 1].id);
+                    app.activity.bump();
+                }
+            } else if !app.agents.is_empty() {
+                app.selected_agent_id = Some(app.agents[0].id);
+            }
+        }
+        KeyCode::F(3) => {
+            // New agent (placeholder)
+            app.status_message = "New Agent: not yet implemented (will open creation form)".to_string();
+            app.activity.bump();
+        }
+        KeyCode::F(2) => {
+            // Edit agent (placeholder)
+            app.status_message = "Edit Agent: not yet implemented (will open edit form)".to_string();
+            app.activity.bump();
+        }
+        KeyCode::Delete => {
+            // Delete agent (placeholder)
+            if let Some(id) = app.selected_agent_id {
+                app.status_message = format!("Delete agent {}: not yet implemented", id);
+                app.activity.bump();
+            }
+        }
+        KeyCode::Esc => {
+            // Switch back to chat
+            app.active_tab = ActiveTab::Chat;
+            app.activity.bump();
+        }
+        _ => {}
     }
     Ok(())
 }
