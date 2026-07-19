@@ -43,7 +43,7 @@ pub fn ConversationsContent(
     let active_workspace_session_key = state.active_workspace_session_key;
 
     rsx! {
-        div { class: "h-full grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px]",
+        div { class: if is_first_msg { "h-full grid grid-cols-1" } else { "h-full grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px]" },
             div { class: "flex flex-col min-w-0 min-h-0",
                 if !workspace_sessions.is_empty() {
                     div { class: "border-b border-slate-200 bg-white/70 px-6 py-4",
@@ -70,12 +70,14 @@ pub fn ConversationsContent(
                     load_more: load_more_cb,
                 }
             }
-            div { class: "h-full min-h-0 flex flex-col",
-                RuntimeRegistryPanel { status: runtime_registry_status }
-                RecentArtifactsPanel { artifacts: artifacts, selected_artifacts: selected_artifacts, focused_artifact: state.focused_artifact, on_open: move |path: String| { spawn(async move { let _ = backend::open_local_path(&path).await; }); } }
-                WorkboardPanel { db: db.clone(), agent_system: agent_system.clone(), messages_resource: messages_resource.clone(), visible_messages: visible_messages, work_items: work_items, selected_work_item: selected_work_item, is_thinking: is_thinking, starter_prompt: starter_prompt, work_items_resource: work_items_resource.clone(), execution_runs_resource: execution_runs_resource.clone(), artifacts_resource: artifacts_resource.clone(), work_item_events_resource: work_item_events_resource.clone(), selected_execution_run_id: selected_execution_run_id }
-                div { class: "flex-1 min-h-0",
-                    ExecutionTracePanel { heading: "Conversation Trace".to_string(), subtitle: "Inspect the planner, supervisor, tool, and synthesis events behind this conversation.".to_string(), empty_title: "No runs yet".to_string(), empty_body: "Send a message and Overseer will capture execution runs here so you can inspect what happened.".to_string(), runs: execution_runs, events: execution_events, selected_run_id: selected_execution_run_id, runs_loading: runs_loading, events_loading: events_loading }
+            if !is_first_msg {
+                div { class: "h-full min-h-0 flex flex-col border-l border-slate-200",
+                    RuntimeRegistryPanel { status: runtime_registry_status }
+                    RecentArtifactsPanel { artifacts: artifacts, selected_artifacts: selected_artifacts, focused_artifact: state.focused_artifact, on_open: move |path: String| { spawn(async move { let _ = backend::open_local_path(&path).await; }); } }
+                    WorkboardPanel { db: db.clone(), agent_system: agent_system.clone(), messages_resource: messages_resource.clone(), visible_messages: visible_messages, work_items: work_items, selected_work_item: selected_work_item, is_thinking: is_thinking, starter_prompt: starter_prompt, work_items_resource: work_items_resource.clone(), execution_runs_resource: execution_runs_resource.clone(), artifacts_resource: artifacts_resource.clone(), work_item_events_resource: work_item_events_resource.clone(), selected_execution_run_id: selected_execution_run_id }
+                    div { class: "flex-1 min-h-0",
+                        ExecutionTracePanel { heading: "Trace".to_string(), subtitle: "".to_string(), empty_title: "No runs yet".to_string(), empty_body: "Runs will appear here once a message is sent.".to_string(), runs: execution_runs, events: execution_events, selected_run_id: selected_execution_run_id, runs_loading: runs_loading, events_loading: events_loading }
+                    }
                 }
             }
         }
