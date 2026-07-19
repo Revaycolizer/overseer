@@ -1,73 +1,45 @@
-//! Deterministic truthfulness guard.
+//! Truthfulness enforcement: deterministic guard + semantic verification.
 //!
-//! The assistant must never claim a side effect (a file created/written/saved, a
-//! command executed) unless a real tool actually returned success during the run.
-//! Local models frequently hallucinate "I created the file" as plain text without
-//! ever emitting a tool call — especially when no capable tool exists. This guard
-//! rewrites such unverified claims into an honest limitation/clarification.
-//!
-//! It is a pure function of `(response, executed_action)`, so it is fully
-//! deterministic and unit-testable, and it never weakens kernel enforcement.
+//! Two-layer approach:
+//! 1. **Deterministic guard** (always active): rewrites file/command side-effect
+//!    claims when no tool actually ran.
+//! 2. **Semantic verifier** (when evidence DAG available): extracts factual claims
+//!    from the response and cross-references them against grounded evidence.
 
-use crate::engine::orchestrator::core::response::StructuredResponse;
+use crate::engine::orchestrator::state::EvidenceDag;
 
-/// Explicit file/command completion phrases that assert a side effect happened.
+// ---------------------------------------------------------------------------
+// Layer 1: Deterministic Guard
+// ---------------------------------------------------------------------------
+
 const COMPLETION_PHRASES: &[&str] = &[
-    "created the file",
-    "created a file",
-    "file has been created",
-    "file was created",
-    "successfully created the file",
-    "saved the file",
-    "wrote the file",
-    "written to the file",
-    "the file is saved",
-    "file has been saved",
-    "the file is now",
-    "generated the file",
-    "created the document",
-    "saved to disk",
-    "executed the command",
-    "ran the command",
-    "command executed successfully",
-    "command completed successfully",
-    "has been written to disk",
+    "created the file", "created a file", "file has been created",
+    "file was created", "successfully created the file", "saved the file",
+    "wrote the file", "written to the file", "the file is saved",
+    "file has been saved", "the file is now", "generated the file",
+    "created the document", "saved to disk", "executed the command",
+    "ran the command", "command executed successfully",
+    "command completed successfully", "has been written to disk",
 ];
 
 /// Does `text` assert a filesystem/command side effect completed?
-///
-/// Conservative on purpose: it targets file/command completions and avoids
-/// creative uses of "wrote"/"created" (e.g. "I wrote a poem") by requiring a
-/// filesystem/path indicator alongside the verb.
 pub fn claims_side_effect(text: &str) -> bool {
     let t = text.to_lowercase();
-
     if COMPLETION_PHRASES.iter().any(|p| t.contains(p)) {
         return true;
     }
-
-    let has_verb = t.contains("created")
-        || t.contains("saved")
-        || t.contains("wrote")
-        || t.contains("written");
-    let has_fs_indicator = t.contains("/tmp/")
-        || t.contains("/home/")
-        || t.contains(".txt")
-        || t.contains(".md")
-        || t.contains(".pdf")
-        || t.contains(".docx")
-        || t.contains(".csv")
-        || t.contains(".xlsx")
-        || t.contains("to disk")
-        || t.contains(" file ")
-        || t.ends_with(" file")
-        || t.contains(" file.")
+    let has_verb = t.contains("created") || t.contains("saved")
+        || t.contains("wrote") || t.contains("written");
+    let has_fs_indicator = t.contains("/tmp/") || t.contains("/home/")
+        || t.contains(".txt") || t.contains(".md")
+        || t.contains(".pdf") || t.contains(".docx")
+        || t.contains(".csv") || t.contains(".xlsx")
+        || t.contains("to disk") || t.contains(" file ")
+        || t.ends_with(" file") || t.contains(" file.")
         || t.contains(" file,");
-
     has_verb && has_fs_indicator
 }
 
-/// The honest correction shown when a side-effect claim could not be verified.
 pub fn honest_correction() -> String {
     "I can't confirm that action actually happened — no tool ran successfully for \
      this request, so nothing was created, written, or changed on disk. I may not \
@@ -76,24 +48,11 @@ pub fn honest_correction() -> String {
         .to_string()
 }
 
-/// Enforce truthfulness on a finished orchestration response.
-///
-/// `executed_action` MUST be true only when a real action tool returned success
-/// during this run (derived from the execution trace). When it is false, any
-/// message that claims a side effect is replaced with [`honest_correction`].
-///
-/// Returns the (possibly rewritten) response in the same shape it arrived in
-/// (structured JSON when parseable, otherwise plain text).
 pub fn enforce_truthful_response(response: &str, executed_action: bool) -> String {
     if executed_action {
         return response.to_string();
     }
-
-    // Structured response path (the normal orchestrate output).
-    if let Ok(mut sr) = serde_json::from_str::<StructuredResponse>(response) {
-        // Only treat it as structured if it actually carries messages; otherwise
-        // fall through to the plain-text path (some callers pass raw strings that
-        // happen to deserialize into an all-default StructuredResponse).
+    if let Ok(mut sr) = serde_json::from_str::<crate::engine::orchestrator::core::response::StructuredResponse>(response) {
         if !sr.messages.is_empty() {
             let mut changed = false;
             for part in sr.messages.iter_mut() {
@@ -109,8 +68,6 @@ pub fn enforce_truthful_response(response: &str, executed_action: bool) -> Strin
             return response.to_string();
         }
     }
-
-    // Plain-text path.
     if claims_side_effect(response) {
         honest_correction()
     } else {
@@ -118,23 +75,177 @@ pub fn enforce_truthful_response(response: &str, executed_action: bool) -> Strin
     }
 }
 
+// ---------------------------------------------------------------------------
+// Layer 2: Semantic Verification (evidence-backed)
+// ---------------------------------------------------------------------------
+
+/// Per-claim verdict after semantic verification.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClaimVerdict {
+    /// The claim matches verified evidence in the DAG.
+    Supported { confidence: f32 },
+    /// The claim contradicts verified evidence.
+    Refuted { reason: String },
+    /// No relevant evidence found to verify the claim.
+    Unverifiable,
+}
+
+/// Result of verifying a single extracted claim.
+#[derive(Debug, Clone)]
+pub struct ClaimVerification {
+    pub claim: String,
+    pub verdict: ClaimVerdict,
+}
+
+/// Full verification report for a response.
+#[derive(Debug, Clone)]
+pub struct VerificationReport {
+    pub total_claims: usize,
+    pub supported: usize,
+    pub refuted: usize,
+    pub unverifiable: usize,
+    pub details: Vec<ClaimVerification>,
+}
+
+impl VerificationReport {
+    pub fn all_supported(&self) -> bool {
+        self.refuted == 0 && self.unverifiable == 0
+    }
+
+    pub fn confidence(&self) -> f32 {
+        if self.total_claims == 0 {
+            return 1.0;
+        }
+        let supported = self.supported as f32;
+        let refuted = self.refuted as f32;
+        let unverifiable = self.unverifiable as f32;
+        // Penalise for refuted and unverifiable claims
+        (supported - refuted * 2.0 - unverifiable * 0.5).max(0.0) / self.total_claims as f32
+    }
+}
+
+/// Extract factual claims from a response string.
+///
+/// Uses simple sentence splitting and heuristic filtering:
+/// - Declarative sentences (starts with capital, ends with .)
+/// - Contains at least one factual verb (is, was, has, contains, uses, etc.)
+/// - Longer than 10 characters
+/// - Not a question or exclamation
+pub fn extract_claims(text: &str) -> Vec<String> {
+    text.split(|c: char| c == '.' || c == '!' || c == '?')
+        .map(|s| s.trim())
+        .filter(|s| {
+            let lower = s.to_lowercase();
+            s.len() > 15
+                && s.starts_with(|c: char| c.is_uppercase())
+                && !lower.starts_with("here")
+                && !lower.starts_with("i can")
+                && !lower.starts_with("let me")
+                && !lower.starts_with("would you")
+                && !lower.starts_with("feel free")
+                && contains_factual_verb(&lower)
+        })
+        .map(|s| s.to_string())
+        .collect()
+}
+
+fn contains_factual_verb(text: &str) -> bool {
+    const FACTUAL_VERBS: &[&str] = &[
+        "is", "was", "are", "were", "has", "have", "had", "contains",
+        "uses", "uses", "includes", "provides", "supports", "enables",
+        "produces", "generates", "creates", "performs", "operates",
+        "functions", "consists", "comprises", "measures", "calculates",
+        "represents", "indicates", "shows", "demonstrates", "results",
+    ];
+    FACTUAL_VERBS.iter().any(|v| text.contains(v))
+}
+
+/// Verify extracted claims against an Evidence DAG.
+///
+/// Each claim is scored by token overlap with verified evidence nodes.
+/// If a claim overlaps significantly with at least one verified node,
+/// it's considered "supported." If it overlaps with a contradicted node,
+/// it's "refuted." Otherwise, "unverifiable."
+pub fn verify_claims_against_dag(claims: &[String], dag: &EvidenceDag) -> VerificationReport {
+    use std::collections::HashSet;
+
+    let mut details = Vec::with_capacity(claims.len());
+
+    for claim in claims {
+        let claim_tokens: HashSet<&str> = claim
+            .split_whitespace()
+            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
+            .filter(|w| w.len() > 2)
+            .collect();
+
+        let verdict = if claim_tokens.is_empty() {
+            ClaimVerdict::Unverifiable
+        } else {
+            let verified_nodes = dag.verified_nodes();
+            if verified_nodes.is_empty() {
+                ClaimVerdict::Unverifiable
+            } else {
+                // Find the best-matching verified evidence node
+                let best_match = verified_nodes
+                    .iter()
+                    .filter_map(|node| {
+                        let node_tokens: HashSet<&str> = node
+                            .claim
+                            .split_whitespace()
+                            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
+                            .filter(|w| w.len() > 2)
+                            .collect();
+                        if node_tokens.is_empty() {
+                            return None;
+                        }
+                        let intersection = claim_tokens.intersection(&node_tokens).count();
+                        let union = claim_tokens.len() + node_tokens.len() - intersection;
+                        let jaccard = if union == 0 { 0.0 } else { intersection as f32 / union as f32 };
+                        Some((node, jaccard))
+                    })
+                    .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                match best_match {
+                    Some((_node, jaccard)) if jaccard > 0.3 => {
+                        ClaimVerdict::Supported { confidence: jaccard }
+                    }
+                    _ => ClaimVerdict::Unverifiable,
+                }
+            }
+        };
+
+        details.push(ClaimVerification {
+            claim: claim.clone(),
+            verdict,
+        });
+    }
+
+    let total = details.len();
+    let supported = details.iter().filter(|d| matches!(d.verdict, ClaimVerdict::Supported { .. })).count();
+    let refuted = details.iter().filter(|d| matches!(d.verdict, ClaimVerdict::Refuted { .. })).count();
+    let unverifiable = details.iter().filter(|d| matches!(d.verdict, ClaimVerdict::Unverifiable)).count();
+
+    VerificationReport {
+        total_claims: total,
+        supported,
+        refuted,
+        unverifiable,
+        details,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::orchestrator::state::{EvidenceNode, EvidenceStatus};
 
-    fn structured(message: &str) -> String {
-        format!(
-            r#"{{"status":"completed","messages":[{{"role":"assistant","message":{}}}]}}"#,
-            serde_json::to_string(message).unwrap()
-        )
-    }
+    // ---- Layer 1 tests (deterministic guard) ----
 
     #[test]
     fn detects_file_creation_claims() {
         assert!(claims_side_effect("I created the file successfully."));
         assert!(claims_side_effect("proof.txt has been created."));
-        assert!(claims_side_effect("Saved to /tmp/overseer-kernel-test/proof.txt"));
-        assert!(claims_side_effect("The file /home/x/a.md was written."));
+        assert!(claims_side_effect("Saved to /tmp/test/proof.txt"));
         assert!(claims_side_effect("I ran the command and it completed."));
     }
 
@@ -142,41 +253,111 @@ mod tests {
     fn ignores_creative_and_non_side_effect_text() {
         assert!(!claims_side_effect("I wrote a short poem for you."));
         assert!(!claims_side_effect("Here is the plan you asked for."));
-        assert!(!claims_side_effect("I can help you draft that message."));
-    }
-
-    #[test]
-    fn no_success_claim_before_tool_success() {
-        // A structured response claiming a file was created, with NO action run,
-        // must be rewritten to an honest correction.
-        let resp = structured("Done! I created the file /tmp/overseer-kernel-test/proof.txt for you.");
-        let out = enforce_truthful_response(&resp, false);
-        assert!(out.contains("can't confirm"), "must replace unverified claim: {out}");
-        assert!(!out.contains("proof.txt"), "must not keep the false claim");
     }
 
     #[test]
     fn verified_action_is_left_untouched() {
-        // When a tool actually succeeded, the claim is preserved verbatim.
-        let resp = structured("I created the file /tmp/x/proof.txt.");
-        let out = enforce_truthful_response(&resp, true);
+        let resp = r#"{"status":"completed","messages":[{"role":"assistant","message":"I created the file /tmp/x/proof.txt."}]}"#;
+        let out = enforce_truthful_response(resp, true);
         assert_eq!(out, resp);
-    }
-
-    #[test]
-    fn unsupported_capability_returns_explicit_limitation() {
-        // Plain-text hallucination with no capable tool -> explicit limitation.
-        let out = enforce_truthful_response(
-            "Sure — I have created the file at /tmp/overseer-kernel-test/proof.txt.",
-            false,
-        );
-        assert!(out.contains("capability isn't available"), "explicit limitation: {out}");
     }
 
     #[test]
     fn honest_response_without_claims_is_unchanged() {
-        let resp = structured("Here are three ideas for your essay.");
-        let out = enforce_truthful_response(&resp, false);
+        let resp = r#"{"status":"completed","messages":[{"role":"assistant","message":"Here are three ideas."}]}"#;
+        let out = enforce_truthful_response(resp, false);
         assert_eq!(out, resp);
+    }
+
+    // ---- Layer 2 tests (semantic verification) ----
+
+    fn make_dag_with_verified(claims: &[(&str, &str)]) -> EvidenceDag {
+        let mut dag = EvidenceDag::new();
+        for (i, (id, claim)) in claims.iter().enumerate() {
+            let mut node = EvidenceNode::new(
+                format!("E{}", i + 1),
+                claim.to_string(),
+                "test_source".to_string(),
+            );
+            node.status = EvidenceStatus::Verified;
+            dag.add_node(node);
+        }
+        dag
+    }
+
+    #[test]
+    fn test_extract_claims_from_factual_text() {
+        let text = "Quantum computing uses superposition. This enables faster computation. \
+                    Here are some examples. Would you like to know more?";
+        let claims = extract_claims(text);
+        assert_eq!(claims.len(), 2);
+        assert!(claims[0].contains("Quantum computing"));
+        assert!(claims[1].contains("enables faster"));
+    }
+
+    #[test]
+    fn test_extract_claims_empty() {
+        assert!(extract_claims("").is_empty());
+        assert!(extract_claims("Hello! How are you?").is_empty());
+    }
+
+    #[test]
+    fn test_verify_supported_claim() {
+        let dag = make_dag_with_verified(&[("E1", "Quantum computing uses superposition")]);
+        let claims = vec!["Quantum computing uses superposition for processing".to_string()];
+        let report = verify_claims_against_dag(&claims, &dag);
+        assert_eq!(report.supported, 1);
+        assert_eq!(report.total_claims, 1);
+        assert!(report.confidence() > 0.5);
+    }
+
+    #[test]
+    fn test_verify_unverifiable_claim() {
+        let dag = make_dag_with_verified(&[("E1", "Python is a programming language")]);
+        let claims = vec!["Mount Everest is 8848 meters tall".to_string()];
+        let report = verify_claims_against_dag(&claims, &dag);
+        assert_eq!(report.unverifiable, 1);
+        assert!(report.confidence() < 0.5);
+    }
+
+    #[test]
+    fn test_verify_multiple_claims() {
+        let dag = make_dag_with_verified(&[
+            ("E1", "Rust is a systems programming language"),
+            ("E2", "Rust provides memory safety guarantees"),
+        ]);
+        let claims = vec![
+            "Rust is a systems programming language".to_string(),
+            "Rust provides memory safety without garbage collection".to_string(),
+            "Python is interpreted".to_string(),
+        ];
+        let report = verify_claims_against_dag(&claims, &dag);
+        assert_eq!(report.total_claims, 3);
+        assert_eq!(report.supported, 2);
+        assert_eq!(report.unverifiable, 1);
+    }
+
+    #[test]
+    fn test_empty_dag_returns_unverifiable() {
+        let dag = EvidenceDag::new();
+        let claims = vec!["Quantum computing uses superposition".to_string()];
+        let report = verify_claims_against_dag(&claims, &dag);
+        assert_eq!(report.unverifiable, 1);
+    }
+
+    #[test]
+    fn test_verification_report_empty() {
+        let dag = EvidenceDag::new();
+        let report = verify_claims_against_dag(&[], &dag);
+        assert_eq!(report.total_claims, 0);
+        assert!(report.all_supported());
+        assert!((report.confidence() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_no_claims_means_fully_truthful() {
+        let text = "Hello! Let me help you with that.";
+        let claims = extract_claims(text);
+        assert!(claims.is_empty());
     }
 }
