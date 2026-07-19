@@ -82,7 +82,7 @@ pub fn WorkflowCanvas(
             onmousedown: move |e| {
                 let c = e.data().client_coordinates();
                 last_screen.set((c.x as f64, c.y as f64));
-                connect_from.set(None);
+                if connect_from().is_none() { panning.set(true); }
             },
             onmousemove: move |e| {
                 let c = e.data().client_coordinates();
@@ -159,7 +159,17 @@ pub fn WorkflowCanvas(
                             text { x: 30, y: 22, fill: "white", font_size: 12, font_weight: "bold", "{label}" }
                             text { x: 12, y: 56, fill: "#64748b", font_size: 10, "{nt}" }
                             circle { cx: 90, cy: 80, r: 6, fill: color, stroke: "white", stroke_width: 2.5, cursor: "crosshair",
-                                onpointerdown: move |e| { e.stop_propagation(); e.prevent_default(); connect_from.set(Some(nid)); } }
+                                onpointerdown: move |e| { e.stop_propagation(); e.prevent_default();
+                                    if connect_from().is_none() { connect_from.set(Some(nid)); }
+                                    else if connect_from() != Some(nid) {
+                                        let from_id = connect_from().unwrap();
+                                        if from_id != nid && !edges.read().iter().any(|e| e.from == from_id && e.to == nid) {
+                                            let max_id = edges.read().iter().map(|e| e.id).max().unwrap_or(0);
+                                            edges.write().push(CanvasEdge { id: max_id + 1, from: from_id, to: nid });
+                                        }
+                                        connect_from.set(None);
+                                    }
+                                } }
                         }
                     }
                 }
