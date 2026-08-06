@@ -31,6 +31,84 @@ pub enum PolicyDecision {
     },
 }
 
+/// Deterministic risk tier of an action, computed from its kind + arguments.
+///
+/// Ordering matters: `Low < Medium < High`. Policy may *auto-approve* actions at
+/// or below a configured threshold (for unattended/autonomous runs), but High is
+/// never auto-approved, and this classification is authoritative — it is derived
+/// only from the request, never from the LLM's `risk_hint`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ActionRisk {
+    Low,
+    Medium,
+    High,
+}
+
+/// Shell command heads considered read-only/safe.
+const SAFE_SHELL_HEADS: &[&str] = &[
+    "ls", "cat", "pwd", "echo", "find", "grep", "rg", "head", "tail", "wc", "stat",
+    "file", "which", "whoami", "date", "uname", "df", "du", "ps", "env", "printenv",
+    "hostname", "id", "uptime", "tree", "realpath", "dirname", "basename", "sort",
+    "uniq", "cut", "cd",
+];
+
+/// Tokens that make a shell command dangerous regardless of the leading command
+/// (mutation, escalation, network, redirection, chaining, substitution).
+const DANGEROUS_SHELL_TOKENS: &[&str] = &[
+    "rm ", "rm-", "rmdir", "mv ", "dd ", "mkfs", "chmod", "chown", "kill", "pkill",
+    "shutdown", "reboot", "sudo", "curl", "wget", "ssh ", "scp ", "passwd", "truncate",
+    "tee ", "mount", "umount", "systemctl", "service ", "crontab", "eval ", "apt",
+    "yum", "dnf", "pacman", "pip ", "npm ", "git push", ">", "|", ";", "&", "`", "$(",
+];
+
+/// Native tools that are read-only and therefore low risk.
+const LOW_NATIVE_TOOLS: &[&str] = &[
+    "web_extract", "web_search", "web_links", "browser_read", "clipboard_read",
+    "vision_analysis",
+];
+
+fn classify_shell_risk(command: &str) -> ActionRisk {
+    let lower = command.to_lowercase();
+    if DANGEROUS_SHELL_TOKENS.iter().any(|t| lower.contains(t)) {
+        return ActionRisk::High;
+    }
+    let head = lower.split_whitespace().next().unwrap_or("");
+    let head = head.rsplit('/').next().unwrap_or(head);
+    if SAFE_SHELL_HEADS.contains(&head) {
+        ActionRisk::Low
+    } else {
+        // Unknown command with no obvious danger token — still treat as risky.
+        ActionRisk::High
+    }
+}
+
+/// Authoritative, deterministic risk classification for an action.
+#[must_use]
+pub fn classify_risk(req: &ActionRequest) -> ActionRisk {
+    match req.kind {
+        ActionKind::PythonTool => ActionRisk::High,
+        ActionKind::ShellCommand => {
+            let cmd = req
+                .arguments
+                .get("command")
+                .or_else(|| req.arguments.get("input").and_then(|i| i.get("command")))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            classify_shell_risk(cmd)
+        }
+        ActionKind::FilesystemWrite => ActionRisk::Medium,
+        ActionKind::ComputerControl => ActionRisk::Medium,
+        ActionKind::NativeTool => {
+            if LOW_NATIVE_TOOLS.contains(&req.tool_name.as_str()) {
+                ActionRisk::Low
+            } else {
+                ActionRisk::Medium
+            }
+        }
+    }
+}
+
 /// The deterministic inputs to a policy decision for one run/session.
 #[derive(Debug, Clone)]
 pub struct PolicyConfig {
@@ -58,6 +136,11 @@ pub struct PolicyConfig {
     pub observation_tools: HashSet<String>,
     /// Escalate to approval when `risk_hint == "high"`. Never downgrades.
     pub escalate_high_risk: bool,
+    /// For unattended/autonomous runs: auto-approve actions whose deterministic
+    /// [`classify_risk`] is at or below this tier, instead of pausing for a human.
+    /// `None` (the default) never auto-approves — every gated action waits for a
+    /// human. High-risk actions are never auto-approved regardless of this value.
+    pub auto_approve_max_risk: Option<ActionRisk>,
 }
 
 impl Default for PolicyConfig {
@@ -74,6 +157,7 @@ impl Default for PolicyConfig {
             approval_required_default: false,
             observation_tools: HashSet::new(),
             escalate_high_risk: true,
+            auto_approve_max_risk: None,
         }
     }
 }
@@ -190,6 +274,18 @@ pub fn evaluate(cfg: &PolicyConfig, req: &ActionRequest) -> PolicyDecision {
                 .unwrap_or(false);
 
         if kind_needs_approval || mode_needs_approval || high_risk_escalation {
+            // Autonomous auto-approve: if a risk threshold is configured, an action
+            // whose deterministic risk is at/below it runs without a human. This
+            // NEVER applies to an LLM-flagged high-risk action, and only reaches
+            // here after all hard-stop denies (emergency/capability/denylist/
+            // allowlist/cap) have already passed.
+            if !high_risk_escalation {
+                if let Some(max) = cfg.auto_approve_max_risk {
+                    if classify_risk(req) <= max {
+                        return PolicyDecision::Allow;
+                    }
+                }
+            }
             let reason = if high_risk_escalation && !(kind_needs_approval || mode_needs_approval) {
                 format!(
                     "High-risk action '{}' requires human approval.",
@@ -211,4 +307,88 @@ pub fn evaluate(cfg: &PolicyConfig, req: &ActionRequest) -> PolicyDecision {
 
     // 7. Otherwise allowed.
     PolicyDecision::Allow
+}
+
+#[cfg(test)]
+mod risk_tests {
+    use super::*;
+
+    fn req(kind: ActionKind, tool: &str, args: serde_json::Value) -> ActionRequest {
+        ActionRequest::new(1, kind, tool, args, vec![tool.to_string()], 1000, "")
+    }
+
+    fn autonomous_cfg(tool: &str, max: ActionRisk) -> PolicyConfig {
+        PolicyConfig {
+            capability_set: [tool.to_string()].into_iter().collect(),
+            require_approval_kinds: [
+                ActionKind::ShellCommand,
+                ActionKind::ComputerControl,
+                ActionKind::FilesystemWrite,
+            ]
+            .into_iter()
+            .collect(),
+            approval_required_default: true,
+            auto_approve_max_risk: Some(max),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn shell_reads_are_low_writes_are_high() {
+        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"ls -la /tmp"}))), ActionRisk::Low);
+        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"cat notes.txt"}))), ActionRisk::Low);
+        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"rm -rf /tmp/x"}))), ActionRisk::High);
+        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"echo hi > f"}))), ActionRisk::High, "redirection is dangerous");
+        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"sudo apt install x"}))), ActionRisk::High);
+        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"frobnicate --all"}))), ActionRisk::High, "unknown command is risky");
+    }
+
+    #[test]
+    fn kinds_have_expected_tiers() {
+        assert_eq!(classify_risk(&req(ActionKind::FilesystemWrite, "write_file", serde_json::json!({}))), ActionRisk::Medium);
+        assert_eq!(classify_risk(&req(ActionKind::ComputerControl, "os_tool", serde_json::json!({"action":"click"}))), ActionRisk::Medium);
+        assert_eq!(classify_risk(&req(ActionKind::PythonTool, "py", serde_json::json!({}))), ActionRisk::High);
+        assert_eq!(classify_risk(&req(ActionKind::NativeTool, "web_extract", serde_json::json!({}))), ActionRisk::Low);
+        assert_eq!(classify_risk(&req(ActionKind::NativeTool, "browser_click", serde_json::json!({}))), ActionRisk::Medium);
+    }
+
+    #[test]
+    fn autonomous_low_auto_approves_safe_shell_but_not_writes() {
+        // Low threshold: `ls` runs; a file write still needs approval.
+        let cfg = autonomous_cfg("shell_exec", ActionRisk::Low);
+        assert_eq!(
+            evaluate(&cfg, &req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"ls"}))),
+            PolicyDecision::Allow
+        );
+        let wcfg = autonomous_cfg("write_file", ActionRisk::Low);
+        assert!(matches!(
+            evaluate(&wcfg, &req(ActionKind::FilesystemWrite, "write_file", serde_json::json!({"path":"/x","content":"y"}))),
+            PolicyDecision::RequireApproval { .. }
+        ));
+        // A destructive shell command is never auto-approved at Low.
+        assert!(matches!(
+            evaluate(&cfg, &req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"rm -rf /"}))),
+            PolicyDecision::RequireApproval { .. }
+        ));
+    }
+
+    #[test]
+    fn high_risk_hint_is_never_auto_approved() {
+        let cfg = autonomous_cfg("shell_exec", ActionRisk::High); // even max threshold
+        let mut r = req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"ls"}));
+        r.risk_hint = Some("high".into());
+        assert!(matches!(evaluate(&cfg, &r), PolicyDecision::RequireApproval { .. }),
+            "an LLM high-risk hint must still force approval regardless of the auto-approve tier");
+    }
+
+    #[test]
+    fn auto_approve_never_overrides_a_deny() {
+        // Denylist deny must win over any auto-approve threshold.
+        let mut cfg = autonomous_cfg("shell_exec", ActionRisk::High);
+        cfg.denylist = ["shell_exec".to_string()].into_iter().collect();
+        assert!(matches!(
+            evaluate(&cfg, &req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"ls"}))),
+            PolicyDecision::Deny { .. }
+        ));
+    }
 }
