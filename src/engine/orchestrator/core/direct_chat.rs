@@ -65,7 +65,25 @@ pub async fn handle_direct_chat(
     )
     .await;
 
-    let raw_response = if history.is_empty() {
+    // Use the configured cloud provider (OpenAI/Anthropic) when a key is set,
+    // otherwise the local Ollama chat agent. Cloud errors fall back to Ollama so
+    // chat never hard-fails.
+    let provider_cfg = crate::engine::providers::load_config(db).await;
+    let raw_response = if provider_cfg.is_cloud_ready() {
+        let system = format!("{}\n\nContext:\n{}", chat_info.instructions, direct_context);
+        match crate::engine::providers::complete_chat(&provider_cfg, &system, clean_query).await {
+            Ok(text) if !text.trim().is_empty() => text,
+            Ok(_) => "(the model returned an empty response)".to_string(),
+            Err(e) => {
+                tracing::warn!(error = %e, "cloud provider failed; falling back to Ollama");
+                if history.is_empty() {
+                    chat_agent.answer(clean_query, &direct_context).await
+                } else {
+                    chat_agent.chat(clean_query, history.to_vec()).await
+                }
+            }
+        }
+    } else if history.is_empty() {
         chat_agent.answer(clean_query, &direct_context).await
     } else {
         chat_agent.chat(clean_query, history.to_vec()).await

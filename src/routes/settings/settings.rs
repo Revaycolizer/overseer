@@ -66,6 +66,7 @@ pub fn Settings() -> Element {
                 }
 
                 div { class: "space-y-9",
+                    crate::routes::settings::ModelProviderSection {}
                     HealthSummary { health: health.clone(), default_chat_model: default_chat_model.clone(), title_model: title_model.clone() }
                     HealthDetails { health: health.clone() }
                     IntelligenceSection {
