@@ -14,8 +14,8 @@ use serde_json::Value;
 use sqlx::SqlitePool;
 
 use overseer_kernel::{
-    ActionKind, ActionRequest, ExecutionOutcome, Kernel, KernelEvent, PolicyConfig, PolicyDecision,
-    Resolution, TraceSink,
+    ActionKind, ActionRequest, ActionRisk, ExecutionOutcome, Kernel, KernelEvent, PolicyConfig,
+    PolicyDecision, Resolution, TraceSink,
 };
 
 use crate::db::Database;
@@ -128,6 +128,33 @@ fn build_policy_config(
     state: &crate::backend::ComputerSupervisionState,
     capabilities: &[String],
 ) -> PolicyConfig {
+    // Supervision mode → autonomous auto-approve threshold. In autonomous modes we
+    // gate ALL action kinds so the deterministic risk classifier is the single
+    // arbiter: it auto-approves only actions at/below the threshold and still
+    // pauses for a human on anything riskier (and always on destructive shell,
+    // Python, or an LLM high-risk hint).
+    //   approval_required (default) → nothing auto-approved (every action waits)
+    //   autonomous                  → auto-approve Low-risk (safe reads/`ls`/`cat`)
+    //   full_auto                   → auto-approve up to High (denylist/emergency still win)
+    let all_kinds = [
+        ActionKind::NativeTool,
+        ActionKind::PythonTool,
+        ActionKind::ShellCommand,
+        ActionKind::ComputerControl,
+        ActionKind::FilesystemWrite,
+    ];
+    let default_kinds = [
+        ActionKind::ComputerControl,
+        ActionKind::ShellCommand,
+        ActionKind::FilesystemWrite,
+    ];
+    let (approval_kinds, auto_approve_max_risk): (Vec<ActionKind>, Option<ActionRisk>) =
+        match state.supervision_mode.as_str() {
+            "autonomous" => (all_kinds.to_vec(), Some(ActionRisk::Low)),
+            "full_auto" => (all_kinds.to_vec(), Some(ActionRisk::High)),
+            _ => (default_kinds.to_vec(), None),
+        };
+
     PolicyConfig {
         capability_set: capabilities.iter().cloned().collect(),
         allowlist: state.allowlist.iter().cloned().collect(),
@@ -136,16 +163,11 @@ fn build_policy_config(
         action_count: 0, // injected by the kernel from its per-run counter
         timeout_ms_cap: state.timeout_ms.max(0) as u64,
         emergency_stopped: state.session_state == "emergency_stopped",
-        require_approval_kinds: [
-            ActionKind::ComputerControl,
-            ActionKind::ShellCommand,
-            ActionKind::FilesystemWrite,
-        ]
-        .into_iter()
-        .collect(),
+        require_approval_kinds: approval_kinds.into_iter().collect(),
         approval_required_default: false,
         observation_tools: ["vision_analysis"].iter().map(|s| s.to_string()).collect(),
         escalate_high_risk: true,
+        auto_approve_max_risk,
     }
 }
 
