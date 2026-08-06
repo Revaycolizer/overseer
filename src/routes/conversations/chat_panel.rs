@@ -3,6 +3,7 @@ use dioxus::prelude::*;
 
 use super::chat_input::ChatInput;
 use super::empty_state::EmptyConversationState;
+use super::kernel_approval::KernelApprovalBar;
 use super::helpers::copy_to_clipboard;
 use super::message_bubble::MessageBubble;
 use super::thinking_bubble::ThinkingBubble;
@@ -72,6 +73,7 @@ pub fn ChatPanel(
                     if is_thinking() { ThinkingBubble {} }
                 }
             }
+            KernelApprovalBar {}
             ChatInput {
                 selected_conversation_id: selected_conversation_id,
                 messages_resource: messages_resource.clone(),

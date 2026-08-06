@@ -5,6 +5,7 @@ pub mod memory;
 pub mod activity;
 pub mod cache;
 pub mod kernel;
+pub mod governed_commands;
 pub mod orchestrator;
 pub mod resilience;
 pub mod shell;

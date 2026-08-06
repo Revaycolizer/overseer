@@ -203,11 +203,18 @@ fn send_message(
                 });
             }
 
-            // The real orchestration run. `orchestrate` creates the execution run
-            // and dispatches tools through the kernel chokepoint.
-            let response = agent_task
-                .orchestrate(&db_task, conv_id, &query_task, Some(token_tx))
-                .await;
+            // Deterministic governed commands (/write, /open, /screenshot) run
+            // straight through the kernel — no model needed. Everything else goes
+            // to the orchestrator.
+            let response = if let Some(cmd) =
+                crate::engine::governed_commands::parse_governed(&query_task)
+            {
+                crate::engine::governed_commands::run_governed(&db_task, conv_id, cmd).await
+            } else {
+                agent_task
+                    .orchestrate(&db_task, conv_id, &query_task, Some(token_tx))
+                    .await
+            };
             let _ = backend::add_message(&db_task, conv_id, "assistant", &response, false).await;
             response
         });

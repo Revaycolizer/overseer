@@ -5,6 +5,7 @@ pub mod chat_composer;
 pub mod chat_input;
 pub mod chat_send;
 pub mod chat_panel;
+pub mod kernel_approval;
 mod conversations;
 pub mod helpers;
 pub mod message_bubble;
