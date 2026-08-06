@@ -15,6 +15,7 @@ pub mod web_links;
 pub mod app_launcher;
 pub mod export_asset;
 pub mod write_file;
+pub mod shell_exec;
 pub mod vision;
 pub mod router;
 pub mod executor;

@@ -56,7 +56,7 @@ pub fn classify_action_kind(tool: &ToolInfo, domain: &str) -> ActionKind {
         ActionKind::PythonTool
     } else if tool.name == "os_tool" || matches!(domain, "computer" | "desktop") {
         ActionKind::ComputerControl
-    } else if tool.name == "code_executor" || tool.name == "shell" {
+    } else if tool.name == "code_executor" || tool.name == "shell" || tool.name == "shell_exec" {
         ActionKind::ShellCommand
     } else {
         ActionKind::NativeTool
