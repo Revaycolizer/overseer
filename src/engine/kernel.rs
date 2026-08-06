@@ -43,7 +43,8 @@ pub fn global_kernel(pool: &SqlitePool) -> &'static Kernel {
 fn is_observation_verb(action: &str) -> bool {
     matches!(
         action,
-        "get_state" | "state" | "observe" | "inspect" | "snapshot" | "status" | "list_processes"
+        "get_state" | "state" | "observe" | "inspect" | "snapshot" | "status"
+            | "list_processes" | "list_windows"
     )
 }
 
