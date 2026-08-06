@@ -81,9 +81,15 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         }
     };
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
-        .await?;
+    // ConnectInfo is required: the rate limiter's SmartIpKeyExtractor falls back
+    // to the peer socket address. Without it every request 500s with
+    // "Unable To Extract Key!".
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await?;
     Ok(())
 }
 
