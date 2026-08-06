@@ -18,6 +18,9 @@ pub enum GovernedCommand {
     Open { target: String },
     /// `/screenshot`
     Screenshot,
+    /// `/do <goal>` (or `/agent <goal>`) — run the native function-calling agent
+    /// loop, which plans and executes multiple governed tool calls to reach a goal.
+    Agent { goal: String },
 }
 
 /// Parse a governed slash-command. Returns `None` for anything else (which then
@@ -45,6 +48,15 @@ pub fn parse_governed(input: &str) -> Option<GovernedCommand> {
     if t == "/screenshot" {
         return Some(GovernedCommand::Screenshot);
     }
+    for prefix in ["/do ", "/agent "] {
+        if let Some(rest) = t.strip_prefix(prefix) {
+            let goal = rest.trim().to_string();
+            if goal.is_empty() {
+                return None;
+            }
+            return Some(GovernedCommand::Agent { goal });
+        }
+    }
     None
 }
 
@@ -67,6 +79,12 @@ fn tool_stub(name: &str) -> ToolInfo {
 /// for human approval when required), finalizes the run, and returns a
 /// `StructuredResponse` JSON string for the chat to render.
 pub async fn run_governed(db: &Database, conversation_id: i64, cmd: GovernedCommand) -> String {
+    // The agent command isn't a single tool call — hand it to the plan→act→observe
+    // loop, which issues its own governed tool calls through the same kernel.
+    if let GovernedCommand::Agent { goal } = &cmd {
+        return crate::engine::agent_loop::run_agent(db, conversation_id, goal, None).await;
+    }
+
     let (tool_name, args, step): (&str, Value, String) = match &cmd {
         GovernedCommand::Write { path, content } => (
             "write_file",
@@ -83,6 +101,7 @@ pub async fn run_governed(db: &Database, conversation_id: i64, cmd: GovernedComm
             json!({ "action": "screenshot" }),
             "screenshot".to_string(),
         ),
+        GovernedCommand::Agent { .. } => unreachable!("agent command handled above"),
     };
 
     let run_id = crate::backend::start_execution_run(db, conversation_id, &format!("/{step}"))
