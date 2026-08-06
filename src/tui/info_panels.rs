@@ -34,7 +34,7 @@ pub fn draw_browser(f: &mut Frame, _app: &App, area: Rect) {
         Line::from(""),
         Line::from(vec![
             Span::styled(" ◆ ", Style::new().fg(ui::SUCCESS)),
-            Span::styled("Use the Dioxus Web UI to manage sessions.", Style::new().fg(ui::TEXT)),
+            Span::styled("Use the desktop app to manage sessions.", Style::new().fg(ui::TEXT)),
         ]),
         Line::from(vec![
             Span::styled(" ◆ ", Style::new().fg(ui::ACCENT)),

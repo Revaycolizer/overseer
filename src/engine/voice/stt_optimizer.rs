@@ -10,7 +10,7 @@ pub struct SpeechOptimizer {
 
 impl SpeechOptimizer {
     pub fn new(model_path: &str) -> Self {
-        let vocab = "Overseer, Rust, Dioxus, Postgres, PgBouncer, Actix, Elysia, Bun, Dar es Salaam".to_string();
+        let vocab = "Overseer, Rust, Tauri, Postgres, PgBouncer, Actix, Elysia, Bun, Dar es Salaam".to_string();
         #[cfg(feature = "whisper")]
         {
             let path = std::path::Path::new(model_path);
