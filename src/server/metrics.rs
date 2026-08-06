@@ -57,7 +57,9 @@ struct HealthResponse {
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
         .route("/metrics", get(handle_metrics))
-        .route("/health", get(handle_health))
+        // `/health` is owned by misc::router(); expose the metrics liveness probe
+        // under `/healthz` to avoid an overlapping-route panic at startup.
+        .route("/healthz", get(handle_health))
 }
 
 async fn handle_metrics() -> String {
