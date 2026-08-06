@@ -1,9 +1,9 @@
 [workspace]
-# The root `overseer` package is the workspace root and a member. The kernel is a
-# separate library crate so the deterministic policy + approval runtime can be
-# built and tested WITHOUT the desktop GUI stack (dioxus-desktop, enigo, cpal),
-# which is exactly what the milestone asks for ("test policy and runtime
-# coordination independently from Dioxus UI code").
+# The root `overseer` package is the headless engine + daemon. The user-facing
+# UI is the standalone Tauri client in `desktop-ui/`, which connects over the
+# local WebSocket daemon (`overseer --server`). The kernel is a separate library
+# crate so the deterministic policy + approval runtime can be built and tested
+# independently of the rest of the engine.
 members = ["crates/overseer-kernel", "crates/overseer-client"]
 resolver = "2"
 
@@ -21,8 +21,6 @@ default-run = "overseer"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dioxus = { version = "0.7.1", features = ["router", "desktop"] }
-dioxus-material-icons = "4.0.1"
 reqwest = { version = "0.12", features = ["json", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -73,7 +71,6 @@ charming = { version = "0.6.0", features = ["ssr"] }
 urlencoding = "2.1"
 dirs = "6.0"
 pdf-extract = "0.7"
-dioxus-desktop = "0.7.9"
 sysinfo = "0.33.1"
 cpal = "0.17.3"
 rustpotter = "3.0.2"
@@ -106,10 +103,7 @@ windows = { version = "0.58", features = [
 
 
 [features]
-default = ["desktop"]
-web = ["dioxus/web"]
-desktop = ["dioxus/desktop"]
-mobile = ["dioxus/mobile"]
+default = []
 memory = ["dep:lancedb", "dep:arrow"]
 whisper = ["dep:whisper-rs"]
 # Opt-in test suites. `cargo test --workspace` (no features) is fully
