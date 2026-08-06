@@ -85,31 +85,58 @@ export default function App() {
   const nextId = () => ++idRef.current;
 
   useEffect(() => {
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-    ws.onopen = () => {
-      setConnected(true);
-      if (token) ws.send(JSON.stringify({ token }));
+    let closed = false;
+    let retry = 0;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const connect = () => {
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+      ws.onopen = () => {
+        retry = 0;
+        setConnected(true);
+        if (token) ws.send(JSON.stringify({ token }));
+      };
+      ws.onmessage = (ev) => {
+        let frame: { type: string; text?: string; response?: string; error?: string };
+        try {
+          frame = JSON.parse(ev.data);
+        } catch {
+          return;
+        }
+        if (frame.type === "token" && frame.text) appendToLastAssistant(frame.text);
+        else if (frame.type === "done") {
+          setBusy(false);
+          if (frame.response) replaceLastAssistant(frame.response);
+        } else if (frame.type === "error") {
+          setBusy(false);
+          appendToLastAssistant(`\n⚠️ ${frame.error}`);
+        }
+      };
+      ws.onerror = () => {
+        try {
+          ws.close();
+        } catch {
+          /* ignore */
+        }
+      };
+      ws.onclose = () => {
+        setConnected(false);
+        if (!closed) {
+          // Reconnect with backoff so the app recovers when the daemon
+          // (re)starts — no manual reload needed.
+          retry = Math.min(retry + 1, 6);
+          timer = setTimeout(connect, Math.min(400 * 2 ** retry, 5000));
+        }
+      };
     };
-    ws.onclose = () => setConnected(false);
-    ws.onerror = () => setConnected(false);
-    ws.onmessage = (ev) => {
-      let frame: { type: string; text?: string; response?: string; error?: string };
-      try {
-        frame = JSON.parse(ev.data);
-      } catch {
-        return;
-      }
-      if (frame.type === "token" && frame.text) appendToLastAssistant(frame.text);
-      else if (frame.type === "done") {
-        setBusy(false);
-        if (frame.response) replaceLastAssistant(frame.response);
-      } else if (frame.type === "error") {
-        setBusy(false);
-        appendToLastAssistant(`\n⚠️ ${frame.error}`);
-      }
+
+    connect();
+    return () => {
+      closed = true;
+      clearTimeout(timer);
+      wsRef.current?.close();
     };
-    return () => ws.close();
   }, [url, token]);
 
   useEffect(() => {
