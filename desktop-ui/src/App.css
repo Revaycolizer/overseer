@@ -12,6 +12,7 @@
   --a3: #f472b6;
   --shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.7);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
   color: var(--text);
@@ -105,6 +106,32 @@ body { background: var(--bg); overflow: hidden; }
   backdrop-filter: blur(14px);
   -webkit-app-region: no-drag;
 }
+.bar-right { display: flex; align-items: center; gap: 10px; -webkit-app-region: no-drag; }
+
+.theme-toggle {
+  width: 34px; height: 34px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 10px; cursor: pointer;
+  color: var(--muted);
+  background: var(--panel); border: 1px solid var(--brd);
+  backdrop-filter: blur(14px);
+  -webkit-app-region: no-drag;
+  transition: color 0.3s var(--ease), border-color 0.3s var(--ease), background 0.3s var(--ease), transform 0.2s var(--ease);
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--brd-strong); background: var(--panel-strong); }
+.theme-toggle:active { transform: scale(0.92); }
+.theme-toggle:focus-visible { outline: 2px solid var(--a1); outline-offset: 2px; }
+
+/* Sun ↔ moon morph, driven by the root's data-theme. */
+.tt-svg { transition: transform 0.5s var(--spring); }
+:root[data-theme="dark"] .tt-svg { transform: rotate(40deg); }
+.tt-disc { r: 5px; transition: r 0.5s var(--spring); }
+:root[data-theme="dark"] .tt-disc { r: 8px; }
+.tt-cut { transition: cx 0.5s var(--spring), cy 0.5s var(--spring); }
+:root[data-theme="dark"] .tt-cut { cx: 18px; cy: 6px; }
+.tt-rays { transform-origin: 12px 12px; transition: opacity 0.5s var(--spring), transform 0.5s var(--spring); }
+:root[data-theme="dark"] .tt-rays { opacity: 0; transform: scale(0.3); }
+
 .conn .pulse { width: 7px; height: 7px; border-radius: 50%; background: #6b7280; }
 .conn.on { color: #b6f7d8; }
 .conn.on .pulse { background: #34d399; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6); animation: ping 2s var(--ease) infinite; }
@@ -270,18 +297,16 @@ body { background: var(--bg); overflow: hidden; }
 }
 .hint code { font-family: var(--mono); background: var(--panel); padding: 2px 7px; border-radius: 6px; border: 1px solid var(--brd); color: #c9c4ff; }
 
-/* ===== Light theme ===== */
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f5f6fb; --text: #14151c; --muted: #5c6270;
-    --panel: rgba(255, 255, 255, 0.66); --panel-strong: rgba(255, 255, 255, 0.85);
-    --brd: rgba(15, 20, 40, 0.09); --brd-strong: rgba(15, 20, 40, 0.16);
-    --shadow: 0 20px 50px -22px rgba(40, 30, 90, 0.28);
-  }
-  .grain { background: linear-gradient(180deg, rgba(245,246,251,0.2), rgba(245,246,251,0.55)); }
-  .wordmark { background: linear-gradient(90deg, #14151c, #5b4bff 60%, #0891b2); -webkit-background-clip: text; background-clip: text; }
-  .msg.user .bubble { color: #fff; background: linear-gradient(135deg, var(--a1), #6366f1); }
+/* ===== Light theme (explicit choice overrides system preference) ===== */
+:root[data-theme="light"] {
+  --bg: #f5f6fb; --text: #14151c; --muted: #5c6270;
+  --panel: rgba(255, 255, 255, 0.66); --panel-strong: rgba(255, 255, 255, 0.85);
+  --brd: rgba(15, 20, 40, 0.09); --brd-strong: rgba(15, 20, 40, 0.16);
+  --shadow: 0 20px 50px -22px rgba(40, 30, 90, 0.28);
 }
+:root[data-theme="light"] .grain { background: linear-gradient(180deg, rgba(245,246,251,0.2), rgba(245,246,251,0.55)); }
+:root[data-theme="light"] .wordmark { background: linear-gradient(90deg, #14151c, #5b4bff 60%, #0891b2); -webkit-background-clip: text; background-clip: text; }
+:root[data-theme="light"] .msg.user .bubble { color: #fff; background: linear-gradient(135deg, var(--a1), #6366f1); }
 
 /* ===== Reduced motion ===== */
 @media (prefers-reduced-motion: reduce) {

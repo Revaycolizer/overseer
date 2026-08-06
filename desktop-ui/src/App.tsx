@@ -33,6 +33,32 @@ function Glyph({ name }: { name: string }) {
   );
 }
 
+// Animated sun↔moon toggle. The morph is driven purely by CSS reacting to the
+// root's data-theme (a mask circle slides in to carve the crescent; rays fade).
+function ThemeToggle({ onToggle }: { onToggle: () => void }) {
+  return (
+    <button className="theme-toggle" onClick={onToggle} type="button" aria-label="Toggle dark / light theme">
+      <svg className="tt-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <mask id="tt-moon-mask">
+          <rect x="0" y="0" width="24" height="24" fill="white" />
+          <circle className="tt-cut" cx="25" cy="0" r="8" fill="black" />
+        </mask>
+        <circle className="tt-disc" cx="12" cy="12" r="5" fill="currentColor" mask="url(#tt-moon-mask)" />
+        <g className="tt-rays">
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </g>
+      </svg>
+    </button>
+  );
+}
+
 export default function App() {
   const [url] = useState(() => localStorage.getItem("overseer.wsUrl") || DEFAULT_URL);
   const [token] = useState(() => localStorage.getItem("overseer.token") || "");
@@ -42,6 +68,14 @@ export default function App() {
   const [input, setInput] = useState("");
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [, setTheme] = useState<string>(() => document.documentElement.dataset.theme || "dark");
+
+  const toggleTheme = () => {
+    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem("overseer.theme", next);
+    setTheme(next);
+  };
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -169,9 +203,12 @@ export default function App() {
           </span>
           <span className="wordmark">Overseer</span>
         </div>
-        <div className={`conn ${connected ? "on" : "off"}`}>
-          <span className="pulse" />
-          {connected ? "connected" : "offline"}
+        <div className="bar-right">
+          <div className={`conn ${connected ? "on" : "off"}`}>
+            <span className="pulse" />
+            {connected ? "connected" : "offline"}
+          </div>
+          <ThemeToggle onToggle={toggleTheme} />
         </div>
       </header>
 
