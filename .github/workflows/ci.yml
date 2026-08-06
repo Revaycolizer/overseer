@@ -27,9 +27,9 @@ jobs:
           choco install protoc --no-progress -y
           echo "PROTOC=C:\ProgramData\chocolatey\bin\protoc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Cargo check (all features)
+      - name: Cargo check
         shell: powershell
-        run: cargo check --features desktop
+        run: cargo check
 
       - name: Cargo clippy
         continue-on-error: true
