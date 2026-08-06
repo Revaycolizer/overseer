@@ -20,6 +20,23 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
     );
     let browser_pool = Arc::new(pool);
     crate::engine::browser::global::init(browser_pool.clone());
+
+    // Background services (run inside the resident daemon).
+    // Scheduler: always on — it just polls an (initially empty) table.
+    {
+        let sched_db = db.clone();
+        tokio::spawn(async move { crate::engine::scheduler::run_scheduler(sched_db).await });
+    }
+    // Voice: opt-in — audio capture needs a real input device.
+    let voice_on = crate::backend::get_setting_or(&db, "voice_always_on", "false").await;
+    if voice_on == "true" || voice_on == "1" {
+        let vdb = db.clone();
+        let vagent = agent_system.clone();
+        tokio::spawn(async move { crate::engine::voice_service::run_voice_service(vdb, vagent).await });
+    } else {
+        tracing::info!("voice service disabled (set setting 'voice_always_on' = true to enable)");
+    }
+
     let state = Arc::new(ServerState { db, agent_system, browser_pool: browser_pool.clone() });
 
     let app = Router::new()
