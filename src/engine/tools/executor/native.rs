@@ -17,6 +17,8 @@ pub async fn call_native_builtin_tool(
         "stealth_search" => Some(crate::engine::tools::web_search::native_stealth_search(args).await?),
         "browser_navigate" => Some(crate::engine::tools::browser::navigate(args).await?),
         "browser_screenshot" => Some(crate::engine::tools::browser::screenshot(args).await?),
+        "browser_read" => Some(crate::engine::tools::browser::read_page(args).await?),
+        "browser_click" => Some(crate::engine::tools::browser::click_text(args).await?),
         "app_launcher" => Some(crate::engine::tools::app_launcher::native_app_launcher(args).await?),
         "write_file" => Some(crate::engine::tools::write_file::native_write_file(args).await?),
         "shell_exec" => Some(crate::engine::tools::shell_exec::native_shell_exec(args).await?),
