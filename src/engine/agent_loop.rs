@@ -1,7 +1,8 @@
 //! Native function-calling agent loop (the "brain").
 //!
 //! Takes a natural-language goal and runs a **plan → act → observe** loop against
-//! a cloud provider with real function-calling: the model picks a tool, we run it
+//! the configured model — **local Ollama by default**, cloud (OpenAI/Anthropic)
+//! only if selected — using real function-calling: the model picks a tool, we run it
 //! through `kernel_execute` (policy → approval → execute → trace), feed the result
 //! back as an observation, and repeat until the model returns a final answer.
 //!
@@ -163,13 +164,11 @@ pub async fn run_agent(
     goal: &str,
     token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
-    let cfg = providers::load_config(db).await;
-    if !cfg.is_cloud_ready() {
-        return respond(
-            "failed",
-            "Agent mode needs a cloud model. Set a provider and API key in Settings → Model Provider (OpenAI or Anthropic), then try `/do <goal>` again.",
-        );
-    }
+    // Uses the configured provider — local Ollama by default, cloud (OpenAI/
+    // Anthropic) only if selected. The model must support tool-calling.
+    // resolve_model falls back to a pulled Ollama model if the configured one
+    // isn't installed, so this works out-of-the-box.
+    let cfg = providers::resolve_model(&providers::load_config(db).await).await;
 
     let run_id = crate::backend::start_execution_run(db, conversation_id, &format!("/do {goal}"))
         .await
@@ -183,7 +182,12 @@ pub async fn run_agent(
             Ok(t) => t,
             Err(e) => {
                 finish(db, run_id, "failed").await;
-                return respond("failed", &format!("Model error: {e}"));
+                return respond(
+                    "failed",
+                    &format!(
+                        "Model error: {e}\n\nIf using local Ollama, make sure it's running (`ollama serve`) and the model supports tool-calling (e.g. qwen2.5, llama3.1, mistral-nemo)."
+                    ),
+                );
             }
         };
 
@@ -300,10 +304,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn without_cloud_key_explains_how_to_enable() {
+    async fn fails_gracefully_when_model_backend_unreachable() {
+        // Default provider is local Ollama. With no Ollama running in the test
+        // env, the loop must fail gracefully with a structured 'failed' response
+        // (not panic, not hang) and hint at the local setup.
         let db = crate::db::Database::new_in_memory().await.unwrap();
         let conv = crate::backend::add_conversation(&db, "t").await.unwrap();
         let out = run_agent(&db, conv, "list my home dir", None).await;
-        assert!(out.contains("Settings"), "should guide user to configure a provider");
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["status"], "failed");
+        assert!(out.to_lowercase().contains("ollama"), "should hint at local setup");
     }
 }
