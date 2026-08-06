@@ -1,23 +1,42 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import "./App.css";
 
 type Role = "user" | "assistant";
 interface Msg {
   role: Role;
   text: string;
+  id: number;
 }
 
 // Overseer engine daemon: `overseer --server` (loopback, port 8080).
 const DEFAULT_URL = "ws://127.0.0.1:8080/api/ws/chat";
 
+const ICONS: Record<string, string> = {
+  files: "M4 5.5A1.5 1.5 0 0 1 5.5 4h3l2 2h6A1.5 1.5 0 0 1 18 7.5v9A1.5 1.5 0 0 1 16.5 18h-11A1.5 1.5 0 0 1 4 16.5z",
+  globe: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M3 12h18M12 3c2.5 2.5 3.5 6 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-6-3.5-9s1-6.5 3.5-9",
+  scaffold: "M4 7l8-4 8 4-8 4zM4 7v10l8 4M20 7v10l-8 4M12 11v10",
+  memory: "M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 3 3V3zM15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-3 3V3z",
+};
+
+const EXAMPLES = [
+  { icon: "files", label: "List my Downloads and find duplicates", text: "/do list the files in my Downloads folder and find any duplicates" },
+  { icon: "globe", label: "Read a webpage and summarize it", text: "/do read https://news.ycombinator.com and summarize the top 5 stories" },
+  { icon: "scaffold", label: "Scaffold a project folder", text: "/do create a folder ~/overseer-demo with a README.md that says hello" },
+  { icon: "memory", label: "Remember a preference", text: "/do remember that I prefer concise answers and dark mode" },
+];
+
+function Glyph({ name }: { name: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d={ICONS[name]} />
+    </svg>
+  );
+}
+
 export default function App() {
-  const [url] = useState(
-    () => localStorage.getItem("overseer.wsUrl") || DEFAULT_URL,
-  );
+  const [url] = useState(() => localStorage.getItem("overseer.wsUrl") || DEFAULT_URL);
   const [token] = useState(() => localStorage.getItem("overseer.token") || "");
-  const [conversationId] = useState(
-    () => Number(localStorage.getItem("overseer.conv")) || 1,
-  );
+  const [conversationId] = useState(() => Number(localStorage.getItem("overseer.conv")) || 1);
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -25,6 +44,11 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const idRef = useRef(1);
+
+  const nextId = () => ++idRef.current;
 
   useEffect(() => {
     const ws = new WebSocket(url);
@@ -42,105 +66,204 @@ export default function App() {
       } catch {
         return;
       }
-      if (frame.type === "token" && frame.text) {
-        appendToLastAssistant(frame.text);
-      } else if (frame.type === "done") {
+      if (frame.type === "token" && frame.text) appendToLastAssistant(frame.text);
+      else if (frame.type === "done") {
         setBusy(false);
-        // Reconcile the streamed text with the authoritative final response.
         if (frame.response) replaceLastAssistant(frame.response);
       } else if (frame.type === "error") {
         setBusy(false);
-        appendToLastAssistant(`\n[error: ${frame.error}]`);
+        appendToLastAssistant(`\n⚠️ ${frame.error}`);
       }
     };
     return () => ws.close();
   }, [url, token]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  // Pointer-reactive aurora: track the cursor as CSS vars for a subtle parallax.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const onMove = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--mx", `${((e.clientX - r.left) / r.width) * 100}%`);
+      el.style.setProperty("--my", `${((e.clientY - r.top) / r.height) * 100}%`);
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, []);
 
   function appendToLastAssistant(chunk: string) {
     setMessages((prev) => {
       const next = [...prev];
       const last = next[next.length - 1];
-      if (last && last.role === "assistant") {
-        next[next.length - 1] = { ...last, text: last.text + chunk };
-      } else {
-        next.push({ role: "assistant", text: chunk });
-      }
+      if (last && last.role === "assistant") next[next.length - 1] = { ...last, text: last.text + chunk };
+      else next.push({ role: "assistant", text: chunk, id: nextId() });
       return next;
     });
   }
-
   function replaceLastAssistant(text: string) {
     setMessages((prev) => {
       const next = [...prev];
       const last = next[next.length - 1];
-      if (last && last.role === "assistant") {
-        next[next.length - 1] = { ...last, text };
-      } else {
-        next.push({ role: "assistant", text });
-      }
+      if (last && last.role === "assistant") next[next.length - 1] = { ...last, text };
+      else next.push({ role: "assistant", text, id: nextId() });
       return next;
     });
   }
 
-  function send() {
-    const text = input.trim();
+  function send(textOverride?: string) {
+    const text = (textOverride ?? input).trim();
+    if (!text || busy) return;
     const ws = wsRef.current;
-    if (!text || !ws || ws.readyState !== WebSocket.OPEN || busy) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // Don't fail silently — tell the user why nothing happened.
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", text, id: nextId() },
+        {
+          role: "assistant",
+          text: "⚠️ Not connected to the Overseer engine. Start it in a terminal:\n\n    overseer --server\n\n(or:  cargo run -- server)  — it listens on 127.0.0.1:8080. Then send again.",
+          id: nextId(),
+        },
+      ]);
+      setInput("");
+      requestAnimationFrame(() => autosize());
+      return;
+    }
     setMessages((prev) => [
       ...prev,
-      { role: "user", text },
-      { role: "assistant", text: "" },
+      { role: "user", text, id: nextId() },
+      { role: "assistant", text: "", id: nextId() },
     ]);
     ws.send(JSON.stringify({ conversation_id: conversationId, message: text }));
     setInput("");
     setBusy(true);
+    requestAnimationFrame(() => autosize());
   }
 
+  function autosize() {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "0px";
+    ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
+  }
+
+  const empty = messages.length === 0;
+  const lastAssistantEmpty = useMemo(() => {
+    const last = messages[messages.length - 1];
+    return last?.role === "assistant" && last.text.length === 0;
+  }, [messages]);
+
   return (
-    <div className="app">
+    <div className="stage" ref={stageRef}>
+      <div className="aurora" aria-hidden />
+      <div className="grain" aria-hidden />
+
       <header className="bar">
-        <span className="title">Overseer</span>
-        <span className={connected ? "dot on" : "dot off"} />
-        <span className="status">{connected ? "connected" : "offline"}</span>
+        <div className="brand">
+          <span className="mark" aria-hidden>
+            <span className="mark-core" />
+          </span>
+          <span className="wordmark">Overseer</span>
+        </div>
+        <div className={`conn ${connected ? "on" : "off"}`}>
+          <span className="pulse" />
+          {connected ? "connected" : "offline"}
+        </div>
       </header>
 
-      <div className="thread" ref={scrollRef}>
-        {messages.length === 0 && (
-          <div className="empty">
-            Ask anything, or run a governed command:{" "}
-            <code>/write ~/notes.txt hello</code>,{" "}
-            <code>/open https://example.com</code>, <code>/screenshot</code>.
+      <main className="thread" ref={scrollRef}>
+        {empty ? (
+          <section className="hero">
+            <h1 className="hero-title">
+              What should I <span className="grad">take care of</span>?
+            </h1>
+            <p className="hero-sub">
+              I can see your screen, run commands, browse the web, and act — every step governed by the Kernel.
+            </p>
+            <div className="chips">
+              {EXAMPLES.map((e, i) => (
+                <button
+                  key={i}
+                  className="chip"
+                  style={{ "--d": `${i * 70}ms` } as CSSProperties}
+                  onClick={() => {
+                    setInput(e.text);
+                    taRef.current?.focus();
+                    requestAnimationFrame(autosize);
+                  }}
+                >
+                  <span className="chip-ic"><Glyph name={e.icon} /></span>
+                  <span>{e.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <div className="messages">
+            {messages.map((m) =>
+              m.role === "assistant" && m.text.length === 0 ? null : (
+                <div key={m.id} className={`msg ${m.role}`}>
+                  {m.role === "assistant" && (
+                    <span className="ava" aria-hidden>
+                      <span className="ava-core" />
+                    </span>
+                  )}
+                  <div className="bubble">{m.text}</div>
+                </div>
+              )
+            )}
+            {busy && lastAssistantEmpty && (
+              <div className="msg assistant">
+                <span className="ava thinking" aria-hidden>
+                  <span className="ava-core" />
+                </span>
+                <div className="bubble thinking-bubble">
+                  <span className="dot" />
+                  <span className="dot" />
+                  <span className="dot" />
+                </div>
+              </div>
+            )}
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className={`msg ${m.role}`}>
-            {m.text || (m.role === "assistant" && busy ? "…" : "")}
-          </div>
-        ))}
-      </div>
+      </main>
 
-      <div className="composer">
-        <textarea
-          value={input}
-          placeholder={
-            connected ? "Message Overseer…" : "Start the engine: overseer --server"
-          }
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-        />
-        <button onClick={send} disabled={!connected || busy}>
-          Send
-        </button>
-      </div>
+      <footer className="composer-wrap">
+        <div className={`composer ${busy ? "busy" : ""}`}>
+          <textarea
+            ref={taRef}
+            value={input}
+            rows={1}
+            placeholder={connected ? "Ask Overseer to do something…" : "Start the engine:  overseer --server"}
+            onChange={(e) => {
+              setInput(e.target.value);
+              autosize();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+          />
+          <button className="send" onClick={() => send()} disabled={busy || !input.trim()} aria-label="Send">
+            {busy ? (
+              <span className="spinner" />
+            ) : (
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+            )}
+          </button>
+        </div>
+        <div className="hint">
+          <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline · try <code>/do …</code>
+        </div>
+      </footer>
     </div>
   );
 }
