@@ -15,6 +15,9 @@ use crate::db::Database;
 use crate::engine::providers::{self, AgentMessage, ToolCall, ToolSpec};
 use crate::engine::utils::discovery::ToolInfo;
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
 
 /// Max plan→act→observe iterations before we stop and summarize.
 const MAX_STEPS: usize = 8;
@@ -198,6 +201,48 @@ pub fn tool_catalog() -> Vec<ToolSpec> {
                 "properties": { "query": { "type": "string", "description": "Optional keyword to match." } }
             }),
         },
+        // ---- In-browser navigation (CDP) ----
+        ToolSpec {
+            name: "browser_open".into(),
+            description: "Open a URL in the controlled browser session (persists for follow-up reads/clicks).".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": { "url": { "type": "string" } },
+                "required": ["url"]
+            }),
+        },
+        ToolSpec {
+            name: "browser_read".into(),
+            description: "Read the current browser page's visible text.".into(),
+            parameters: json!({ "type": "object", "properties": {} }),
+        },
+        ToolSpec {
+            name: "browser_click".into(),
+            description: "Click a link or button in the current browser page by its visible text.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": { "text": { "type": "string", "description": "Visible text of the link/button." } },
+                "required": ["text"]
+            }),
+        },
+        // ---- Scheduled / repeating autonomy ----
+        ToolSpec {
+            name: "schedule_goal".into(),
+            description: "Schedule a goal to run later or repeatedly (the daemon runs it, still approval-gated).".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "goal": { "type": "string", "description": "The goal to run, as you'd type after /do." },
+                    "every_secs": { "type": "integer", "description": "Repeat interval in seconds; omit or 0 for one-shot." }
+                },
+                "required": ["goal"]
+            }),
+        },
+        ToolSpec {
+            name: "list_schedules".into(),
+            description: "List the currently scheduled goals.".into(),
+            parameters: json!({ "type": "object", "properties": {} }),
+        },
     ]
 }
 
@@ -346,11 +391,19 @@ async fn dispatch_tool(
     conversation_id: i64,
     call: &ToolCall,
 ) -> String {
-    // Long-term memory is the agent's own scratchpad, not a governed OS action.
+    // Internal tools (the agent's own bookkeeping / reads — not governed OS actions).
     match call.name.as_str() {
         "remember" => return remember_note(db, conversation_id, &call.arguments).await,
         "recall" => return recall_notes(db, &call.arguments).await,
+        "schedule_goal" => return schedule_goal_tool(db, conversation_id, &call.arguments).await,
+        "list_schedules" => return list_schedules_tool(db).await,
+        "browser_read" => return browser_read_internal(conversation_id).await,
         _ => {}
+    }
+
+    // Browser actions need a live session id injected before the kernel call.
+    if call.name == "browser_open" || call.name == "browser_click" {
+        return browser_action(db, run_id, conversation_id, call).await;
     }
 
     let Some((tool_name, args, domain, step)) = map_call(call) else {
@@ -520,6 +573,131 @@ async fn recall_notes(db: &Database, args: &Value) -> String {
     }
 }
 
+// ---- Scheduled autonomy tools ----
+
+async fn schedule_goal_tool(db: &Database, conversation_id: i64, args: &Value) -> String {
+    let goal = args.get("goal").and_then(|v| v.as_str()).unwrap_or("").trim();
+    if goal.is_empty() {
+        return "Nothing to schedule (empty goal).".to_string();
+    }
+    let every = args.get("every_secs").and_then(|v| v.as_i64()).unwrap_or(0).max(0);
+    let now = crate::engine::scheduler::now_unix();
+    let first = if every > 0 { now + every } else { now };
+    match crate::engine::scheduler::add_schedule(db, conversation_id, goal, every, first).await {
+        Ok(id) => {
+            if every > 0 {
+                format!("Scheduled goal #{id}: \"{}\" every {every}s.", short(goal, 80))
+            } else {
+                format!("Scheduled goal #{id} to run shortly: \"{}\".", short(goal, 80))
+            }
+        }
+        Err(e) => format!("Failed to schedule: {e}"),
+    }
+}
+
+async fn list_schedules_tool(db: &Database) -> String {
+    let list = crate::engine::scheduler::list_schedules(db).await;
+    if list.is_empty() {
+        return "No scheduled goals.".to_string();
+    }
+    let now = crate::engine::scheduler::now_unix();
+    let lines = list
+        .iter()
+        .map(|s| {
+            let when = (s.next_run_at - now).max(0);
+            let repeat = if s.interval_secs > 0 { format!("every {}s", s.interval_secs) } else { "once".into() };
+            format!("- #{} in {}s ({}) — {}", s.id, when, repeat, short(&s.goal, 60))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("Scheduled goals:\n{lines}")
+}
+
+// ---- In-browser (CDP) session management ----
+
+/// One controlled browser session per conversation, reused across calls.
+static BROWSER_SESSIONS: OnceLock<Mutex<HashMap<i64, i64>>> = OnceLock::new();
+
+async fn ensure_browser_session(conversation_id: i64) -> Result<i64, String> {
+    let pool = crate::engine::browser::global::get()
+        .cloned()
+        .ok_or_else(|| "browser pool not initialized (run the daemon)".to_string())?;
+    let map = BROWSER_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = map.lock().await;
+    if let Some(&sid) = guard.get(&conversation_id) {
+        if pool.session_exists(sid).await {
+            return Ok(sid);
+        }
+    }
+    let sid = pool
+        .create_session(Some(conversation_id))
+        .await
+        .map_err(|e| e.to_string())?;
+    guard.insert(conversation_id, sid);
+    Ok(sid)
+}
+
+async fn browser_read_internal(conversation_id: i64) -> String {
+    let sid = match ensure_browser_session(conversation_id).await {
+        Ok(s) => s,
+        Err(e) => return format!("browser unavailable: {e}"),
+    };
+    match crate::engine::tools::browser::read_page(&json!({ "session_id": sid })).await {
+        Ok(mut s) => {
+            if s.len() > MAX_OBSERVATION {
+                s.truncate(MAX_OBSERVATION);
+            }
+            s
+        }
+        Err(e) => format!("browser read failed: {e}"),
+    }
+}
+
+async fn browser_action(
+    db: &Database,
+    run_id: Option<i64>,
+    conversation_id: i64,
+    call: &ToolCall,
+) -> String {
+    let sid = match ensure_browser_session(conversation_id).await {
+        Ok(s) => s,
+        Err(e) => return format!("browser unavailable: {e}"),
+    };
+    let a = &call.arguments;
+    let (tool_name, args, step): (&str, Value, String) = match call.name.as_str() {
+        "browser_open" => {
+            let url = a.get("url").and_then(|v| v.as_str()).unwrap_or_default();
+            ("browser_navigate", json!({ "session_id": sid, "url": url }), format!("browser open {url}"))
+        }
+        "browser_click" => {
+            let text = a.get("text").and_then(|v| v.as_str()).unwrap_or_default();
+            ("browser_click", json!({ "session_id": sid, "text": text }), format!("browser click '{text}'"))
+        }
+        _ => return format!("unknown browser action '{}'", call.name),
+    };
+    let tool = tool_stub(tool_name);
+    let outcome = crate::engine::kernel::kernel_execute(
+        db,
+        run_id,
+        "web",
+        &step,
+        &tool,
+        args,
+        &[tool_name.to_string()],
+    )
+    .await;
+    match &outcome {
+        overseer_kernel::ExecutionOutcome::Executed { output } => {
+            let mut o = output.clone();
+            if o.len() > MAX_OBSERVATION {
+                o.truncate(MAX_OBSERVATION);
+            }
+            o
+        }
+        other => other.agent_response(),
+    }
+}
+
 async fn finish(db: &Database, run_id: Option<i64>, status: &str) {
     if let Some(rid) = run_id {
         let _ = crate::backend::finish_execution_run(db, rid, status, None, None).await;
@@ -628,6 +806,24 @@ mod tests {
         assert_eq!(tool, "os_tool");
         assert_eq!(args["action"], "type_text");
         assert_eq!(args["text"], "hello");
+    }
+
+    #[test]
+    fn browser_and_schedule_tools_registered() {
+        let names: Vec<String> = tool_catalog().into_iter().map(|t| t.name).collect();
+        for expected in ["browser_open", "browser_read", "browser_click", "schedule_goal", "list_schedules"] {
+            assert!(names.contains(&expected.to_string()), "missing {expected}");
+        }
+    }
+
+    #[tokio::test]
+    async fn schedule_then_list_roundtrips() {
+        let db = crate::db::Database::new_in_memory().await.unwrap();
+        let conv = crate::backend::add_conversation(&db, "t").await.unwrap();
+        let out = schedule_goal_tool(&db, conv, &json!({ "goal": "brief me", "every_secs": 3600 })).await;
+        assert!(out.contains("Scheduled goal"));
+        let listed = list_schedules_tool(&db).await;
+        assert!(listed.contains("brief me"));
     }
 
     #[tokio::test]
