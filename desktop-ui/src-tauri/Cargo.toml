@@ -1,8 +1,12 @@
+# Standalone workspace: keep this Tauri app out of the parent Rust engine
+# workspace at ../../Cargo.toml (otherwise `cargo metadata` / `tauri dev` fails).
+[workspace]
+
 [package]
 name = "desktop-ui"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Overseer desktop client"
+authors = ["Overseer"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
