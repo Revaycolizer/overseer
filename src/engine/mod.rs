@@ -5,6 +5,7 @@ pub mod memory;
 pub mod activity;
 pub mod cache;
 pub mod kernel;
+pub mod agent_loop;
 pub mod governed_commands;
 pub mod providers;
 pub mod orchestrator;
