@@ -2,8 +2,6 @@
 
 use tracing_subscriber::EnvFilter;
 
-use overseer::routes::App;
-
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -90,18 +88,18 @@ fn main() {
         return;
     }
 
-    #[cfg(feature = "desktop")]
-    {
-        use dioxus::desktop::{Config, WindowBuilder};
-        let config = Config::new().with_window(
-            WindowBuilder::new()
-                .with_title("Overseer")
-                .with_decorations(false),
-        );
-        dioxus::LaunchBuilder::desktop()
-            .with_cfg(config)
-            .launch(App);
-    }
-    #[cfg(not(feature = "desktop"))]
-    dioxus::launch(App);
+    // No subcommand: run the engine daemon. The Tauri desktop client
+    // (`desktop-ui/`) connects to it over the local WebSocket.
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        tracing::info!("Initializing database for daemon...");
+        let db = overseer::db::Database::new().await.unwrap();
+        let agent_system =
+            std::sync::Arc::new(overseer::engine::system::AgentSystem::new(db.clone()));
+        if let Err(e) =
+            overseer::server::run_server(std::sync::Arc::new(db), agent_system, 8080).await
+        {
+            tracing::error!(?e, "Server error");
+        }
+    });
 }
