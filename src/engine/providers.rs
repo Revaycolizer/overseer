@@ -74,6 +74,47 @@ pub async fn load_config(db: &Database) -> ProviderConfig {
     }
 }
 
+/// For Ollama, make sure the configured model is actually pulled; if not, fall
+/// back to the first available model so the agent "just works" instead of 404-ing
+/// on a default the user never pulled. Cloud configs are returned unchanged. Any
+/// error (Ollama down, etc.) leaves the config as-is for the caller to surface.
+pub async fn resolve_model(cfg: &ProviderConfig) -> ProviderConfig {
+    if !matches!(cfg.provider, Provider::Ollama) {
+        return cfg.clone();
+    }
+    let client = reqwest::Client::new();
+    let Ok(resp) = client
+        .get(format!("{}/api/tags", cfg.base_url))
+        .send()
+        .await
+    else {
+        return cfg.clone();
+    };
+    let Ok(v) = resp.json::<serde_json::Value>().await else {
+        return cfg.clone();
+    };
+    let available: Vec<String> = v["models"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if available.iter().any(|m| m == &cfg.model) || available.is_empty() {
+        return cfg.clone();
+    }
+    let mut out = cfg.clone();
+    tracing::warn!(
+        configured = %cfg.model,
+        chosen = %available[0],
+        "configured Ollama model not pulled; falling back to first available"
+    );
+    out.model = available[0].clone();
+    out
+}
+
 /// Single-turn chat completion against the configured cloud provider.
 /// Returns the assistant text. Only valid for OpenAI/Anthropic (see
 /// `is_cloud_ready`); the Ollama path stays on the existing rig client.
@@ -176,7 +217,8 @@ pub struct AgentTurn {
     pub tool_calls: Vec<ToolCall>,
 }
 
-/// One agentic step against a cloud provider with tools available.
+/// One agentic step against the configured provider (local Ollama by default,
+/// or OpenAI/Anthropic) with tools available.
 /// Returns the model's tool calls (to execute + observe) or a final answer.
 pub async fn complete_with_tools(
     cfg: &ProviderConfig,
@@ -188,10 +230,91 @@ pub async fn complete_with_tools(
     match cfg.provider {
         Provider::OpenAI => openai_with_tools(&client, cfg, system, messages, tools).await,
         Provider::Anthropic => anthropic_with_tools(&client, cfg, system, messages, tools).await,
-        Provider::Ollama => {
-            anyhow::bail!("complete_with_tools is for cloud providers")
+        Provider::Ollama => ollama_with_tools(&client, cfg, system, messages, tools).await,
+    }
+}
+
+/// Local Ollama function-calling via `/api/chat` (non-streaming). Tool-capable
+/// models (qwen2.5, llama3.1, mistral-nemo, …) return structured `tool_calls`
+/// whose arguments are already JSON objects. This is the DEFAULT path — cloud
+/// providers are optional extras.
+async fn ollama_with_tools(
+    client: &reqwest::Client,
+    cfg: &ProviderConfig,
+    system: &str,
+    messages: &[AgentMessage],
+    tools: &[ToolSpec],
+) -> anyhow::Result<AgentTurn> {
+    let mut wire: Vec<serde_json::Value> = vec![serde_json::json!({
+        "role": "system", "content": system,
+    })];
+    for m in messages {
+        match m {
+            AgentMessage::User(s) => wire.push(serde_json::json!({ "role": "user", "content": s })),
+            AgentMessage::Assistant { text, tool_calls } => {
+                let calls: Vec<serde_json::Value> = tool_calls
+                    .iter()
+                    .map(|c| serde_json::json!({ "function": { "name": c.name, "arguments": c.arguments } }))
+                    .collect();
+                let mut msg = serde_json::json!({
+                    "role": "assistant",
+                    "content": text.clone().unwrap_or_default(),
+                });
+                if !calls.is_empty() {
+                    msg["tool_calls"] = serde_json::Value::Array(calls);
+                }
+                wire.push(msg);
+            }
+            // Ollama matches tool results by name/order, not id.
+            AgentMessage::ToolResult { name, content, .. } => wire.push(serde_json::json!({
+                "role": "tool", "name": name, "content": content,
+            })),
         }
     }
+
+    let tool_defs: Vec<serde_json::Value> = tools
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "type": "function",
+                "function": { "name": t.name, "description": t.description, "parameters": t.parameters },
+            })
+        })
+        .collect();
+
+    let mut body = serde_json::json!({ "model": cfg.model, "messages": wire, "stream": false });
+    if !tool_defs.is_empty() {
+        body["tools"] = serde_json::Value::Array(tool_defs);
+    }
+
+    let resp = client
+        .post(format!("{}/api/chat", cfg.base_url))
+        .json(&body)
+        .send()
+        .await?;
+    let status = resp.status();
+    let v: serde_json::Value = resp.json().await?;
+    if !status.is_success() {
+        anyhow::bail!("Ollama error {}: {}", status, v);
+    }
+
+    let msg = &v["message"];
+    let mut turn = AgentTurn::default();
+    if let Some(text) = msg["content"].as_str() {
+        if !text.trim().is_empty() {
+            turn.text = Some(text.to_string());
+        }
+    }
+    if let Some(calls) = msg["tool_calls"].as_array() {
+        for (i, c) in calls.iter().enumerate() {
+            turn.tool_calls.push(ToolCall {
+                id: format!("call_{i}"), // Ollama has no call ids; synthesize for round-trip
+                name: c["function"]["name"].as_str().unwrap_or_default().to_string(),
+                arguments: c["function"]["arguments"].clone(),
+            });
+        }
+    }
+    Ok(turn)
 }
 
 async fn openai_with_tools(
