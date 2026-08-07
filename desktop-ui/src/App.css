@@ -362,7 +362,7 @@ body { background: var(--bg); overflow: hidden; }
 .side-label { transition: opacity 0.2s var(--ease); }
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.topbar { display: flex; align-items: center; padding: 14px 22px 2px; -webkit-app-region: drag; }
+.topbar { display: flex; align-items: center; padding: 14px 22px 2px; }
 .topbar .spacer { flex: 1; }
 .main-body { flex: 1; display: flex; min-height: 0; }
 
