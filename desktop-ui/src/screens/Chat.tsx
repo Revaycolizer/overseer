@@ -1,5 +1,5 @@
-import { useEffect, useRef, type CSSProperties } from "react";
-import { Msg, Persona } from "../lib/store";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Approval, Msg, Persona, SLASH_COMMANDS } from "../lib/store";
 
 const ICONS: Record<string, string> = {
   files: "M4 5.5A1.5 1.5 0 0 1 5.5 4h3l2 2h6A1.5 1.5 0 0 1 18 7.5v9A1.5 1.5 0 0 1 16.5 18h-11A1.5 1.5 0 0 1 4 16.5z",
@@ -28,6 +28,8 @@ export default function Chat({
   busy,
   connected,
   persona,
+  approvals,
+  onResolve,
   input,
   setInput,
   onSend,
@@ -36,16 +38,19 @@ export default function Chat({
   busy: boolean;
   connected: boolean;
   persona: Persona | null;
+  approvals: Approval[];
+  onResolve: (id: string, ok: boolean) => void;
   input: string;
   setInput: (v: string) => void;
   onSend: (text: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const [sel, setSel] = useState(0);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+  }, [messages, approvals]);
 
   function autosize() {
     const ta = taRef.current;
@@ -54,9 +59,26 @@ export default function Chat({
     ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
   }
 
+  // Slash palette: active while typing the command token (a leading "/" with no space yet).
+  const slashQuery = input.startsWith("/") && !input.includes(" ") ? input : "";
+  const matches = slashQuery
+    ? SLASH_COMMANDS.filter((c) => c.cmd.startsWith(slashQuery))
+    : [];
+  const paletteOpen = matches.length > 0;
+
+  useEffect(() => {
+    setSel(0);
+  }, [slashQuery]);
+
+  function pick(cmd: string) {
+    setInput(cmd + " ");
+    taRef.current?.focus();
+    requestAnimationFrame(autosize);
+  }
+
   const empty = messages.length === 0;
   const last = messages[messages.length - 1];
-  const thinking = busy && last?.role === "assistant" && last.text.length === 0;
+  const thinking = busy && last?.role === "assistant" && last.text.length === 0 && approvals.length === 0;
 
   return (
     <div className="chat">
@@ -128,50 +150,109 @@ export default function Chat({
       </div>
 
       <div className="composer-wrap">
-        {persona && (
+        {approvals.map((a) => (
+          <div key={a.id} className="approval">
+            <div className="approval-body">
+              <span className="approval-badge">approval</span>
+              <div>
+                <div className="approval-summary">{a.summary || `${a.tool} action`}</div>
+                <div className="approval-meta">
+                  <code>{a.tool}</code> · {a.kind.replace(/_/g, " ")}
+                </div>
+              </div>
+            </div>
+            <div className="approval-actions">
+              <button className="btn-danger" onClick={() => onResolve(a.id, false)}>
+                Reject
+              </button>
+              <button className="btn-primary" onClick={() => onResolve(a.id, true)}>
+                Approve
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {persona && approvals.length === 0 && (
           <div className="persona-active">
             <span className="persona-emoji">{persona.emoji}</span>
             {persona.name} is active
           </div>
         )}
-        <div className={`composer ${busy ? "busy" : ""}`}>
-          <textarea
-            ref={taRef}
-            value={input}
-            rows={1}
-            placeholder={connected ? (persona ? `Message ${persona.name}…` : "Ask Overseer to do something…") : "Start the engine:  overseer --server"}
-            onChange={(e) => {
-              setInput(e.target.value);
-              autosize();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
+
+        <div className="composer-shell">
+          {paletteOpen && (
+            <div className="palette">
+              {matches.map((c, i) => (
+                <button
+                  key={c.cmd}
+                  className={`palette-item ${i === sel ? "on" : ""}`}
+                  onMouseEnter={() => setSel(i)}
+                  onClick={() => pick(c.cmd)}
+                >
+                  <span className="palette-cmd">{c.cmd}</span>
+                  <span className="palette-args">{c.args}</span>
+                  <span className="palette-desc">{c.desc}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className={`composer ${busy ? "busy" : ""}`}>
+            <textarea
+              ref={taRef}
+              value={input}
+              rows={1}
+              placeholder={connected ? (persona ? `Message ${persona.name}…` : "Ask Overseer to do something…  (type / for commands)") : "Start the engine:  overseer --server"}
+              onChange={(e) => {
+                setInput(e.target.value);
+                autosize();
+              }}
+              onKeyDown={(e) => {
+                if (paletteOpen) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setSel((s) => (s + 1) % matches.length);
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setSel((s) => (s - 1 + matches.length) % matches.length);
+                    return;
+                  }
+                  if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+                    e.preventDefault();
+                    pick(matches[sel].cmd);
+                    return;
+                  }
+                }
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  onSend(input);
+                  requestAnimationFrame(autosize);
+                }
+              }}
+            />
+            <button
+              className="send"
+              onClick={() => {
                 onSend(input);
                 requestAnimationFrame(autosize);
-              }
-            }}
-          />
-          <button
-            className="send"
-            onClick={() => {
-              onSend(input);
-              requestAnimationFrame(autosize);
-            }}
-            disabled={busy || !input.trim()}
-            aria-label="Send"
-          >
-            {busy ? (
-              <span className="spinner" />
-            ) : (
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 19V5M5 12l7-7 7 7" />
-              </svg>
-            )}
-          </button>
+              }}
+              disabled={busy || !input.trim()}
+              aria-label="Send"
+            >
+              {busy ? (
+                <span className="spinner" />
+              ) : (
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
         <div className="hint">
-          <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline · try <code>/do …</code>
+          <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline · <kbd>/</kbd> for commands
         </div>
       </div>
     </div>

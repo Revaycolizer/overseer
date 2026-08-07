@@ -14,6 +14,22 @@ export interface Msg {
   id: number;
 }
 
+export interface Approval {
+  id: string;
+  tool: string;
+  kind: string;
+  summary: string;
+  reason: string;
+}
+
+/** Slash commands surfaced in the composer palette. */
+export const SLASH_COMMANDS = [
+  { cmd: "/do", args: "<goal>", desc: "Autonomous agent — plans & runs tools to reach a goal" },
+  { cmd: "/write", args: "<path> <content>", desc: "Write a file (governed)" },
+  { cmd: "/open", args: "<app or url>", desc: "Launch an app or open a URL" },
+  { cmd: "/screenshot", args: "", desc: "Capture the screen" },
+];
+
 const PERSONAS = "overseer.personas";
 const ACTIVE = "overseer.activePersona";
 const IDLE = "overseer.idleSecs";

@@ -427,6 +427,69 @@ body { background: var(--bg); overflow: hidden; }
 .clock-date { font-size: clamp(15px, 2.5vw, 22px); color: var(--muted); letter-spacing: 0.01em; }
 .clock-hint { position: absolute; bottom: 40px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
 
+/* ===== Sidebar — refined ===== */
+.sidebar { width: 236px; padding: 18px 12px; gap: 2px; }
+.side-brand { padding: 8px 10px 18px; }
+.side-group { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); padding: 4px 14px 8px; white-space: nowrap; overflow: hidden; transition: opacity 0.2s var(--ease); }
+.sidebar.collapsed .side-group { opacity: 0; }
+.side-item { position: relative; padding: 11px 14px; border-radius: 13px; }
+.side-bar { position: absolute; left: 5px; top: 50%; width: 3px; height: 18px; border-radius: 3px; background: linear-gradient(var(--a1), var(--a2)); transform: translateY(-50%) scaleY(0); transition: transform 0.3s var(--spring); }
+.side-item.active .side-bar { transform: translateY(-50%) scaleY(1); }
+.side-item.active { box-shadow: 0 10px 26px -16px rgba(124, 92, 255, 0.7); }
+.sidebar.collapsed .side-item, .sidebar.collapsed .side-collapse, .sidebar.collapsed .side-status { justify-content: center; }
+.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 4px; padding-top: 10px; border-top: 1px solid var(--brd); }
+.side-status { display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-size: 12.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.side-status .pulse { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex: none; }
+.side-status.on { color: #b6f7d8; }
+.side-status.on .pulse { background: #34d399; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6); animation: ping 2s var(--ease) infinite; }
+.side-collapse { margin-top: 0; }
+
+/* ===== Approval cards ===== */
+.approval {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  max-width: 824px; margin: 0 auto 10px; padding: 13px 16px; border-radius: 16px;
+  background: linear-gradient(135deg, rgba(245, 180, 74, 0.16), rgba(245, 180, 74, 0.06));
+  border: 1px solid rgba(245, 180, 74, 0.36); box-shadow: var(--shadow);
+  animation: pop 0.4s var(--ease) both;
+}
+.approval-body { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.approval-badge { flex: none; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #f5b04a; padding: 4px 9px; border-radius: 999px; border: 1px solid rgba(245, 180, 74, 0.45); background: rgba(245, 180, 74, 0.12); }
+.approval-summary { font-weight: 600; font-size: 14px; }
+.approval-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.approval-meta code { font-family: var(--mono); color: #c9c4ff; }
+.approval-actions { display: flex; gap: 8px; flex: none; }
+.approval-actions button { padding: 8px 16px; font-size: 13px; }
+
+/* ===== Slash-command palette ===== */
+.composer-shell { position: relative; }
+.palette {
+  position: absolute; bottom: calc(100% + 10px); left: 0; right: 0;
+  background: var(--panel-strong); border: 1px solid var(--brd); border-radius: 16px; padding: 6px;
+  backdrop-filter: blur(22px); box-shadow: var(--shadow); overflow: hidden;
+  animation: rise 0.22s var(--ease) both;
+}
+.palette-item {
+  display: grid; grid-template-columns: auto auto 1fr; align-items: baseline; gap: 12px;
+  width: 100%; text-align: left; padding: 10px 13px; border: none; background: transparent;
+  border-radius: 11px; cursor: pointer; color: var(--text); font: inherit;
+  transition: background 0.15s var(--ease);
+}
+.palette-item.on, .palette-item:hover { background: linear-gradient(120deg, rgba(124, 92, 255, 0.22), rgba(34, 211, 238, 0.12)); }
+.palette-cmd { font-family: var(--mono); font-weight: 700; font-size: 13.5px; color: #c9c4ff; }
+.palette-args { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.palette-desc { font-size: 12.5px; color: var(--muted); text-align: right; }
+
+/* ===== Summon greeting ===== */
+.greet {
+  position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 30;
+  display: flex; align-items: center; gap: 11px; padding: 11px 18px; border-radius: 14px;
+  background: var(--panel-strong); border: 1px solid var(--brd); backdrop-filter: blur(22px);
+  box-shadow: var(--shadow); font-size: 14px; font-weight: 500;
+  animation: greetIn 0.5s var(--ease);
+}
+.greet .mark { width: 22px; height: 22px; }
+@keyframes greetIn { 0% { opacity: 0; transform: translate(-50%, -14px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
+
 /* ===== Reduced motion ===== */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }

@@ -6,6 +6,7 @@ import Studio from "./screens/Studio";
 import Clock from "./screens/Clock";
 import Settings from "./screens/Settings";
 import {
+  Approval,
   Msg,
   Persona,
   loadPersonas,
@@ -50,11 +51,14 @@ export default function App() {
   const [input, setInput] = useState("");
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
 
   const [personas, setPersonas] = useState<Persona[]>(() => loadPersonas());
   const [activeId, setActiveId] = useState<string | null>(() => getActivePersona());
   const [idleSecs, setIdleSecsState] = useState<number>(() => getIdleSecs());
   const [idle, setIdle] = useState(false);
+  const [greeting, setGreeting] = useState<string | null>(null);
+  const greetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const wsRef = useRef<WebSocket | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -92,11 +96,16 @@ export default function App() {
           return;
         }
         if (frame.type === "token" && frame.text) appendAssistant(frame.text);
-        else if (frame.type === "done") {
+        else if (frame.type === "approval") {
+          const a = frame as unknown as Approval;
+          setApprovals((prev) => (prev.some((x) => x.id === a.id) ? prev : [...prev, a]));
+        } else if (frame.type === "done") {
           setBusy(false);
+          setApprovals([]);
           if (frame.response) replaceAssistant(parseAssistant(frame.response));
         } else if (frame.type === "error") {
           setBusy(false);
+          setApprovals([]);
           appendAssistant(`\n⚠️ ${frame.error}`);
         }
       };
@@ -134,6 +143,26 @@ export default function App() {
     };
     window.addEventListener("pointermove", onMove);
     return () => window.removeEventListener("pointermove", onMove);
+  }, []);
+
+  // ---- Greet on summon (window becomes visible, e.g. via the tray hotkey) ----
+  useEffect(() => {
+    const greetNow = () => {
+      const h = new Date().getHours();
+      const part = h < 5 ? "Still up" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+      setGreeting(`${part} — what should I take care of?`);
+      if (greetTimer.current) clearTimeout(greetTimer.current);
+      greetTimer.current = setTimeout(() => setGreeting(null), 3800);
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") greetNow();
+    };
+    greetNow(); // greet on launch
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      if (greetTimer.current) clearTimeout(greetTimer.current);
+    };
   }, []);
 
   // ---- Inactivity → ambient clock ----
@@ -202,6 +231,14 @@ export default function App() {
     setBusy(true);
   }
 
+  const resolveApproval = (id: string, ok: boolean) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(ok ? { approve: id } : { reject: id }));
+    }
+    setApprovals((prev) => prev.filter((a) => a.id !== id));
+  };
+
   // ---- Persona management ----
   const savePersona = (p: Persona) => {
     setPersonas((prev) => {
@@ -241,11 +278,20 @@ export default function App() {
       <div className="aurora" aria-hidden />
       <div className="grain" aria-hidden />
 
+      {greeting && !idle && (
+        <div className="greet">
+          <span className="mark" aria-hidden>
+            <span className="mark-core" />
+          </span>
+          {greeting}
+        </div>
+      )}
+
       {idle ? (
         <Clock idle />
       ) : (
         <div className="shell">
-          <Sidebar view={view} onNavigate={setView} collapsed={collapsed} onToggle={toggleSidebar} />
+          <Sidebar view={view} onNavigate={setView} collapsed={collapsed} onToggle={toggleSidebar} connected={connected} />
           <div className="main">
             <div className="topbar">
               <div className="spacer" />
@@ -265,6 +311,8 @@ export default function App() {
                   busy={busy}
                   connected={connected}
                   persona={activePersona}
+                  approvals={approvals}
+                  onResolve={resolveApproval}
                   input={input}
                   setInput={setInput}
                   onSend={send}

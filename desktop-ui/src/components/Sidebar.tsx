@@ -12,11 +12,13 @@ export default function Sidebar({
   onNavigate,
   collapsed,
   onToggle,
+  connected,
 }: {
   view: View;
   onNavigate: (v: View) => void;
   collapsed: boolean;
   onToggle: () => void;
+  connected: boolean;
 }) {
   return (
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
@@ -27,6 +29,7 @@ export default function Sidebar({
         <span className="wordmark side-word">Overseer</span>
       </div>
 
+      <div className="side-group">Workspace</div>
       <nav className="side-nav">
         {NAV.map((n) => (
           <button
@@ -35,6 +38,7 @@ export default function Sidebar({
             onClick={() => onNavigate(n.id)}
             title={n.label}
           >
+            <span className="side-bar" aria-hidden />
             <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d={n.path} />
             </svg>
@@ -43,12 +47,18 @@ export default function Sidebar({
         ))}
       </nav>
 
-      <button className="side-collapse" onClick={onToggle} title={collapsed ? "Expand" : "Collapse"}>
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d={collapsed ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"} />
-        </svg>
-        <span className="side-label">Collapse</span>
-      </button>
+      <div className="side-foot">
+        <div className={`side-status ${connected ? "on" : "off"}`} title={connected ? "Engine online" : "Engine offline"}>
+          <span className="pulse" />
+          <span className="side-label">{connected ? "Engine online" : "Engine offline"}</span>
+        </div>
+        <button className="side-collapse" onClick={onToggle} title={collapsed ? "Expand" : "Collapse"}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d={collapsed ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"} />
+          </svg>
+          <span className="side-label">Collapse</span>
+        </button>
+      </div>
     </aside>
   );
 }
