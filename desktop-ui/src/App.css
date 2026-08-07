@@ -428,7 +428,14 @@ body { background: var(--bg); overflow: hidden; }
 .clock-hint { position: absolute; bottom: 40px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
 
 /* ===== Sidebar — refined ===== */
-.sidebar { width: 236px; padding: 18px 12px; gap: 2px; }
+.sidebar {
+  width: 236px; padding: 18px 12px; gap: 2px;
+  background: var(--panel-strong);
+  border-right: 1px solid var(--brd-strong);
+  box-shadow: 6px 0 34px -20px rgba(15, 12, 40, 0.55);
+}
+:root[data-theme="dark"] .sidebar { background: rgba(16, 18, 28, 0.72); }
+:root[data-theme="light"] .sidebar { background: rgba(255, 255, 255, 0.9); }
 .side-brand { padding: 8px 10px 18px; }
 .side-group { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); padding: 4px 14px 8px; white-space: nowrap; overflow: hidden; transition: opacity 0.2s var(--ease); }
 .sidebar.collapsed .side-group { opacity: 0; }
