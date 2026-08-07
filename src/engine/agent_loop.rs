@@ -102,6 +102,15 @@ pub fn tool_catalog() -> Vec<ToolSpec> {
         },
         // ---- Read the web ----
         ToolSpec {
+            name: "web_search".into(),
+            description: "Search the web for a query and get result titles, snippets, and links. Use this whenever the user asks to search or look something up online.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": { "query": { "type": "string", "description": "What to search for." } },
+                "required": ["query"]
+            }),
+        },
+        ToolSpec {
             name: "read_webpage".into(),
             description: "Fetch a URL and extract its readable text content.".into(),
             parameters: json!({
@@ -300,6 +309,10 @@ fn map_call(call: &ToolCall) -> Option<(&'static str, Value, &'static str, Strin
             "list windows".to_string(),
         )),
         // Read the web.
+        "web_search" => {
+            let query = a.get("query").and_then(|v| v.as_str()).unwrap_or_default();
+            Some(("web_search", json!({ "query": query }), "web", format!("search: {query}")))
+        }
         "read_webpage" => {
             let url = a.get("url").and_then(|v| v.as_str()).unwrap_or_default();
             Some(("web_extract", json!({ "url": url }), "web", format!("read {url}")))

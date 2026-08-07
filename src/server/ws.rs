@@ -104,10 +104,14 @@ async fn run_turn(tx: &mut Tx, rx: &mut Rx, state: &Arc<ServerState>, req: ChatR
     let (tok_tx, mut tok_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let db_task = db.clone();
     let mut handle = tokio::spawn(async move {
+        let _ = &agent; // agent_system kept for future routing; loop uses the engine directly
         if let Some(cmd) = crate::engine::governed_commands::parse_governed(&message) {
             crate::engine::governed_commands::run_governed(&db_task, conv, cmd).await
         } else {
-            agent.orchestrate(&db_task, conv, &message, Some(tok_tx)).await
+            // Plain messages go through the function-calling agent loop so the
+            // assistant actually *does* things (search, open, run) instead of
+            // narrating intent. Chit-chat with no tool call just returns text.
+            crate::engine::agent_loop::run_agent(&db_task, conv, &message, Some(tok_tx)).await
         }
     });
 
