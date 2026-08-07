@@ -52,6 +52,7 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [listening, setListening] = useState(false);
 
   const [personas, setPersonas] = useState<Persona[]>(() => loadPersonas());
   const [activeId, setActiveId] = useState<string | null>(() => getActivePersona());
@@ -103,6 +104,12 @@ export default function App() {
           setBusy(false);
           setApprovals([]);
           if (frame.response) replaceAssistant(parseAssistant(frame.response));
+        } else if (frame.type === "voice_result") {
+          setListening(false);
+          if (frame.text) setInput((prev) => (prev ? prev + " " : "") + frame.text);
+        } else if (frame.type === "voice_error") {
+          setListening(false);
+          setGreeting(frame.error || "Voice unavailable");
         } else if (frame.type === "error") {
           setBusy(false);
           setApprovals([]);
@@ -231,6 +238,13 @@ export default function App() {
     setBusy(true);
   }
 
+  const startVoice = () => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || listening || busy) return;
+    ws.send(JSON.stringify({ voice: true }));
+    setListening(true);
+  };
+
   const resolveApproval = (id: string, ok: boolean) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -313,6 +327,8 @@ export default function App() {
                   persona={activePersona}
                   approvals={approvals}
                   onResolve={resolveApproval}
+                  listening={listening}
+                  onVoice={startVoice}
                   input={input}
                   setInput={setInput}
                   onSend={send}

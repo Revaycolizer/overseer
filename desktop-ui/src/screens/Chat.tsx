@@ -30,6 +30,8 @@ export default function Chat({
   persona,
   approvals,
   onResolve,
+  listening,
+  onVoice,
   input,
   setInput,
   onSend,
@@ -40,6 +42,8 @@ export default function Chat({
   persona: Persona | null;
   approvals: Approval[];
   onResolve: (id: string, ok: boolean) => void;
+  listening: boolean;
+  onVoice: () => void;
   input: string;
   setInput: (v: string) => void;
   onSend: (text: string) => void;
@@ -198,6 +202,18 @@ export default function Chat({
           )}
 
           <div className={`composer ${busy ? "busy" : ""}`}>
+            <button
+              className={`mic ${listening ? "listening" : ""}`}
+              onClick={onVoice}
+              disabled={!connected}
+              title={listening ? "Listening… speak now" : "Speak"}
+              aria-label="Voice input"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+              </svg>
+            </button>
             <textarea
               ref={taRef}
               value={input}

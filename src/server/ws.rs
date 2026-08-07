@@ -73,9 +73,21 @@ async fn handle_socket(socket: WebSocket, state: Arc<ServerState>) {
             Message::Close(_) => break,
             _ => continue,
         };
-        // Ignore stray approve/reject frames that arrive outside a run.
+        // Control frames handled outside a run.
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
             if v.get("approve").is_some() || v.get("reject").is_some() {
+                continue;
+            }
+            // Voice dictation: record one utterance on the daemon and transcribe it.
+            if v.get("voice").and_then(|x| x.as_bool()) == Some(true) {
+                let raw = crate::engine::voice::wake_word::get_vad_threshold();
+                let threshold = if raw <= 0.0 { 0.02 } else { raw };
+                let frame = match crate::engine::voice::local_stt::record_and_transcribe(threshold).await {
+                    Ok(t) if !t.trim().is_empty() => json!({"type":"voice_result","text": t.trim()}),
+                    Ok(_) => json!({"type":"voice_error","error":"Didn't catch any speech. Check your mic, and install a local STT tool: pip install openai-whisper (or vosk)."}),
+                    Err(e) => json!({"type":"voice_error","error": format!("Voice capture failed: {e}")}),
+                };
+                let _ = send(&mut tx, frame).await;
                 continue;
             }
         }
