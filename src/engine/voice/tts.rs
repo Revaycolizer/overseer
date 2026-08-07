@@ -25,11 +25,16 @@ fn resolve_bin(name: &str) -> String {
 }
 
 /// First Piper `.onnx` voice model found in the data dir or the repo assets.
+/// Checks both the XDG data dir and the standard ~/.local/share location, since
+/// a snap-launched shell can override XDG_DATA_HOME to the snap's private dir.
 fn find_piper_model() -> Option<String> {
-    let candidates = [
+    let mut candidates = vec![
         crate::db::get_overseer_data_dir().join("assets").join("voice").join("models"),
-        std::path::PathBuf::from("assets/voice/models"),
     ];
+    if let Some(h) = dirs::home_dir() {
+        candidates.push(h.join(".local").join("share").join("overseer").join("assets").join("voice").join("models"));
+    }
+    candidates.push(std::path::PathBuf::from("assets/voice/models"));
     for d in candidates {
         if let Ok(rd) = std::fs::read_dir(&d) {
             for e in rd.flatten() {
