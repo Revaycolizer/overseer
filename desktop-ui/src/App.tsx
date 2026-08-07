@@ -53,6 +53,10 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [listening, setListening] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const voiceModeRef = useRef(false);
+  const sendRef = useRef<(raw: string, opts?: { speak?: boolean }) => void>(() => {});
+  const startVoiceRef = useRef<() => void>(() => {});
 
   const [personas, setPersonas] = useState<Persona[]>(() => loadPersonas());
   const [activeId, setActiveId] = useState<string | null>(() => getActivePersona());
@@ -104,11 +108,20 @@ export default function App() {
           setBusy(false);
           setApprovals([]);
           if (frame.response) replaceAssistant(parseAssistant(frame.response));
+          // Hands-free: after the reply is spoken, listen again for a reply.
+          if (voiceModeRef.current) setTimeout(() => startVoiceRef.current(), 900);
         } else if (frame.type === "voice_result") {
           setListening(false);
-          if (frame.text) setInput((prev) => (prev ? prev + " " : "") + frame.text);
+          if (frame.text) {
+            if (voiceModeRef.current) sendRef.current(frame.text, { speak: true });
+            else setInput((prev) => (prev ? prev + " " : "") + frame.text);
+          }
         } else if (frame.type === "voice_error") {
           setListening(false);
+          if (voiceModeRef.current) {
+            voiceModeRef.current = false;
+            setVoiceMode(false); // stop the hands-free loop on a miss
+          }
           setGreeting(frame.error || "Voice unavailable");
         } else if (frame.type === "error") {
           setBusy(false);
@@ -209,9 +222,10 @@ export default function App() {
     });
   }
 
-  function send(raw: string) {
+  function send(raw: string, opts?: { speak?: boolean }) {
     const text = raw.trim();
     if (!text || busy) return;
+    const speak = opts?.speak ?? voiceModeRef.current;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       setMessages((prev) => [
@@ -233,10 +247,24 @@ export default function App() {
       { role: "user", text, id: nextId() },
       { role: "assistant", text: "", id: nextId() },
     ]);
-    ws.send(JSON.stringify({ conversation_id: conversationId, message: payload }));
+    ws.send(JSON.stringify({ conversation_id: conversationId, message: payload, speak }));
     setInput("");
     setBusy(true);
   }
+
+  const toggleVoiceMode = () => {
+    const next = !voiceModeRef.current;
+    voiceModeRef.current = next;
+    setVoiceMode(next);
+    if (next) startVoice();
+    else setListening(false);
+  };
+
+  // Keep refs pointing at the latest closures for the WS handler to call.
+  useEffect(() => {
+    sendRef.current = send;
+    startVoiceRef.current = startVoice;
+  });
 
   const startVoice = () => {
     const ws = wsRef.current;
@@ -329,6 +357,8 @@ export default function App() {
                   onResolve={resolveApproval}
                   listening={listening}
                   onVoice={startVoice}
+                  voiceMode={voiceMode}
+                  onToggleVoiceMode={toggleVoiceMode}
                   input={input}
                   setInput={setInput}
                   onSend={send}

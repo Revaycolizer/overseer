@@ -284,6 +284,11 @@ body { background: var(--bg); overflow: hidden; }
 }
 .mic:hover:not(:disabled) { color: var(--text); background: var(--panel); border-color: var(--brd-strong); }
 .mic:disabled { opacity: 0.4; cursor: default; }
+.mic.on {
+  color: #fff; border-color: transparent;
+  background: linear-gradient(135deg, var(--a1), var(--a2));
+  box-shadow: 0 8px 22px -10px rgba(124, 92, 255, 0.8);
+}
 .mic.listening {
   color: #fff; border-color: transparent;
   background: linear-gradient(135deg, #f43f5e, #f472b6);

@@ -32,6 +32,8 @@ export default function Chat({
   onResolve,
   listening,
   onVoice,
+  voiceMode,
+  onToggleVoiceMode,
   input,
   setInput,
   onSend,
@@ -44,6 +46,8 @@ export default function Chat({
   onResolve: (id: string, ok: boolean) => void;
   listening: boolean;
   onVoice: () => void;
+  voiceMode: boolean;
+  onToggleVoiceMode: () => void;
   input: string;
   setInput: (v: string) => void;
   onSend: (text: string) => void;
@@ -203,10 +207,21 @@ export default function Chat({
 
           <div className={`composer ${busy ? "busy" : ""}`}>
             <button
+              className={`mic ${voiceMode ? "on" : ""}`}
+              onClick={onToggleVoiceMode}
+              disabled={!connected}
+              title={voiceMode ? "Hands-free voice on — click to stop" : "Hands-free voice: talk and it talks back"}
+              aria-label="Toggle hands-free voice"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12v-1M7 12V8M11 14V6M15 12V9M19 12v-2M23 12v-1" />
+              </svg>
+            </button>
+            <button
               className={`mic ${listening ? "listening" : ""}`}
               onClick={onVoice}
               disabled={!connected}
-              title={listening ? "Listening… speak now" : "Speak"}
+              title={listening ? "Listening… speak now" : "Push to talk (dictate once)"}
               aria-label="Voice input"
             >
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
