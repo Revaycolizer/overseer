@@ -34,22 +34,9 @@ pub fn play_listening_chime() {
 }
 
 pub fn start_thinking_hum_loop() {
-    if IS_THINKING.swap(true, Ordering::SeqCst) { return; }
-    std::thread::spawn(|| {
-        while IS_THINKING.load(Ordering::SeqCst) {
-            #[cfg(target_os = "macos")]
-            { let _ = Command::new("afplay").arg("/System/Library/Sounds/Subtle.aiff").output(); }
-            #[cfg(target_os = "windows")]
-            { let _ = Command::new("powershell").args(["-Command", "[Console]::Beep(180, 500)"]).output(); }
-            #[cfg(target_os = "linux")]
-            {
-                let mut bytes = Vec::new();
-                for i in 0..4000 { bytes.push((128.0 + 127.0 * (i as f32 * 180.0 * 2.0 * std::f32::consts::PI / 8000.0).sin()) as u8); }
-                play_linux_bytes(bytes);
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-    });
+    // Disabled: the looping aplay hum floods the audio device and the logs, and
+    // the UI already shows a "thinking" state. Kept as a no-op for callers.
+    IS_THINKING.store(true, Ordering::SeqCst);
 }
 
 pub fn stop_thinking_hum_loop() {
