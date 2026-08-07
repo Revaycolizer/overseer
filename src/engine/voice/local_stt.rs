@@ -3,21 +3,19 @@ pub async fn record_and_transcribe(vad_threshold: f32) -> Result<String, String>
     let peak = samples.iter().fold(0.0f32, |m, &x| m.max(x.abs()));
     tracing::info!(samples = samples.len(), peak, "voice: captured audio");
 
-    // Distinguish a silent/absent mic from a transcription failure — otherwise
-    // both look like the same unhelpful "all fallbacks failed" error.
-    if samples.len() < 1600 || peak < 0.01 {
-        return Err(format!(
-            "No speech captured (mic level {:.3}). Check that your microphone is the default input device and unmuted.",
-            peak
-        ));
+    // No real speech (silence / too quiet / no VAD hit) → return empty so the
+    // caller simply re-listens rather than replying to nothing.
+    if samples.is_empty() || samples.len() < 1600 || peak < 0.01 {
+        return Ok(String::new());
     }
 
     super::earcons::start_thinking_hum_loop();
     let res = transcribe_samples_sync(&samples);
     super::earcons::stop_thinking_hum_loop();
     match res {
-        Ok(t) if !t.trim().is_empty() => Ok(t),
-        Ok(_) => Err("Heard audio but transcription came back empty — try speaking a bit louder/closer.".to_string()),
+        // An empty transcript is also "no speech" — re-listen, don't error out.
+        Ok(t) => Ok(t.trim().to_string()),
+        // A genuine tool failure (mic device / STT binary) stays an error.
         Err(e) => Err(e),
     }
 }

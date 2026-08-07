@@ -116,6 +116,10 @@ export default function App() {
             if (voiceModeRef.current) sendRef.current(frame.text, { speak: true });
             else setInput((prev) => (prev ? prev + " " : "") + frame.text);
           }
+        } else if (frame.type === "voice_idle") {
+          // No speech detected — in hands-free mode, just keep listening.
+          setListening(false);
+          if (voiceModeRef.current) setTimeout(() => startVoiceRef.current(), 400);
         } else if (frame.type === "voice_error") {
           setListening(false);
           if (voiceModeRef.current) {

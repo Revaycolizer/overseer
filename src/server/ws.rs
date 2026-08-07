@@ -85,15 +85,19 @@ async fn handle_socket(socket: WebSocket, state: Arc<ServerState>) {
             if v.get("voice").and_then(|x| x.as_bool()) == Some(true) {
                 // Don't record while talking back, or the mic captures our own TTS.
                 let mut waited = 0;
-                while crate::engine::voice::tts::is_tts_speaking() && waited < 60 {
+                while crate::engine::voice::tts::is_tts_speaking() && waited < 80 {
                     tokio::time::sleep(Duration::from_millis(150)).await;
                     waited += 1;
                 }
+                // Settle margin so the tail of playback isn't captured as input.
+                tokio::time::sleep(Duration::from_millis(400)).await;
                 let raw = crate::engine::voice::wake_word::get_vad_threshold();
                 let threshold = if raw <= 0.0 { 0.02 } else { raw };
                 let frame = match crate::engine::voice::local_stt::record_and_transcribe(threshold).await {
                     Ok(t) if !t.trim().is_empty() => json!({"type":"voice_result","text": t.trim()}),
-                    Ok(_) => json!({"type":"voice_error","error":"Didn't catch any speech. Check your mic, and install a local STT tool: pip install openai-whisper (or vosk)."}),
+                    // Silence / no speech → idle, so the client re-listens instead of
+                    // treating nothing as a message.
+                    Ok(_) => json!({"type":"voice_idle"}),
                     Err(e) => json!({"type":"voice_error","error": format!("Voice capture failed: {e}")}),
                 };
                 let _ = send(&mut tx, frame).await;

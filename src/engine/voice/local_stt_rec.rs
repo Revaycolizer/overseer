@@ -75,5 +75,11 @@ pub async fn record_samples(vad_threshold: f32) -> Result<Vec<f32>, String> {
     let _ = stream.pause();
     drop(stream);
     while let Some(s) = cons.pop() { temp.push(s); }
+    // If nothing ever crossed the VAD threshold, treat it as silence (empty) so
+    // the caller re-listens instead of transcribing ambient noise or TTS echo —
+    // this is what stops the assistant "hearing itself" and self-conversing.
+    if !speech_detected {
+        return Ok(Vec::new());
+    }
     Ok(temp)
 }
