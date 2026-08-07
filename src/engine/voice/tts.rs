@@ -7,6 +7,42 @@ pub fn is_tts_speaking() -> bool {
     TTS_SPEAKING_COUNT.load(Ordering::SeqCst) > 0
 }
 
+/// Resolve a CLI by location: pip user-bin (~/.local/bin), then system dirs, then PATH.
+fn resolve_bin(name: &str) -> String {
+    if let Some(h) = dirs::home_dir() {
+        let p = h.join(".local").join("bin").join(name);
+        if p.exists() {
+            return p.to_string_lossy().to_string();
+        }
+    }
+    for base in ["/usr/local/bin", "/usr/bin"] {
+        let p = std::path::Path::new(base).join(name);
+        if p.exists() {
+            return p.to_string_lossy().to_string();
+        }
+    }
+    name.to_string()
+}
+
+/// First Piper `.onnx` voice model found in the data dir or the repo assets.
+fn find_piper_model() -> Option<String> {
+    let candidates = [
+        crate::db::get_overseer_data_dir().join("assets").join("voice").join("models"),
+        std::path::PathBuf::from("assets/voice/models"),
+    ];
+    for d in candidates {
+        if let Ok(rd) = std::fs::read_dir(&d) {
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.extension().and_then(|x| x.to_str()) == Some("onnx") {
+                    return Some(p.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn speak_locally(text: &str) {
     let mut speech_text = text.to_string();
     if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
@@ -53,50 +89,39 @@ pub fn speak_locally(text: &str) {
             TTS_SPEAKING_COUNT.fetch_sub(1, Ordering::SeqCst);
         };
 
-        // 1. Try calling piper if installed (Cross-Platform direct stdin implementation)
-        if Command::new("piper").arg("--version").output().is_ok() {
-            let model_path = "assets/voice/models/en_US-lessac-medium.onnx";
-            if std::path::Path::new(model_path).exists() {
-                use std::io::Write;
-                if let Ok(mut child) = Command::new("piper")
-                    .arg("--model")
-                    .arg(model_path)
-                    .arg("--output_file")
-                    .arg(&temp_wav_str)
-                    .stdin(std::process::Stdio::piped())
-                    .spawn()
-                {
-                    if let Some(mut stdin) = child.stdin.take() {
-                        let _ = writeln!(stdin, "{}", clean_text);
-                    }
-                    if let Ok(status) = child.wait() {
-                        if status.success() {
-                            // Play the audio file cross-platform
-                            #[cfg(target_os = "linux")]
-                            {
-                                let _ = Command::new("aplay").arg(&temp_wav_str).output();
-                            }
-                            #[cfg(target_os = "macos")]
-                            {
-                                let _ = Command::new("afplay").arg(&temp_wav_str).output();
-                            }
-                            #[cfg(target_os = "windows")]
-                            {
-                                let play_script = format!(
-                                    "(New-Object System.Media.SoundPlayer '{}').PlaySync()",
-                                    temp_wav_str
-                                );
-                                let _ = Command::new("powershell")
-                                    .arg("-Command")
-                                    .arg(&play_script)
-                                    .output();
-                            }
-                            play_finished();
-                            return;
+        // 1. Piper (neural TTS) — the natural voice. Resolve the binary + a model
+        //    by absolute location; PATH/cwd are unreliable for the daemon, and
+        //    `piper --version` can't be used as a probe.
+        if let Some(model_path) = find_piper_model() {
+            use std::io::Write;
+            let piper_bin = resolve_bin("piper");
+            if let Ok(mut child) = Command::new(&piper_bin)
+                .args(["--model", &model_path, "--output_file", &temp_wav_str])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+            {
+                if let Some(mut stdin) = child.stdin.take() {
+                    let _ = writeln!(stdin, "{}", clean_text);
+                }
+                if let Ok(status) = child.wait() {
+                    if status.success() && std::path::Path::new(&temp_wav_str).exists() {
+                        #[cfg(target_os = "linux")]
+                        { let _ = Command::new("aplay").arg(&temp_wav_str).output(); }
+                        #[cfg(target_os = "macos")]
+                        { let _ = Command::new("afplay").arg(&temp_wav_str).output(); }
+                        #[cfg(target_os = "windows")]
+                        {
+                            let play_script = format!("(New-Object System.Media.SoundPlayer '{}').PlaySync()", temp_wav_str);
+                            let _ = Command::new("powershell").arg("-Command").arg(&play_script).output();
                         }
+                        play_finished();
+                        return;
                     }
                 }
             }
+            tracing::warn!(bin = %piper_bin, "piper present but synthesis failed; falling back");
         }
 
         // 2. Native OS built-in high-quality speech engines (Zero-dependency fallbacks)
