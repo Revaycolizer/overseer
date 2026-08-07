@@ -276,6 +276,22 @@ body { background: var(--bg); overflow: hidden; }
 }
 .composer textarea::placeholder { color: var(--muted); }
 
+.mic {
+  flex: none; width: 40px; height: 40px; border-radius: 13px; cursor: pointer;
+  display: grid; place-items: center; color: var(--muted);
+  background: transparent; border: 1px solid var(--brd);
+  transition: color 0.2s var(--ease), background 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.mic:hover:not(:disabled) { color: var(--text); background: var(--panel); border-color: var(--brd-strong); }
+.mic:disabled { opacity: 0.4; cursor: default; }
+.mic.listening {
+  color: #fff; border-color: transparent;
+  background: linear-gradient(135deg, #f43f5e, #f472b6);
+  box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.6);
+  animation: micpulse 1.3s var(--ease) infinite;
+}
+@keyframes micpulse { 0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.55); } 70%, 100% { box-shadow: 0 0 0 12px rgba(244, 63, 94, 0); } }
+
 .send {
   flex: none; width: 42px; height: 42px; border-radius: 14px; border: none; cursor: pointer;
   display: grid; place-items: center; color: #0a0b12;
@@ -315,7 +331,7 @@ body { background: var(--bg); overflow: hidden; }
   padding: 16px 12px; border-right: 1px solid var(--brd);
   background: var(--panel); backdrop-filter: blur(20px);
   transition: width 0.35s var(--ease);
-  -webkit-app-region: drag;
+  /* No drag region here — a large WebKitGTK drag region swallows button clicks. */
 }
 .sidebar.collapsed { width: 66px; }
 .side-brand { display: flex; align-items: center; gap: 11px; padding: 6px 8px 16px; overflow: hidden; }
