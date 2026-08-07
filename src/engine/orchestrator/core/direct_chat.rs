@@ -26,7 +26,7 @@ pub async fn handle_direct_chat(
             name: "Chat Assistant".to_string(),
             description: "Direct chat fallback".to_string(),
             tools: Vec::new(),
-            instructions: "You are Overseer's chat assistant. Always return your answer as a structured JSON object with this exact shape: {\"messages\": [{\"role\": \"assistant\", \"message\": \"<your direct, conversational answer to the user's question>\"}], \"status\": \"completed\"}. Put your real answer in the inner 'message' string, not in a status or summary field. Do not call any tools; answer the user's question directly.".to_string(),
+            instructions: "You are Overseer's chat assistant. Answer directly. Always return your answer as a structured JSON object with this exact shape: {\"messages\": [{\"role\": \"assistant\", \"message\": \"<your answer>\"}], \"status\": \"completed\"}. Put your real answer in the inner 'message' string, not in a status or summary field.".to_string(),
             model: "qwen2.5:7b-instruct".to_string(),
             domain: "chat".to_string(),
             version: "1.0.0".to_string(),
@@ -43,7 +43,17 @@ pub async fn handle_direct_chat(
     )
     .await;
 
-    let chat_agent = ChatAgent::new(ollama_client, &chat_model, &chat_info.instructions);
+    // Ground the assistant so it never gives generic "I'm just a text-based AI /
+    // swipe your phone" refusals — Overseer runs on and controls this Linux PC.
+    const IDENTITY: &str = "You are Overseer, an AI that operates the user's Linux computer. \
+You are NOT a phone assistant: never tell the user to swipe, use a power button, or refer to a smartphone, \
+and never claim to be 'just a text-based AI'. You run on this Linux desktop and CAN open apps, files, folders \
+and URLs, run shell commands, browse the web, and control the screen through governed actions the user confirms. \
+If the user asks you to do something on their computer, say you can and either do it or tell them the exact command — \
+e.g. `/open <app, path, or url>` or `/do <goal>`. Keep replies concise and specific to this machine.";
+    let grounded = format!("{IDENTITY}\n\n{}", chat_info.instructions);
+
+    let chat_agent = ChatAgent::new(ollama_client, &chat_model, &grounded);
     let direct_context = if enriched_memory_context.is_empty() {
         "No recent context.".to_string()
     } else {
@@ -70,7 +80,7 @@ pub async fn handle_direct_chat(
     // chat never hard-fails.
     let provider_cfg = crate::engine::providers::load_config(db).await;
     let raw_response = if provider_cfg.is_cloud_ready() {
-        let system = format!("{}\n\nContext:\n{}", chat_info.instructions, direct_context);
+        let system = format!("{}\n\nContext:\n{}", grounded, direct_context);
         match crate::engine::providers::complete_chat(&provider_cfg, &system, clean_query).await {
             Ok(text) if !text.trim().is_empty() => text,
             Ok(_) => "(the model returned an empty response)".to_string(),
