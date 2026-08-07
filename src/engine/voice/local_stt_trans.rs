@@ -28,9 +28,20 @@ pub fn transcribe_samples_sync(recorded_data: &[f32]) -> Result<String, String> 
             }
         }
     }
-    if Command::new("whisper").arg("--version").output().is_ok() {
+    // Resolve the whisper CLI: PATH first, then the common pip user-bin location
+    // (~/.local/bin) — the daemon's PATH often doesn't include it.
+    let mut whisper_cmd = "whisper".to_string();
+    if !Command::new(&whisper_cmd).arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
+        if let Some(home) = dirs::home_dir() {
+            let local = home.join(".local").join("bin").join("whisper");
+            if local.exists() {
+                whisper_cmd = local.to_string_lossy().to_string();
+            }
+        }
+    }
+    if Command::new(&whisper_cmd).arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
         let temp_dir = std::env::temp_dir();
-        if let Ok(out) = Command::new("whisper").args([&temp_wav_str, "--model", "tiny.en", "--output_dir", &temp_dir.to_string_lossy(), "--output_format", "txt"]).output() {
+        if let Ok(out) = Command::new(&whisper_cmd).args([&temp_wav_str, "--model", "tiny.en", "--output_dir", &temp_dir.to_string_lossy(), "--output_format", "txt"]).output() {
             if out.status.success() {
                 let txt_path = temp_dir.join("overseer_speech_stt.txt");
                 if txt_path.exists() {
