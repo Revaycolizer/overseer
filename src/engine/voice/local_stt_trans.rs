@@ -28,30 +28,37 @@ pub fn transcribe_samples_sync(recorded_data: &[f32]) -> Result<String, String> 
             }
         }
     }
-    // Resolve the whisper CLI: PATH first, then the common pip user-bin location
-    // (~/.local/bin) — the daemon's PATH often doesn't include it.
-    let mut whisper_cmd = "whisper".to_string();
-    if !Command::new(&whisper_cmd).arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
-        if let Some(home) = dirs::home_dir() {
-            let local = home.join(".local").join("bin").join("whisper");
-            if local.exists() {
-                whisper_cmd = local.to_string_lossy().to_string();
-            }
-        }
-    }
-    if Command::new(&whisper_cmd).arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
+    // Resolve the whisper CLI by LOCATION (PATH may not include ~/.local/bin, and
+    // `whisper --version` is an argparse error — it can't be used as a probe).
+    let whisper_cmd = dirs::home_dir()
+        .map(|h| h.join(".local").join("bin").join("whisper"))
+        .filter(|p| p.exists())
+        .map(|p| p.to_string_lossy().to_string())
+        .or_else(|| {
+            ["/usr/local/bin/whisper", "/usr/bin/whisper"]
+                .iter()
+                .find(|p| std::path::Path::new(p).exists())
+                .map(|p| p.to_string())
+        })
+        .unwrap_or_else(|| "whisper".to_string());
+    {
         let temp_dir = std::env::temp_dir();
-        if let Ok(out) = Command::new(&whisper_cmd).args([&temp_wav_str, "--model", "tiny.en", "--output_dir", &temp_dir.to_string_lossy(), "--output_format", "txt"]).output() {
-            if out.status.success() {
+        match Command::new(&whisper_cmd)
+            .args([&temp_wav_str, "--model", "tiny.en", "--output_dir", &temp_dir.to_string_lossy(), "--output_format", "txt"])
+            .output()
+        {
+            Ok(out) => {
                 let txt_path = temp_dir.join("overseer_speech_stt.txt");
-                if txt_path.exists() {
-                    if let Ok(text) = std::fs::read_to_string(&txt_path) {
-                        let _ = std::fs::remove_file(txt_path);
-                        let clean = text.trim().to_string();
-                        if !clean.is_empty() { return Ok(clean); }
+                if let Ok(text) = std::fs::read_to_string(&txt_path) {
+                    let _ = std::fs::remove_file(&txt_path);
+                    let clean = text.trim().to_string();
+                    if !clean.is_empty() {
+                        return Ok(clean);
                     }
                 }
+                tracing::warn!(cmd = %whisper_cmd, status = ?out.status, "whisper produced no transcript: {}", String::from_utf8_lossy(&out.stderr));
             }
+            Err(e) => tracing::warn!(cmd = %whisper_cmd, "failed to run whisper: {e}"),
         }
     }
 
