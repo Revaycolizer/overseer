@@ -90,6 +90,14 @@ export default function Chat({
 
   return (
     <div className="chat">
+      <div className="tabs">
+        <button className={`tab ${!voiceMode ? "on" : ""}`} onClick={() => voiceMode && onToggleVoiceMode()}>
+          Chat
+        </button>
+        <button className={`tab ${voiceMode ? "on" : ""}`} onClick={() => !voiceMode && onToggleVoiceMode()}>
+          Talk
+        </button>
+      </div>
       <div className="thread" ref={scrollRef}>
         {empty ? (
           <section className="hero">
@@ -187,6 +195,24 @@ export default function Chat({
           </div>
         )}
 
+        {voiceMode ? (
+          <div className="voice-console">
+            <button
+              className={`orb ${listening ? "listening" : busy ? "thinking" : ""}`}
+              onClick={onVoice}
+              title="Tap to talk"
+              aria-label="Talk"
+            >
+              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+              </svg>
+            </button>
+            <div className="voice-status">
+              {listening ? "Listening…" : busy ? "Thinking…" : "Talking with Overseer — just speak"}
+            </div>
+          </div>
+        ) : (
         <div className="composer-shell">
           {paletteOpen && (
             <div className="palette">
@@ -206,17 +232,6 @@ export default function Chat({
           )}
 
           <div className={`composer ${busy ? "busy" : ""}`}>
-            <button
-              className={`mic ${voiceMode ? "on" : ""}`}
-              onClick={onToggleVoiceMode}
-              disabled={!connected}
-              title={voiceMode ? "Hands-free voice on — click to stop" : "Hands-free voice: talk and it talks back"}
-              aria-label="Toggle hands-free voice"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 12v-1M7 12V8M11 14V6M15 12V9M19 12v-2M23 12v-1" />
-              </svg>
-            </button>
             <button
               className={`mic ${listening ? "listening" : ""}`}
               onClick={onVoice}
@@ -282,8 +297,15 @@ export default function Chat({
             </button>
           </div>
         </div>
+        )}
         <div className="hint">
-          <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline · <kbd>/</kbd> for commands
+          {voiceMode ? (
+            "Speak — Overseer listens and replies aloud · switch to Chat to type"
+          ) : (
+            <>
+              <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline · <kbd>/</kbd> for commands
+            </>
+          )}
         </div>
       </div>
     </div>
