@@ -45,6 +45,10 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)]
             {
+                // Launch on login so Overseer is always resident and summonable.
+                use tauri_plugin_autostart::ManagerExt;
+                let _ = app.autolaunch().enable();
+
                 let show = MenuItem::with_id(app, "show", "Show / Hide", true, None::<&str>)?;
                 let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
                 let menu = Menu::with_items(app, &[&show, &quit])?;
