@@ -28,6 +28,14 @@ pub fn speak_locally(text: &str) {
         }
     }
 
+    // Speak only the answer, not the appended step log, and keep it a sane length.
+    if let Some(idx) = speech_text.find("\n\n---") {
+        speech_text.truncate(idx);
+    }
+    if speech_text.chars().count() > 600 {
+        speech_text = speech_text.chars().take(600).collect::<String>() + "…";
+    }
+
     let clean_text = speech_text
         .chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '.' || *c == ',' || *c == '!' || *c == '?')

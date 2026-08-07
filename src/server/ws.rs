@@ -37,6 +37,9 @@ pub fn router() -> Router<Arc<ServerState>> {
 struct ChatReq {
     conversation_id: i64,
     message: String,
+    /// When true, speak the assistant's reply aloud (voice conversation).
+    #[serde(default)]
+    speak: bool,
 }
 
 #[derive(Deserialize)]
@@ -80,6 +83,12 @@ async fn handle_socket(socket: WebSocket, state: Arc<ServerState>) {
             }
             // Voice dictation: record one utterance on the daemon and transcribe it.
             if v.get("voice").and_then(|x| x.as_bool()) == Some(true) {
+                // Don't record while talking back, or the mic captures our own TTS.
+                let mut waited = 0;
+                while crate::engine::voice::tts::is_tts_speaking() && waited < 60 {
+                    tokio::time::sleep(Duration::from_millis(150)).await;
+                    waited += 1;
+                }
                 let raw = crate::engine::voice::wake_word::get_vad_threshold();
                 let threshold = if raw <= 0.0 { 0.02 } else { raw };
                 let frame = match crate::engine::voice::local_stt::record_and_transcribe(threshold).await {
@@ -138,6 +147,9 @@ async fn run_turn(tx: &mut Tx, rx: &mut Rx, state: &Arc<ServerState>, req: ChatR
             res = &mut handle => {
                 let response = res.unwrap_or_default();
                 let _ = crate::backend::add_message(&db, conv, "assistant", &response, false).await;
+                if req.speak {
+                    crate::engine::voice::tts::speak_locally(&response);
+                }
                 send(tx, json!({"type":"done","response": response})).await?;
                 return Ok(());
             }
