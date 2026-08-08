@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { parseAssistant } from "../lib/store";
 
@@ -17,6 +17,7 @@ export default function Widget() {
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(t: string) => void>(() => {});
   const talkRef = useRef<() => void>(() => {});
+  const convoRef = useRef(false); // active back-and-forth conversation
 
   // Transparent window background for the floating look.
   useEffect(() => {
@@ -60,10 +61,14 @@ export default function Widget() {
         else if (f.type === "done") {
           setBusy(false);
           if (f.response) setStatus(parseAssistant(f.response).slice(0, 240));
+          // Conversation: after it answers (and speaks), listen for your reply.
+          if (convoRef.current) setTimeout(() => talkRef.current(), 700);
         } else if (f.type === "voice_result" && f.text) {
           sendRef.current(f.text);
         } else if (f.type === "voice_idle") {
           setListening(false);
+          // Silence — keep the conversation open and listen again.
+          if (convoRef.current) setTimeout(() => talkRef.current(), 400);
         } else if (f.type === "voice_error") {
           setListening(false);
           setStatus(f.error || "voice unavailable");
@@ -89,6 +94,7 @@ export default function Widget() {
   }
   sendRef.current = send;
 
+  // One listen cycle (used internally to keep the conversation going).
   function talk() {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || listening || busy) return;
@@ -97,6 +103,24 @@ export default function Widget() {
     setListening(true);
   }
   talkRef.current = talk;
+
+  // Orb: start a hands-free conversation, or stop it.
+  function toggleConvo() {
+    if (convoRef.current || listening) {
+      convoRef.current = false;
+      setListening(false);
+      setStatus("Talk to Overseer");
+    } else {
+      convoRef.current = true;
+      talk();
+    }
+  }
+
+  // Drag the window from anywhere on the pill except interactive controls.
+  function onPillPointerDown(e: ReactPointerEvent) {
+    if ((e.target as HTMLElement).closest("button, input")) return;
+    getCurrentWindow().startDragging().catch(() => {});
+  }
 
   // Subscribe to hands-free wake signals (double-clap / "Hey Overseer"): summon
   // this window and start listening.
@@ -111,6 +135,7 @@ export default function Widget() {
             const w = getCurrentWindow();
             w.show().catch(() => {});
             w.setFocus().catch(() => {});
+            convoRef.current = true; // wake starts a conversation
             setTimeout(() => talkRef.current(), 250);
           }
         } catch {
@@ -136,16 +161,17 @@ export default function Widget() {
   }, []);
 
   function hide() {
+    convoRef.current = false;
     getCurrentWindow().hide().catch(() => {});
   }
 
   return (
     <div className="widget-root">
-      <div className="widget-pill" data-tauri-drag-region>
+      <div className="widget-pill" onPointerDown={onPillPointerDown}>
         <button
           className={`widget-orb ${listening ? "listening" : busy ? "thinking" : ""}`}
-          onClick={talk}
-          title="Tap to talk"
+          onClick={toggleConvo}
+          title={convoRef.current || listening ? "Stop" : "Tap to talk"}
           aria-label="Talk"
         >
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
