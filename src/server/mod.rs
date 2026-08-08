@@ -10,6 +10,8 @@ pub struct ServerState {
     pub db: Arc<Database>,
     pub agent_system: Arc<AgentSystem>,
     pub browser_pool: Arc<crate::engine::browser::pool::BrowserPool>,
+    /// Broadcasts hands-free wake signals to connected clients (the widget).
+    pub wake_tx: tokio::sync::broadcast::Sender<()>,
 }
 
 pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port: u16) -> anyhow::Result<()> {
@@ -37,7 +39,15 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         tracing::info!("voice service disabled (set setting 'voice_always_on' = true to enable)");
     }
 
-    let state = Arc::new(ServerState { db, agent_system, browser_pool: browser_pool.clone() });
+    // Hands-free wake (double-clap / "Hey Overseer") → broadcast to the widget.
+    let (wake_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    {
+        let wdb = db.clone();
+        let wt = wake_tx.clone();
+        tokio::spawn(async move { crate::engine::wake_service::run_wake_service(wdb, wt).await });
+    }
+
+    let state = Arc::new(ServerState { db, agent_system, browser_pool: browser_pool.clone(), wake_tx });
 
     let app = Router::new()
         .merge(conversations::router())
@@ -63,6 +73,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .merge(crate::server::metrics::router())
         .merge(crate::server::openapi::router())
         .merge(ws::router())
+        .merge(events::router())
         .layer(GovernorLayer {
             config: crate::engine::resilience::server_governor(),
         })
@@ -116,3 +127,4 @@ pub mod metrics;
 pub mod misc;
 pub mod openapi;
 pub mod ws;
+pub mod events;
