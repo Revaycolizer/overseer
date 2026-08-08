@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { parseAssistant } from "../lib/store";
 
 const WS_URL = "ws://127.0.0.1:8080/api/ws/chat";
@@ -24,6 +25,19 @@ export default function Widget() {
   useEffect(() => {
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";
+  }, []);
+
+  // The Rust side shows this window on wake and emits `overseer-wake` — start a
+  // conversation when that arrives.
+  useEffect(() => {
+    const un = listen("overseer-wake", () => {
+      convoRef.current = true;
+      idleRef.current = 0;
+      setTimeout(() => talkRef.current(), 250);
+    });
+    return () => {
+      un.then((f) => f()).catch(() => {});
+    };
   }, []);
 
   useEffect(() => {

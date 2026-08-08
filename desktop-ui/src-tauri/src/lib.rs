@@ -91,6 +91,36 @@ pub fn run() {
                     let _ = widget.set_visible_on_all_workspaces(true);
                     let _ = widget.set_skip_taskbar(true);
                 }
+
+                // Listen (from Rust, always running) to the daemon's wake channel and
+                // summon the widget natively — no dependency on the hidden widget's
+                // webview being alive. Emits `overseer-wake` so the widget starts to listen.
+                {
+                    use tauri::Emitter;
+                    let handle = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        use futures_util::StreamExt;
+                        use tokio_tungstenite::tungstenite::Message;
+                        loop {
+                            if let Ok((mut ws, _)) =
+                                tokio_tungstenite::connect_async("ws://127.0.0.1:8080/api/ws/events").await
+                            {
+                                while let Some(Ok(msg)) = ws.next().await {
+                                    if let Message::Text(t) = msg {
+                                        if t.contains("wake") {
+                                            if let Some(w) = handle.get_webview_window("widget") {
+                                                let _ = w.show();
+                                                let _ = w.set_focus();
+                                                let _ = w.emit("overseer-wake", ());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        }
+                    });
+                }
             }
             Ok(())
         })
