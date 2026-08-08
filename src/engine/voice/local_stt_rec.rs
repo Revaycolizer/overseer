@@ -68,7 +68,8 @@ pub async fn record_samples(vad_threshold: f32) -> Result<Vec<f32>, String> {
                 last_speech = std::time::Instant::now();
             }
         }
-        if speech_detected && last_speech.elapsed() > std::time::Duration::from_millis(1500) { break; }
+        // End the turn shortly after speech stops so it answers promptly.
+        if speech_detected && last_speech.elapsed() > std::time::Duration::from_millis(800) { break; }
     }
 
     is_rec.store(false, Ordering::SeqCst);
