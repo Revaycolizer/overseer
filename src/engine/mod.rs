@@ -19,6 +19,7 @@ pub mod tokenizer;
 pub mod tools;
 pub mod utils;
 pub mod voice;
+pub mod wake_service;
 pub mod vision;
 pub mod workflow;
 pub mod commands;

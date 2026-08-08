@@ -1,4 +1,5 @@
 pub mod wake_word;
+pub mod clap_detect;
 pub mod tts;
 pub mod training;
 pub mod pipeline;
