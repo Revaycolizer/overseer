@@ -55,6 +55,7 @@ export default function App() {
   const [listening, setListening] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
   const voiceModeRef = useRef(false);
+  const voiceIdleRef = useRef(0);
   const sendRef = useRef<(raw: string, opts?: { speak?: boolean }) => void>(() => {});
   const startVoiceRef = useRef<() => void>(() => {});
 
@@ -109,17 +110,26 @@ export default function App() {
           setApprovals([]);
           if (frame.response) replaceAssistant(parseAssistant(frame.response));
           // Hands-free: after the reply is spoken, listen again for a reply.
+          voiceIdleRef.current = 0;
           if (voiceModeRef.current) setTimeout(() => startVoiceRef.current(), 900);
         } else if (frame.type === "voice_result") {
           setListening(false);
+          voiceIdleRef.current = 0;
           if (frame.text) {
             if (voiceModeRef.current) sendRef.current(frame.text, { speak: true });
             else setInput((prev) => (prev ? prev + " " : "") + frame.text);
           }
         } else if (frame.type === "voice_idle") {
-          // No speech detected — in hands-free mode, just keep listening.
           setListening(false);
-          if (voiceModeRef.current) setTimeout(() => startVoiceRef.current(), 400);
+          voiceIdleRef.current += 1;
+          // Keep listening across brief silences, but stop after two so it isn't
+          // stuck listening forever (and hogging the mic from clap-wake).
+          if (voiceModeRef.current && voiceIdleRef.current < 2) {
+            setTimeout(() => startVoiceRef.current(), 400);
+          } else if (voiceModeRef.current) {
+            voiceModeRef.current = false;
+            setVoiceMode(false);
+          }
         } else if (frame.type === "voice_error") {
           setListening(false);
           if (voiceModeRef.current) {
@@ -260,6 +270,7 @@ export default function App() {
     const next = !voiceModeRef.current;
     voiceModeRef.current = next;
     setVoiceMode(next);
+    voiceIdleRef.current = 0;
     if (next) startVoice();
     else setListening(false);
   };

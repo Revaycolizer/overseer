@@ -18,6 +18,7 @@ export default function Widget() {
   const sendRef = useRef<(t: string) => void>(() => {});
   const talkRef = useRef<() => void>(() => {});
   const convoRef = useRef(false); // active back-and-forth conversation
+  const idleRef = useRef(0); // consecutive silences → end the conversation
 
   // Transparent window background for the floating look.
   useEffect(() => {
@@ -60,15 +61,23 @@ export default function Widget() {
         if (f.type === "token" && f.text) setStatus((s) => (s + f.text).slice(-180));
         else if (f.type === "done") {
           setBusy(false);
+          idleRef.current = 0;
           if (f.response) setStatus(parseAssistant(f.response).slice(0, 240));
           // Conversation: after it answers (and speaks), listen for your reply.
           if (convoRef.current) setTimeout(() => talkRef.current(), 700);
         } else if (f.type === "voice_result" && f.text) {
+          idleRef.current = 0;
           sendRef.current(f.text);
         } else if (f.type === "voice_idle") {
           setListening(false);
-          // Silence — keep the conversation open and listen again.
-          if (convoRef.current) setTimeout(() => talkRef.current(), 400);
+          idleRef.current += 1;
+          // After two silences, end the conversation instead of listening forever.
+          if (convoRef.current && idleRef.current < 2) {
+            setTimeout(() => talkRef.current(), 400);
+          } else {
+            convoRef.current = false;
+            setStatus("Talk to Overseer");
+          }
         } else if (f.type === "voice_error") {
           setListening(false);
           setStatus(f.error || "voice unavailable");
@@ -112,6 +121,7 @@ export default function Widget() {
       setStatus("Talk to Overseer");
     } else {
       convoRef.current = true;
+      idleRef.current = 0;
       talk();
     }
   }
@@ -136,6 +146,7 @@ export default function Widget() {
             w.show().catch(() => {});
             w.setFocus().catch(() => {});
             convoRef.current = true; // wake starts a conversation
+            idleRef.current = 0;
             setTimeout(() => talkRef.current(), 250);
           }
         } catch {
