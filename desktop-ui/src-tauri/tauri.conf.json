@@ -21,8 +21,8 @@
       {
         "label": "widget",
         "title": "Overseer Widget",
-        "width": 400,
-        "height": 168,
+        "width": 430,
+        "height": 96,
         "resizable": false,
         "decorations": false,
         "transparent": true,

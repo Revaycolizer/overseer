@@ -1,34 +1,47 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { parseAssistant } from "../lib/store";
 
 const WS_URL = "ws://127.0.0.1:8080/api/ws/chat";
+const COMPACT = new LogicalSize(430, 96);
+const EXPANDED = new LogicalSize(460, 340);
 
 /**
- * Floating always-on-top widget: a compact glass pill you talk (or type) to.
- * Own lightweight WS connection to the daemon; speaks replies aloud.
+ * Floating always-on-top widget: a compact glass bar you talk (or type) to. It
+ * expands to show the assistant's answer, then collapses again. Own lightweight
+ * WS to the daemon; speaks replies. Summoned by hotkey, tray, or clap/wake.
  */
 export default function Widget() {
   const [connected, setConnected] = useState(false);
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("Talk to Overseer");
   const [input, setInput] = useState("");
+  const [answer, setAnswer] = useState("");
+
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(t: string) => void>(() => {});
   const talkRef = useRef<() => void>(() => {});
-  const convoRef = useRef(false); // active back-and-forth conversation
-  const idleRef = useRef(0); // consecutive silences → end the conversation
+  const convoRef = useRef(false);
+  const idleRef = useRef(0);
+  const expandedRef = useRef(false);
+  const answerBoxRef = useRef<HTMLDivElement | null>(null);
 
-  // Transparent window background for the floating look.
   useEffect(() => {
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";
   }, []);
 
-  // The Rust side shows this window on wake and emits `overseer-wake` — start a
-  // conversation when that arrives.
+  // Grow/shrink the window only on the empty↔non-empty transition (not per token).
+  useEffect(() => {
+    const has = answer.trim().length > 0;
+    if (has !== expandedRef.current) {
+      expandedRef.current = has;
+      getCurrentWindow().setSize(has ? EXPANDED : COMPACT).catch(() => {});
+    }
+    answerBoxRef.current?.scrollTo({ top: answerBoxRef.current.scrollHeight });
+  }, [answer]);
+
   useEffect(() => {
     const un = listen("overseer-wake", () => {
       convoRef.current = true;
@@ -72,12 +85,11 @@ export default function Widget() {
         } catch {
           return;
         }
-        if (f.type === "token" && f.text) setStatus((s) => (s + f.text).slice(-180));
+        if (f.type === "token" && f.text) setAnswer((a) => a + f.text);
         else if (f.type === "done") {
           setBusy(false);
           idleRef.current = 0;
-          if (f.response) setStatus(parseAssistant(f.response).slice(0, 240));
-          // Conversation: after it answers (and speaks), listen for your reply.
+          if (f.response) setAnswer(parseAssistant(f.response));
           if (convoRef.current) setTimeout(() => talkRef.current(), 700);
         } else if (f.type === "voice_result" && f.text) {
           idleRef.current = 0;
@@ -85,16 +97,11 @@ export default function Widget() {
         } else if (f.type === "voice_idle") {
           setListening(false);
           idleRef.current += 1;
-          // After two silences, end the conversation instead of listening forever.
-          if (convoRef.current && idleRef.current < 2) {
-            setTimeout(() => talkRef.current(), 400);
-          } else {
-            convoRef.current = false;
-            setStatus("Talk to Overseer");
-          }
+          if (convoRef.current && idleRef.current < 2) setTimeout(() => talkRef.current(), 400);
+          else convoRef.current = false;
         } else if (f.type === "voice_error") {
           setListening(false);
-          setStatus(f.error || "voice unavailable");
+          setAnswer(f.error || "voice unavailable");
         }
       };
     };
@@ -110,29 +117,25 @@ export default function Widget() {
     const t = text.trim();
     const ws = wsRef.current;
     if (!t || !ws || ws.readyState !== WebSocket.OPEN || busy) return;
-    setStatus("…");
+    setAnswer("");
     setBusy(true);
     ws.send(JSON.stringify({ conversation_id: 1, message: t, speak: true }));
     setInput("");
   }
   sendRef.current = send;
 
-  // One listen cycle (used internally to keep the conversation going).
   function talk() {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || listening || busy) return;
-    setStatus("Listening…");
     ws.send(JSON.stringify({ voice: true }));
     setListening(true);
   }
   talkRef.current = talk;
 
-  // Orb: start a hands-free conversation, or stop it.
   function toggleConvo() {
     if (convoRef.current || listening) {
       convoRef.current = false;
       setListening(false);
-      setStatus("Talk to Overseer");
     } else {
       convoRef.current = true;
       idleRef.current = 0;
@@ -140,92 +143,66 @@ export default function Widget() {
     }
   }
 
-  // Drag the window from anywhere on the pill except interactive controls.
   function onPillPointerDown(e: ReactPointerEvent) {
-    if ((e.target as HTMLElement).closest("button, input")) return;
+    if ((e.target as HTMLElement).closest("button, input, .wc-answer")) return;
     getCurrentWindow().startDragging().catch(() => {});
   }
 
-  // Subscribe to hands-free wake signals (double-clap / "Hey Overseer"): summon
-  // this window and start listening.
-  useEffect(() => {
-    let closed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const connect = () => {
-      const ev = new WebSocket("ws://127.0.0.1:8080/api/ws/events");
-      ev.onmessage = (e) => {
-        try {
-          if (JSON.parse(e.data).type === "wake") {
-            const w = getCurrentWindow();
-            w.show().catch(() => {});
-            w.setFocus().catch(() => {});
-            convoRef.current = true; // wake starts a conversation
-            idleRef.current = 0;
-            setTimeout(() => talkRef.current(), 250);
-          }
-        } catch {
-          /* ignore */
-        }
-      };
-      ev.onclose = () => {
-        if (!closed) timer = setTimeout(connect, 1500);
-      };
-      ev.onerror = () => {
-        try {
-          ev.close();
-        } catch {
-          /* ignore */
-        }
-      };
-    };
-    connect();
-    return () => {
-      closed = true;
-      clearTimeout(timer);
-    };
-  }, []);
-
   function hide() {
     convoRef.current = false;
+    setAnswer("");
     getCurrentWindow().hide().catch(() => {});
   }
 
+  const state = listening ? "Listening…" : busy ? "Thinking…" : connected ? "Ready" : "Offline";
+
   return (
     <div className="widget-root">
-      <div className="widget-pill" onPointerDown={onPillPointerDown}>
-        <button
-          className={`widget-orb ${listening ? "listening" : busy ? "thinking" : ""}`}
-          onClick={toggleConvo}
-          title={convoRef.current || listening ? "Stop" : "Tap to talk"}
-          aria-label="Talk"
-        >
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="9" y="3" width="6" height="11" rx="3" />
-            <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-          </svg>
-        </button>
+      <div className={`wc ${answer ? "wc-open" : ""}`} onPointerDown={onPillPointerDown}>
+        <div className="wc-head">
+          <button
+            className={`wc-orb ${listening ? "listening" : busy ? "thinking" : ""}`}
+            onClick={toggleConvo}
+            title={convoRef.current || listening ? "Stop" : "Tap to talk"}
+            aria-label="Talk"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+            </svg>
+          </button>
 
-        <div className="widget-body">
-          <div className="widget-status">{listening ? "Listening…" : busy ? "Thinking…" : status}</div>
           <input
-            className="widget-input"
+            className="wc-input"
             value={input}
-            placeholder="Ask or press the mic…"
+            placeholder={state === "Ready" ? "Ask Overseer…" : state}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") send(input);
             }}
           />
-        </div>
 
-        <div className="widget-side">
-          <span className={`widget-dot ${connected ? "on" : ""}`} title={connected ? "connected" : "offline"} />
-          <button className="widget-x" onClick={hide} title="Hide (Ctrl+Alt+Space)" aria-label="Hide">
+          {input.trim() && (
+            <button className="wc-send" onClick={() => send(input)} aria-label="Send">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+            </button>
+          )}
+          <span className={`wc-dot ${connected ? "on" : ""}`} title={connected ? "connected" : "offline"} />
+          <button className="wc-x" onClick={hide} title="Hide (Ctrl+Alt+Space)" aria-label="Hide">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>
           </button>
         </div>
+
+        {answer && (
+          <div className="wc-answer" ref={answerBoxRef}>
+            {answer}
+            {busy && <span className="wc-caret" />}
+          </div>
+        )}
       </div>
     </div>
   );
