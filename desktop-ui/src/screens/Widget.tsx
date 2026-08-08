@@ -16,6 +16,7 @@ export default function Widget() {
   const [input, setInput] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(t: string) => void>(() => {});
+  const talkRef = useRef<() => void>(() => {});
 
   // Transparent window background for the floating look.
   useEffect(() => {
@@ -95,6 +96,44 @@ export default function Widget() {
     ws.send(JSON.stringify({ voice: true }));
     setListening(true);
   }
+  talkRef.current = talk;
+
+  // Subscribe to hands-free wake signals (double-clap / "Hey Overseer"): summon
+  // this window and start listening.
+  useEffect(() => {
+    let closed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const connect = () => {
+      const ev = new WebSocket("ws://127.0.0.1:8080/api/ws/events");
+      ev.onmessage = (e) => {
+        try {
+          if (JSON.parse(e.data).type === "wake") {
+            const w = getCurrentWindow();
+            w.show().catch(() => {});
+            w.setFocus().catch(() => {});
+            setTimeout(() => talkRef.current(), 250);
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+      ev.onclose = () => {
+        if (!closed) timer = setTimeout(connect, 1500);
+      };
+      ev.onerror = () => {
+        try {
+          ev.close();
+        } catch {
+          /* ignore */
+        }
+      };
+    };
+    connect();
+    return () => {
+      closed = true;
+      clearTimeout(timer);
+    };
+  }, []);
 
   function hide() {
     getCurrentWindow().hide().catch(() => {});
