@@ -16,7 +16,25 @@ fn toggle_window(app: &tauri::AppHandle, label: &str) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    let mut builder = tauri::Builder::default();
+
+    // Single-instance MUST be registered first: a second launch (e.g. autostart +
+    // a manual run) just summons the existing window instead of starting again and
+    // colliding on the global hotkey.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            for label in ["widget", "main"] {
+                if let Some(w) = app.get_webview_window(label) {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                    break;
+                }
+            }
+        }));
+    }
+
+    builder = builder.plugin(tauri_plugin_opener::init());
 
     #[cfg(desktop)]
     {
