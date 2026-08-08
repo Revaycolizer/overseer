@@ -72,7 +72,7 @@ fn run(tx: mpsc::Sender<()>) -> anyhow::Result<()> {
 
     // Transient detection over ~20ms windows.
     const WIN: usize = 320; // ~20ms @ 16k-ish (native rate is fine for peaks)
-    const LOUD: f32 = 0.28; // clap peak threshold
+    const LOUD: f32 = 0.20; // clap peak threshold (lower = more sensitive)
     const QUIET: f32 = 0.06; // must fall back below this between claps
     const MIN_GAP: Duration = Duration::from_millis(120);
     const MAX_GAP: Duration = Duration::from_millis(650);
@@ -87,8 +87,9 @@ fn run(tx: mpsc::Sender<()>) -> anyhow::Result<()> {
         if !IS_CLAP_LISTENING.load(Ordering::SeqCst) {
             break;
         }
-        // Skip while we're speaking so TTS isn't mistaken for claps.
-        if super::tts::is_tts_speaking() {
+        // Skip while speaking (TTS) or while a voice utterance is being recorded,
+        // so we don't fight the recorder for the mic or mishear our own output.
+        if super::tts::is_tts_speaking() || super::local_stt_rec::RECORDING.load(Ordering::SeqCst) {
             while cons.pop().is_some() {}
             std::thread::sleep(Duration::from_millis(50));
             continue;
@@ -111,6 +112,7 @@ fn run(tx: mpsc::Sender<()>) -> anyhow::Result<()> {
                 }
             } else if peak >= LOUD && armed {
                 armed = false;
+                tracing::info!(peak, "clap: transient detected"); // tune LOUD from this
                 let now = Instant::now();
                 match first_clap {
                     Some(t) if now.duration_since(t) >= MIN_GAP && now.duration_since(t) <= MAX_GAP => {

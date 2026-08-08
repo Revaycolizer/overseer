@@ -3,7 +3,20 @@ use std::sync::Arc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::HeapRb;
 
+/// True while a voice utterance is being recorded, so other mic consumers (the
+/// clap detector) can pause and avoid fighting over the input device.
+pub static RECORDING: AtomicBool = AtomicBool::new(false);
+
+struct RecGuard;
+impl Drop for RecGuard {
+    fn drop(&mut self) {
+        RECORDING.store(false, Ordering::SeqCst);
+    }
+}
+
 pub async fn record_samples(vad_threshold: f32) -> Result<Vec<f32>, String> {
+    RECORDING.store(true, Ordering::SeqCst);
+    let _rec_guard = RecGuard;
     let host = cpal::default_host();
     let device = host.default_input_device().ok_or("No input device")?;
     let config = device.default_input_config().map_err(|e| e.to_string())?;
