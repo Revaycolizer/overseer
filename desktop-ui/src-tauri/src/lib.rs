@@ -83,6 +83,14 @@ pub fn run() {
                         _ => {}
                     })
                     .build(app)?;
+
+                // Keep the floating widget above everything and on every workspace,
+                // so it stays put when the desktop is shown / other apps minimize.
+                if let Some(widget) = app.get_webview_window("widget") {
+                    let _ = widget.set_always_on_top(true);
+                    let _ = widget.set_visible_on_all_workspaces(true);
+                    let _ = widget.set_skip_taskbar(true);
+                }
             }
             Ok(())
         })
