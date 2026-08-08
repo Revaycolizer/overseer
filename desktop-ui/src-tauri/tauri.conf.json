@@ -17,6 +17,20 @@
         "width": 440,
         "height": 680,
         "resizable": true
+      },
+      {
+        "label": "widget",
+        "title": "Overseer Widget",
+        "width": 400,
+        "height": 168,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": false,
+        "center": true
       }
     ],
     "security": {

@@ -2,9 +2,9 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Manager, WindowEvent};
 
-/// Show the window if hidden, hide it if visible — the always-on assistant toggle.
-fn toggle_main(app: &tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
+/// Show the window if hidden, hide it if visible.
+fn toggle_window(app: &tauri::AppHandle, label: &str) {
+    if let Some(w) = app.get_webview_window(label) {
         if w.is_visible().unwrap_or(false) {
             let _ = w.hide();
         } else {
@@ -34,7 +34,8 @@ pub fn run() {
                     .expect("register global shortcut")
                     .with_handler(|app, _shortcut, event| {
                         if event.state == ShortcutState::Pressed {
-                            toggle_main(app);
+                            // Summon/dismiss the floating widget (the always-on assistant).
+                            toggle_window(app, "widget");
                         }
                     })
                     .build(),
@@ -49,15 +50,17 @@ pub fn run() {
                 use tauri_plugin_autostart::ManagerExt;
                 let _ = app.autolaunch().enable();
 
-                let show = MenuItem::with_id(app, "show", "Show / Hide", true, None::<&str>)?;
+                let widget = MenuItem::with_id(app, "widget", "Assistant Widget", true, None::<&str>)?;
+                let show = MenuItem::with_id(app, "show", "Open Full App", true, None::<&str>)?;
                 let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&show, &quit])?;
+                let menu = Menu::with_items(app, &[&widget, &show, &quit])?;
                 let _tray = TrayIconBuilder::new()
                     .icon(app.default_window_icon().unwrap().clone())
                     .tooltip("Overseer")
                     .menu(&menu)
                     .on_menu_event(|app, event| match event.id.as_ref() {
-                        "show" => toggle_main(app),
+                        "widget" => toggle_window(app, "widget"),
+                        "show" => toggle_window(app, "main"),
                         "quit" => app.exit(0),
                         _ => {}
                     })

@@ -550,6 +550,36 @@ body { background: var(--bg); overflow: hidden; }
 .greet .mark { width: 22px; height: 22px; }
 @keyframes greetIn { 0% { opacity: 0; transform: translate(-50%, -14px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
 
+/* ===== Floating widget ===== */
+.widget-root { height: 100vh; display: grid; place-items: center; padding: 10px; background: transparent; }
+.widget-pill {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 24px;
+  background: var(--panel-strong); border: 1px solid var(--brd-strong);
+  backdrop-filter: blur(28px); box-shadow: 0 26px 64px -18px rgba(0, 0, 0, 0.7);
+}
+.widget-orb {
+  width: 52px; height: 52px; flex: none; border-radius: 50%; border: none; cursor: pointer;
+  display: grid; place-items: center; color: #fff;
+  background: linear-gradient(140deg, var(--a1), var(--a2));
+  box-shadow: 0 12px 28px -10px rgba(124, 92, 255, 0.85);
+  transition: transform 0.2s var(--spring);
+  -webkit-app-region: no-drag;
+}
+.widget-orb:hover { transform: scale(1.05); }
+.widget-orb:active { transform: scale(0.95); }
+.widget-orb.thinking { animation: orbspin 3s linear infinite; }
+.widget-orb.listening { background: linear-gradient(140deg, #f43f5e, #f472b6); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.5); animation: orbpulse 1.4s var(--ease) infinite; }
+.widget-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.widget-status { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.widget-input { border: none; outline: none; background: transparent; color: var(--text); font: inherit; font-size: 14px; width: 100%; -webkit-app-region: no-drag; }
+.widget-input::placeholder { color: var(--muted); }
+.widget-side { display: flex; flex-direction: column; align-items: center; gap: 8px; -webkit-app-region: no-drag; }
+.widget-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; transition: background 0.3s var(--ease); }
+.widget-dot.on { background: #34d399; box-shadow: 0 0 8px rgba(52, 211, 153, 0.7); }
+.widget-x { width: 22px; height: 22px; border-radius: 7px; border: none; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; transition: background 0.2s var(--ease), color 0.2s var(--ease); }
+.widget-x:hover { background: var(--panel); color: var(--text); }
+
 /* ===== Reduced motion ===== */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
