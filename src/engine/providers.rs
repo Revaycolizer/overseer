@@ -45,13 +45,19 @@ impl ProviderConfig {
 
 /// Load the configured provider from settings.
 pub async fn load_config(db: &Database) -> ProviderConfig {
-    let provider = Provider::parse(&crate::backend::get_setting_or(db, "llm_provider", "ollama").await);
+    let provider =
+        Provider::parse(&crate::backend::get_setting_or(db, "llm_provider", "ollama").await);
     match provider {
         Provider::OpenAI => ProviderConfig {
             provider,
             api_key: crate::backend::get_setting(db, "openai_api_key").await,
             base_url: {
-                let b = crate::backend::get_setting_or(db, "openai_base_url", "https://api.openai.com/v1").await;
+                let b = crate::backend::get_setting_or(
+                    db,
+                    "openai_base_url",
+                    "https://api.openai.com/v1",
+                )
+                .await;
                 b.trim_end_matches('/').to_string()
             },
             model: crate::backend::get_setting_or(db, "openai_model", "gpt-4o-mini").await,
@@ -60,16 +66,27 @@ pub async fn load_config(db: &Database) -> ProviderConfig {
             provider,
             api_key: crate::backend::get_setting(db, "anthropic_api_key").await,
             base_url: {
-                let b = crate::backend::get_setting_or(db, "anthropic_base_url", "https://api.anthropic.com").await;
+                let b = crate::backend::get_setting_or(
+                    db,
+                    "anthropic_base_url",
+                    "https://api.anthropic.com",
+                )
+                .await;
                 b.trim_end_matches('/').to_string()
             },
-            model: crate::backend::get_setting_or(db, "anthropic_model", "claude-3-5-sonnet-latest").await,
+            model: crate::backend::get_setting_or(
+                db,
+                "anthropic_model",
+                "claude-3-5-sonnet-latest",
+            )
+            .await,
         },
         Provider::Ollama => ProviderConfig {
             provider,
             api_key: String::new(),
             base_url: "http://localhost:11434".to_string(),
-            model: crate::backend::get_setting_or(db, "default_chat_model", "qwen2.5:7b-instruct").await,
+            model: crate::backend::get_setting_or(db, "default_chat_model", "qwen2.5:7b-instruct")
+                .await,
         },
     }
 }
@@ -105,20 +122,39 @@ pub async fn resolve_model(cfg: &ProviderConfig) -> ProviderConfig {
     if available.iter().any(|m| m == &cfg.model) || available.is_empty() {
         return cfg.clone();
     }
+    // The configured model isn't pulled — pick an available one that supports
+    // tool-calling (so the agent keeps working) instead of just the first tag.
+    const TOOL_FAMILIES: &[&str] = &[
+        "qwen", "llama3", "llama-3", "mistral", "hermes", "command-r", "firefunction", "granite",
+    ];
+    let chosen = available
+        .iter()
+        .find(|m| {
+            let lm = m.to_lowercase();
+            TOOL_FAMILIES.iter().any(|f| lm.contains(f))
+        })
+        .cloned()
+        .unwrap_or_else(|| available[0].clone());
+
     let mut out = cfg.clone();
-    tracing::warn!(
+    // Expected fallback, not an error — log quietly.
+    tracing::info!(
         configured = %cfg.model,
-        chosen = %available[0],
-        "configured Ollama model not pulled; falling back to first available"
+        using = %chosen,
+        "configured model not pulled — using an available local model"
     );
-    out.model = available[0].clone();
+    out.model = chosen;
     out
 }
 
 /// Single-turn chat completion against the configured cloud provider.
 /// Returns the assistant text. Only valid for OpenAI/Anthropic (see
 /// `is_cloud_ready`); the Ollama path stays on the existing rig client.
-pub async fn complete_chat(cfg: &ProviderConfig, system: &str, user: &str) -> anyhow::Result<String> {
+pub async fn complete_chat(
+    cfg: &ProviderConfig,
+    system: &str,
+    user: &str,
+) -> anyhow::Result<String> {
     let client = reqwest::Client::new();
     match cfg.provider {
         Provider::OpenAI => {
@@ -164,7 +200,10 @@ pub async fn complete_chat(cfg: &ProviderConfig, system: &str, user: &str) -> an
             if !status.is_success() {
                 anyhow::bail!("Anthropic error {}: {}", status, v);
             }
-            Ok(v["content"][0]["text"].as_str().unwrap_or_default().to_string())
+            Ok(v["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string())
         }
         Provider::Ollama => {
             anyhow::bail!("complete_chat is for cloud providers; use the Ollama path")
@@ -309,7 +348,10 @@ async fn ollama_with_tools(
         for (i, c) in calls.iter().enumerate() {
             turn.tool_calls.push(ToolCall {
                 id: format!("call_{i}"), // Ollama has no call ids; synthesize for round-trip
-                name: c["function"]["name"].as_str().unwrap_or_default().to_string(),
+                name: c["function"]["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string(),
                 arguments: c["function"]["arguments"].clone(),
             });
         }
@@ -342,7 +384,10 @@ async fn openai_with_tools(
                     })
                     .collect();
                 let mut msg = serde_json::json!({ "role": "assistant" });
-                msg["content"] = text.clone().map(serde_json::Value::String).unwrap_or(serde_json::Value::Null);
+                msg["content"] = text
+                    .clone()
+                    .map(serde_json::Value::String)
+                    .unwrap_or(serde_json::Value::Null);
                 if !calls.is_empty() {
                     msg["tool_calls"] = serde_json::Value::Array(calls);
                 }
@@ -390,9 +435,13 @@ async fn openai_with_tools(
     }
     if let Some(calls) = msg["tool_calls"].as_array() {
         for c in calls {
-            let name = c["function"]["name"].as_str().unwrap_or_default().to_string();
+            let name = c["function"]["name"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
             let args_str = c["function"]["arguments"].as_str().unwrap_or("{}");
-            let arguments = serde_json::from_str(args_str).unwrap_or(serde_json::Value::Object(Default::default()));
+            let arguments = serde_json::from_str(args_str)
+                .unwrap_or(serde_json::Value::Object(Default::default()));
             turn.tool_calls.push(ToolCall {
                 id: c["id"].as_str().unwrap_or_default().to_string(),
                 name,
