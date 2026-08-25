@@ -57,21 +57,51 @@ export const setIdleSecs = (n: number) => localStorage.setItem(IDLE, String(n));
 export const newId = () =>
   `p_${Date.now().toString(36)}_${Math.floor(performance.now()).toString(36)}`;
 
-/** Parse the engine's StructuredResponse JSON into plain assistant text. */
+/** Parse the engine's response into clean assistant text:
+ *  1. unwrap a StructuredResponse `{ messages: [...] }`
+ *  2. collapse tool-trace bullets (`• write ~/x — {json…}`) into `✓ summary`
+ *     so the user sees "✓ Wrote README.md", never raw tool JSON. */
 export function parseAssistant(raw: string): string {
   const t = raw?.trim() ?? "";
-  if (!t.startsWith("{")) return raw;
-  try {
-    const v = JSON.parse(t);
-    if (Array.isArray(v.messages)) {
-      const text = v.messages
-        .map((m: { message?: string }) => m.message ?? "")
-        .filter(Boolean)
-        .join("\n\n");
-      if (text) return text;
+  if (!t) return raw;
+
+  // 1) Structured { messages: [...] }
+  if (t.startsWith("{")) {
+    try {
+      const v = JSON.parse(t);
+      if (Array.isArray(v.messages)) {
+        const text = v.messages
+          .map((m: { message?: string }) => m.message ?? "")
+          .filter(Boolean)
+          .join("\n\n");
+        if (text) return text;
+      }
+    } catch {
+      /* not JSON — fall through */
     }
-  } catch {
-    /* not JSON — show as-is */
   }
+
+  // 2) Tool trace with embedded JSON → clean checklist
+  if (/[•\-]\s.*\{.*"tool"/.test(t) || /\{.*"status"\s*:\s*"(completed|failed)"/.test(t)) {
+    return t
+      .split("\n")
+      .filter((l) => l.trim() !== "---")
+      .map((line) => {
+        const m = line.match(/^\s*[•\-]\s*(.*?)\s*—\s*(\{.*)$/);
+        if (!m) return line;
+        const label = m[1].trim();
+        const json = m[2];
+        const sm = json.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        const failed = /"status"\s*:\s*"failed"/.test(json) || /"exit_code"\s*:\s*[1-9]/.test(json);
+        let summary = sm
+          ? sm[1].replace(/\\"/g, '"').replace(/\\n/g, " ").replace(/\\t/g, " ").trim()
+          : label;
+        summary = summary.replace(/\s*\(\.*$/, "").trim() || label; // drop truncation like "(..."
+        return `${failed ? "✗" : "✓"} ${summary}`;
+      })
+      .join("\n")
+      .trim();
+  }
+
   return raw;
 }
