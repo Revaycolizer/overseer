@@ -4,11 +4,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import App from "./App";
 import Widget from "./screens/Widget";
 
-// Resolve theme before first paint (saved choice, else system preference) so
-// there's no flash of the wrong theme.
-const savedTheme = localStorage.getItem("overseer.theme");
-document.documentElement.dataset.theme =
-  savedTheme || (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+// Overseer ships a single, light "paper" theme — no dark mode.
+document.documentElement.dataset.theme = "light";
 
 // The same bundle serves two windows: the full app ("main") and the floating
 // widget ("widget"). Pick by the Tauri window label; default to the app.
