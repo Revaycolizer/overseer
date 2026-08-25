@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./App.css";
 import Sidebar, { View } from "./components/Sidebar";
 import Chat from "./screens/Chat";
@@ -20,26 +21,6 @@ import {
 
 const DEFAULT_URL = "ws://127.0.0.1:8080/api/ws/chat";
 
-function ThemeToggle({ onToggle }: { onToggle: () => void }) {
-  return (
-    <button className="theme-toggle" onClick={onToggle} type="button" aria-label="Toggle dark / light theme">
-      <svg className="tt-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <mask id="tt-moon-mask">
-          <rect x="0" y="0" width="24" height="24" fill="white" />
-          <circle className="tt-cut" cx="25" cy="0" r="8" fill="black" />
-        </mask>
-        <circle className="tt-disc" cx="12" cy="12" r="5" fill="currentColor" mask="url(#tt-moon-mask)" />
-        <g className="tt-rays">
-          <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-          <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-        </g>
-      </svg>
-    </button>
-  );
-}
-
 export default function App() {
   const [url] = useState(() => localStorage.getItem("overseer.wsUrl") || DEFAULT_URL);
   const [token] = useState(() => localStorage.getItem("overseer.token") || "");
@@ -47,6 +28,7 @@ export default function App() {
 
   const [view, setView] = useState<View>("chat");
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("overseer.sidebar") === "1");
+  const [isFs, setIsFs] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [connected, setConnected] = useState(false);
@@ -72,14 +54,6 @@ export default function App() {
   const nextId = () => ++idRef.current;
 
   const activePersona = useMemo(() => personas.find((p) => p.id === activeId) ?? null, [personas, activeId]);
-
-  const [, setThemeTick] = useState(0);
-  const toggleTheme = () => {
-    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem("overseer.theme", next);
-    setThemeTick((t) => t + 1);
-  };
 
   // ---- WebSocket with auto-reconnect ----
   useEffect(() => {
@@ -165,6 +139,38 @@ export default function App() {
       wsRef.current?.close();
     };
   }, [url, token]);
+
+  // ---- Fullscreen: always leave an exit (Esc / F11) + in-app controls ----
+  useEffect(() => {
+    let win: ReturnType<typeof getCurrentWindow> | null = null;
+    let unlisten: (() => void) | undefined;
+    try {
+      win = getCurrentWindow();
+    } catch {
+      return; // running outside Tauri (plain browser dev)
+    }
+    const w = win;
+    const sync = () => w.isFullscreen().then(setIsFs).catch(() => {});
+    sync();
+    w.onResized(sync).then((u) => (unlisten = u)).catch(() => {});
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        w.isFullscreen().then((v) => { if (v) w.setFullscreen(false); }).catch(() => {});
+      } else if (e.key === "F11") {
+        e.preventDefault();
+        w.isFullscreen().then((v) => w.setFullscreen(!v)).catch(() => {});
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      unlisten?.();
+    };
+  }, []);
+
+  const winMinimize = () => getCurrentWindow().minimize().catch(() => {});
+  const winExitFs = () => getCurrentWindow().setFullscreen(false).catch(() => {});
+  const winClose = () => getCurrentWindow().close().catch(() => {});
 
   // ---- Pointer-reactive aurora ----
   useEffect(() => {
@@ -335,6 +341,20 @@ export default function App() {
       <div className="aurora" aria-hidden />
       <div className="grain" aria-hidden />
 
+      {isFs && (
+        <div className="winctl" role="group" aria-label="Window controls">
+          <button className="winctl-btn" onClick={winMinimize} title="Minimize" aria-label="Minimize">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+          </button>
+          <button className="winctl-btn" onClick={winExitFs} title="Exit full screen (Esc)" aria-label="Exit full screen">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg>
+          </button>
+          <button className="winctl-btn danger" onClick={winClose} title="Close" aria-label="Close">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+          </button>
+        </div>
+      )}
+
       {greeting && !idle && (
         <div className="greet">
           <span className="mark" aria-hidden>
@@ -357,7 +377,6 @@ export default function App() {
                   <span className="pulse" />
                   {connected ? "connected" : "offline"}
                 </div>
-                <ThemeToggle onToggle={toggleTheme} />
               </div>
             </div>
 
