@@ -55,6 +55,7 @@ export default function Chat({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const [sel, setSel] = useState(0);
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -87,6 +88,7 @@ export default function Chat({
   const empty = messages.length === 0;
   const last = messages[messages.length - 1];
   const thinking = busy && last?.role === "assistant" && last.text.length === 0 && approvals.length === 0;
+  const lastUser = [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
 
   return (
     <div className="chat">
@@ -98,6 +100,72 @@ export default function Chat({
           Talk
         </button>
       </div>
+
+      {voiceMode ? (
+        <div className="voice-stage">
+          {approvals.map((a) => (
+            <div key={a.id} className="approval">
+              <div className="approval-body">
+                <span className="approval-badge">approval</span>
+                <div>
+                  <div className="approval-summary">{a.summary || `${a.tool} action`}</div>
+                  <div className="approval-meta">
+                    <code>{a.tool}</code> · {a.kind.replace(/_/g, " ")}
+                  </div>
+                </div>
+              </div>
+              <div className="approval-actions">
+                <button className="btn-danger" onClick={() => onResolve(a.id, false)}>Reject</button>
+                <button className="btn-primary" onClick={() => onResolve(a.id, true)}>Approve</button>
+              </div>
+            </div>
+          ))}
+
+          <div className="voice-orb-wrap">
+            <span className="voice-ring r1" aria-hidden />
+            <span className="voice-ring r2" aria-hidden />
+            <button
+              className={`voice-orb ${muted ? "muted" : listening ? "listening" : busy ? "thinking" : ""}`}
+              onClick={() => { if (!muted) onVoice(); }}
+              disabled={!connected}
+              title="Tap to talk"
+              aria-label="Tap to talk"
+            />
+          </div>
+
+          <div className="voice-meta">
+            <span className="voice-label">
+              <span className="voice-label-dot" />
+              {muted ? "Muted" : listening ? "Listening" : busy ? "Thinking" : "Ready to listen"}
+            </span>
+            <div className="voice-transcript">
+              {lastUser ? `“${lastUser}”` : "Tap the orb, or just speak — Overseer is listening."}
+            </div>
+            {listening && !muted && (
+              <div className="waveform" aria-hidden>
+                {Array.from({ length: 22 }).map((_, i) => (
+                  <span key={i} className="wave-bar" style={{ animationDelay: `${(i % 11) * 90}ms` } as CSSProperties} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="voice-actions">
+            <button className="voice-btn ghost" onClick={() => setMuted((m) => !m)}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                {muted && <path d="M4 4l16 16" />}
+              </svg>
+              {muted ? "Unmute" : "Mute"}
+            </button>
+            <button className="voice-btn primary" onClick={onToggleVoiceMode}>Stop</button>
+          </div>
+
+          <div className="voice-hint">Say “Overseer, stop” to cancel · hands-free conversation</div>
+        </div>
+      ) : (
+      <>
       <div className="thread" ref={scrollRef}>
         {empty ? (
           <section className="hero">
@@ -195,24 +263,6 @@ export default function Chat({
           </div>
         )}
 
-        {voiceMode ? (
-          <div className="voice-console">
-            <button
-              className={`orb ${listening ? "listening" : busy ? "thinking" : ""}`}
-              onClick={onVoice}
-              title="Tap to talk"
-              aria-label="Talk"
-            >
-              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="3" width="6" height="11" rx="3" />
-                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-              </svg>
-            </button>
-            <div className="voice-status">
-              {listening ? "Listening…" : busy ? "Thinking…" : "Talking with Overseer — just speak"}
-            </div>
-          </div>
-        ) : (
         <div className="composer-shell">
           {paletteOpen && (
             <div className="palette">
@@ -297,17 +347,12 @@ export default function Chat({
             </button>
           </div>
         </div>
-        )}
         <div className="hint">
-          {voiceMode ? (
-            "Speak — Overseer listens and replies aloud · switch to Chat to type"
-          ) : (
-            <>
-              <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline · <kbd>/</kbd> for commands
-            </>
-          )}
+          <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline · <kbd>/</kbd> for commands
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
