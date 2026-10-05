@@ -60,9 +60,16 @@
     },
     "terminal_distribution": {
       "report": "terminal-distribution-verification.json",
-      "local_install": "Mac Apple Silicon passed",
-      "public_release": "not published",
-      "other_platforms": "configured; not verified"
+      "public_release": "https://github.com/Jeccoman/overseer-downloads/releases/tag/terminal-v0.1.4-preview.1",
+      "homebrew": "brew install Jeccoman/tap/overseer; public installation and brew test passed on Mac",
+      "source_visibility": "private",
+      "verified_native_targets": [
+        "macOS Apple Silicon",
+        "Ubuntu 24.04 x64",
+        "Windows x64"
+      ],
+      "unsupported": "Intel Mac ONNX build failed; Linux ARM not targeted",
+      "interactive_acceptance": "Mac/Linux smoke passed; Windows unverified"
     }
   },
   "remaining_blockers": [
@@ -190,11 +197,11 @@
     },
     {
       "issue": "Acceptance coverage is incomplete",
-      "required_work": "Live cloud-provider tests with configured accounts, native UI interaction and platform/accessibility permission testing; Windows/Linux/Intel builds not verified here"
+      "required_work": "Live cloud-provider tests with configured accounts, native desktop interaction, Windows terminal interactive acceptance and platform/accessibility permission testing; Intel Mac build fails at ONNX dependency"
     }
   ],
   "known_limits": [
-    "No public deployment or release was performed",
+    "Public terminal preview published; general product launch remains blocked",
     "Four tests requiring optional external resources remain ignored",
     "Existing compiler warnings and unmaintained/yanked dependency warnings remain",
     "Audit covers the entire root lockfile; many advisory packages are absent from the default Mac build"

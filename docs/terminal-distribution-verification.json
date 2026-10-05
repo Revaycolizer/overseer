@@ -1,5 +1,5 @@
 {
-  "verified_at_utc": "2026-10-05T15:02:31.060438+00:00",
+  "verified_at_utc": "2026-10-05T18:32:20.418896+00:00",
   "version": "0.1.4",
   "platform": "macOS Apple Silicon",
   "archive": "dist/terminal/overseer-terminal-v0.1.4-aarch64-apple-darwin.tar.gz",
@@ -14,22 +14,52 @@
     "help_version_invalid_arguments_without_database_creation": "passed",
     "installed_standalone_launch_type_quit_with_embedded_migrations": "passed",
     "workflow_yaml": "parsed",
-    "homebrew_generator": "Actual generated Mac ARM formula installed through a temporary local tap; brew test and executable version passed; temporary install/tap removed"
+    "homebrew_generator": "Actual generated Mac ARM formula installed through a temporary local tap; brew test and executable version passed; temporary install/tap removed",
+    "public_anonymous_downloads": "All three archive downloads and SHA256 checksums passed without authentication",
+    "public_homebrew_install": "brew install Jeccoman/tap/overseer and brew test passed on Mac Apple Silicon",
+    "ci_targets": {
+      "mac_arm64": "native build, 3 terminal tests, installer and standalone interactive smoke passed",
+      "linux_x64": "native build, 3 terminal tests, installer and standalone interactive smoke passed",
+      "windows_x64": "native build, 3 terminal tests and installer checks passed",
+      "mac_intel": "failed: ONNX prebuilt library unavailable"
+    }
   },
   "limitations": [
-    "A private draft preview is created; public downloads and Homebrew tap publication await destination choice",
-    "Intel Mac, Linux and Windows builds are configured but not verified locally",
-    "Homebrew tap is not published",
-    "Mac binary is not Developer ID signed/notarized; existing public launch blockers remain"
+    "Intel Mac excluded after native build failure; Linux ARM not targeted",
+    "Mac is not Developer ID signed/notarized; remaining public-launch blockers still apply",
+    "Windows native interactive acceptance and cloud-provider acceptance remain unverified",
+    "Linux Homebrew installation has not been tested; Linux archive installer passed natively"
   ],
   "github": {
     "source_branch": "terminal-preview/distribution-20261005",
     "source_commit": "770bbb012909192a8dd345f7a737e133577f43b4",
     "workflow_run": "https://github.com/Revaycolizer/overseer/actions/runs/37345149321",
-    "workflow_status": "in progress",
+    "workflow_status": "completed: Apple Silicon, Linux x64, Windows x64 succeeded; Intel Mac failed at ONNX dependency",
     "preview_tag": "terminal-v0.1.4-preview.1",
-    "release_state": "private draft; locally verified Mac archive uploaded",
+    "release_state": "public prerelease published",
     "repository_visibility": "private",
-    "developer_id_application_identity": "not available"
-  }
+    "developer_id_application_identity": "not available",
+    "release_url": "https://github.com/Jeccoman/overseer-downloads/releases/tag/terminal-v0.1.4-preview.1",
+    "packaging_tooling_commit": "7181cea82eff892b4c0b89e9a34d07a278866115",
+    "downloads_repository": "Jeccoman/overseer-downloads",
+    "tap_repository": "Jeccoman/homebrew-tap",
+    "source_repository_visibility": "private"
+  },
+  "public_artifacts": [
+    {
+      "name": "overseer-terminal-v0.1.4-aarch64-apple-darwin.tar.gz",
+      "sha256": "3db54387f8fbb4ac5fd88c6137a9c23b60a0807137036a84059948ffae0cb765",
+      "bytes": 19776087
+    },
+    {
+      "name": "overseer-terminal-v0.1.4-x86_64-pc-windows-msvc.zip",
+      "sha256": "3ba021ce0f74ab1a67ce315203dbddbb721e5ccb4182ce0e012e45e3de6a8c15",
+      "bytes": 27152854
+    },
+    {
+      "name": "overseer-terminal-v0.1.4-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "7ababcf96b61a715d263f38ab78ab2a3d5f804aeed545f46d6a72f162d863b62",
+      "bytes": 29039510
+    }
+  ]
 }
