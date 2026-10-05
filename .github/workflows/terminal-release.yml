@@ -80,7 +80,7 @@ jobs:
           path: dist/terminal
       - name: Generate formula and combined checksums
         run: |
-          tag=$(python3 -c 'import tomllib; print("v" + tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          tag=$(python3 -c 'import tomllib; print("terminal-v" + tomllib.load(open("Cargo.toml", "rb"))["package"]["version"] + "-preview.1")')
           python3 scripts/generate-terminal-formula.py dist/terminal --tag "$tag" --repository "$GITHUB_REPOSITORY"
           cat dist/terminal/*.sha256 > dist/terminal/SHA256SUMS.txt
           (cd dist/terminal && sha256sum -c SHA256SUMS.txt)

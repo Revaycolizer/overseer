@@ -14,12 +14,22 @@
     "help_version_invalid_arguments_without_database_creation": "passed",
     "installed_standalone_launch_type_quit_with_embedded_migrations": "passed",
     "workflow_yaml": "parsed",
-    "homebrew_generator": "fixture checksum manifests and Ruby syntax passed; actual tap install not tested"
+    "homebrew_generator": "Actual generated Mac ARM formula installed through a temporary local tap; brew test and executable version passed; temporary install/tap removed"
   },
   "limitations": [
-    "No GitHub workflow was dispatched or release published",
+    "A private draft preview is created; public downloads and Homebrew tap publication await destination choice",
     "Intel Mac, Linux and Windows builds are configured but not verified locally",
     "Homebrew tap is not published",
     "Mac binary is not Developer ID signed/notarized; existing public launch blockers remain"
-  ]
+  ],
+  "github": {
+    "source_branch": "terminal-preview/distribution-20261005",
+    "source_commit": "770bbb012909192a8dd345f7a737e133577f43b4",
+    "workflow_run": "https://github.com/Revaycolizer/overseer/actions/runs/37345149321",
+    "workflow_status": "in progress",
+    "preview_tag": "terminal-v0.1.4-preview.1",
+    "release_state": "private draft; locally verified Mac archive uploaded",
+    "repository_visibility": "private",
+    "developer_id_application_identity": "not available"
+  }
 }
