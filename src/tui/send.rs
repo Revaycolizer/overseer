@@ -10,14 +10,22 @@ impl App {
     /// bumps the engine activity counter so the main loop picks it up
     /// (see `crate::engine::activity`).
     pub async fn send_message(&mut self) -> anyhow::Result<()> {
-        if self.input.trim().is_empty() || self.selected_conv_id.is_none() {
+        if self.input.trim().is_empty() {
             return Ok(());
+        }
+        if self.selected_conv_id.is_none() {
+            self.selected_conv_id = Some(self.client.add_conversation("New Conversation").await?);
         }
         let active_conv_id = self.selected_conv_id.unwrap();
         let query = self.input.clone();
-        self.input.clear();
 
-        let _ = self.client.add_message(active_conv_id, "user", &query, false).await?;
+        let _ = self
+            .client
+            .add_message(active_conv_id, "user", &query, false)
+            .await?;
+        self.input.clear();
+        self.input_cursor = 0;
+        self.chat_scroll = 0;
         self.activity.bump();
 
         // No 4-word optimistic title write: the LLM refinement via
@@ -51,8 +59,7 @@ impl App {
             // doesn't render the partial message body — that's
             // V4.17.1d's Dioxus path — but per-bump UI updates let
             // the TUI show a "typing…" indicator or other live state.)
-            let (token_tx, mut token_rx) =
-                tokio::sync::mpsc::unbounded_channel::<String>();
+            let (token_tx, mut token_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
             let activity_for_tokens = activity.clone();
             let _consumer = tokio::spawn(async move {
                 while let Some(_) = token_rx.recv().await {
@@ -61,9 +68,14 @@ impl App {
                 }
             });
 
-            match client.orchestrate(active_conv_id, &query, Some(token_tx)).await {
+            match client
+                .orchestrate(active_conv_id, &query, Some(token_tx))
+                .await
+            {
                 Ok(response) => {
-                    let _ = client.add_message(active_conv_id, "assistant", &response, false).await;
+                    let _ = client
+                        .add_message(active_conv_id, "assistant", &response, false)
+                        .await;
                     activity.bump();
 
                     // Wait for the LLM-refined title to land. The

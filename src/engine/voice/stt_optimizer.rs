@@ -1,5 +1,5 @@
 #[cfg(feature = "whisper")]
-use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 pub struct SpeechOptimizer {
     #[cfg(feature = "whisper")]
@@ -10,14 +10,16 @@ pub struct SpeechOptimizer {
 
 impl SpeechOptimizer {
     pub fn new(model_path: &str) -> Self {
-        let vocab = "Overseer, Rust, Tauri, Postgres, PgBouncer, Actix, Elysia, Bun, Dar es Salaam".to_string();
+        let vocab = "Overseer, Rust, Tauri, Postgres, PgBouncer, Actix, Elysia, Bun, Dar es Salaam"
+            .to_string();
         #[cfg(feature = "whisper")]
         {
             let path = std::path::Path::new(model_path);
             let ctx = WhisperContext::new_with_params(
                 &path.to_string_lossy(),
                 WhisperContextParameters::default(),
-            ).ok();
+            )
+            .ok();
             Self {
                 whisper_ctx: ctx,
                 custom_vocabulary: vocab,
@@ -33,6 +35,10 @@ impl SpeechOptimizer {
     }
 
     pub fn transcribe_stream(&self, audio_data: &[f32]) -> String {
+        self.transcribe(audio_data).unwrap_or_default()
+    }
+
+    pub fn transcribe(&self, audio_data: &[f32]) -> Result<String, String> {
         #[cfg(feature = "whisper")]
         {
             if let Some(ctx) = &self.whisper_ctx {
@@ -41,18 +47,15 @@ impl SpeechOptimizer {
                 if let Ok(mut state) = ctx.create_state() {
                     if state.full(params, audio_data).is_ok() {
                         let num_segments = state.full_n_segments().unwrap_or(0);
-                        return (0..num_segments)
+                        return Ok((0..num_segments)
                             .map(|i| state.full_get_segment_text(i).unwrap_or_default())
                             .collect::<Vec<String>>()
-                            .join("");
+                            .join(""));
                     }
                 }
             }
         }
 
-        if let Ok(res) = crate::engine::voice::local_stt_trans::transcribe_samples_sync(audio_data) {
-            return res;
-        }
-        String::new()
+        crate::engine::voice::local_stt_trans::transcribe_samples_sync(audio_data)
     }
 }

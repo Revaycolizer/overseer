@@ -27,6 +27,9 @@ impl AgentSystem {
         user_query: &str,
         token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     ) -> String {
+        if let Some(response) = crate::engine::learning::command(db, conversation_id, user_query).await {
+            return response;
+        }
         // V4.17.2: emit a budget warning before we send the prompt
         // to Ollama. The query itself is a lower bound on the prompt
         // size (the system preamble + context + history add hundreds

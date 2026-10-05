@@ -9,7 +9,7 @@ pub async fn get_setting(db: &Database, key: &str) -> String {
             .await;
 
     match res {
-        Ok(Some((v,))) => v,
+        Ok(Some((v,))) => decode_setting(key, v),
         _ => "".to_string(),
     }
 }
@@ -27,7 +27,29 @@ pub async fn get_setting_i64(db: &Database, key: &str, default: i64) -> i64 {
     get_setting(db, key).await.parse::<i64>().unwrap_or(default)
 }
 
+fn sensitive_setting(key: &str) -> bool {
+    matches!(key, "openai_api_key" | "anthropic_api_key")
+}
+
+fn decode_setting(key: &str, value: String) -> String {
+    if sensitive_setting(key) && value.starts_with("v2:") {
+        crate::engine::workflow::credentials::decrypt(&value).unwrap_or_else(|error| {
+            tracing::error!(%error, "Cannot read encrypted provider credential");
+            String::new()
+        })
+    } else {
+        value
+    }
+}
+
 pub async fn set_setting(db: &Database, key: &str, value: &str) -> anyhow::Result<()> {
+    let encrypted;
+    let value = if sensitive_setting(key) && !value.is_empty() {
+        encrypted = crate::engine::workflow::credentials::encrypt(value)?;
+        encrypted.as_str()
+    } else {
+        value
+    };
     let id = db.next_id().await;
     sqlx::query("INSERT INTO settings (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
         .bind(id)
@@ -44,7 +66,12 @@ pub async fn get_all_settings(db: &Database) -> HashMap<String, String> {
         .await
         .unwrap_or_default();
 
-    rows.into_iter().collect()
+    rows.into_iter()
+        .map(|(key, value)| {
+            let decoded = decode_setting(&key, value);
+            (key, decoded)
+        })
+        .collect()
 }
 
 pub async fn resolve_model_name(
@@ -107,12 +134,7 @@ pub async fn resolve_model_with_fallbacks(
     let available = super::get_available_models().await;
     let is_available = |m: &str| available.is_empty() || available.iter().any(|c| c == m);
 
-    let raw = get_setting_or(
-        db,
-        &format!("{}_fallbacks", setting_key),
-        "[]",
-    )
-    .await;
+    let raw = get_setting_or(db, &format!("{}_fallbacks", setting_key), "[]").await;
     let parsed: Vec<String> = serde_json::from_str(&raw).unwrap_or_default();
     for candidate in parsed {
         let c = candidate.trim();

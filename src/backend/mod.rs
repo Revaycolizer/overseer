@@ -46,6 +46,7 @@ pub use conversations::{Conversation, ConversationSearchResult};
 pub use messages::titling::is_first_user_message;
 pub use messages::{Message, Attachment};
 pub use health::get_available_models;
+pub(crate) use health::models::try_get_available_models;
 pub use artifacts::Artifact;
 pub use work_items::{WorkItem, WorkItemEvent};
 pub use computer_supervision::{

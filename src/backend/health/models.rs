@@ -22,33 +22,8 @@ pub async fn get_available_models() -> Vec<String> {
         }
     }
 
-    let client = reqwest::Client::new();
-    let models = match client.get("http://localhost:11434/api/tags").send().await {
-        Ok(resp) => {
-            if let Ok(json) = resp.json::<serde_json::Value>().await {
-                if let Some(models) = json["models"].as_array() {
-                    models
-                        .iter()
-                        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-                        .collect()
-                } else {
-                    vec![
-                        "llama3:latest".to_string(),
-                        "qwen2.5:7b-instruct".to_string(),
-                    ]
-                }
-            } else {
-                vec![
-                    "llama3:latest".to_string(),
-                    "qwen2.5:7b-instruct".to_string(),
-                ]
-            }
-        }
-        Err(_) => vec![
-            "llama3:latest".to_string(),
-            "qwen2.5:7b-instruct".to_string(),
-        ],
-    };
+    // Never show fabricated installed models when Ollama is unavailable.
+    let models = try_get_available_models().await.unwrap_or_default();
 
     if let Ok(mut guard) = cache.lock() {
         *guard = Some(AvailableModelsCache {
@@ -61,12 +36,13 @@ pub async fn get_available_models() -> Vec<String> {
 }
 
 pub(crate) async fn try_get_available_models() -> Result<Vec<String>, String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(3)).build().map_err(|e| e.to_string())?;
     let response = client
         .get("http://localhost:11434/api/tags")
         .send()
         .await
-        .map_err(|err| err.to_string())?;
+        .map_err(|err| err.to_string())?
+        .error_for_status().map_err(|err| err.to_string())?;
 
     let json = response
         .json::<serde_json::Value>()

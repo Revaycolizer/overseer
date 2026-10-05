@@ -48,7 +48,7 @@ impl SupervisionClient for LocalClient {
 impl RegistryClient for LocalClient {
     async fn refresh_runtime_registry_now(&self) -> anyhow::Result<()> { crate::backend::refresh_runtime_registry_now(&self.db).await }
     async fn get_runtime_registry_status(&self) -> anyhow::Result<RuntimeRegistryStatus> { Ok(crate::backend::get_runtime_registry_status(&self.db).await) }
-    async fn get_available_models(&self) -> anyhow::Result<Vec<String>> { Ok(crate::backend::get_available_models().await) }
+    async fn get_available_models(&self) -> anyhow::Result<Vec<String>> { crate::backend::try_get_available_models().await.map_err(anyhow::Error::msg) }
     async fn get_runtime_health(&self) -> RuntimeHealth { crate::backend::get_runtime_health(&self.db).await }
 }
 

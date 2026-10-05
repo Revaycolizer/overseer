@@ -15,7 +15,7 @@ const DEFAULT_BACKUP_ROTATION: usize = 7;
 /// The backup is written to `{data_dir}/backups/overseer-{timestamp}.db`.
 /// Old backups beyond `rotation` count are pruned.
 pub async fn create_backup(db: &Database, rotation: Option<usize>) -> anyhow::Result<PathBuf> {
-    let rotation = rotation.unwrap_or(DEFAULT_BACKUP_ROTATION);
+    let rotation = rotation.unwrap_or(DEFAULT_BACKUP_ROTATION).max(1);
     let data_dir = crate::db::get_overseer_data_dir();
     let backup_dir = data_dir.join("backups");
     tokio::fs::create_dir_all(&backup_dir).await?;
@@ -24,9 +24,25 @@ pub async fn create_backup(db: &Database, rotation: Option<usize>) -> anyhow::Re
     let backup_path = backup_dir.join(format!("overseer-{}.db", timestamp));
 
     // VACUUM INTO creates a compact, clean copy
-    sqlx::query(&format!("VACUUM INTO '{}'", backup_path.display().to_string().replace('\'', "''")))
-        .execute(&db.pool)
-        .await?;
+    sqlx::query(&format!(
+        "VACUUM INTO '{}'",
+        backup_path.display().to_string().replace('\'', "''")
+    ))
+    .execute(&db.pool)
+    .await?;
+
+    // The database alone cannot decrypt v2 credentials after a disk loss.
+    let key = data_dir.join("credentials.key");
+    if key.exists() {
+        let destination = backup_path.with_extension("key");
+        tokio::fs::copy(key, &destination).await?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            tokio::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o600))
+                .await?;
+        }
+    }
 
     // Prune old backups
     let mut backups: Vec<PathBuf> = Vec::new();
@@ -42,6 +58,10 @@ pub async fn create_backup(db: &Database, rotation: Option<usize>) -> anyhow::Re
     while backups.len() > rotation {
         if let Some(oldest) = backups.first() {
             tokio::fs::remove_file(oldest).await?;
+            let key = oldest.with_extension("key");
+            if key.exists() {
+                tokio::fs::remove_file(key).await?;
+            }
             backups.remove(0);
         }
     }
@@ -55,12 +75,11 @@ pub async fn create_backup(db: &Database, rotation: Option<usize>) -> anyhow::Re
 pub async fn migration_dry_run(db: &Database) -> anyhow::Result<Vec<String>> {
     let migrator = sqlx::migrate::Migrator::new(std::path::Path::new("./migrations")).await?;
 
-    let applied = sqlx::query_scalar::<_, String>(
-        "SELECT version FROM _sqlx_migrations ORDER BY version"
-    )
-    .fetch_all(&db.pool)
-    .await
-    .unwrap_or_default();
+    let applied =
+        sqlx::query_scalar::<_, String>("SELECT version FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(&db.pool)
+            .await
+            .unwrap_or_default();
 
     let pending: Vec<String> = migrator
         .iter()
@@ -74,7 +93,7 @@ pub async fn migration_dry_run(db: &Database) -> anyhow::Result<Vec<String>> {
 /// Export all conversations to a JSON archive.
 pub async fn export_all_conversations(db: &Database) -> anyhow::Result<String> {
     let conversations = sqlx::query_as::<_, (i64, String, String)>(
-        "SELECT id, title, created_at FROM conversations ORDER BY created_at"
+        "SELECT id, title, created_at FROM conversations ORDER BY created_at",
     )
     .fetch_all(&db.pool)
     .await?;
@@ -108,7 +127,8 @@ pub async fn export_all_conversations(db: &Database) -> anyhow::Result<String> {
 /// Import conversations from a JSON archive.
 pub async fn import_conversations(db: &Database, json_data: &str) -> anyhow::Result<usize> {
     let data: serde_json::Value = serde_json::from_str(json_data)?;
-    let conversations = data["conversations"].as_array()
+    let conversations = data["conversations"]
+        .as_array()
         .ok_or_else(|| anyhow::anyhow!("Missing 'conversations' array"))?;
 
     let mut count = 0;
@@ -127,7 +147,7 @@ pub async fn import_conversations(db: &Database, json_data: &str) -> anyhow::Res
                 let content = msg["content"].as_str().unwrap_or("");
                 let msg_id = db.next_id().await;
                 sqlx::query(
-                    "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)"
+                    "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
                 )
                 .bind(msg_id)
                 .bind(conv_id)

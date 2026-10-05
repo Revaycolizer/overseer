@@ -20,6 +20,14 @@ overseer_files/assistant-*.png
 /assets/voice/
 
 **/node_modules/
+**/.pnpm-store/
+**/__pycache__/
 
 
-
+# SDK build output and local Python environments
+**/dist-cjs/
+**/*.egg-info/
+**/.pytest_cache/
+/sdks/python/build/
+/sdks/examples/vscode-extension/out/
+/sdks/examples/rust-quickstart/target/

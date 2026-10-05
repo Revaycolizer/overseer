@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use ringbuf::HeapRb;
+use ringbuf::{HeapRb, traits::{Split, Producer, Consumer}};
 
 /// True while a voice utterance is being recorded, so other mic consumers (the
 /// clap detector) can pause and avoid fighting over the input device.
@@ -39,7 +39,7 @@ pub async fn record_samples(vad_threshold: f32) -> Result<Vec<f32>, String> {
                 } else { data.to_vec() };
                 for sample in mono {
                     while res_idx < 1.0 {
-                        let _ = prod.push(prev + res_idx * (sample - prev));
+                        let _ = prod.try_push(prev + res_idx * (sample - prev));
                         res_idx += step;
                     }
                     res_idx -= 1.0; prev = sample;
@@ -55,7 +55,7 @@ pub async fn record_samples(vad_threshold: f32) -> Result<Vec<f32>, String> {
                 } else { data.iter().map(|&s| s as f32 / 32768.0).collect() };
                 for sample in mono {
                     while res_idx < 1.0 {
-                        let _ = prod.push(prev + res_idx * (sample - prev));
+                        let _ = prod.try_push(prev + res_idx * (sample - prev));
                         res_idx += step;
                     }
                     res_idx -= 1.0; prev = sample;
@@ -72,7 +72,7 @@ pub async fn record_samples(vad_threshold: f32) -> Result<Vec<f32>, String> {
 
     while start.elapsed() < std::time::Duration::from_secs(8) {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        while let Some(s) = cons.pop() { temp.push(s); }
+        while let Some(s) = cons.try_pop() { temp.push(s); }
         let rms_check_len = 160;
         if temp.len() >= rms_check_len {
             let rms = (temp.iter().rev().take(rms_check_len).map(|&x| x * x).sum::<f32>() / rms_check_len as f32).sqrt();
@@ -88,7 +88,7 @@ pub async fn record_samples(vad_threshold: f32) -> Result<Vec<f32>, String> {
     is_rec.store(false, Ordering::SeqCst);
     let _ = stream.pause();
     drop(stream);
-    while let Some(s) = cons.pop() { temp.push(s); }
+    while let Some(s) = cons.try_pop() { temp.push(s); }
     // If nothing ever crossed the VAD threshold, treat it as silence (empty) so
     // the caller re-listens instead of transcribing ambient noise or TTS echo —
     // this is what stops the assistant "hearing itself" and self-conversing.

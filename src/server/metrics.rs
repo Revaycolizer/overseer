@@ -3,8 +3,8 @@
 //! - GET /metrics — Prometheus-formatted metrics
 //! - GET /health — Simple JSON health check
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::sync::OnceLock;
 
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
@@ -38,11 +38,21 @@ impl MetricsCollector {
         }
     }
 
-    pub fn inc_requests(&self) { self.requests_total.fetch_add(1, Ordering::Relaxed); }
-    pub fn inc_errors(&self) { self.errors_total.fetch_add(1, Ordering::Relaxed); }
-    pub fn inc_tools(&self) { self.tools_called.fetch_add(1, Ordering::Relaxed); }
-    pub fn inc_messages(&self) { self.messages_sent.fetch_add(1, Ordering::Relaxed); }
-    pub fn inc_runs(&self) { self.orchestration_runs.fetch_add(1, Ordering::Relaxed); }
+    pub fn inc_requests(&self) {
+        self.requests_total.fetch_add(1, Ordering::Relaxed);
+    }
+    pub fn inc_errors(&self) {
+        self.errors_total.fetch_add(1, Ordering::Relaxed);
+    }
+    pub fn inc_tools(&self) {
+        self.tools_called.fetch_add(1, Ordering::Relaxed);
+    }
+    pub fn inc_messages(&self) {
+        self.messages_sent.fetch_add(1, Ordering::Relaxed);
+    }
+    pub fn inc_runs(&self) {
+        self.orchestration_runs.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 #[derive(Serialize)]
@@ -54,7 +64,10 @@ struct HealthResponse {
     ollama_reachable: bool,
 }
 
+static STARTED: OnceLock<std::time::Instant> = OnceLock::new();
+
 pub fn router() -> Router<Arc<ServerState>> {
+    STARTED.get_or_init(std::time::Instant::now);
     Router::new()
         .route("/metrics", get(handle_metrics))
         // `/health` is owned by misc::router(); expose the metrics liveness probe
@@ -89,7 +102,9 @@ overseer_orchestration_runs {}
     )
 }
 
-async fn handle_health(State(state): State<Arc<ServerState>>) -> Json<HealthResponse> {
+async fn handle_health(
+    State(state): State<Arc<ServerState>>,
+) -> (StatusCode, Json<HealthResponse>) {
     let db_ok = sqlx::query("SELECT 1")
         .execute(&state.db.pool)
         .await
@@ -103,14 +118,25 @@ async fn handle_health(State(state): State<Arc<ServerState>>) -> Json<HealthResp
         .map(|r| r.status().is_success())
         .unwrap_or(false);
 
-    Json(HealthResponse {
-        status: if db_ok { "healthy".into() } else { "degraded".into() },
-        version: env!("CARGO_PKG_VERSION").into(),
-        uptime_secs: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0),
-        db_connected: db_ok,
-        ollama_reachable: ollama_ok,
-    })
+    (
+        if db_ok {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        },
+        Json(HealthResponse {
+            status: if db_ok {
+                "healthy".into()
+            } else {
+                "degraded".into()
+            },
+            version: env!("CARGO_PKG_VERSION").into(),
+            uptime_secs: STARTED
+                .get_or_init(std::time::Instant::now)
+                .elapsed()
+                .as_secs(),
+            db_connected: db_ok,
+            ollama_reachable: ollama_ok,
+        }),
+    )
 }

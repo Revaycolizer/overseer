@@ -101,6 +101,7 @@ impl Database {
         let generator = SnowflakeIdGenerator::new(1, 1);
         let database = Self {
             pool: pool.clone(),
+            kernel: Arc::new(std::sync::OnceLock::new()),
             snowflake: Arc::new(Mutex::new(generator)),
             lancedb_uri: data_dir.join("data").join("lancedb").to_string_lossy().to_string(),
             remote_url: None,
@@ -152,6 +153,7 @@ impl Database {
         sqlx::migrate!("./migrations").run(&pool).await?;
         Ok(Self {
             pool,
+            kernel: Arc::new(std::sync::OnceLock::new()),
             snowflake: Arc::new(Mutex::new(SnowflakeIdGenerator::new(1, 1))),
             lancedb_uri: String::new(),
             remote_url: None,

@@ -6,12 +6,25 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
 
     // ── Global shortcuts ──
 
+    if (key.code == KeyCode::Char('o') && key.modifiers.contains(KeyModifiers::CONTROL)) || (key.code == KeyCode::F(6) && matches!(app.active_tab, ActiveTab::Chat | ActiveTab::Settings)) {
+        app.active_tab = ActiveTab::Settings;
+        app.refresh_settings_map().await?;
+        app.refresh_models().await;
+        app.status_message = "Ollama models: Up/Down select, Enter apply, Esc back".into();
+        return Ok(());
+    }
+    if key.code == KeyCode::BackTab || (key.code == KeyCode::Tab && !app.input.starts_with('/')) {
+        app.active_tab = if key.code == KeyCode::BackTab { app.active_tab.prev() } else { app.active_tab.next() };
+        refresh_current_tab(app).await;
+        return Ok(());
+    }
+
     // Ctrl+Left / Ctrl+Right — cycle tabs
     if key.code == KeyCode::Left && (key.modifiers.contains(KeyModifiers::CONTROL) || key.modifiers.contains(KeyModifiers::SHIFT)) {
-        app.active_tab = app.active_tab.prev(); app.activity.bump(); return Ok(());
+        app.active_tab = app.active_tab.prev(); refresh_current_tab(app).await; app.activity.bump(); return Ok(());
     }
     if key.code == KeyCode::Right && (key.modifiers.contains(KeyModifiers::CONTROL) || key.modifiers.contains(KeyModifiers::SHIFT)) {
-        app.active_tab = app.active_tab.next(); app.activity.bump(); return Ok(());
+        app.active_tab = app.active_tab.next(); refresh_current_tab(app).await; app.activity.bump(); return Ok(());
     }
 
     // Alt+1..9,0 — jump to tab
@@ -80,7 +93,7 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         let new_id = app.client.add_conversation("New Conversation").await?;
         app.selected_conv_id = Some(new_id);
         app.activity.bump();
-        app.input.clear(); app.input_cursor = 0;
+        app.input.clear(); app.input_cursor = 0; app.chat_scroll = 0;
         let _ = app.refresh_conversations().await;
         return Ok(());
     }
@@ -97,7 +110,21 @@ pub async fn handle_key(app: &mut App, key: KeyEvent) -> anyhow::Result<()> {
         ActiveTab::MCP => { handle_mcp_key(app, key).await?; }
         ActiveTab::Skills => { handle_skills_key(app, key).await?; }
         ActiveTab::Settings => {
-            if key.code == KeyCode::Esc { app.active_tab = ActiveTab::Chat; app.activity.bump(); }
+            match key.code {
+                KeyCode::Up => app.selected_model = app.selected_model.saturating_sub(1),
+                KeyCode::Down => app.selected_model = (app.selected_model + 1).min(app.available_models.len().saturating_sub(1)),
+                KeyCode::Enter => {
+                    if let Some(model) = app.available_models.get(app.selected_model).cloned() {
+                        match app.select_model(&model).await {
+                            Ok(()) => app.active_tab = ActiveTab::Chat,
+                            Err(e) => app.status_message = format!("Model selection failed: {e}"),
+                        }
+                    }
+                }
+                KeyCode::Esc => app.active_tab = ActiveTab::Chat,
+                _ => {}
+            }
+            app.activity.bump();
         }
         ActiveTab::Browser => {}
         _ => {
@@ -298,7 +325,7 @@ async fn refresh_current_tab(app: &mut App) {
         ActiveTab::Tools => { let _ = app.refresh_tools().await; }
         ActiveTab::Workflows => { let _ = app.refresh_workflows().await; }
         ActiveTab::Computer => { let _ = app.refresh_computer().await; }
-        ActiveTab::Settings => { let _ = app.refresh_settings_map().await; }
+        ActiveTab::Settings => { let _ = app.refresh_settings_map().await; app.refresh_models().await; }
         ActiveTab::MCP => {
             if app.mcp_connected {
                 let url = app.mcp_server_url.clone();
@@ -315,6 +342,8 @@ async fn refresh_current_tab(app: &mut App) {
 
 async fn handle_chat_key(app: &mut App, key: KeyEvent, is_orch: bool) -> anyhow::Result<()> {
     match key.code {
+        KeyCode::PageUp => app.chat_scroll = app.chat_scroll.saturating_add(8),
+        KeyCode::PageDown => app.chat_scroll = app.chat_scroll.saturating_sub(8),
         KeyCode::Tab => {
             if app.input.starts_with('/') {
                 if let Some(f) = crate::engine::commands::get_suggestions(&app.input).first() {
@@ -324,12 +353,12 @@ async fn handle_chat_key(app: &mut App, key: KeyEvent, is_orch: bool) -> anyhow:
         }
         KeyCode::Up => {
             if let Some(idx) = app.selected_conv_idx() {
-                if idx > 0 { app.selected_conv_id = Some(app.conversations[idx - 1].id); app.refresh_conversations().await?; }
+                if idx > 0 { app.chat_scroll = 0; app.selected_conv_id = Some(app.conversations[idx - 1].id); app.refresh_conversations().await?; }
             }
         }
         KeyCode::Down => {
             if let Some(idx) = app.selected_conv_idx() {
-                if idx + 1 < app.conversations.len() { app.selected_conv_id = Some(app.conversations[idx + 1].id); app.refresh_conversations().await?; }
+                if idx + 1 < app.conversations.len() { app.chat_scroll = 0; app.selected_conv_id = Some(app.conversations[idx + 1].id); app.refresh_conversations().await?; }
             }
         }
         KeyCode::Enter => {
@@ -343,7 +372,7 @@ async fn handle_chat_key(app: &mut App, key: KeyEvent, is_orch: bool) -> anyhow:
             if !is_orch { super::input_handler::app(&key, app); }
         }
         KeyCode::Esc => {
-            if is_orch { app.cancel_current_orchestrate(); app.status_message = "Cancelling…".to_string(); }
+            if is_orch { app.cancel_current_orchestrate(); app.is_orchestrating.store(false, std::sync::atomic::Ordering::SeqCst); app.status_message = "Cancelled.".to_string(); }
             else if app.search_results.is_some() { app.search_results = None; app.search_query.clear(); app.status_message = "Search cleared".to_string(); app.activity.bump(); }
         }
         _ => {}

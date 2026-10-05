@@ -1,6 +1,6 @@
 use rustpotter::{WakewordRef, WakewordRefBuildFromFiles, WakewordSave};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use ringbuf::HeapRb;
+use ringbuf::{HeapRb, traits::{Split, Producer, Consumer}};
 use hound::{WavSpec, WavWriter, SampleFormat};
 
 #[derive(Clone)]
@@ -77,7 +77,7 @@ pub fn record_sample() -> anyhow::Result<VoiceSample> {
                 for sample in mono {
                     while resample_index < 1.0 {
                         let interpolated = prev_sample + resample_index * (sample - prev_sample);
-                        let _ = prod.push(interpolated);
+                        let _ = prod.try_push(interpolated);
                         resample_index += step;
                     }
                     resample_index -= 1.0;
@@ -99,7 +99,7 @@ pub fn record_sample() -> anyhow::Result<VoiceSample> {
                 for sample in mono {
                     while resample_index < 1.0 {
                         let interpolated = prev_sample + resample_index * (sample - prev_sample);
-                        let _ = prod.push(interpolated);
+                        let _ = prod.try_push(interpolated);
                         resample_index += step;
                     }
                     resample_index -= 1.0;
@@ -115,7 +115,7 @@ pub fn record_sample() -> anyhow::Result<VoiceSample> {
     drop(stream);
 
     let mut captured_data = Vec::new();
-    while let Some(s) = cons.pop() { captured_data.push(s); }
+    while let Some(s) = cons.try_pop() { captured_data.push(s); }
     if captured_data.is_empty() { return Ok(VoiceSample { data: captured_data, sample_rate: 16000 }); }
 
     // 1. Remove DC offset

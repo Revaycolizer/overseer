@@ -1,0 +1,25 @@
+{
+  "verified_at_utc": "2026-10-05T15:02:31.060438+00:00",
+  "version": "0.1.4",
+  "platform": "macOS Apple Silicon",
+  "archive": "dist/terminal/overseer-terminal-v0.1.4-aarch64-apple-darwin.tar.gz",
+  "bytes": 19922068,
+  "sha256": "2bc25bafbed0544b16c4b6d7d90bc841f99c23facf71eeb315a826db463b7c96",
+  "checks": {
+    "release_build": "passed",
+    "terminal_unit_tests": 3,
+    "archive_integrity": "passed",
+    "isolated_install_reinstall_uninstall": "passed",
+    "corrupted_package_rejected_preserving_installed_binary": "passed",
+    "help_version_invalid_arguments_without_database_creation": "passed",
+    "installed_standalone_launch_type_quit_with_embedded_migrations": "passed",
+    "workflow_yaml": "parsed",
+    "homebrew_generator": "fixture checksum manifests and Ruby syntax passed; actual tap install not tested"
+  },
+  "limitations": [
+    "No GitHub workflow was dispatched or release published",
+    "Intel Mac, Linux and Windows builds are configured but not verified locally",
+    "Homebrew tap is not published",
+    "Mac binary is not Developer ID signed/notarized; existing public launch blockers remain"
+  ]
+}

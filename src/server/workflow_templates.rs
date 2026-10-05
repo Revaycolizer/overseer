@@ -17,7 +17,7 @@ struct CreateTemplate { name: String, description: Option<String>, category: Opt
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
         .route("/v1/workflow-templates", get(list_templates).post(create_template))
-        .route("/v1/workflow-templates/{id}/install", post(install_template))
+        .route("/v1/workflow-templates/:id/install", post(install_template))
 }
 
 async fn list_templates(State(state): State<Arc<ServerState>>) -> Result<Json<Vec<Template>>, String> {

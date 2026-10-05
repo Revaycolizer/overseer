@@ -10,7 +10,10 @@ pub async fn record_and_transcribe(vad_threshold: f32) -> Result<String, String>
     }
 
     super::earcons::start_thinking_hum_loop();
-    let res = transcribe_samples_sync(&samples);
+    let res = tokio::task::spawn_blocking(move || transcribe_samples_sync(&samples))
+        .await
+        .map_err(|e| format!("Speech transcription task failed: {e}"))
+        .and_then(|result| result);
     super::earcons::stop_thinking_hum_loop();
     match res {
         // An empty transcript is also "no speech" — re-listen, don't error out.
@@ -21,13 +24,8 @@ pub async fn record_and_transcribe(vad_threshold: f32) -> Result<String, String>
 }
 
 pub fn transcribe_samples_sync(recorded_data: &[f32]) -> Result<String, String> {
-    let data_dir = crate::db::get_overseer_data_dir();
-    let model_path = data_dir.join("assets").join("voice").join("models").join("ggml-tiny.en.bin");
+    let model_path = super::local_stt_trans::whisper_model_path();
     let optimizer = super::stt_optimizer::SpeechOptimizer::new(&model_path.to_string_lossy());
-    let res = optimizer.transcribe_stream(recorded_data);
-    if res.trim().is_empty() {
-        super::local_stt_trans::transcribe_samples_sync(recorded_data)
-    } else {
-        Ok(res)
-    }
+    // Preserve failures instead of treating them as silence and running STT twice.
+    optimizer.transcribe(recorded_data)
 }

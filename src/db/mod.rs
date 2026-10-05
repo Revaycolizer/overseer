@@ -21,6 +21,8 @@ pub struct Database {
     #[cfg(not(target_arch = "wasm32"))]
     pub pool: sqlx::SqlitePool,
     #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) kernel: Arc<std::sync::OnceLock<overseer_kernel::Kernel>>,
+    #[cfg(not(target_arch = "wasm32"))]
     pub snowflake: Arc<Mutex<SnowflakeIdGenerator>>,
     pub lancedb_uri: String,
     pub remote_url: Option<String>,
@@ -101,6 +103,7 @@ impl Database {
         let generator = SnowflakeIdGenerator::new(1, 1);
         Self {
             pool,
+            kernel: Arc::new(std::sync::OnceLock::new()),
             snowflake: Arc::new(Mutex::new(generator)),
             lancedb_uri: "".to_string(),
             remote_url: Some(url.to_string()),
@@ -119,6 +122,11 @@ impl Database {
 }
 
 pub fn get_overseer_data_dir() -> std::path::PathBuf {
+    // Allow isolated verification runs and portable installations without
+    // opening or migrating the user's normal application database.
+    if let Some(path) = std::env::var_os("OVERSEER_DATA_DIR").filter(|path| !path.is_empty()) {
+        return std::path::PathBuf::from(path);
+    }
     if let Some(mut data_dir) = dirs::data_dir() {
         data_dir.push("overseer");
         data_dir
@@ -143,4 +151,3 @@ mod tests {
             .expect("migrations should apply without errors");
     }
 }
-

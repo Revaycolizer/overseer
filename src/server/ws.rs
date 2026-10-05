@@ -35,11 +35,33 @@ pub fn router() -> Router<Arc<ServerState>> {
 
 #[derive(Deserialize)]
 struct ChatReq {
+    #[serde(default, deserialize_with = "conversation_id")]
     conversation_id: i64,
     message: String,
+    #[serde(default)]
+    model: Option<String>,
     /// When true, speak the assistant's reply aloud (voice conversation).
     #[serde(default)]
     speak: bool,
+}
+
+fn conversation_id<'de, D: serde::Deserializer<'de>>(d: D) -> Result<i64, D::Error> {
+    let value = serde_json::Value::deserialize(d)?;
+    match value {
+        serde_json::Value::String(s) => s.parse().map_err(serde::de::Error::custom),
+        serde_json::Value::Number(n) => n
+            .as_i64()
+            .ok_or_else(|| serde::de::Error::custom("invalid conversation ID")),
+        _ => Err(serde::de::Error::custom("invalid conversation ID")),
+    }
+}
+
+// Dropping a JoinHandle detaches its task. Cancel the engine when its socket leaves.
+struct AbortOnDrop(tokio::task::AbortHandle);
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 #[derive(Deserialize)]
@@ -57,8 +79,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<ServerState>) {
     // Optional token gate.
     if let Ok(expected) = std::env::var("OVERSEER_API_TOKEN") {
         if !expected.is_empty() {
-            let ok = match rx.next().await {
-                Some(Ok(Message::Text(t))) => serde_json::from_str::<TokenFrame>(&t)
+            let ok = match tokio::time::timeout(Duration::from_secs(10), rx.next()).await {
+                Ok(Some(Ok(Message::Text(t)))) => serde_json::from_str::<TokenFrame>(&t)
                     .map(|f| f.token == expected)
                     .unwrap_or(false),
                 _ => false,
@@ -93,12 +115,18 @@ async fn handle_socket(socket: WebSocket, state: Arc<ServerState>) {
                 tokio::time::sleep(Duration::from_millis(400)).await;
                 let raw = crate::engine::voice::wake_word::get_vad_threshold();
                 let threshold = if raw <= 0.0 { 0.02 } else { raw };
-                let frame = match crate::engine::voice::local_stt::record_and_transcribe(threshold).await {
-                    Ok(t) if !t.trim().is_empty() => json!({"type":"voice_result","text": t.trim()}),
+                let frame = match crate::engine::voice::local_stt::record_and_transcribe(threshold)
+                    .await
+                {
+                    Ok(t) if !t.trim().is_empty() => {
+                        json!({"type":"voice_result","text": t.trim()})
+                    }
                     // Silence / no speech → idle, so the client re-listens instead of
                     // treating nothing as a message.
                     Ok(_) => json!({"type":"voice_idle"}),
-                    Err(e) => json!({"type":"voice_error","error": format!("Voice capture failed: {e}")}),
+                    Err(e) => {
+                        json!({"type":"voice_error","error": format!("Voice capture failed: {e}")})
+                    }
                 };
                 let _ = send(&mut tx, frame).await;
                 continue;
@@ -118,28 +146,65 @@ async fn handle_socket(socket: WebSocket, state: Arc<ServerState>) {
 /// Drive one chat turn: run the engine while forwarding tokens, surfacing
 /// pending approvals, and accepting approve/reject from the client — all
 /// concurrently so an approval-gated run never hangs the socket.
-async fn run_turn(tx: &mut Tx, rx: &mut Rx, state: &Arc<ServerState>, req: ChatReq) -> Result<(), ()> {
+async fn run_turn(
+    tx: &mut Tx,
+    rx: &mut Rx,
+    state: &Arc<ServerState>,
+    req: ChatReq,
+) -> Result<(), ()> {
     let db = state.db.clone();
-    let agent = state.agent_system.clone();
-    let conv = req.conversation_id;
+    if req.message.trim().is_empty() || req.message.len() > 65536 {
+        send(
+            tx,
+            json!({"type":"error","error":"Message must contain between 1 and 65536 bytes"}),
+        )
+        .await?;
+        return Ok(());
+    }
+    let exists = sqlx::query_scalar::<_, i64>("SELECT id FROM conversations WHERE id=?")
+        .bind(req.conversation_id)
+        .fetch_optional(&db.pool)
+        .await
+        .map_err(|_| ())?;
+    let conv = match exists {
+        Some(id) => id,
+        None => crate::backend::add_conversation(&db, "Desktop chat")
+            .await
+            .map_err(|_| ())?,
+    };
+    send(
+        tx,
+        json!({"type":"session","conversation_id":conv.to_string()}),
+    )
+    .await?;
     let message = req.message.clone();
+    let model = req.model.clone().filter(|name| name.len() <= 256);
 
-    let _ = crate::backend::add_message(&db, conv, "user", &message, false).await;
+    crate::backend::add_message(&db, conv, "user", &message, false)
+        .await
+        .map_err(|_| ())?;
 
     let (tok_tx, mut tok_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let db_task = db.clone();
     let mut handle = tokio::spawn(async move {
-        let _ = &agent; // agent_system kept for future routing; loop uses the engine directly
         if let Some(cmd) = crate::engine::governed_commands::parse_governed(&message) {
             crate::engine::governed_commands::run_governed(&db_task, conv, cmd).await
         } else {
             // Plain messages go through the function-calling agent loop so the
             // assistant actually *does* things (search, open, run) instead of
             // narrating intent. Chit-chat with no tool call just returns text.
-            crate::engine::agent_loop::run_agent(&db_task, conv, &message, Some(tok_tx)).await
+            crate::engine::agent_loop::run_agent_with_model(
+                &db_task,
+                conv,
+                &message,
+                Some(tok_tx),
+                model.as_deref(),
+            )
+            .await
         }
     });
 
+    let _abort = AbortOnDrop(handle.abort_handle());
     let mut seen: HashSet<String> = HashSet::new();
     let mut poll = tokio::time::interval(Duration::from_millis(400));
     let mut tok_done = false;
@@ -169,10 +234,10 @@ async fn run_turn(tx: &mut Tx, rx: &mut Rx, state: &Arc<ServerState>, req: ChatR
                 match incoming {
                     Some(Ok(Message::Text(t))) => {
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&t) {
-                            if let Some(id) = v.get("approve").and_then(|x| x.as_str()) {
+                            if let Some(id) = v.get("approve").and_then(|x| x.as_str()).filter(|id| seen.contains(*id)) {
                                 crate::engine::kernel::approve(&db, id, "user");
                                 seen.remove(id);
-                            } else if let Some(id) = v.get("reject").and_then(|x| x.as_str()) {
+                            } else if let Some(id) = v.get("reject").and_then(|x| x.as_str()).filter(|id| seen.contains(*id)) {
                                 crate::engine::kernel::reject(&db, id, "user");
                                 seen.remove(id);
                             }
@@ -186,6 +251,9 @@ async fn run_turn(tx: &mut Tx, rx: &mut Rx, state: &Arc<ServerState>, req: ChatR
             _ = poll.tick() => {
                 let pending = crate::engine::kernel::list_pending_approvals(&db, None).await;
                 for a in pending {
+                    let owner = sqlx::query_scalar::<_, i64>("SELECT conversation_id FROM execution_runs WHERE id=?")
+                        .bind(a.run_id).fetch_optional(&db.pool).await.ok().flatten();
+                    if owner != Some(conv) { continue; }
                     if seen.insert(a.id.clone()) {
                         send(tx, json!({
                             "type": "approval",
@@ -203,5 +271,7 @@ async fn run_turn(tx: &mut Tx, rx: &mut Rx, state: &Arc<ServerState>, req: ChatR
 }
 
 async fn send(tx: &mut Tx, value: serde_json::Value) -> Result<(), ()> {
-    tx.send(Message::Text(value.to_string())).await.map_err(|_| ())
+    tx.send(Message::Text(value.to_string()))
+        .await
+        .map_err(|_| ())
 }

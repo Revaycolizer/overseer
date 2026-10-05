@@ -8,7 +8,7 @@ use super::ServerState;
 
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
-        .route("/v1/browser/sessions/{id}/resume", post(resume_session))
+        .route("/v1/browser/sessions/:id/resume", post(resume_session))
 }
 
 async fn resume_session(

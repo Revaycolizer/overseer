@@ -24,6 +24,9 @@ pub fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
         ActiveTab::Chat => ("Chat", vec![
             ("Ctrl+N / F2    New conversation", false),
             ("Enter           Send message", false),
+            ("F6 / Ctrl+O     Choose an Ollama model", false),
+            ("PageUp/Down     Scroll conversation", false),
+            ("/memory         Preferences and project knowledge", false),
             ("Up/Down         Select conversation", false),
             ("Esc             Cancel / clear search", false),
             ("", false),
@@ -68,7 +71,7 @@ pub fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
 
     lines.push(Line::from(Span::raw("")));
     lines.push(Line::from(Span::styled(
-        " Global: Ctrl+Left/Right=tabs  Alt+1..0=jump  F5=Refresh  Q=Quit  F1=Help",
+        " Global: Tab/Shift+Tab=tabs  Alt+1..0=jump  F5=Refresh  Ctrl+Q=Quit  F1=Help",
         Style::new().fg(MUTED),
     )));
 

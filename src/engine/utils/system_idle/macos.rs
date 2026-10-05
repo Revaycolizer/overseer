@@ -2,10 +2,15 @@
 pub fn get_idle_secs() -> u64 {
     use std::process::Command;
 
-    let output = Command::new("ioreg")
+    let Ok(output) = Command::new("ioreg")
         .args(["-c", "IOHIDSystem", "-d", "4"])
         .output()
-        .unwrap_or_default();
+    else {
+        return 0;
+    };
+    if !output.status.success() {
+        return 0;
+    }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {

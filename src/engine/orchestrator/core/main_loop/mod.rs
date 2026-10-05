@@ -55,6 +55,8 @@ pub async fn orchestrate_request(
         completed: completed.clone(),
     });
     
+    let learned = crate::engine::learning::context(db, conversation_id, &clean_query).await.unwrap_or_default();
+    let memory_context = format!("{memory_context}\n{learned}");
     let enriched_memory_context = format!("{}\n\n{}\n\n{}", memory_context, format_artifact_context(&artifact_refs), format_work_item_context(&work_item_refs));
 
     if let Some((resp, _)) = resolve_screenshot_follow_up(db, conversation_id, &clean_query).await {
@@ -92,6 +94,9 @@ pub async fn orchestrate_request(
     // Build evidence DAG from the run's execution trace for semantic verification
     let dag = crate::backend::build_evidence_dag_from_run(db, run_id).await;
     let res = truthfulness::verify_response_semantic(&res, executed_action, dag.as_ref());
+    if let Err(e) = crate::engine::learning::record_outcome(db, conversation_id, run_id).await {
+        tracing::debug!(%e, "Learning outcome was not saved");
+    }
     completed.store(true, std::sync::atomic::Ordering::SeqCst);
     res
 }

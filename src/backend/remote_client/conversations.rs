@@ -1,19 +1,32 @@
+use super::RemoteClient;
 use crate::backend::client::ConversationClient;
 use crate::backend::Conversation;
-use super::RemoteClient;
 
 #[async_trait::async_trait]
 impl ConversationClient for RemoteClient {
     async fn get_conversations(&self, limit: i64) -> anyhow::Result<Vec<Conversation>> {
         let url = format!("{}/api/conversations?limit={}", self.base_url, limit);
-        let res = self.http_client.get(&url).send().await?.json::<Vec<Conversation>>().await?;
+        let res = self
+            .http_client
+            .get(&url)
+            .send()
+            .await?
+            .json::<Vec<Conversation>>()
+            .await?;
         Ok(res)
     }
 
     async fn add_conversation(&self, title: &str) -> anyhow::Result<i64> {
         let url = format!("{}/api/conversations", self.base_url);
         let payload = serde_json::json!({ "title": title });
-        let res = self.http_client.post(&url).json(&payload).send().await?.json::<i64>().await?;
+        let res = self
+            .http_client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await?
+            .json::<i64>()
+            .await?;
         Ok(res)
     }
 
@@ -31,9 +44,22 @@ impl ConversationClient for RemoteClient {
         Ok(())
     }
 
-    async fn search_messages(&self, query: &str) -> anyhow::Result<Vec<crate::backend::ConversationSearchResult>> {
-        let url = format!("{}/api/conversations/search?q={}", self.base_url, urlencoding::encode(query));
-        let res = self.http_client.get(&url).send().await?.json::<Vec<crate::backend::ConversationSearchResult>>().await?;
+    async fn search_messages(
+        &self,
+        query: &str,
+    ) -> anyhow::Result<Vec<crate::backend::ConversationSearchResult>> {
+        let url = format!(
+            "{}/api/conversations/search?q={}",
+            self.base_url,
+            urlencoding::encode(query)
+        );
+        let res = self
+            .http_client
+            .get(&url)
+            .send()
+            .await?
+            .json::<Vec<crate::backend::ConversationSearchResult>>()
+            .await?;
         Ok(res)
     }
 }

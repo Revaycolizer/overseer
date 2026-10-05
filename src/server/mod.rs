@@ -15,6 +15,7 @@ pub struct ServerState {
 }
 
 pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port: u16) -> anyhow::Result<()> {
+    crate::engine::workflow::credentials::migrate_legacy(&db).await?;
     let data_dir = crate::db::get_overseer_data_dir();
     let pool = crate::engine::browser::pool::BrowserPool::new(
         crate::engine::browser::pool_config::PoolConfig::default(),
@@ -77,6 +78,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .layer(GovernorLayer {
             config: crate::engine::resilience::server_governor(),
         })
+        .layer(axum::middleware::from_fn(access::guard))
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -128,3 +130,5 @@ pub mod misc;
 pub mod openapi;
 pub mod ws;
 pub mod events;
+
+pub mod access;

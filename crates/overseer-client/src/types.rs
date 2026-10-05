@@ -33,15 +33,16 @@ pub struct Conversation {
     pub id: i64,
     pub title: String,
     pub created_at: String,
-    pub updated_at: String,
 }
 
 /// A search result highlighting a message within a conversation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationSearchResult {
     pub conversation_id: i64,
+    pub conversation_title: String,
     pub message_id: i64,
-    pub snippet: String,
+    pub content: String,
+    pub created_at: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -57,6 +58,8 @@ pub struct Message {
     pub content: String,
     pub created_at: String,
     pub hide_evidence: bool,
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
 }
 
 /// A file attached to a message.
@@ -68,6 +71,7 @@ pub struct Attachment {
     pub file_path: String,
     pub content_type: String,
     pub size: i64,
+    pub extracted_content: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -80,10 +84,10 @@ pub struct AgentInfo {
     pub id: i64,
     pub name: String,
     pub description: String,
-    pub domain: String,
-    pub tools: Vec<ToolInfo>,
+    pub tools: Vec<String>,
     pub instructions: String,
     pub model: String,
+    pub domain: String,
     pub version: String,
     pub code: Option<String>,
     pub source_files: Vec<String>,
@@ -100,14 +104,12 @@ pub struct ToolInfo {
     pub id: i64,
     pub name: String,
     pub description: String,
-    pub language: String,
     pub code: String,
+    pub language: String,
+    pub script_path: Option<String>,
+    pub required_intent: Option<String>,
+    pub safety_level: String,
     pub version: String,
-    pub tool_type: String,
-    pub domain: String,
-    pub parameters_json: Option<String>,
-    pub allowed_agents_json: Option<String>,
-    pub safety_level: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -119,13 +121,21 @@ pub struct ToolInfo {
 pub struct Supervisor {
     pub id: i64,
     pub name: String,
-    pub description: String,
+    pub description: Option<String>,
+    pub instructions: Option<String>,
+    pub model: Option<String>,
     pub domain: String,
-    pub preamble: String,
-    pub model: String,
-    pub temperature: f64,
-    pub is_active: bool,
-    pub agents: Vec<AgentInfo>,
+    pub version: Option<String>,
+    pub code: Option<String>,
+    pub bypass_synthesizer: bool,
+    pub fast_path_keywords: Option<String>,
+    pub verification_agent_id: Option<i64>,
+    pub routing_priority: i32,
+    pub hide_evidence: bool,
+    pub report_style: Option<String>,
+    pub skip_fast_path_if_artifacts: bool,
+    pub artifact_fast_path_keywords: Option<String>,
+    pub response_format: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +148,8 @@ pub struct Workflow {
     pub id: i64,
     pub name: String,
     pub description: Option<String>,
+    pub trigger_type: String,
+    pub trigger_config: Option<String>,
     pub status: String,
     pub created_at: String,
     pub updated_at: String,
@@ -148,10 +160,12 @@ pub struct Workflow {
 pub struct WorkflowStep {
     pub id: i64,
     pub workflow_id: i64,
-    pub step_order: i32,
+    pub step_order: i64,
     pub name: String,
-    pub tool_name: Option<String>,
-    pub config_json: Option<String>,
+    pub prompt: String,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 /// A single execution run of a workflow.
@@ -159,21 +173,26 @@ pub struct WorkflowStep {
 pub struct WorkflowRun {
     pub id: i64,
     pub workflow_id: i64,
+    pub conversation_id: Option<i64>,
     pub status: String,
-    pub started_at: String,
+    pub summary: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: String,
     pub finished_at: Option<String>,
-    pub result_summary: Option<String>,
 }
 
 /// A single step execution within a workflow run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowStepRun {
     pub id: i64,
-    pub run_id: i64,
-    pub step_name: String,
+    pub workflow_run_id: i64,
+    pub workflow_step_id: i64,
+    pub execution_run_id: Option<i64>,
+    pub step_order: i64,
     pub status: String,
-    pub output_json: Option<String>,
-    pub started_at: String,
+    pub output: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: String,
     pub finished_at: Option<String>,
 }
 
@@ -187,8 +206,13 @@ pub struct WorkItem {
     pub id: i64,
     pub conversation_id: i64,
     pub title: String,
+    pub brief: Option<String>,
     pub status: String,
     pub surface_kind: String,
+    pub assigned_domain: Option<String>,
+    pub prompt: String,
+    pub source_artifact_ids_json: Option<String>,
+    pub metadata_json: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -202,6 +226,7 @@ pub struct WorkItemEvent {
     pub event_type: String,
     pub status: Option<String>,
     pub summary: Option<String>,
+    pub metadata_json: Option<String>,
     pub created_at: String,
 }
 
@@ -215,11 +240,14 @@ pub struct Artifact {
     pub id: i64,
     pub conversation_id: i64,
     pub execution_run_id: Option<i64>,
+    pub domain: Option<String>,
+    pub step_text: Option<String>,
     pub kind: String,
     pub label: String,
     pub content: Option<String>,
     pub file_path: Option<String>,
     pub content_type: Option<String>,
+    pub metadata_json: Option<String>,
     pub created_at: String,
 }
 
@@ -232,9 +260,13 @@ pub struct Artifact {
 pub struct Planner {
     pub id: i64,
     pub name: String,
-    pub instructions: String,
-    pub model: String,
-    pub is_active: bool,
+    pub description: Option<String>,
+    pub instructions: Option<String>,
+    pub model: Option<String>,
+    pub domain: String,
+    pub version: Option<String>,
+    pub code: Option<String>,
+    pub response_format: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -245,11 +277,9 @@ pub struct Planner {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityVersion {
     pub id: i64,
-    pub entity_type: String,
-    pub entity_id: i64,
-    pub tag: String,
+    pub version_tag: String,
+    pub changelog: Option<String>,
     pub created_at: String,
-    pub description: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -259,28 +289,32 @@ pub struct EntityVersion {
 /// Runtime health summary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeHealth {
-    pub status: String,
-    pub version: String,
-    pub uptime_secs: u64,
-    pub db_connected: bool,
     pub ollama_reachable: bool,
+    pub ollama_endpoint: String,
+    pub available_models: Vec<String>,
+    pub selected_runtime_model: String,
+    pub runtime_model_available: bool,
+    pub title_model: String,
+    pub title_model_available: bool,
+    pub python_command: Option<String>,
+    pub protoc_path: Option<String>,
+    pub runtime_dir: String,
+    pub native_runtime: bool,
 }
 
 /// System load snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemLoad {
-    pub cpu_percent: f64,
-    pub memory_percent: f64,
-    pub agent_count: i64,
-    pub active_conversations: i64,
+    pub label: String,
+    pub usage: u32,
 }
 
 /// Registry status for runtime tool/agent discovery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeRegistryStatus {
-    pub last_refresh: Option<String>,
-    pub agent_count: i64,
-    pub tool_count: i64,
+    pub status: String,
+    pub refreshed_at: Option<String>,
+    pub error: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -290,10 +324,18 @@ pub struct RuntimeRegistryStatus {
 /// State of computer supervision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComputerSupervisionState {
-    pub enabled: bool,
-    pub allowlist: String,
-    pub pending_action: Option<serde_json::Value>,
-    pub recent_executions: Vec<String>,
+    pub supervision_mode: String,
+    pub session_state: String,
+    pub session_note: String,
+    pub allowlist: Vec<String>,
+    pub max_actions: i64,
+    pub action_count: i64,
+    pub timeout_ms: i64,
+    pub approval_state: String,
+    pub pending_tool: String,
+    pub pending_action: String,
+    pub pending_domain: String,
+    pub session_started_at: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -328,6 +370,7 @@ pub struct WorkflowTemplate {
 /// Result of a browser session operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserSessionResult {
+    pub id: Option<i64>,
     pub session: Option<BrowserSessionInfo>,
     pub exists: Option<bool>,
 }
@@ -336,4 +379,13 @@ pub struct BrowserSessionResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserSessionInfo {
     pub id: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceHealth {
+    pub status: String,
+    pub version: String,
+    pub uptime_secs: u64,
+    pub db_connected: bool,
+    pub ollama_reachable: bool,
 }

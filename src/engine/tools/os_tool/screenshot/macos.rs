@@ -24,27 +24,13 @@ pub async fn capture_macos_screenshot_json(tool_name: &str) -> Result<String, Dy
         });
     }
 
-    let mut width = 1440;
-    let mut height = 900;
-    if let Ok(res_out) = Command::new("system_profiler")
-        .arg("SPDisplaysDataType")
-        .output()
-        .await
-    {
-        let stdout = String::from_utf8_lossy(&res_out.stdout);
-        for line in stdout.lines() {
-            if line.contains("Resolution:") {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    let dims: Vec<&str> = parts[1].split('x').collect();
-                    if dims.len() >= 2 {
-                        width = dims[0].parse().unwrap_or(1440);
-                        height = dims[1].parse().unwrap_or(900);
-                    }
-                }
-            }
-        }
-    }
+    // Read the PNG header instead of launching system_profiler on every capture.
+    // This reports the actual captured pixels, including Retina/multi-display sizes.
+    let (width, height) = image::image_dimensions(&temp_path)
+        .map_err(|e| DynamicToolError::ExecutionFailed {
+            tool: tool_name.to_string(),
+            details: format!("Failed to inspect captured screenshot: {}", e),
+        })?;
 
     Ok(json!({
         "action": "screenshot",

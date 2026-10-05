@@ -10,7 +10,7 @@ use super::ServerState;
 
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
-        .route("/v1/workflows/webhook/{workflow_id}/{token}", post(webhook_trigger))
+        .route("/v1/workflows/webhook/:workflow_id/:token", post(webhook_trigger))
 }
 
 async fn webhook_trigger(
