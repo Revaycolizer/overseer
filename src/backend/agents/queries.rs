@@ -46,7 +46,9 @@ pub async fn get_agents(db: &Database) -> anyhow::Result<Vec<AgentInfo>> {
             code: r.get("code"),
             tools: tools_by_agent.remove(&agent_id).unwrap_or_default(),
             source_files: vec![],
-            response_format: r.get::<Option<String>, _>("response_format").unwrap_or_else(|| "json".to_string()),
+            response_format: r
+                .get::<Option<String>, _>("response_format")
+                .unwrap_or_else(|| "json".to_string()),
         });
     }
 

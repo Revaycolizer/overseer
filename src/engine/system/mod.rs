@@ -1,11 +1,11 @@
 // src/engine/system/mod.rs
-pub mod orchestrator;
 pub mod history_builder;
+pub mod orchestrator;
 
 use crate::db::Database;
+use rig::client::CompletionClient;
 use rig::providers::ollama;
 use rig::streaming::StreamingPrompt;
-use rig::client::CompletionClient;
 use std::fmt;
 
 pub struct AgentSystem {
@@ -14,7 +14,7 @@ pub struct AgentSystem {
 
 impl AgentSystem {
     pub fn new(_db: Database) -> Self {
-        Self { 
+        Self {
             ollama_client: ollama::Client::new(rig::client::Nothing)
                 .expect("Failed to initialize Ollama client"),
         }
@@ -27,7 +27,9 @@ impl AgentSystem {
         user_query: &str,
         token_sender: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     ) -> String {
-        if let Some(response) = crate::engine::learning::command(db, conversation_id, user_query).await {
+        if let Some(response) =
+            crate::engine::learning::command(db, conversation_id, user_query).await
+        {
             return response;
         }
         // V4.17.2: emit a budget warning before we send the prompt
@@ -69,7 +71,12 @@ impl AgentSystem {
             tokio::spawn(async move {
                 let refined = agent_bg.generate_title(&db_bg, &query_bg).await;
                 if !refined.is_empty() {
-                    let _ = crate::backend::update_conversation_title(&db_bg, conversation_id, &refined).await;
+                    let _ = crate::backend::update_conversation_title(
+                        &db_bg,
+                        conversation_id,
+                        &refined,
+                    )
+                    .await;
                     // Bump the engine activity counter so the TUI's
                     // change-driven refresh picks up the refined title
                     // (its own `app.activity` counter is only bumped by
@@ -85,8 +92,12 @@ impl AgentSystem {
 
     pub async fn generate_title(&self, db: &Database, query: &str) -> String {
         let model_name = crate::backend::resolve_model_name(
-            db, None, "title_generator_model", "qwen2.5:7b-instruct"
-        ).await;
+            db,
+            None,
+            "title_generator_model",
+            "qwen2.5:7b-instruct",
+        )
+        .await;
 
         let agent = rig::agent::AgentBuilder::new(self.ollama_client.completion_model(&model_name))
             .preamble("You are a concise conversation title generator. Your sole task is to generate a 3-5 word title summarizing the topic of the user's query. Output ONLY the title itself.")
@@ -108,17 +119,20 @@ impl AgentSystem {
             truncated
         );
 
-        let _permit = crate::engine::resilience::ollama_title_throttle().acquire().await;
+        let _permit = crate::engine::resilience::ollama_title_throttle()
+            .acquire()
+            .await;
         // Use streaming + collect_stream: this validates the V4.17.1
         // streaming helper end-to-end. Title generation doesn't need
         // per-token UI updates, so a single collect is sufficient.
-        match crate::engine::streaming::collect_stream(
-            agent.stream_prompt(prompt).await,
-        )
-        .await
-        {
+        match crate::engine::streaming::collect_stream(agent.stream_prompt(prompt).await).await {
             Ok(title) => {
-                let clean = title.trim().trim_matches('"').trim_matches('\'').trim().to_string();
+                let clean = title
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .trim()
+                    .to_string();
                 clean_title_response(&clean)
             }
             // On error or empty response, return empty so the caller
@@ -145,24 +159,31 @@ fn clean_title_response(raw: &str) -> String {
             .expect("valid title prefix regex")
     });
     let title_re = TITLE_RE.get_or_init(|| {
-        regex::Regex::new(r"(?i)^(suggested\s+)?title:\s*")
-            .expect("valid title label regex")
+        regex::Regex::new(r"(?i)^(suggested\s+)?title:\s*").expect("valid title label regex")
     });
 
     let mut title = raw.to_string();
     title = prefix_re.replace(&title, "").to_string();
     title = title_re.replace(&title, "").to_string();
 
-    title.trim().trim_matches('"').trim_matches('\'').to_string()
+    title
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .to_string()
 }
 
 impl PartialEq for AgentSystem {
-    fn eq(&self, _other: &Self) -> bool { true }
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
 }
 
 impl Clone for AgentSystem {
     fn clone(&self) -> Self {
-        Self { ollama_client: self.ollama_client.clone() }
+        Self {
+            ollama_client: self.ollama_client.clone(),
+        }
     }
 }
 

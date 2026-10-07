@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use crate::engine::orchestrator::utils::formatter::format_supervisor_result;
 use super::response::MessagePart;
+use crate::engine::orchestrator::utils::formatter::format_supervisor_result;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupervisorExecutionResult {
@@ -68,7 +68,19 @@ impl SupervisorExecutionResult {
         raw_response: String,
         findings: std::collections::HashMap<String, serde_json::Value>,
     ) -> Self {
-        Self::new("completed".to_string(), summary, messages, evidence, artifacts, charts, verified, hide_evidence, report_style, raw_response, findings)
+        Self::new(
+            "completed".to_string(),
+            summary,
+            messages,
+            evidence,
+            artifacts,
+            charts,
+            verified,
+            hide_evidence,
+            report_style,
+            raw_response,
+            findings,
+        )
     }
 
     pub fn failed(

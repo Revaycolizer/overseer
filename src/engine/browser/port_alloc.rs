@@ -9,5 +9,4 @@ pub fn allocate_port() -> u16 {
     BASE_PORT + offset
 }
 
-pub fn release_port(_port: u16) {
-}
+pub fn release_port(_port: u16) {}

@@ -1,7 +1,7 @@
-use regex::Regex;
 use crate::engine::tools::error::DynamicToolError;
 use crate::engine::tools::input::stringify_tool_input;
 use crate::engine::tools::utils::{clean_text_content, extract_html_title, truncate_for_tool};
+use regex::Regex;
 
 pub async fn native_stealth_browse(args: &serde_json::Value) -> Result<String, DynamicToolError> {
     let mut url = stringify_tool_input(args);

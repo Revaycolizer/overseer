@@ -5,8 +5,8 @@
 /// `Vec<String>` fact lists with a verifiable, traversable graph.
 use std::collections::{HashMap, HashSet};
 
-use serde::{Deserialize, Serialize};
 use super::EvidenceChunk;
+use serde::{Deserialize, Serialize};
 
 /// Verification status of an evidence node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,7 +24,10 @@ pub enum EvidenceStatus {
 
 impl EvidenceStatus {
     pub fn is_terminal(&self) -> bool {
-        matches!(self, EvidenceStatus::Verified | EvidenceStatus::Contradicted | EvidenceStatus::Expired)
+        matches!(
+            self,
+            EvidenceStatus::Verified | EvidenceStatus::Contradicted | EvidenceStatus::Expired
+        )
     }
 }
 
@@ -207,11 +210,8 @@ impl EvidenceDag {
     pub fn from_evidence_chunks(chunks: &[EvidenceChunk]) -> Self {
         let mut dag = EvidenceDag::new();
         for chunk in chunks {
-            let mut node = EvidenceNode::new(
-                chunk.id.clone(),
-                chunk.text.clone(),
-                chunk.source.clone(),
-            );
+            let mut node =
+                EvidenceNode::new(chunk.id.clone(), chunk.text.clone(), chunk.source.clone());
             node.status = EvidenceStatus::Verified;
             node.confidence = 0.9; // High confidence for directly recorded evidence
 
@@ -250,7 +250,10 @@ mod tests {
         dag.add_node(node);
         assert_eq!(dag.len(), 1);
         assert!(dag.get("E1").is_some());
-        assert_eq!(dag.get("E1").unwrap().claim, "Quantum computing uses superposition");
+        assert_eq!(
+            dag.get("E1").unwrap().claim,
+            "Quantum computing uses superposition"
+        );
     }
 
     #[test]

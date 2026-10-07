@@ -40,7 +40,13 @@ impl SkillRegistry {
     /// List all installed skills.
     pub async fn list_installed(&self) -> Vec<InstalledSkill> {
         #[derive(sqlx::FromRow)]
-        struct Row { name: String, version: String, description: String, tags: String, installed_at: String }
+        struct Row {
+            name: String,
+            version: String,
+            description: String,
+            tags: String,
+            installed_at: String,
+        }
         let rows = sqlx::query_as::<_, Row>(
             "SELECT name, version, description, tags, installed_at FROM installed_skills ORDER BY name"
         )
@@ -48,13 +54,20 @@ impl SkillRegistry {
         .await
         .unwrap_or_default();
 
-        rows.into_iter().map(|r| InstalledSkill {
-            name: r.name,
-            version: r.version,
-            description: r.description,
-            tags: r.tags.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-            installed_at: r.installed_at,
-        }).collect()
+        rows.into_iter()
+            .map(|r| InstalledSkill {
+                name: r.name,
+                version: r.version,
+                description: r.description,
+                tags: r
+                    .tags
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
+                installed_at: r.installed_at,
+            })
+            .collect()
     }
 
     /// Install a standard skill (SKILL.md format).
@@ -97,13 +110,11 @@ impl SkillRegistry {
 
     /// Check if a skill is installed.
     pub async fn is_installed(&self, name: &str) -> bool {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM installed_skills WHERE name = ?"
-        )
-        .bind(name)
-        .fetch_one(&self.db.pool)
-        .await
-        .unwrap_or(0);
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM installed_skills WHERE name = ?")
+            .bind(name)
+            .fetch_one(&self.db.pool)
+            .await
+            .unwrap_or(0);
         count > 0
     }
 }

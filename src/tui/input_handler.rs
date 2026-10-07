@@ -1,14 +1,32 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::App;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub fn app(key: &KeyEvent, app: &mut App) -> bool {
     match key.code {
-        KeyCode::Backspace => { backspace(app); true }
-        KeyCode::Delete => { delete(app, key.modifiers); true }
-        KeyCode::Left => { left(app, key.modifiers); true }
-        KeyCode::Right => { right(app, key.modifiers); true }
-        KeyCode::Home => { app.input_cursor = 0; true }
-        KeyCode::End => { app.input_cursor = app.input.len(); true }
+        KeyCode::Backspace => {
+            backspace(app);
+            true
+        }
+        KeyCode::Delete => {
+            delete(app, key.modifiers);
+            true
+        }
+        KeyCode::Left => {
+            left(app, key.modifiers);
+            true
+        }
+        KeyCode::Right => {
+            right(app, key.modifiers);
+            true
+        }
+        KeyCode::Home => {
+            app.input_cursor = 0;
+            true
+        }
+        KeyCode::End => {
+            app.input_cursor = app.input.len();
+            true
+        }
         KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
             let idx = app.input_cursor.min(app.input.len());
             app.input.insert(idx, c);
@@ -61,7 +79,10 @@ fn right(app: &mut App, mods: KeyModifiers) {
 }
 
 fn previous_boundary(input: &str, cursor: usize) -> usize {
-    input[..cursor].char_indices().next_back().map_or(0, |(idx, _)| idx)
+    input[..cursor]
+        .char_indices()
+        .next_back()
+        .map_or(0, |(idx, _)| idx)
 }
 
 fn next_boundary(input: &str, cursor: usize) -> usize {

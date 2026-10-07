@@ -1,10 +1,15 @@
-use serde_json::json;
 use crate::engine::tools::error::DynamicToolError;
-use crate::engine::tools::os_tool::workspace_search::search_workspace_files_fast;
-use crate::engine::tools::os_tool::find_files::unix_search::{get_unix_search_roots, execute_unix_search};
 use crate::engine::tools::os_tool::find_files::unix_scoring::process_unix_search_results;
+use crate::engine::tools::os_tool::find_files::unix_search::{
+    execute_unix_search, get_unix_search_roots,
+};
+use crate::engine::tools::os_tool::workspace_search::search_workspace_files_fast;
+use serde_json::json;
 
-pub async fn windows_find_files_json(tool_name: &str, query: &str) -> Result<String, DynamicToolError> {
+pub async fn windows_find_files_json(
+    tool_name: &str,
+    query: &str,
+) -> Result<String, DynamicToolError> {
     if let Some(results) = search_workspace_files_fast(query).await {
         let cwd = std::env::current_dir()
             .ok()

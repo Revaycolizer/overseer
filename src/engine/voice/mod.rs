@@ -1,16 +1,13 @@
-pub mod wake_word;
 pub mod clap_detect;
-pub mod tts;
-pub mod training;
-pub mod pipeline;
+pub mod earcons;
+pub mod fast_path_utils;
 pub mod local_stt;
 pub mod local_stt_rec;
 pub mod local_stt_trans;
-pub mod earcons;
+pub mod pipeline;
 pub mod priority;
-pub mod fast_path_utils;
-pub mod vad;
 pub mod stt_optimizer;
-
-
-
+pub mod training;
+pub mod tts;
+pub mod vad;
+pub mod wake_word;

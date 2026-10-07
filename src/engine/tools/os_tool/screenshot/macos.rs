@@ -1,6 +1,6 @@
+use crate::engine::tools::error::DynamicToolError;
 use serde_json::json;
 use tokio::process::Command;
-use crate::engine::tools::error::DynamicToolError;
 
 pub async fn capture_macos_screenshot_json(tool_name: &str) -> Result<String, DynamicToolError> {
     let mut temp_path = std::env::temp_dir();
@@ -26,8 +26,8 @@ pub async fn capture_macos_screenshot_json(tool_name: &str) -> Result<String, Dy
 
     // Read the PNG header instead of launching system_profiler on every capture.
     // This reports the actual captured pixels, including Retina/multi-display sizes.
-    let (width, height) = image::image_dimensions(&temp_path)
-        .map_err(|e| DynamicToolError::ExecutionFailed {
+    let (width, height) =
+        image::image_dimensions(&temp_path).map_err(|e| DynamicToolError::ExecutionFailed {
             tool: tool_name.to_string(),
             details: format!("Failed to inspect captured screenshot: {}", e),
         })?;

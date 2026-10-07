@@ -24,7 +24,11 @@ pub fn check_pressure(
     active_sessions: usize,
     per_session_mb: u64,
 ) -> MemoryReport {
-    let pct = if total_ram_mb > 0 { (used_ram_mb as f64 / total_ram_mb as f64) * 100.0 } else { 0.0 };
+    let pct = if total_ram_mb > 0 {
+        (used_ram_mb as f64 / total_ram_mb as f64) * 100.0
+    } else {
+        0.0
+    };
     let available = total_ram_mb.saturating_sub(used_ram_mb);
     let next_would_use = pool_mb + per_session_mb;
 

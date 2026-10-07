@@ -1,6 +1,6 @@
-use serde_json::json;
 use crate::engine::tools::error::DynamicToolError;
 use crate::engine::tools::os_tool::unix_command::run_command_simple;
+use serde_json::json;
 
 pub async fn linux_desktop_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     let active_window_id = run_command_simple("xprop -root _NET_ACTIVE_WINDOW", tool_name).await?;

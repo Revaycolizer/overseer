@@ -1,15 +1,15 @@
 use crate::db::Database;
 use crate::engine::orchestrator::core::event_logger;
 use crate::engine::orchestrator::core::response::StructuredResponse;
-use crate::engine::orchestrator::state::StructuredState;
-use crate::engine::orchestrator::state::update_state_from_findings;
-use crate::engine::orchestrator::planning::planner::MacroTask;
-use crate::engine::utils::discovery::AgentInfo;
-use crate::engine::tools::StructuredPerceptionTool;
-use rig::completion::Message;
-use rig::providers::ollama;
 use crate::engine::orchestrator::lattice::compiler;
 use crate::engine::orchestrator::lattice::synthesizer;
+use crate::engine::orchestrator::planning::planner::MacroTask;
+use crate::engine::orchestrator::state::update_state_from_findings;
+use crate::engine::orchestrator::state::StructuredState;
+use crate::engine::tools::StructuredPerceptionTool;
+use crate::engine::utils::discovery::AgentInfo;
+use rig::completion::Message;
+use rig::providers::ollama;
 
 pub async fn execute_macro_tasks(
     db: &Database,
@@ -35,12 +35,27 @@ pub async fn execute_macro_tasks(
         let mut retry_count = 0;
         let domain = task.domain.clone();
 
-        event_logger::micro_step(db, run_id, event_sequence, "running", &domain, &task.task, &format!("Executing step {}/{}: {}", idx + 1, macro_tasks.len(), task.task), None).await;
+        event_logger::micro_step(
+            db,
+            run_id,
+            event_sequence,
+            "running",
+            &domain,
+            &task.task,
+            &format!(
+                "Executing step {}/{}: {}",
+                idx + 1,
+                macro_tasks.len(),
+                task.task
+            ),
+            None,
+        )
+        .await;
 
         loop {
             // Fetch supervisor config to get dynamic synthesis flags
             let supervisor = sqlx::query_as::<_, crate::db::Supervisor>(
-                "SELECT * FROM supervisors WHERE domain = ?"
+                "SELECT * FROM supervisors WHERE domain = ?",
             )
             .bind(&domain)
             .fetch_optional(&db.pool)
@@ -48,65 +63,178 @@ pub async fn execute_macro_tasks(
             .unwrap_or(None);
 
             let (hide_evidence, report_style) = if let Some(ref s) = supervisor {
-                (s.hide_evidence, s.report_style.clone().unwrap_or_else(|| "detailed".to_string()))
+                (
+                    s.hide_evidence,
+                    s.report_style
+                        .clone()
+                        .unwrap_or_else(|| "detailed".to_string()),
+                )
             } else {
                 (false, "detailed".to_string())
             };
 
             // Re-implementing the core loop directly here to avoid missing file dependencies
             match crate::engine::orchestrator::dispatch_domain(
-                db, run_id, event_sequence, _all_agents, &domain, &task.task, &task.task, 
-                history.to_vec(), &plan_history, &state, ollama_client, 60000, None,
+                db,
+                run_id,
+                event_sequence,
+                _all_agents,
+                &domain,
+                &task.task,
+                &task.task,
+                history.to_vec(),
+                &plan_history,
+                &state,
+                ollama_client,
+                60000,
+                None,
                 token_sender.clone(),
-            ).await {
+            )
+            .await
+            {
                 Ok(res) => {
-                    let mut compiled = compiler::compile_response(db, &task.task, &res, &state).await.unwrap_or(res);
-                    
+                    let mut compiled = compiler::compile_response(db, &task.task, &res, &state)
+                        .await
+                        .unwrap_or(res);
+
                     // ARCHITECTURE V3.1: DYNAMIC AGENT-BASED SYNTHESIS
                     compiled.hide_evidence = hide_evidence;
-                    
-                    let bypass = supervisor.as_ref().map(|s| s.bypass_synthesizer).unwrap_or(false);
+
+                    let bypass = supervisor
+                        .as_ref()
+                        .map(|s| s.bypass_synthesizer)
+                        .unwrap_or(false);
                     // REDUNDANCY CHECK: Skip LLM synthesis if artifacts were generated (Final synthesizer handles it)
                     if !bypass && compiled.artifacts.is_empty() {
-                        synthesizer::synthesize_step_result(db, ollama_client, &mut compiled, &report_style, &task.task).await;
+                        synthesizer::synthesize_step_result(
+                            db,
+                            ollama_client,
+                            &mut compiled,
+                            &report_style,
+                            &task.task,
+                        )
+                        .await;
                     }
-                    
-                    update_state_from_findings(&mut state, db, &compiled.findings, &compiled.summary, &compiled.evidence).await;
-                    plan_history.push_str(&format!("\nStep {}: {}", idx + 1, compiled.summary));
-                    
-                    master_response.merge(crate::engine::orchestrator::utils::formatter::format_supervisor_result(&compiled));
 
-                    event_logger::micro_step(db, run_id, event_sequence, "completed", &domain, &task.task, &format!("Completed step {} of {}.", idx + 1, macro_tasks.len()), Some(&compiled.summary)).await;
+                    update_state_from_findings(
+                        &mut state,
+                        db,
+                        &compiled.findings,
+                        &compiled.summary,
+                        &compiled.evidence,
+                    )
+                    .await;
+                    plan_history.push_str(&format!("\nStep {}: {}", idx + 1, compiled.summary));
+
+                    master_response.merge(
+                        crate::engine::orchestrator::utils::formatter::format_supervisor_result(
+                            &compiled,
+                        ),
+                    );
+
+                    event_logger::micro_step(
+                        db,
+                        run_id,
+                        event_sequence,
+                        "completed",
+                        &domain,
+                        &task.task,
+                        &format!("Completed step {} of {}.", idx + 1, macro_tasks.len()),
+                        Some(&compiled.summary),
+                    )
+                    .await;
                     break;
                 }
                 Err(_) if retry_count <= 2 => {
                     retry_count += 1;
-                    event_logger::micro_step(db, run_id, event_sequence, "running", &domain, &task.task, &format!("Retrying step {}/{} (Attempt {}/3)...", idx + 1, macro_tasks.len(), retry_count + 1), None).await;
+                    event_logger::micro_step(
+                        db,
+                        run_id,
+                        event_sequence,
+                        "running",
+                        &domain,
+                        &task.task,
+                        &format!(
+                            "Retrying step {}/{} (Attempt {}/3)...",
+                            idx + 1,
+                            macro_tasks.len(),
+                            retry_count + 1
+                        ),
+                        None,
+                    )
+                    .await;
                     continue;
-                },
-                Err(_) => { 
-                    master_response.status = "failed".to_string(); 
-                    event_logger::micro_step(db, run_id, event_sequence, "failed", &domain, &task.task, &format!("Step {}/{} failed after maximum retries.", idx + 1, macro_tasks.len()), None).await;
-                    break; 
+                }
+                Err(_) => {
+                    master_response.status = "failed".to_string();
+                    event_logger::micro_step(
+                        db,
+                        run_id,
+                        event_sequence,
+                        "failed",
+                        &domain,
+                        &task.task,
+                        &format!(
+                            "Step {}/{} failed after maximum retries.",
+                            idx + 1,
+                            macro_tasks.len()
+                        ),
+                        None,
+                    )
+                    .await;
+                    break;
                 }
             }
         }
     }
 
     // Final Post-Synthesis for complex multi-step plans (Centralized UI Governance)
-    let has_research = macro_tasks.iter().any(|t| matches!(t.domain.as_str(), "stealth" | "web"));
+    let has_research = macro_tasks
+        .iter()
+        .any(|t| matches!(t.domain.as_str(), "stealth" | "web"));
 
-    event_logger::simple(db, run_id, event_sequence, "synthesis", "running", "Synthesizing step results into a final unified response...", None).await;
+    event_logger::simple(
+        db,
+        run_id,
+        event_sequence,
+        "synthesis",
+        "running",
+        "Synthesizing step results into a final unified response...",
+        None,
+    )
+    .await;
 
-    synthesizer::synthesize_final_response(db, ollama_client, history.to_vec(), &mut master_response, has_research, _query).await;
+    synthesizer::synthesize_final_response(
+        db,
+        ollama_client,
+        history.to_vec(),
+        &mut master_response,
+        has_research,
+        _query,
+    )
+    .await;
 
     let final_json = serde_json::to_string(&master_response).unwrap_or_default();
 
-    event_logger::simple(db, run_id, event_sequence, "final_response", "completed", "Final synthesized response ready.", Some(&final_json)).await;
+    event_logger::simple(
+        db,
+        run_id,
+        event_sequence,
+        "final_response",
+        "completed",
+        "Final synthesized response ready.",
+        Some(&final_json),
+    )
+    .await;
 
     if let Some(rid) = run_id {
-        let status = if master_response.status == "failed" { "failed" } else { "completed" };
-        let _ = crate::backend::finish_execution_run(db, rid, status, Some(&final_json), None).await;
+        let status = if master_response.status == "failed" {
+            "failed"
+        } else {
+            "completed"
+        };
+        let _ =
+            crate::backend::finish_execution_run(db, rid, status, Some(&final_json), None).await;
     }
 
     final_json

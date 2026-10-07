@@ -1,14 +1,13 @@
 // src/db/seed_supervisors.rs — seed_supervisors() + seed_planners()
 use super::Database;
 
-
 impl Database {
     pub(super) async fn seed_supervisors(&self) -> anyhow::Result<()> {
         let _count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM supervisors")
             .fetch_one(&self.pool)
             .await?;
 
-       // println!("🛸 Seeding dynamic supervisors...");
+        // println!("🛸 Seeding dynamic supervisors...");
         let supervisors = vec![
             ("Web Supervisor", "Automates UI-based web interaction, form filling, and Chrome-specific automation", "web", "qwen2.5:7b-instruct", "chrome, browser, automate, website automation, click, type, website, internet, web", 10, true, None),
             ("Stealth Supervisor", "Orchestrates all web research, search queries, and factual data retrieval", "stealth", "qwen2.5:7b-instruct", "research, search, browse, internet, query, latest, which is, who is", 20, true, None),
@@ -82,10 +81,30 @@ impl Database {
 
         //println!("🌱 Seeding Planners...");
         let planners = vec![
-            ("Web Planner", "Plans browser-based tasks step-by-step.", "web", "web_planner"),
-            ("Office Planner", "Plans office document tasks (Writer, Calc, etc).", "office", "office_planner"),
-            ("Desktop Planner", "Plans desktop and application-level tasks.", "desktop", "desktop_planner"),
-            ("Neontune Planner", "Plans music and audio library operations.", "neontune", "neontune_planner"),
+            (
+                "Web Planner",
+                "Plans browser-based tasks step-by-step.",
+                "web",
+                "web_planner",
+            ),
+            (
+                "Office Planner",
+                "Plans office document tasks (Writer, Calc, etc).",
+                "office",
+                "office_planner",
+            ),
+            (
+                "Desktop Planner",
+                "Plans desktop and application-level tasks.",
+                "desktop",
+                "desktop_planner",
+            ),
+            (
+                "Neontune Planner",
+                "Plans music and audio library operations.",
+                "neontune",
+                "neontune_planner",
+            ),
         ];
 
         for (name, desc, domain, domain_id) in planners {

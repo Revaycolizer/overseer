@@ -1,7 +1,6 @@
 // src/db/seed_agents.rs — seed_agents()
 use super::Database;
 
-
 impl Database {
     pub(super) async fn seed_agents(&self) -> anyhow::Result<()> {
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agents")
@@ -44,15 +43,69 @@ impl Database {
 
         // 2. Add others not in configs with real preambles
         let codebase_agents = vec![
-            ("Master Orchestrator", "Primary system planner", "orchestrator", "qwen2.5:7b-instruct", "src/engine/agents/master_planner/preamble.md"),
-            ("Overseer Agent", "Task verification and grounding supervisor", "overseer", "qwen2.5:7b-instruct", ""),
-            ("Web Planner", "Web task planner", "web_planner", "llama3", "src/engine/agents/web/planner_preamble.md"),
-            ("Office Planner", "Office task planner", "office_planner", "qwen2.5:7b-instruct", ""),
-            ("Desktop Planner", "Desktop task planner", "desktop_planner", "qwen2.5:7b-instruct", ""),
-            ("Neontune Planner", "Music task planner", "neontune_planner", "qwen2.5:7b-instruct", ""),
-            ("Chat Assistant", "General chat and help", "chat", "llama3", "src/engine/agents/chat/preamble.md"),
-            ("Vision Assistant", "Image analysis specialist", "vision", "llava", ""),
-            ("Computer Operator", "Operates a supervised computer session", "computer", "qwen2.5:7b-instruct", ""),
+            (
+                "Master Orchestrator",
+                "Primary system planner",
+                "orchestrator",
+                "qwen2.5:7b-instruct",
+                "src/engine/agents/master_planner/preamble.md",
+            ),
+            (
+                "Overseer Agent",
+                "Task verification and grounding supervisor",
+                "overseer",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Web Planner",
+                "Web task planner",
+                "web_planner",
+                "llama3",
+                "src/engine/agents/web/planner_preamble.md",
+            ),
+            (
+                "Office Planner",
+                "Office task planner",
+                "office_planner",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Desktop Planner",
+                "Desktop task planner",
+                "desktop_planner",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Neontune Planner",
+                "Music task planner",
+                "neontune_planner",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
+            (
+                "Chat Assistant",
+                "General chat and help",
+                "chat",
+                "llama3",
+                "src/engine/agents/chat/preamble.md",
+            ),
+            (
+                "Vision Assistant",
+                "Image analysis specialist",
+                "vision",
+                "llava",
+                "",
+            ),
+            (
+                "Computer Operator",
+                "Operates a supervised computer session",
+                "computer",
+                "qwen2.5:7b-instruct",
+                "",
+            ),
         ];
 
         for (name, desc, domain, model, path) in codebase_agents {
@@ -71,8 +124,13 @@ impl Database {
                     "Default preamble".to_string()
                 };
                 agents_data.push((
-                    name.to_string(), desc.to_string(), domain.to_string(),
-                    model.to_string(), inst, "1.0.0".to_string(), None::<String>,
+                    name.to_string(),
+                    desc.to_string(),
+                    domain.to_string(),
+                    model.to_string(),
+                    inst,
+                    "1.0.0".to_string(),
+                    None::<String>,
                 ));
             }
         }

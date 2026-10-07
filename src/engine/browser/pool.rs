@@ -4,11 +4,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use super::memory_monitor;
+use super::pool_config::PoolConfig;
 use super::port_alloc;
 use super::session::BrowserSession;
 use super::session_init;
 use super::spawner;
-use super::pool_config::PoolConfig;
 
 pub(super) struct Inner {
     pub(super) sessions: HashMap<i64, BrowserSession>,
@@ -23,13 +23,23 @@ pub struct BrowserPool {
 
 impl BrowserPool {
     pub fn new(config: PoolConfig, data_dir: PathBuf) -> Self {
-        Self { config, inner: Arc::new(Mutex::new(Inner { sessions: HashMap::new(), next_id: 1 })), data_dir }
+        Self {
+            config,
+            inner: Arc::new(Mutex::new(Inner {
+                sessions: HashMap::new(),
+                next_id: 1,
+            })),
+            data_dir,
+        }
     }
 
     pub async fn create_session(&self, _conversation_id: Option<i64>) -> anyhow::Result<i64> {
         let mut inner = self.inner.lock().await;
         if inner.sessions.len() >= self.config.max_sessions {
-            anyhow::bail!("Max browser sessions ({}) reached", self.config.max_sessions);
+            anyhow::bail!(
+                "Max browser sessions ({}) reached",
+                self.config.max_sessions
+            );
         }
         let count = inner.sessions.len();
         let report = memory_monitor::current_report(count as u64 * 90, count);
@@ -42,7 +52,8 @@ impl BrowserPool {
         let port = port_alloc::allocate_port();
         let profile_path = self.data_dir.join("browser-profiles").join(id.to_string());
 
-        let (process, cdp_ws_url) = spawner::spawn_obscura(port, &profile_path, self.config.stealth).await?;
+        let (process, cdp_ws_url) =
+            spawner::spawn_obscura(port, &profile_path, self.config.stealth).await?;
 
         let mut session = BrowserSession::new(id, port, profile_path, Some(process), cdp_ws_url);
         session_init::init_session(&mut session).await;
@@ -67,7 +78,12 @@ impl BrowserPool {
     }
 
     pub async fn get_profile_path(&self, id: i64) -> Option<std::path::PathBuf> {
-        self.inner.lock().await.sessions.get(&id).map(|s| s.profile_path.clone())
+        self.inner
+            .lock()
+            .await
+            .sessions
+            .get(&id)
+            .map(|s| s.profile_path.clone())
     }
 
     pub async fn shutdown(&self) {

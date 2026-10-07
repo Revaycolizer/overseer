@@ -26,13 +26,17 @@ pub fn infer_action_group_3(lower: &str) -> Option<String> {
     if lower.starts_with("move") || lower.starts_with("hover") {
         return Some("move_mouse".to_string());
     }
-    if lower.starts_with("type ") || lower.starts_with("write ") || lower.starts_with("input text ") {
+    if lower.starts_with("type ") || lower.starts_with("write ") || lower.starts_with("input text ")
+    {
         return Some("type_text".to_string());
     }
     if lower.starts_with("press ") || lower.starts_with("key ") {
         return Some("press_key".to_string());
     }
-    if lower.starts_with("hotkey ") || lower.starts_with("shortcut ") || lower.starts_with("combination ") {
+    if lower.starts_with("hotkey ")
+        || lower.starts_with("shortcut ")
+        || lower.starts_with("combination ")
+    {
         return Some("hotkey".to_string());
     }
     if lower.starts_with("scroll ") {

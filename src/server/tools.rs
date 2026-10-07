@@ -1,12 +1,12 @@
-use axum::{
-    routing::{get, post},
-    extract::{State, Json},
-    Router,
-};
-use std::sync::Arc;
-use serde::Deserialize;
 use super::ServerState;
 use crate::engine::utils::discovery::ToolInfo;
+use axum::{
+    extract::{Json, State},
+    routing::{get, post},
+    Router,
+};
+use serde::Deserialize;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 pub struct AddToolPayload {
@@ -30,33 +30,45 @@ pub fn router() -> Router<Arc<ServerState>> {
 }
 
 async fn get_tools(State(state): State<Arc<ServerState>>) -> Result<Json<Vec<ToolInfo>>, String> {
-    crate::backend::get_tools(&state.db).await.map(Json).map_err(|e| e.to_string())
+    crate::backend::get_tools(&state.db)
+        .await
+        .map(Json)
+        .map_err(|e| e.to_string())
 }
 
 async fn add_tool(
     State(state): State<Arc<ServerState>>,
     Json(p): Json<AddToolPayload>,
 ) -> Result<Json<i64>, String> {
-    crate::backend::add_tool(&state.db, &p.name, &p.description, &p.language).await.map(Json).map_err(|e| e.to_string())
+    crate::backend::add_tool(&state.db, &p.name, &p.description, &p.language)
+        .await
+        .map(Json)
+        .map_err(|e| e.to_string())
 }
 
 async fn update_tool(
     State(state): State<Arc<ServerState>>,
     Json(t): Json<ToolInfo>,
 ) -> Result<(), String> {
-    crate::backend::update_tool(&state.db, t).await.map_err(|e| e.to_string())
+    crate::backend::update_tool(&state.db, t)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn add_tool_to_agent(
     State(state): State<Arc<ServerState>>,
     Json(p): Json<ToolLinkPayload>,
 ) -> Result<(), String> {
-    crate::backend::add_tool_to_agent(&state.db, p.agent_id, p.tool_id).await.map_err(|e| e.to_string())
+    crate::backend::add_tool_to_agent(&state.db, p.agent_id, p.tool_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn remove_tool_from_agent(
     State(state): State<Arc<ServerState>>,
     Json(p): Json<ToolLinkPayload>,
 ) -> Result<(), String> {
-    crate::backend::remove_tool_from_agent(&state.db, p.agent_id, p.tool_id).await.map_err(|e| e.to_string())
+    crate::backend::remove_tool_from_agent(&state.db, p.agent_id, p.tool_id)
+        .await
+        .map_err(|e| e.to_string())
 }

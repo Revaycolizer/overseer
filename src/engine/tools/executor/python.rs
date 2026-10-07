@@ -1,6 +1,6 @@
-use tokio::process::Command;
 use crate::engine::tools::error::DynamicToolError;
 use crate::engine::utils::discovery::{build_python_command, get_tool_executable_path, ToolInfo};
+use tokio::process::Command;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -9,14 +9,13 @@ pub async fn execute_python_tool(
     info: &ToolInfo,
     args: serde_json::Value,
 ) -> Result<String, DynamicToolError> {
-    let executable_path = get_tool_executable_path(info).ok_or_else(|| {
-        DynamicToolError::MissingExecutable {
+    let executable_path =
+        get_tool_executable_path(info).ok_or_else(|| DynamicToolError::MissingExecutable {
             tool: info.name.clone(),
-        }
-    })?;
+        })?;
 
-    let parts = build_python_command()
-        .map_err(|details| DynamicToolError::MissingPython { details })?;
+    let parts =
+        build_python_command().map_err(|details| DynamicToolError::MissingPython { details })?;
     let mut cmd = Command::new(&parts[0]);
     if parts.len() > 1 {
         cmd.args(&parts[1..]);

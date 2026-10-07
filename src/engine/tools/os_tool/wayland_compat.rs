@@ -1,31 +1,34 @@
 use std::process::Command;
 
 pub fn is_wayland() -> bool {
-    let xdg = std::env::var("XDG_SESSION_TYPE").unwrap_or_default().to_lowercase();
+    let xdg = std::env::var("XDG_SESSION_TYPE")
+        .unwrap_or_default()
+        .to_lowercase();
     let display = std::env::var("WAYLAND_DISPLAY").unwrap_or_default();
     xdg == "wayland" || !display.is_empty()
 }
 
 pub fn capture_wayland_screenshot(path: &str) -> Result<(), String> {
     if Command::new("grim").arg("-h").output().is_ok() {
-        let output = Command::new("grim")
-            .arg(path)
-            .output();
+        let output = Command::new("grim").arg(path).output();
         match output {
             Ok(out) if out.status.success() => return Ok(()),
-            Ok(out) => return Err(format!("grim failed with exit code: {:?}", out.status.code())),
+            Ok(out) => {
+                return Err(format!(
+                    "grim failed with exit code: {:?}",
+                    out.status.code()
+                ))
+            }
             Err(e) => return Err(format!("failed to execute grim: {}", e)),
         }
     }
-    
+
     Err("grim utility not found on PATH. Install grim for Wayland screenshots.".to_string())
 }
 
 pub fn wayland_type_text(text: &str) -> Result<(), String> {
     if Command::new("wtype").arg("-h").output().is_ok() {
-        let output = Command::new("wtype")
-            .arg(text)
-            .output();
+        let output = Command::new("wtype").arg(text).output();
         if let Ok(out) = output {
             if out.status.success() {
                 return Ok(());
@@ -34,9 +37,7 @@ pub fn wayland_type_text(text: &str) -> Result<(), String> {
     }
 
     if Command::new("ydotool").arg("-h").output().is_ok() {
-        let output = Command::new("ydotool")
-            .args(["type", text])
-            .output();
+        let output = Command::new("ydotool").args(["type", text]).output();
         if let Ok(out) = output {
             if out.status.success() {
                 return Ok(());
@@ -59,9 +60,7 @@ pub fn wayland_press_key(key: &str) -> Result<(), String> {
     };
 
     if Command::new("wtype").arg("-h").output().is_ok() {
-        let output = Command::new("wtype")
-            .args(["-k", mapped_key])
-            .output();
+        let output = Command::new("wtype").args(["-k", mapped_key]).output();
         if let Ok(out) = output {
             if out.status.success() {
                 return Ok(());

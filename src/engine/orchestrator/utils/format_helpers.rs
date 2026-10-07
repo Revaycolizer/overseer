@@ -17,15 +17,24 @@ pub fn normalize_summary(summary: &str) -> String {
 
 pub fn extract_artifact_path(item: &str) -> Option<String> {
     let lower = item.to_lowercase();
-    
-    // 1. Check for common file extensions (Images + Documents)
-    let has_extension = lower.contains(".png") || lower.contains(".jpg") || lower.contains(".jpeg") || 
-                        lower.contains(".webp") || lower.contains(".pdf") || lower.contains(".csv") ||
-                        lower.contains(".xlsx") || lower.contains(".docx") || lower.contains(".xls") ||
-                        lower.contains(".doc") || lower.contains(".txt") || lower.contains(".json") ||
-                        lower.contains(".md") || lower.contains(".svg");
 
-    if has_extension && (item.contains('/') || item.contains('\\') || item.contains("assets/"))  {
+    // 1. Check for common file extensions (Images + Documents)
+    let has_extension = lower.contains(".png")
+        || lower.contains(".jpg")
+        || lower.contains(".jpeg")
+        || lower.contains(".webp")
+        || lower.contains(".pdf")
+        || lower.contains(".csv")
+        || lower.contains(".xlsx")
+        || lower.contains(".docx")
+        || lower.contains(".xls")
+        || lower.contains(".doc")
+        || lower.contains(".txt")
+        || lower.contains(".json")
+        || lower.contains(".md")
+        || lower.contains(".svg");
+
+    if has_extension && (item.contains('/') || item.contains('\\') || item.contains("assets/")) {
         return Some(item.trim().to_string());
     }
 
@@ -53,7 +62,7 @@ pub fn strip_grounding_markers(text: &str) -> String {
     let re_evidence = regex::Regex::new(r"\(?\[E[0-9]+\]\)?\s*").unwrap();
     let re_chart = regex::Regex::new(r"---CHART_SVG---").unwrap();
     let re_ui = regex::Regex::new(r"(?m)^[╭╰═─│\s]+$").unwrap(); // Strips lines that are just UI characters
-    
+
     let cleaned = re_evidence.replace_all(text, "");
     let cleaned = re_chart.replace_all(&cleaned, "");
     let cleaned = re_ui.replace_all(&cleaned, "");

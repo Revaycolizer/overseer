@@ -2,7 +2,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum OrchestrationRoute { DirectChat, SingleDomain, MultiStep }
+pub enum OrchestrationRoute {
+    DirectChat,
+    SingleDomain,
+    MultiStep,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestrationDecision {

@@ -1,8 +1,5 @@
-
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-
-
 
 struct AvailableModelsCache {
     fetched_at: Instant,
@@ -36,13 +33,17 @@ pub async fn get_available_models() -> Vec<String> {
 }
 
 pub(crate) async fn try_get_available_models() -> Result<Vec<String>, String> {
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(3)).build().map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
     let response = client
         .get("http://localhost:11434/api/tags")
         .send()
         .await
         .map_err(|err| err.to_string())?
-        .error_for_status().map_err(|err| err.to_string())?;
+        .error_for_status()
+        .map_err(|err| err.to_string())?;
 
     let json = response
         .json::<serde_json::Value>()

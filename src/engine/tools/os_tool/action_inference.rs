@@ -1,5 +1,7 @@
 use crate::engine::tools::input::{read_string_field, stringify_tool_input};
-use crate::engine::tools::os_tool::action_groups::{infer_action_group_1, infer_action_group_2, infer_action_group_3};
+use crate::engine::tools::os_tool::action_groups::{
+    infer_action_group_1, infer_action_group_2, infer_action_group_3,
+};
 
 pub fn infer_os_tool_action(input: &serde_json::Value) -> String {
     let explicit = read_string_field(input, &["action", "command", "mode", "query"])

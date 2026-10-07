@@ -1,5 +1,5 @@
-use crate::db::Database;
 use super::models::WorkflowStep;
+use crate::db::Database;
 
 pub async fn get_workflow_steps(
     db: &Database,

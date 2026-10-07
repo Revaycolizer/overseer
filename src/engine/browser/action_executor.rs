@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use super::action_types::*;
 use super::cdp::CdpConnection;
 use super::dom_snapshot::DomSnapshot;
 use super::wait_strategies;
+use std::sync::Arc;
 
 pub struct ActionExecutor {
     pub cdp: Arc<CdpConnection>,
@@ -18,8 +18,11 @@ impl ActionExecutor {
         let start = std::time::Instant::now();
         let before = DomSnapshot::capture(&self.cdp).await?;
 
-        self.cdp.call("Page.navigate", serde_json::json!({"url": url})).await?;
-        let _ = wait_strategies::wait_for_navigation(&self.cdp, self.policy.action_timeout_ms).await;
+        self.cdp
+            .call("Page.navigate", serde_json::json!({"url": url}))
+            .await?;
+        let _ =
+            wait_strategies::wait_for_navigation(&self.cdp, self.policy.action_timeout_ms).await;
 
         let after = DomSnapshot::capture(&self.cdp).await?;
         let nav = before.url != after.url;
@@ -38,11 +41,17 @@ impl ActionExecutor {
         let start = std::time::Instant::now();
         let before = DomSnapshot::capture(&self.cdp).await?;
 
-        wait_strategies::wait_for_selector(&self.cdp, selector, self.policy.action_timeout_ms).await?;
+        wait_strategies::wait_for_selector(&self.cdp, selector, self.policy.action_timeout_ms)
+            .await?;
         let sel = serde_json::json!(selector).to_string();
-        self.cdp.call("Runtime.evaluate", serde_json::json!({
-            "expression": format!("document.querySelector({}).click()", sel),
-        })).await?;
+        self.cdp
+            .call(
+                "Runtime.evaluate",
+                serde_json::json!({
+                    "expression": format!("document.querySelector({}).click()", sel),
+                }),
+            )
+            .await?;
 
         let after = DomSnapshot::capture(&self.cdp).await?;
         let nav = before.url != after.url;

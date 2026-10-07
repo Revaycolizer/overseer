@@ -8,8 +8,7 @@ pub async fn spawn_obscura(
     profile_path: &Path,
     stealth: bool,
 ) -> Result<(Child, String)> {
-    let binary = super::obscura_resolver::resolve_obscura()
-        .context("Obscura binary not found")?;
+    let binary = super::obscura_resolver::resolve_obscura().context("Obscura binary not found")?;
 
     std::fs::create_dir_all(profile_path)?;
 

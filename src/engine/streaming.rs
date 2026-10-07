@@ -27,9 +27,7 @@ pub async fn collect_stream_with_sender<R>(
             MultiTurnStreamItem::FinalResponse(r) => {
                 final_response = Some(r.response().to_string());
             }
-            MultiTurnStreamItem::StreamAssistantItem(
-                StreamedAssistantContent::Text(text),
-            ) => {
+            MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(text)) => {
                 if let Some(s) = token_sender {
                     let _ = s.send(text.text);
                 }

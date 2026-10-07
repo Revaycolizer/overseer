@@ -1,6 +1,6 @@
+use super::LocalClient;
 use crate::backend::client::ConversationClient;
 use crate::backend::Conversation;
-use super::LocalClient;
 
 #[async_trait::async_trait]
 impl ConversationClient for LocalClient {
@@ -20,7 +20,10 @@ impl ConversationClient for LocalClient {
         crate::backend::delete_conversation(&self.db, id).await
     }
 
-    async fn search_messages(&self, query: &str) -> anyhow::Result<Vec<crate::backend::ConversationSearchResult>> {
+    async fn search_messages(
+        &self,
+        query: &str,
+    ) -> anyhow::Result<Vec<crate::backend::ConversationSearchResult>> {
         crate::backend::conversations::search_messages(&self.db, query).await
     }
 }

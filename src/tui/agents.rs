@@ -1,3 +1,6 @@
+use super::app::App;
+use super::ui::{ACCENT, MUTED, SUCCESS, SURFACE, TEXT, WARN};
+use crate::engine::utils::discovery::AgentInfo;
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -5,13 +8,9 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
-use crate::engine::utils::discovery::AgentInfo;
-use super::app::App;
-use super::ui::{ACCENT, MUTED, SURFACE, SUCCESS, TEXT, WARN};
 
 pub fn draw_agents(f: &mut Frame, app: &mut App, area: Rect) {
-    let chunks = Layout::horizontal([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)])
-        .split(area);
+    let chunks = Layout::horizontal([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)]).split(area);
 
     draw_agent_list(f, app, chunks[0]);
     draw_agent_detail(f, app, chunks[1]);
@@ -22,7 +21,11 @@ fn draw_agent_list(f: &mut Frame, app: &mut App, area: Rect) {
         .agents
         .iter()
         .map(|a| {
-            let prefix = if app.selected_agent_id == Some(a.id) { " ▶ " } else { "   " };
+            let prefix = if app.selected_agent_id == Some(a.id) {
+                " ▶ "
+            } else {
+                "   "
+            };
             ListItem::new(Line::from(vec![
                 Span::styled(prefix, Style::new().fg(ACCENT)),
                 Span::styled(a.name.clone(), Style::new().fg(TEXT)),
@@ -37,7 +40,10 @@ fn draw_agent_list(f: &mut Frame, app: &mut App, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::new().fg(SURFACE))
-                .title(Span::styled(" Agents ", Style::new().fg(ACCENT).add_modifier(Modifier::BOLD))),
+                .title(Span::styled(
+                    " Agents ",
+                    Style::new().fg(ACCENT).add_modifier(Modifier::BOLD),
+                )),
         )
         .highlight_style(Style::new().fg(ACCENT).add_modifier(Modifier::BOLD));
 
@@ -45,7 +51,11 @@ fn draw_agent_list(f: &mut Frame, app: &mut App, area: Rect) {
 }
 
 fn draw_agent_detail(f: &mut Frame, app: &mut App, area: Rect) {
-    let Some(agent) = app.agents.iter().find(|a| app.selected_agent_id == Some(a.id)) else {
+    let Some(agent) = app
+        .agents
+        .iter()
+        .find(|a| app.selected_agent_id == Some(a.id))
+    else {
         f.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(" ◀ ", Style::new().fg(ACCENT)),
@@ -79,14 +89,16 @@ fn draw_agent_detail(f: &mut Frame, app: &mut App, area: Rect) {
             Span::styled(&agent.version, Style::new().fg(TEXT)),
         ]),
         Line::from(Span::raw("")),
-        Line::from(vec![
-            Span::styled("Description:", Style::new().fg(MUTED).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            "Description:",
+            Style::new().fg(MUTED).add_modifier(Modifier::BOLD),
+        )]),
         Line::from(Span::styled(&agent.description, Style::new().fg(TEXT))),
         Line::from(Span::raw("")),
-        Line::from(vec![
-            Span::styled("Tools:", Style::new().fg(MUTED).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            "Tools:",
+            Style::new().fg(MUTED).add_modifier(Modifier::BOLD),
+        )]),
     ];
 
     let mut lines = lines;

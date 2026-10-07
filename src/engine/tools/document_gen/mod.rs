@@ -1,15 +1,14 @@
+pub mod csv_gen;
+pub mod docx_gen;
 pub mod pdf;
 pub mod utils;
-pub mod csv_gen;
 pub mod xlsx_gen;
-pub mod docx_gen;
 
 use serde_json::{json, Value};
 use utils::strip_grounding_markers;
 
 pub async fn native_document_writer(args: &Value) -> Result<String, String> {
     let format = args
-
         .get("format")
         .and_then(|v| v.as_str())
         .unwrap_or("pdf")
@@ -18,7 +17,11 @@ pub async fn native_document_writer(args: &Value) -> Result<String, String> {
     let headers: Vec<String> = args
         .get("headers")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|i| i.as_str().map(|s| s.to_string())).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|i| i.as_str().map(|s| s.to_string()))
+                .collect()
+        })
         .unwrap_or_default();
 
     let data = args.get("data").and_then(|v| v.as_array());
@@ -50,32 +53,67 @@ pub async fn native_document_writer(args: &Value) -> Result<String, String> {
 }
 
 fn build_content_string(content: Option<&Value>) -> String {
-    let c = match content { Some(v) => v, None => return String::new() };
+    let c = match content {
+        Some(v) => v,
+        None => return String::new(),
+    };
 
     // Shape: {"title":"...", "sections":[{header,content}]}
     if let Some(sections) = c.get("sections").and_then(|v| v.as_array()) {
         let title = c.get("title").and_then(|v| v.as_str()).unwrap_or("");
         let mut parts = Vec::new();
-        if !title.is_empty() { parts.push(format!("# {}", title)); }
+        if !title.is_empty() {
+            parts.push(format!("# {}", title));
+        }
         for sec in sections {
-            let h = sec.get("header").or_else(|| sec.get("section")).or_else(|| sec.get("title"))
-                .and_then(|v| v.as_str()).unwrap_or("");
-            let b = sec.get("content").or_else(|| sec.get("text")).and_then(|v| v.as_str()).unwrap_or("");
-            if !h.is_empty() { parts.push(format!("## {}", h)); }
-            if !b.is_empty() { parts.push(b.to_string()); }
+            let h = sec
+                .get("header")
+                .or_else(|| sec.get("section"))
+                .or_else(|| sec.get("title"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let b = sec
+                .get("content")
+                .or_else(|| sec.get("text"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if !h.is_empty() {
+                parts.push(format!("## {}", h));
+            }
+            if !b.is_empty() {
+                parts.push(b.to_string());
+            }
         }
         return strip_grounding_markers(&parts.join("\n\n"));
     }
 
     // Shape: array of strings or {section/header, text/content} objects
     if let Some(arr) = c.as_array() {
-        let joined = arr.iter().map(|item| {
-            if let Some(s) = item.as_str() { return s.to_string(); }
-            let h = item.get("section").or_else(|| item.get("header")).or_else(|| item.get("title"))
-                .and_then(|v| v.as_str()).unwrap_or("");
-            let b = item.get("text").or_else(|| item.get("content")).and_then(|v| v.as_str()).unwrap_or("");
-            if h.is_empty() { b.to_string() } else { format!("## {}\n{}", h, b) }
-        }).collect::<Vec<_>>().join("\n\n");
+        let joined = arr
+            .iter()
+            .map(|item| {
+                if let Some(s) = item.as_str() {
+                    return s.to_string();
+                }
+                let h = item
+                    .get("section")
+                    .or_else(|| item.get("header"))
+                    .or_else(|| item.get("title"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let b = item
+                    .get("text")
+                    .or_else(|| item.get("content"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if h.is_empty() {
+                    b.to_string()
+                } else {
+                    format!("## {}\n{}", h, b)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
         return strip_grounding_markers(&joined);
     }
 

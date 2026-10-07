@@ -47,24 +47,62 @@ pub enum ActionRisk {
 
 /// Shell command heads considered read-only/safe.
 const SAFE_SHELL_HEADS: &[&str] = &[
-    "ls", "cat", "pwd", "echo", "find", "grep", "rg", "head", "tail", "wc", "stat",
-    "file", "which", "whoami", "date", "uname", "df", "du", "ps", "env", "printenv",
-    "hostname", "id", "uptime", "tree", "realpath", "dirname", "basename", "sort",
-    "uniq", "cut", "cd",
+    "ls", "cat", "pwd", "echo", "find", "grep", "rg", "head", "tail", "wc", "stat", "file",
+    "which", "whoami", "date", "uname", "df", "du", "ps", "env", "printenv", "hostname", "id",
+    "uptime", "tree", "realpath", "dirname", "basename", "sort", "uniq", "cut", "cd",
 ];
 
 /// Tokens that make a shell command dangerous regardless of the leading command
 /// (mutation, escalation, network, redirection, chaining, substitution).
 const DANGEROUS_SHELL_TOKENS: &[&str] = &[
-    "rm ", "rm-", "rmdir", "mv ", "dd ", "mkfs", "chmod", "chown", "kill", "pkill",
-    "shutdown", "reboot", "sudo", "curl", "wget", "ssh ", "scp ", "passwd", "truncate",
-    "tee ", "mount", "umount", "systemctl", "service ", "crontab", "eval ", "apt",
-    "yum", "dnf", "pacman", "pip ", "npm ", "git push", ">", "|", ";", "&", "`", "$(",
+    "rm ",
+    "rm-",
+    "rmdir",
+    "mv ",
+    "dd ",
+    "mkfs",
+    "chmod",
+    "chown",
+    "kill",
+    "pkill",
+    "shutdown",
+    "reboot",
+    "sudo",
+    "curl",
+    "wget",
+    "ssh ",
+    "scp ",
+    "passwd",
+    "truncate",
+    "tee ",
+    "mount",
+    "umount",
+    "systemctl",
+    "service ",
+    "crontab",
+    "eval ",
+    "apt",
+    "yum",
+    "dnf",
+    "pacman",
+    "pip ",
+    "npm ",
+    "git push",
+    ">",
+    "|",
+    ";",
+    "&",
+    "`",
+    "$(",
 ];
 
 /// Native tools that are read-only and therefore low risk.
 const LOW_NATIVE_TOOLS: &[&str] = &[
-    "web_extract", "web_search", "web_links", "browser_read", "clipboard_read",
+    "web_extract",
+    "web_search",
+    "web_links",
+    "browser_read",
+    "clipboard_read",
     "vision_analysis",
 ];
 
@@ -335,21 +373,96 @@ mod risk_tests {
 
     #[test]
     fn shell_reads_are_low_writes_are_high() {
-        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"ls -la /tmp"}))), ActionRisk::Low);
-        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"cat notes.txt"}))), ActionRisk::Low);
-        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"rm -rf /tmp/x"}))), ActionRisk::High);
-        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"echo hi > f"}))), ActionRisk::High, "redirection is dangerous");
-        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"sudo apt install x"}))), ActionRisk::High);
-        assert_eq!(classify_risk(&req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"frobnicate --all"}))), ActionRisk::High, "unknown command is risky");
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::ShellCommand,
+                "shell_exec",
+                serde_json::json!({"command":"ls -la /tmp"})
+            )),
+            ActionRisk::Low
+        );
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::ShellCommand,
+                "shell_exec",
+                serde_json::json!({"command":"cat notes.txt"})
+            )),
+            ActionRisk::Low
+        );
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::ShellCommand,
+                "shell_exec",
+                serde_json::json!({"command":"rm -rf /tmp/x"})
+            )),
+            ActionRisk::High
+        );
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::ShellCommand,
+                "shell_exec",
+                serde_json::json!({"command":"echo hi > f"})
+            )),
+            ActionRisk::High,
+            "redirection is dangerous"
+        );
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::ShellCommand,
+                "shell_exec",
+                serde_json::json!({"command":"sudo apt install x"})
+            )),
+            ActionRisk::High
+        );
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::ShellCommand,
+                "shell_exec",
+                serde_json::json!({"command":"frobnicate --all"})
+            )),
+            ActionRisk::High,
+            "unknown command is risky"
+        );
     }
 
     #[test]
     fn kinds_have_expected_tiers() {
-        assert_eq!(classify_risk(&req(ActionKind::FilesystemWrite, "write_file", serde_json::json!({}))), ActionRisk::Medium);
-        assert_eq!(classify_risk(&req(ActionKind::ComputerControl, "os_tool", serde_json::json!({"action":"click"}))), ActionRisk::Medium);
-        assert_eq!(classify_risk(&req(ActionKind::PythonTool, "py", serde_json::json!({}))), ActionRisk::High);
-        assert_eq!(classify_risk(&req(ActionKind::NativeTool, "web_extract", serde_json::json!({}))), ActionRisk::Low);
-        assert_eq!(classify_risk(&req(ActionKind::NativeTool, "browser_click", serde_json::json!({}))), ActionRisk::Medium);
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::FilesystemWrite,
+                "write_file",
+                serde_json::json!({})
+            )),
+            ActionRisk::Medium
+        );
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::ComputerControl,
+                "os_tool",
+                serde_json::json!({"action":"click"})
+            )),
+            ActionRisk::Medium
+        );
+        assert_eq!(
+            classify_risk(&req(ActionKind::PythonTool, "py", serde_json::json!({}))),
+            ActionRisk::High
+        );
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::NativeTool,
+                "web_extract",
+                serde_json::json!({})
+            )),
+            ActionRisk::Low
+        );
+        assert_eq!(
+            classify_risk(&req(
+                ActionKind::NativeTool,
+                "browser_click",
+                serde_json::json!({})
+            )),
+            ActionRisk::Medium
+        );
     }
 
     #[test]
@@ -357,17 +470,38 @@ mod risk_tests {
         // Low threshold: `ls` runs; a file write still needs approval.
         let cfg = autonomous_cfg("shell_exec", ActionRisk::Low);
         assert_eq!(
-            evaluate(&cfg, &req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"ls"}))),
+            evaluate(
+                &cfg,
+                &req(
+                    ActionKind::ShellCommand,
+                    "shell_exec",
+                    serde_json::json!({"command":"ls"})
+                )
+            ),
             PolicyDecision::Allow
         );
         let wcfg = autonomous_cfg("write_file", ActionRisk::Low);
         assert!(matches!(
-            evaluate(&wcfg, &req(ActionKind::FilesystemWrite, "write_file", serde_json::json!({"path":"/x","content":"y"}))),
+            evaluate(
+                &wcfg,
+                &req(
+                    ActionKind::FilesystemWrite,
+                    "write_file",
+                    serde_json::json!({"path":"/x","content":"y"})
+                )
+            ),
             PolicyDecision::RequireApproval { .. }
         ));
         // A destructive shell command is never auto-approved at Low.
         assert!(matches!(
-            evaluate(&cfg, &req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"rm -rf /"}))),
+            evaluate(
+                &cfg,
+                &req(
+                    ActionKind::ShellCommand,
+                    "shell_exec",
+                    serde_json::json!({"command":"rm -rf /"})
+                )
+            ),
             PolicyDecision::RequireApproval { .. }
         ));
     }
@@ -375,10 +509,16 @@ mod risk_tests {
     #[test]
     fn high_risk_hint_is_never_auto_approved() {
         let cfg = autonomous_cfg("shell_exec", ActionRisk::High); // even max threshold
-        let mut r = req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"ls"}));
+        let mut r = req(
+            ActionKind::ShellCommand,
+            "shell_exec",
+            serde_json::json!({"command":"ls"}),
+        );
         r.risk_hint = Some("high".into());
-        assert!(matches!(evaluate(&cfg, &r), PolicyDecision::RequireApproval { .. }),
-            "an LLM high-risk hint must still force approval regardless of the auto-approve tier");
+        assert!(
+            matches!(evaluate(&cfg, &r), PolicyDecision::RequireApproval { .. }),
+            "an LLM high-risk hint must still force approval regardless of the auto-approve tier"
+        );
     }
 
     #[test]
@@ -387,7 +527,14 @@ mod risk_tests {
         let mut cfg = autonomous_cfg("shell_exec", ActionRisk::High);
         cfg.denylist = ["shell_exec".to_string()].into_iter().collect();
         assert!(matches!(
-            evaluate(&cfg, &req(ActionKind::ShellCommand, "shell_exec", serde_json::json!({"command":"ls"}))),
+            evaluate(
+                &cfg,
+                &req(
+                    ActionKind::ShellCommand,
+                    "shell_exec",
+                    serde_json::json!({"command":"ls"})
+                )
+            ),
             PolicyDecision::Deny { .. }
         ));
     }

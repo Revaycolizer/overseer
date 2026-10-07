@@ -11,7 +11,10 @@ pub struct SwarmScheduler {
 
 impl SwarmScheduler {
     pub fn new() -> Self {
-        Self { max_concurrency: 4, active_cell_count: 0 }
+        Self {
+            max_concurrency: 4,
+            active_cell_count: 0,
+        }
     }
 
     pub fn with_concurrency(mut self, n: usize) -> Self {

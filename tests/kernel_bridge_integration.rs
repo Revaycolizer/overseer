@@ -12,9 +12,7 @@
 
 use overseer::engine::kernel as kernel_bridge;
 use overseer::engine::utils::discovery::ToolInfo;
-use overseer_kernel::{
-    ActionKind, ActionRequest, ExecutionOutcome, PolicyConfig, PolicyDecision,
-};
+use overseer_kernel::{ActionKind, ActionRequest, ExecutionOutcome, PolicyConfig, PolicyDecision};
 use serde_json::json;
 
 // ---------------------------------------------------------------------------
@@ -127,7 +125,9 @@ fn test_policy_denies_uncapable_tool() {
 
     let req = make_action(1, "unknown_tool", ActionKind::NativeTool);
     let decision = overseer_kernel::evaluate(&cfg, &req);
-    assert!(matches!(decision, PolicyDecision::Deny { code, .. } if code == "capability_not_granted"));
+    assert!(
+        matches!(decision, PolicyDecision::Deny { code, .. } if code == "capability_not_granted")
+    );
 }
 
 #[test]
@@ -150,9 +150,13 @@ fn test_policy_denies_denied_action() {
     cfg.denylist.insert("delete".to_string());
 
     let req = ActionRequest::new(
-        1, ActionKind::NativeTool, "test_tool",
+        1,
+        ActionKind::NativeTool,
+        "test_tool",
         json!({"action": "delete", "path": "/etc"}),
-        vec!["test_tool".to_string()], 5000, "delete action",
+        vec!["test_tool".to_string()],
+        5000,
+        "delete action",
     );
     let decision = overseer_kernel::evaluate(&cfg, &req);
     assert!(matches!(decision, PolicyDecision::Deny { code, .. } if code == "denied_action"));
@@ -162,7 +166,8 @@ fn test_policy_denies_denied_action() {
 fn test_policy_requires_approval_for_computer_control() {
     let mut cfg = PolicyConfig::default();
     cfg.capability_set.insert("os_tool".to_string());
-    cfg.require_approval_kinds.insert(ActionKind::ComputerControl);
+    cfg.require_approval_kinds
+        .insert(ActionKind::ComputerControl);
 
     let req = make_action(1, "os_tool", ActionKind::ComputerControl);
     let decision = overseer_kernel::evaluate(&cfg, &req);
@@ -241,7 +246,10 @@ fn test_policy_denies_action_cap_with_observations_still_allowed() {
 #[test]
 fn test_policy_allowlist_denies_outside_list() {
     let cfg = PolicyConfig {
-        capability_set: ["tool_a", "tool_b"].iter().map(|s| (*s).to_string()).collect(),
+        capability_set: ["tool_a", "tool_b"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect(),
         allowlist: ["tool_a"].iter().map(|s| (*s).to_string()).collect(),
         ..PolicyConfig::default()
     };
@@ -254,7 +262,10 @@ fn test_policy_allowlist_denies_outside_list() {
 #[test]
 fn test_policy_allowlist_allows_listed() {
     let cfg = PolicyConfig {
-        capability_set: ["tool_a", "tool_b"].iter().map(|s| (*s).to_string()).collect(),
+        capability_set: ["tool_a", "tool_b"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect(),
         allowlist: ["tool_a"].iter().map(|s| (*s).to_string()).collect(),
         ..PolicyConfig::default()
     };
@@ -268,7 +279,8 @@ fn test_policy_allowlist_allows_listed() {
 fn test_policy_policy_config_snapshot_is_json() {
     let cfg = PolicyConfig::default();
     let snapshot = cfg.snapshot();
-    let parsed: serde_json::Value = serde_json::from_str(&snapshot).expect("snapshot should be valid JSON");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&snapshot).expect("snapshot should be valid JSON");
     assert_eq!(parsed["policy_version"], "kernel-0.1");
 }
 
@@ -300,7 +312,8 @@ fn test_policy_effective_timeout_ms_zero_cap() {
 fn test_action_request_canonical_payload_is_json() {
     let req = make_action(1, "test_tool", ActionKind::NativeTool);
     let payload = req.canonical_payload();
-    let parsed: serde_json::Value = serde_json::from_str(&payload).expect("payload should be valid JSON");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&payload).expect("payload should be valid JSON");
     assert_eq!(parsed["tool_name"], "test_tool");
     assert_eq!(parsed["run_id"], 1);
 }
@@ -343,19 +356,26 @@ fn test_bridge_classify_all_combinations() {
 
 #[test]
 fn test_execution_outcome_executed_check() {
-    let outcome = ExecutionOutcome::Executed { output: "ok".into() };
+    let outcome = ExecutionOutcome::Executed {
+        output: "ok".into(),
+    };
     assert!(outcome.executed());
 }
 
 #[test]
 fn test_execution_outcome_not_executed() {
-    let outcome = ExecutionOutcome::Denied { code: "test".into(), reason: "test".into() };
+    let outcome = ExecutionOutcome::Denied {
+        code: "test".into(),
+        reason: "test".into(),
+    };
     assert!(!outcome.executed());
 }
 
 #[test]
 fn test_execution_outcome_agent_response_executed() {
-    let outcome = ExecutionOutcome::Executed { output: "done".into() };
+    let outcome = ExecutionOutcome::Executed {
+        output: "done".into(),
+    };
     let resp = outcome.agent_response();
     assert!(resp.contains("executed"));
     assert!(resp.contains("done"));
@@ -363,7 +383,10 @@ fn test_execution_outcome_agent_response_executed() {
 
 #[test]
 fn test_execution_outcome_agent_response_denied() {
-    let outcome = ExecutionOutcome::Denied { code: "test".into(), reason: "test reason".into() };
+    let outcome = ExecutionOutcome::Denied {
+        code: "test".into(),
+        reason: "test reason".into(),
+    };
     let resp = outcome.agent_response();
     assert!(resp.contains("denied"));
     assert!(resp.contains("test reason"));

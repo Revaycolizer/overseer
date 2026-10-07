@@ -1,8 +1,8 @@
-use regex::Regex;
-use serde_json::json;
 use crate::engine::tools::error::DynamicToolError;
 use crate::engine::tools::input::stringify_tool_input;
 use crate::engine::tools::utils::{clean_text_content, truncate_for_tool};
+use regex::Regex;
+use serde_json::json;
 
 pub async fn native_web_links(args: &serde_json::Value) -> Result<String, DynamicToolError> {
     let mut url = stringify_tool_input(args);

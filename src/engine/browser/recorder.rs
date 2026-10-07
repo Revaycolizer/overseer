@@ -9,7 +9,10 @@ pub struct FrameRecorder {
 impl FrameRecorder {
     pub fn new(frames_dir: PathBuf) -> Self {
         let (broadcast_tx, _) = broadcast::channel(64);
-        Self { frames_dir, broadcast_tx }
+        Self {
+            frames_dir,
+            broadcast_tx,
+        }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Vec<u8>> {

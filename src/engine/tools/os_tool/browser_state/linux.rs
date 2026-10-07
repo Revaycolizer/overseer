@@ -1,6 +1,6 @@
+use crate::engine::tools::error::DynamicToolError;
 use serde_json::json;
 use tokio::process::Command;
-use crate::engine::tools::error::DynamicToolError;
 
 pub async fn linux_browser_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     let output = Command::new("wmctrl")

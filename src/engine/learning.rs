@@ -262,15 +262,34 @@ pub async fn context(db: &Database, conversation: i64, query: &str) -> Result<St
 
 /// Model-provided notes remain unverified and share all user memory controls.
 pub async fn remember_tool_note(db: &Database, conversation: i64, content: &str) -> Result<()> {
-    ensure!(crate::backend::get_setting(db, "learning_paused").await != "true", "Learning is paused");
+    ensure!(
+        crate::backend::get_setting(db, "learning_paused").await != "true",
+        "Learning is paused"
+    );
     use sha2::Digest;
-    let key = format!("note:{}", hex::encode(sha2::Sha256::digest(content.as_bytes())));
-    save(db, "note", &scope(db, conversation).await, &key, content,
-        &format!("conversation:{conversation}:unverified model-provided note")).await
+    let key = format!(
+        "note:{}",
+        hex::encode(sha2::Sha256::digest(content.as_bytes()))
+    );
+    save(
+        db,
+        "note",
+        &scope(db, conversation).await,
+        &key,
+        content,
+        &format!("conversation:{conversation}:unverified model-provided note"),
+    )
+    .await
 }
 
-pub async fn recall_tool_notes(db: &Database, conversation: i64, query: &str) -> Result<Vec<String>> {
-    if crate::backend::get_setting(db, "learning_paused").await == "true" { return Ok(vec![]); }
+pub async fn recall_tool_notes(
+    db: &Database,
+    conversation: i64,
+    query: &str,
+) -> Result<Vec<String>> {
+    if crate::backend::get_setting(db, "learning_paused").await == "true" {
+        return Ok(vec![]);
+    }
     Ok(sqlx::query_scalar("SELECT content FROM learning_memories WHERE kind='note' AND scope=? AND content LIKE ? ORDER BY id DESC LIMIT 8")
         .bind(scope(db, conversation).await).bind(format!("%{query}%"))
         .fetch_all(&db.pool).await?)

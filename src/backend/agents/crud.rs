@@ -8,7 +8,9 @@ pub async fn add_agent(
     domain: &str,
 ) -> anyhow::Result<i64> {
     let id = db.next_id().await;
-    let model = crate::backend::resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
+    let model =
+        crate::backend::resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct")
+            .await;
     sqlx::query(
         "INSERT INTO agents (id, name, description, instructions, model, domain, version, code, response_format)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"

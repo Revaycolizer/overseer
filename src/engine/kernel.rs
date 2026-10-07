@@ -38,8 +38,14 @@ pub fn database_kernel(db: &Database) -> &Kernel {
 fn is_observation_verb(action: &str) -> bool {
     matches!(
         action,
-        "get_state" | "state" | "observe" | "inspect" | "snapshot" | "status"
-            | "list_processes" | "list_windows"
+        "get_state"
+            | "state"
+            | "observe"
+            | "inspect"
+            | "snapshot"
+            | "status"
+            | "list_processes"
+            | "list_windows"
     )
 }
 
@@ -435,8 +441,8 @@ mod bridge_tests {
     async fn bridge_governs_suspend_approve_reject_emergency() {
         let db = crate::db::Database::new_in_memory().await.unwrap();
         // approval_required is the default, but set it explicitly for clarity.
-        let _ =
-            crate::backend::set_setting(&db, "computer_supervision_mode", "approval_required").await;
+        let _ = crate::backend::set_setting(&db, "computer_supervision_mode", "approval_required")
+            .await;
 
         let args = serde_json::json!({"action":"click","x":10,"y":20});
 
@@ -474,7 +480,11 @@ mod bridge_tests {
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
             assert!(!approval_id.is_empty(), "action should have suspended");
-            assert_eq!(count.load(Ordering::SeqCst), 0, "no execution before approval");
+            assert_eq!(
+                count.load(Ordering::SeqCst),
+                0,
+                "no execution before approval"
+            );
             let evs = event_types(&db, run_a).await;
             assert!(evs.contains(&"action_requested".to_string()));
             assert!(evs.contains(&"approval_requested".to_string()));
@@ -527,7 +537,11 @@ mod bridge_tests {
             assert!(reject(&db, &approval_id, "tester"));
             let outcome = handle.await.unwrap();
             assert!(matches!(outcome, ExecutionOutcome::Rejected { .. }));
-            assert_eq!(count_b.load(Ordering::SeqCst), 0, "rejected action never executes");
+            assert_eq!(
+                count_b.load(Ordering::SeqCst),
+                0,
+                "rejected action never executes"
+            );
         }
 
         // ---------- Phase C: emergency stop cancels a pending action ----------
@@ -560,7 +574,11 @@ mod bridge_tests {
             emergency_stop(&db, run_c).await;
             let outcome = handle.await.unwrap();
             assert!(matches!(outcome, ExecutionOutcome::Cancelled { .. }));
-            assert_eq!(count_c.load(Ordering::SeqCst), 0, "emergency-stopped action never executes");
+            assert_eq!(
+                count_c.load(Ordering::SeqCst),
+                0,
+                "emergency-stopped action never executes"
+            );
             let evs = event_types(&db, run_c).await;
             assert!(evs.contains(&"emergency_stop".to_string()));
         }
@@ -571,8 +589,11 @@ mod bridge_tests {
         // full proof.txt acceptance path, in-process and safe.
         let run_d = new_run(&db, "phase-d").await;
         {
-            let tmp = std::env::temp_dir()
-                .join(format!("overseer-kernel-test-{}-{}", std::process::id(), run_d));
+            let tmp = std::env::temp_dir().join(format!(
+                "overseer-kernel-test-{}-{}",
+                std::process::id(),
+                run_d
+            ));
             let proof = tmp.join("proof.txt");
             let _ = std::fs::remove_dir_all(&tmp);
 
@@ -622,7 +643,10 @@ mod bridge_tests {
                 }
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
-            assert!(!approval_id.is_empty(), "filesystem write must require approval");
+            assert!(
+                !approval_id.is_empty(),
+                "filesystem write must require approval"
+            );
             assert!(!proof.exists(), "file must NOT exist before approval");
 
             // The persisted approval is typed as a filesystem write.

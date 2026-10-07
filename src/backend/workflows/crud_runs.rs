@@ -1,5 +1,5 @@
-use crate::db::Database;
 use super::models::{WorkflowRun, WorkflowStepRun};
+use crate::db::Database;
 
 pub async fn get_workflow_runs(
     db: &Database,

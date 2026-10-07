@@ -142,7 +142,10 @@ pub fn group_into_cells(agents: &[AgentInfo]) -> Vec<Vec<AgentInfo>> {
     let mut domain_groups: HashMap<String, Vec<AgentInfo>> = HashMap::new();
     for agent in agents.iter() {
         let category = domain_category(&agent.domain);
-        domain_groups.entry(category).or_default().push(agent.clone());
+        domain_groups
+            .entry(category)
+            .or_default()
+            .push(agent.clone());
     }
 
     let mut cells: Vec<Vec<AgentInfo>> = Vec::new();
@@ -152,10 +155,12 @@ pub fn group_into_cells(agents: &[AgentInfo]) -> Vec<Vec<AgentInfo>> {
             while remaining.len() > 3 {
                 let mut sub_cell = Vec::new();
                 sub_cell.push(remaining.remove(0));
-                let base_tokens: HashSet<String> = tokenise(&sub_cell[0].description).into_iter().collect();
+                let base_tokens: HashSet<String> =
+                    tokenise(&sub_cell[0].description).into_iter().collect();
                 let mut idx = 0;
                 while idx < remaining.len() && sub_cell.len() < 3 {
-                    let t: HashSet<String> = tokenise(&remaining[idx].description).into_iter().collect();
+                    let t: HashSet<String> =
+                        tokenise(&remaining[idx].description).into_iter().collect();
                     if base_tokens.intersection(&t).count() > 1 {
                         sub_cell.push(remaining.remove(idx));
                     } else {
@@ -184,7 +189,8 @@ fn domain_category(domain: &str) -> String {
         "development"
     } else if lower.contains("computer") || lower.contains("desktop") || lower.contains("os") {
         "computer"
-    } else if lower.contains("chat") || lower.contains("conversation") || lower.contains("general") {
+    } else if lower.contains("chat") || lower.contains("conversation") || lower.contains("general")
+    {
         "chat"
     } else if lower.contains("research") || lower.contains("analysis") || lower.contains("data") {
         "research"
@@ -196,15 +202,18 @@ fn domain_category(domain: &str) -> String {
 
 fn tokenise(text: &str) -> Vec<String> {
     const STOP_WORDS: &[&str] = &[
-        "the", "and", "for", "are", "was", "were", "has", "had", "but", "not",
-        "this", "that", "with", "from", "they", "have", "been", "would", "could",
-        "should", "will", "more", "than", "then", "also", "about", "just", "very",
-        "what", "when", "where", "which", "who", "how", "may", "might", "can",
-        "its", "all", "any", "each", "every", "some", "use", "used", "using",
+        "the", "and", "for", "are", "was", "were", "has", "had", "but", "not", "this", "that",
+        "with", "from", "they", "have", "been", "would", "could", "should", "will", "more", "than",
+        "then", "also", "about", "just", "very", "what", "when", "where", "which", "who", "how",
+        "may", "might", "can", "its", "all", "any", "each", "every", "some", "use", "used",
+        "using",
     ];
     let stop: HashSet<&str> = STOP_WORDS.iter().copied().collect();
     text.split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
         .filter(|w| w.len() > 2 && !stop.contains(w.as_str()))
         .collect()
 }
@@ -215,7 +224,9 @@ fn tf_vector(tokens: &[String]) -> HashMap<String, f64> {
         *tf.entry(t.as_str()).or_insert(0) += 1;
     }
     let max_tf = tf.values().copied().max().unwrap_or(1).max(1);
-    tf.iter().map(|(k, v)| (k.to_string(), *v as f64 / max_tf as f64)).collect()
+    tf.iter()
+        .map(|(k, v)| (k.to_string(), *v as f64 / max_tf as f64))
+        .collect()
 }
 
 fn tfidf_vector(
@@ -251,7 +262,11 @@ fn cosine_similarity_map(a: &HashMap<String, f64>, b: &HashMap<String, f64>) -> 
         mag_b += weight_b * weight_b;
     }
     let denom = mag_a.sqrt() * mag_b.sqrt();
-    if denom < 1e-10 { 0.0 } else { dot / denom }
+    if denom < 1e-10 {
+        0.0
+    } else {
+        dot / denom
+    }
 }
 
 #[cfg(test)]
@@ -282,9 +297,24 @@ mod tests {
     #[test]
     fn test_search_returns_relevant_agents() {
         let atlas = make_atlas(vec![
-            make_agent(1, "web_search", "web", "Searches the web for information using search engines"),
-            make_agent(2, "file_tool", "files", "Reads and writes files on the local filesystem"),
-            make_agent(3, "chat_agent", "chat", "General conversation and Q&A assistant"),
+            make_agent(
+                1,
+                "web_search",
+                "web",
+                "Searches the web for information using search engines",
+            ),
+            make_agent(
+                2,
+                "file_tool",
+                "files",
+                "Reads and writes files on the local filesystem",
+            ),
+            make_agent(
+                3,
+                "chat_agent",
+                "chat",
+                "General conversation and Q&A assistant",
+            ),
         ]);
         let results = search_atlas(&atlas, "search the web", 2);
         assert!(!results.is_empty());

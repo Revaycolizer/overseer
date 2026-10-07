@@ -1,12 +1,12 @@
-use axum::{
-    routing::{get, post},
-    extract::{Query, State, Json},
-    Router,
-};
-use std::sync::Arc;
-use serde::Deserialize;
 use super::ServerState;
 use crate::backend::Conversation;
+use axum::{
+    extract::{Json, Query, State},
+    routing::{get, post},
+    Router,
+};
+use serde::Deserialize;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 pub struct LimitQuery {
@@ -31,8 +31,14 @@ pub struct DeleteConvPayload {
 
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
-        .route("/api/conversations", get(get_conversations).post(add_conversation))
-        .route("/api/conversations/update_title", post(update_conversation_title))
+        .route(
+            "/api/conversations",
+            get(get_conversations).post(add_conversation),
+        )
+        .route(
+            "/api/conversations/update_title",
+            post(update_conversation_title),
+        )
         .route("/api/conversations/delete", post(delete_conversation))
         .route("/api/conversations/search", get(search_messages))
 }

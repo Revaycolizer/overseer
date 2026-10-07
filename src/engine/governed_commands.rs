@@ -121,9 +121,10 @@ pub async fn run_governed(db: &Database, conversation_id: i64, cmd: GovernedComm
     .await;
 
     let (status, text) = match &outcome {
-        overseer_kernel::ExecutionOutcome::Executed { output } => {
-            ("completed", format!("✅ Done — {step}.\n\n{}", summarize(output)))
-        }
+        overseer_kernel::ExecutionOutcome::Executed { output } => (
+            "completed",
+            format!("✅ Done — {step}.\n\n{}", summarize(output)),
+        ),
         other => ("failed", other.agent_response()),
     };
 
@@ -168,8 +169,16 @@ mod tests {
 
     #[test]
     fn parses_open_and_screenshot() {
-        assert_eq!(parse_governed("/open firefox"), Some(GovernedCommand::Open { target: "firefox".into() }));
-        assert_eq!(parse_governed("/screenshot"), Some(GovernedCommand::Screenshot));
+        assert_eq!(
+            parse_governed("/open firefox"),
+            Some(GovernedCommand::Open {
+                target: "firefox".into()
+            })
+        );
+        assert_eq!(
+            parse_governed("/screenshot"),
+            Some(GovernedCommand::Screenshot)
+        );
     }
 
     #[test]
@@ -207,7 +216,10 @@ mod tests {
             }
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
-        assert!(!approved_id.is_empty(), "governed write must create a pending approval");
+        assert!(
+            !approved_id.is_empty(),
+            "governed write must create a pending approval"
+        );
         assert!(!path.exists(), "file must not exist before approval");
 
         // Approve -> the staged action executes and writes the file.

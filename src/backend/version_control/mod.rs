@@ -1,7 +1,7 @@
 pub mod publish;
-pub mod rollback;
 pub mod queries;
+pub mod rollback;
 
 pub use publish::*;
-pub use rollback::*;
 pub use queries::*;
+pub use rollback::*;

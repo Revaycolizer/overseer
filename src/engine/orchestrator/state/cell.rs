@@ -31,9 +31,13 @@ impl CellState {
     pub fn to_prompt_string(&self) -> String {
         let mut s = format!("═══ CELL STATE: {} ═══\n", self.cell_id);
         s.push_str("FACTS:\n");
-        for f in &self.facts { s.push_str(&format!("- {}\n", f)); }
+        for f in &self.facts {
+            s.push_str(&format!("- {}\n", f));
+        }
         s.push_str("\nSOURCES:\n");
-        for src in &self.sources { s.push_str(&format!("- {}\n", src)); }
+        for src in &self.sources {
+            s.push_str(&format!("- {}\n", src));
+        }
         s
     }
 }

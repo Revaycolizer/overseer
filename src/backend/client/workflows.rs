@@ -1,4 +1,4 @@
-use crate::backend::{Workflow, WorkflowStep, WorkflowRun, WorkflowStepRun};
+use crate::backend::{Workflow, WorkflowRun, WorkflowStep, WorkflowStepRun};
 
 #[async_trait::async_trait]
 pub trait WorkflowClient {

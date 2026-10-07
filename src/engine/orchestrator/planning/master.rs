@@ -11,7 +11,7 @@ impl MasterPlanner {
         _ollama_client: &ollama::Client,
         model: &str,
         base_instructions: &str,
-        _agents: &[crate::engine::utils::discovery::AgentInfo], 
+        _agents: &[crate::engine::utils::discovery::AgentInfo],
     ) -> Self {
         Self {
             model: model.to_string(),
@@ -30,9 +30,11 @@ impl MasterPlanner {
         let mut registry = String::new();
         registry.push_str("Domain | Purpose | Equipped Tools\n");
         registry.push_str("-------|---------|----------------\n");
-        
+
         for agent in all_agents {
-            if agent.domain == "orchestrator" || agent.domain == "overseer" { continue; }
+            if agent.domain == "orchestrator" || agent.domain == "overseer" {
+                continue;
+            }
             let tools = agent.tools.join(", ");
             registry.push_str(&format!(
                 "{} | {} | [{}]\n",
@@ -98,7 +100,7 @@ Output: [
 
         let final_preamble = self.base_instructions.replace(
             "(THIS SECTION WILL BE DYNAMICALLY INJECTED AT RUNTIME)",
-            &format!("{}\n\n{}", registry, coordination_rules)
+            &format!("{}\n\n{}", registry, coordination_rules),
         );
 
         let agent = AgentBuilder::new(ollama_client.completion_model(&self.model))
@@ -112,12 +114,12 @@ Output: [
             prompt
         };
 
-        let _permit = crate::engine::resilience::ollama_dispatch_throttle().acquire().await;
-        crate::engine::resilience::with_resilience(
-            crate::engine::resilience::ollama(),
-            3,
-            || agent.chat(safe_prompt, history.clone()),
-        )
+        let _permit = crate::engine::resilience::ollama_dispatch_throttle()
+            .acquire()
+            .await;
+        crate::engine::resilience::with_resilience(crate::engine::resilience::ollama(), 3, || {
+            agent.chat(safe_prompt, history.clone())
+        })
         .await
         .unwrap_or_else(|e| format!("[{{\"domain\": \"error\", \"task\": \"{}\"}}]", e))
     }

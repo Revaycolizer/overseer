@@ -6,7 +6,7 @@ pub async fn capture_accessibility_tree() -> Result<String, String> {
     {
         crate::engine::tools::os_tool::accessibility::windows_accessibility_state_json(
             "vision_accessibility",
-            &serde_json::Value::Null
+            &serde_json::Value::Null,
         )
         .await
         .map_err(|e| e.to_string())
@@ -44,9 +44,7 @@ try:
 except Exception as e:
     print(json.dumps({"error": str(e)}))
 "#;
-        let child = Command::new("python3")
-            .args(["-c", py_script])
-            .output();
+        let child = Command::new("python3").args(["-c", py_script]).output();
         match child {
             Ok(output) if output.status.success() => {
                 Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())

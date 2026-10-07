@@ -17,7 +17,7 @@ pub async fn run_unix_command(cmd_str: &str) -> Result<String, DynamicToolError>
             tool: "unix_shell".to_string(),
             details: format!("Command failed: {}", e),
         })?;
-    
+
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
@@ -31,10 +31,14 @@ pub async fn run_unix_command(cmd_str: &str) -> Result<String, DynamicToolError>
 pub async fn simulate_unix_click(x: i32, y: i32) -> Result<String, DynamicToolError> {
     if crate::engine::tools::os_tool::wayland_compat::is_wayland() {
         if Command::new("ydotool").arg("-h").output().is_ok() {
-            let _ = Command::new("ydotool").args(["mousemove", &x.to_string(), &y.to_string()]).output();
+            let _ = Command::new("ydotool")
+                .args(["mousemove", &x.to_string(), &y.to_string()])
+                .output();
             let out = Command::new("ydotool").args(["click", "0xC0"]).output();
             if let Ok(o) = out {
-                if o.status.success() { return Ok("Click simulated via ydotool".to_string()); }
+                if o.status.success() {
+                    return Ok("Click simulated via ydotool".to_string());
+                }
             }
         }
     }

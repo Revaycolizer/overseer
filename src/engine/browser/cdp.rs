@@ -7,13 +7,21 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
 pub struct CdpConnection {
-    ws: Arc<Mutex<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>>,
+    ws: Arc<
+        Mutex<
+            tokio_tungstenite::WebSocketStream<
+                tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+            >,
+        >,
+    >,
 }
 
 impl CdpConnection {
     pub async fn connect(ws_url: &str) -> Result<Self> {
         let (ws, _) = connect_async(ws_url).await?;
-        Ok(Self { ws: Arc::new(Mutex::new(ws)) })
+        Ok(Self {
+            ws: Arc::new(Mutex::new(ws)),
+        })
     }
 
     pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
@@ -67,21 +75,29 @@ pub async fn cdp_call(ws_url: &str, method: &str, params: Value) -> Result<Value
 pub async fn navigate_and_wait(ws_url: &str, url: &str) -> Result<Value> {
     let conn = CdpConnection::connect(ws_url).await?;
     conn.call("Page.enable", serde_json::json!({})).await?;
-    let result = conn.call("Page.navigate", serde_json::json!({"url": url})).await;
-    let _ = conn.call("Page.domContentEventFired", serde_json::json!({})).await;
+    let result = conn
+        .call("Page.navigate", serde_json::json!({"url": url}))
+        .await;
+    let _ = conn
+        .call("Page.domContentEventFired", serde_json::json!({}))
+        .await;
     result
 }
 
 pub async fn block_resources(ws_url: &str) -> Result<()> {
     let conn = CdpConnection::connect(ws_url).await?;
     conn.call("Network.enable", serde_json::json!({})).await?;
-    conn.call("Network.setBlockedURLs", serde_json::json!({
-        "urls": [
-            "*.png", "*.jpg", "*.gif", "*.svg", "*.ico",
-            "*.woff", "*.woff2", "*.ttf", "*.eot",
-            "*.mp4", "*.mp3", "*.webm",
-            "*/analytics/*", "*/tracking/*", "*/ads/*", "*/beacon/*",
-        ]
-    })).await?;
+    conn.call(
+        "Network.setBlockedURLs",
+        serde_json::json!({
+            "urls": [
+                "*.png", "*.jpg", "*.gif", "*.svg", "*.ico",
+                "*.woff", "*.woff2", "*.ttf", "*.eot",
+                "*.mp4", "*.mp3", "*.webm",
+                "*/analytics/*", "*/tracking/*", "*/ads/*", "*/beacon/*",
+            ]
+        }),
+    )
+    .await?;
     Ok(())
 }

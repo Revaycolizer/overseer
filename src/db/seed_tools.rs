@@ -1,7 +1,6 @@
 // src/db/seed_tools.rs — seed_tools() + seed_agent_tools()
 use super::Database;
 
-
 impl Database {
     pub(super) async fn seed_tools(&self) -> anyhow::Result<()> {
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tools")
@@ -12,7 +11,7 @@ impl Database {
             return Ok(());
         }
 
-       // println!("🛠️ Seeding ALL authentic tools from filesystem...");
+        // println!("🛠️ Seeding ALL authentic tools from filesystem...");
         let mut tools_data = Vec::new();
 
         let script_dirs = ["web", "stealth", "desktop"];
@@ -73,8 +72,11 @@ impl Database {
         ];
         for (name, desc) in native_tools {
             tools_data.push((
-                name.to_string(), desc.to_string(), "rust".to_string(),
-                "".to_string(), "// Native Implementation".to_string(),
+                name.to_string(),
+                desc.to_string(),
+                "rust".to_string(),
+                "".to_string(),
+                "// Native Implementation".to_string(),
             ));
         }
 
@@ -106,29 +108,48 @@ impl Database {
             return Ok(());
         }
 
-      //  println!("🔗 Linking agents and tools with comprehensive mappings...");
+        //  println!("🔗 Linking agents and tools with comprehensive mappings...");
         let mut tx = self.pool.begin().await?;
 
         let mappings = vec![
-            ("stealth", "stealth_search"), ("stealth", "stealth_browse"),
-            ("stealth", "http_request"), ("stealth", "web_search"),
-            ("stealth", "web_browse"), ("stealth", "web_extract"),
-            ("stealth", "web_links"), ("chat", "web_search"),
-            ("chat", "stealth_search"), ("web_supervisor", "browser_automation"),
-            ("web_supervisor", "ui_automation"), ("web_supervisor", "web_search"),
-            ("web_supervisor", "web_browse"), ("web_supervisor", "web_extract"),
-            ("web_supervisor", "web_links"), ("orchestrator", "os_tool"),
-            ("orchestrator", "ui_automation"), ("orchestrator", "browser_automation"),
-            ("orchestrator", "app_launcher"), ("orchestrator", "clipboard_read"),
-            ("orchestrator", "clipboard_write"), ("chat", "charting"),
-            ("computer", "os_tool"), ("computer", "vision_analysis"),
-            ("computer", "charting"), ("computer", "app_launcher"),
-            ("computer", "clipboard_read"), ("computer", "clipboard_write"),
-            ("desktop", "app_launcher"), ("desktop", "clipboard_read"),
-            ("desktop", "clipboard_write"), ("office", "document_writer"),
-            ("computer", "document_writer"), ("desktop", "document_writer"),
-            ("computer", "write_file"), ("desktop", "write_file"),
-            ("office", "write_file"), ("text_writer", "write_file"),
+            ("stealth", "stealth_search"),
+            ("stealth", "stealth_browse"),
+            ("stealth", "http_request"),
+            ("stealth", "web_search"),
+            ("stealth", "web_browse"),
+            ("stealth", "web_extract"),
+            ("stealth", "web_links"),
+            ("chat", "web_search"),
+            ("chat", "stealth_search"),
+            ("web_supervisor", "browser_automation"),
+            ("web_supervisor", "ui_automation"),
+            ("web_supervisor", "web_search"),
+            ("web_supervisor", "web_browse"),
+            ("web_supervisor", "web_extract"),
+            ("web_supervisor", "web_links"),
+            ("orchestrator", "os_tool"),
+            ("orchestrator", "ui_automation"),
+            ("orchestrator", "browser_automation"),
+            ("orchestrator", "app_launcher"),
+            ("orchestrator", "clipboard_read"),
+            ("orchestrator", "clipboard_write"),
+            ("chat", "charting"),
+            ("computer", "os_tool"),
+            ("computer", "vision_analysis"),
+            ("computer", "charting"),
+            ("computer", "app_launcher"),
+            ("computer", "clipboard_read"),
+            ("computer", "clipboard_write"),
+            ("desktop", "app_launcher"),
+            ("desktop", "clipboard_read"),
+            ("desktop", "clipboard_write"),
+            ("office", "document_writer"),
+            ("computer", "document_writer"),
+            ("desktop", "document_writer"),
+            ("computer", "write_file"),
+            ("desktop", "write_file"),
+            ("office", "write_file"),
+            ("text_writer", "write_file"),
             ("orchestrator", "write_file"),
         ];
 

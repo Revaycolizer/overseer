@@ -35,18 +35,16 @@ pub async fn native_stealth_search(args: &serde_json::Value) -> Result<String, D
 
     for attempt in 1..=3 {
         match client.get(url.clone()).send().await {
-            Ok(resp) => {
-                match resp.error_for_status() {
-                    Ok(resp_ok) => {
-                        if let Ok(text) = resp_ok.text().await {
-                            html = text;
-                            last_err = None;
-                            break;
-                        }
-                    },
-                    Err(e) => {
-                        last_err = Some(format!("HTTP Error: {}", e));
+            Ok(resp) => match resp.error_for_status() {
+                Ok(resp_ok) => {
+                    if let Ok(text) = resp_ok.text().await {
+                        html = text;
+                        last_err = None;
+                        break;
                     }
+                }
+                Err(e) => {
+                    last_err = Some(format!("HTTP Error: {}", e));
                 }
             },
             Err(e) => {

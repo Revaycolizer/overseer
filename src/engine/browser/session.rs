@@ -1,11 +1,11 @@
-use std::path::PathBuf;
-use std::sync::atomic::AtomicU32;
-use std::sync::Arc;
-use tokio::process::Child;
 use super::action_types::ActionPolicy;
 use super::audit_log::AuditLog;
 use super::cdp::CdpConnection;
 use super::recorder::FrameRecorder;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicU32;
+use std::sync::Arc;
+use tokio::process::Child;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionState {
@@ -34,7 +34,13 @@ pub struct BrowserSession {
 }
 
 impl BrowserSession {
-    pub fn new(id: i64, port: u16, profile_path: PathBuf, process: Option<Child>, cdp_ws_url: String) -> Self {
+    pub fn new(
+        id: i64,
+        port: u16,
+        profile_path: PathBuf,
+        process: Option<Child>,
+        cdp_ws_url: String,
+    ) -> Self {
         Self {
             id,
             port,

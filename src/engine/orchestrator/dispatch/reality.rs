@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
+use std::collections::HashSet;
 
 pub fn enforce_physical_reality(
     res: &mut SupervisorExecutionResult,
@@ -15,19 +15,31 @@ pub fn enforce_physical_reality(
         res.artifacts.push(art.clone());
     }
 
-    let is_action_domain = ["stealth", "web", "office", "computer", "desktop", "code_executor"]
-        .contains(&domain);
+    let is_action_domain = [
+        "stealth",
+        "web",
+        "office",
+        "computer",
+        "desktop",
+        "code_executor",
+    ]
+    .contains(&domain);
 
     // ARCHITECTURE V3.6: GROUNDING RESILIENCE
     // Only fire if the LLM claims "completed" on an action domain without ever
-    // calling a tool AND without producing any real artifacts AND without 
+    // calling a tool AND without producing any real artifacts AND without
     // any existing grounding evidence in the context.
-    let has_grounding = res.evidence.iter().any(|e| e.contains("Evidence") || e.contains("Vision Insights"));
+    let has_grounding = res
+        .evidence
+        .iter()
+        .any(|e| e.contains("Evidence") || e.contains("Vision Insights"));
     let no_tool_no_artifact = !action_tool_executed && last_artifacts.is_empty() && !has_grounding;
 
     if res.status == "completed" && is_action_domain && no_tool_no_artifact {
-        tracing::warn!(?domain, "Physical reality failure — no tool execution, forcing stalled");
+        tracing::warn!(
+            ?domain,
+            "Physical reality failure — no tool execution, forcing stalled"
+        );
         res.status = "stalled".to_string();
     }
 }
-

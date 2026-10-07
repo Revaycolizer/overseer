@@ -30,11 +30,19 @@ impl WorkflowGraph {
         let mut adj: HashMap<i64, Vec<i64>> = self.nodes.iter().map(|n| (n.id, vec![])).collect();
 
         for e in &self.edges {
-            if let Some(deg) = in_degree.get_mut(&e.target_node) { *deg += 1; }
-            if let Some(children) = adj.get_mut(&e.source_node) { children.push(e.target_node); }
+            if let Some(deg) = in_degree.get_mut(&e.target_node) {
+                *deg += 1;
+            }
+            if let Some(children) = adj.get_mut(&e.source_node) {
+                children.push(e.target_node);
+            }
         }
 
-        let mut queue: VecDeque<i64> = in_degree.iter().filter(|(_, &d)| d == 0).map(|(&id, _)| id).collect();
+        let mut queue: VecDeque<i64> = in_degree
+            .iter()
+            .filter(|(_, &d)| d == 0)
+            .map(|(&id, _)| id)
+            .collect();
         let mut sorted = Vec::with_capacity(self.nodes.len());
 
         while let Some(node) = queue.pop_front() {
@@ -43,12 +51,18 @@ impl WorkflowGraph {
                 for &child in children {
                     if let Some(deg) = in_degree.get_mut(&child) {
                         *deg -= 1;
-                        if *deg == 0 { queue.push_back(child); }
+                        if *deg == 0 {
+                            queue.push_back(child);
+                        }
                     }
                 }
             }
         }
 
-        if sorted.len() == self.nodes.len() { Ok(sorted) } else { Err(sorted) }
+        if sorted.len() == self.nodes.len() {
+            Ok(sorted)
+        } else {
+            Err(sorted)
+        }
     }
 }

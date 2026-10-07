@@ -73,4 +73,3 @@ pub async fn delete_message(db: &Database, id: i64) -> anyhow::Result<()> {
         .await?;
     Ok(())
 }
-

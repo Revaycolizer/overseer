@@ -1,8 +1,10 @@
-use serde_json::json;
-use enigo::{Direction, Keyboard};
 use crate::engine::tools::error::DynamicToolError;
-use crate::engine::tools::os_tool::input_helpers::{with_enigo, extract_text_value, extract_key_tokens, key_from_token};
+use crate::engine::tools::os_tool::input_helpers::{
+    extract_key_tokens, extract_text_value, key_from_token, with_enigo,
+};
 use crate::engine::tools::os_tool::uia_interaction::windows_uia_interaction_json;
+use enigo::{Direction, Keyboard};
+use serde_json::json;
 
 pub async fn handle_keyboard_action(
     action: &str,
@@ -11,22 +13,24 @@ pub async fn handle_keyboard_action(
 ) -> Result<String, DynamicToolError> {
     match action {
         "type_text" => {
-            let text = extract_text_value(input).ok_or_else(|| {
-                DynamicToolError::ExecutionFailed {
+            let text =
+                extract_text_value(input).ok_or_else(|| DynamicToolError::ExecutionFailed {
                     tool: "os_tool".to_string(),
                     details: "Type text requires a `text` value.".to_string(),
-                }
-            })?;
+                })?;
             if selector_present {
                 let raw = windows_uia_interaction_json("os_tool", "type_text", input).await?;
-                let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
+                let mut value: serde_json::Value =
+                    serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
                 let method = value.get("method").and_then(|v| v.as_str()).unwrap_or("");
                 if method != "value_pattern" {
                     let mut enigo = with_enigo()?;
-                    enigo.text(&text).map_err(|err| DynamicToolError::ExecutionFailed {
-                        tool: "os_tool".to_string(),
-                        details: format!("Failed to type text after focusing element: {}", err),
-                    })?;
+                    enigo
+                        .text(&text)
+                        .map_err(|err| DynamicToolError::ExecutionFailed {
+                            tool: "os_tool".to_string(),
+                            details: format!("Failed to type text after focusing element: {}", err),
+                        })?;
                     if let Some(object) = value.as_object_mut() {
                         object.insert(
                             "method".to_string(),
@@ -45,10 +49,12 @@ pub async fn handle_keyboard_action(
             }
 
             let mut enigo = with_enigo()?;
-            enigo.text(&text).map_err(|err| DynamicToolError::ExecutionFailed {
-                tool: "os_tool".to_string(),
-                details: format!("Failed to type text: {}", err),
-            })?;
+            enigo
+                .text(&text)
+                .map_err(|err| DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: format!("Failed to type text: {}", err),
+                })?;
             Ok(json!({
                 "action": "type_text",
                 "typed_chars": text.chars().count(),
@@ -59,19 +65,23 @@ pub async fn handle_keyboard_action(
         }
         "press_key" => {
             let mut enigo = with_enigo()?;
-            let key = extract_key_tokens(input).into_iter().next().ok_or_else(|| {
-                DynamicToolError::ExecutionFailed {
+            let key = extract_key_tokens(input)
+                .into_iter()
+                .next()
+                .ok_or_else(|| DynamicToolError::ExecutionFailed {
                     tool: "os_tool".to_string(),
                     details: "Press key requires a `key` value.".to_string(),
+                })?;
+            let resolved =
+                key_from_token(&key).ok_or_else(|| DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: format!("Unsupported key token '{}'.", key),
+                })?;
+            enigo.key(resolved, Direction::Click).map_err(|err| {
+                DynamicToolError::ExecutionFailed {
+                    tool: "os_tool".to_string(),
+                    details: format!("Failed to press key: {}", err),
                 }
-            })?;
-            let resolved = key_from_token(&key).ok_or_else(|| DynamicToolError::ExecutionFailed {
-                tool: "os_tool".to_string(),
-                details: format!("Unsupported key token '{}'.", key),
-            })?;
-            enigo.key(resolved, Direction::Click).map_err(|err| DynamicToolError::ExecutionFailed {
-                tool: "os_tool".to_string(),
-                details: format!("Failed to press key: {}", err),
             })?;
             Ok(json!({
                 "action": "press_key",

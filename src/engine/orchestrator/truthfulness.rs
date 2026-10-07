@@ -13,13 +13,25 @@ use crate::engine::orchestrator::state::EvidenceDag;
 // ---------------------------------------------------------------------------
 
 const COMPLETION_PHRASES: &[&str] = &[
-    "created the file", "created a file", "file has been created",
-    "file was created", "successfully created the file", "saved the file",
-    "wrote the file", "written to the file", "the file is saved",
-    "file has been saved", "the file is now", "generated the file",
-    "created the document", "saved to disk", "executed the command",
-    "ran the command", "command executed successfully",
-    "command completed successfully", "has been written to disk",
+    "created the file",
+    "created a file",
+    "file has been created",
+    "file was created",
+    "successfully created the file",
+    "saved the file",
+    "wrote the file",
+    "written to the file",
+    "the file is saved",
+    "file has been saved",
+    "the file is now",
+    "generated the file",
+    "created the document",
+    "saved to disk",
+    "executed the command",
+    "ran the command",
+    "command executed successfully",
+    "command completed successfully",
+    "has been written to disk",
 ];
 
 /// Does `text` assert a filesystem/command side effect completed?
@@ -28,14 +40,22 @@ pub fn claims_side_effect(text: &str) -> bool {
     if COMPLETION_PHRASES.iter().any(|p| t.contains(p)) {
         return true;
     }
-    let has_verb = t.contains("created") || t.contains("saved")
-        || t.contains("wrote") || t.contains("written");
-    let has_fs_indicator = t.contains("/tmp/") || t.contains("/home/")
-        || t.contains(".txt") || t.contains(".md")
-        || t.contains(".pdf") || t.contains(".docx")
-        || t.contains(".csv") || t.contains(".xlsx")
-        || t.contains("to disk") || t.contains(" file ")
-        || t.ends_with(" file") || t.contains(" file.")
+    let has_verb = t.contains("created")
+        || t.contains("saved")
+        || t.contains("wrote")
+        || t.contains("written");
+    let has_fs_indicator = t.contains("/tmp/")
+        || t.contains("/home/")
+        || t.contains(".txt")
+        || t.contains(".md")
+        || t.contains(".pdf")
+        || t.contains(".docx")
+        || t.contains(".csv")
+        || t.contains(".xlsx")
+        || t.contains("to disk")
+        || t.contains(" file ")
+        || t.ends_with(" file")
+        || t.contains(" file.")
         || t.contains(" file,");
     has_verb && has_fs_indicator
 }
@@ -52,7 +72,10 @@ pub fn enforce_truthful_response(response: &str, executed_action: bool) -> Strin
     if executed_action {
         return response.to_string();
     }
-    if let Ok(mut sr) = serde_json::from_str::<crate::engine::orchestrator::core::response::StructuredResponse>(response) {
+    if let Ok(mut sr) = serde_json::from_str::<
+        crate::engine::orchestrator::core::response::StructuredResponse,
+    >(response)
+    {
         if !sr.messages.is_empty() {
             let mut changed = false;
             for part in sr.messages.iter_mut() {
@@ -102,8 +125,15 @@ pub fn verify_response_semantic(
     }
 
     // Extract the text content from the response
-    let text = if let Ok(sr) = serde_json::from_str::<crate::engine::orchestrator::core::response::StructuredResponse>(&guarded) {
-        sr.messages.iter().map(|m| m.message.as_str()).collect::<Vec<_>>().join(" ")
+    let text = if let Ok(sr) = serde_json::from_str::<
+        crate::engine::orchestrator::core::response::StructuredResponse,
+    >(&guarded)
+    {
+        sr.messages
+            .iter()
+            .map(|m| m.message.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
     } else {
         guarded.clone()
     };
@@ -137,7 +167,10 @@ pub fn verify_response_semantic(
 
     if note.is_empty() {
         guarded
-    } else if let Ok(mut sr) = serde_json::from_str::<crate::engine::orchestrator::core::response::StructuredResponse>(&guarded) {
+    } else if let Ok(mut sr) = serde_json::from_str::<
+        crate::engine::orchestrator::core::response::StructuredResponse,
+    >(&guarded)
+    {
         sr.messages.push(
             crate::engine::orchestrator::core::response::MessagePart {
                 role: "system".to_string(),
@@ -227,11 +260,35 @@ pub fn extract_claims(text: &str) -> Vec<String> {
 
 fn contains_factual_verb(text: &str) -> bool {
     const FACTUAL_VERBS: &[&str] = &[
-        "is", "was", "are", "were", "has", "have", "had", "contains",
-        "uses", "uses", "includes", "provides", "supports", "enables",
-        "produces", "generates", "creates", "performs", "operates",
-        "functions", "consists", "comprises", "measures", "calculates",
-        "represents", "indicates", "shows", "demonstrates", "results",
+        "is",
+        "was",
+        "are",
+        "were",
+        "has",
+        "have",
+        "had",
+        "contains",
+        "uses",
+        "uses",
+        "includes",
+        "provides",
+        "supports",
+        "enables",
+        "produces",
+        "generates",
+        "creates",
+        "performs",
+        "operates",
+        "functions",
+        "consists",
+        "comprises",
+        "measures",
+        "calculates",
+        "represents",
+        "indicates",
+        "shows",
+        "demonstrates",
+        "results",
     ];
     FACTUAL_VERBS.iter().any(|v| text.contains(v))
 }
@@ -276,15 +333,19 @@ pub fn verify_claims_against_dag(claims: &[String], dag: &EvidenceDag) -> Verifi
                         }
                         let intersection = claim_tokens.intersection(&node_tokens).count();
                         let union = claim_tokens.len() + node_tokens.len() - intersection;
-                        let jaccard = if union == 0 { 0.0 } else { intersection as f32 / union as f32 };
+                        let jaccard = if union == 0 {
+                            0.0
+                        } else {
+                            intersection as f32 / union as f32
+                        };
                         Some((node, jaccard))
                     })
                     .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
                 match best_match {
-                    Some((_node, jaccard)) if jaccard > 0.3 => {
-                        ClaimVerdict::Supported { confidence: jaccard }
-                    }
+                    Some((_node, jaccard)) if jaccard > 0.3 => ClaimVerdict::Supported {
+                        confidence: jaccard,
+                    },
                     _ => ClaimVerdict::Unverifiable,
                 }
             }
@@ -297,9 +358,18 @@ pub fn verify_claims_against_dag(claims: &[String], dag: &EvidenceDag) -> Verifi
     }
 
     let total = details.len();
-    let supported = details.iter().filter(|d| matches!(d.verdict, ClaimVerdict::Supported { .. })).count();
-    let refuted = details.iter().filter(|d| matches!(d.verdict, ClaimVerdict::Refuted { .. })).count();
-    let unverifiable = details.iter().filter(|d| matches!(d.verdict, ClaimVerdict::Unverifiable)).count();
+    let supported = details
+        .iter()
+        .filter(|d| matches!(d.verdict, ClaimVerdict::Supported { .. }))
+        .count();
+    let refuted = details
+        .iter()
+        .filter(|d| matches!(d.verdict, ClaimVerdict::Refuted { .. }))
+        .count();
+    let unverifiable = details
+        .iter()
+        .filter(|d| matches!(d.verdict, ClaimVerdict::Unverifiable))
+        .count();
 
     VerificationReport {
         total_claims: total,

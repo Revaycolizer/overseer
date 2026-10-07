@@ -1,6 +1,6 @@
+use crate::engine::tools::error::DynamicToolError;
 use serde_json::json;
 use tokio::process::Command;
-use crate::engine::tools::error::DynamicToolError;
 
 pub async fn capture_linux_screenshot_json(tool_name: &str) -> Result<String, DynamicToolError> {
     let mut temp_path = std::env::temp_dir();
@@ -18,7 +18,9 @@ pub async fn capture_linux_screenshot_json(tool_name: &str) -> Result<String, Dy
 
     let mut captured = false;
     if crate::engine::tools::os_tool::wayland_compat::is_wayland() {
-        if let Ok(_) = crate::engine::tools::os_tool::wayland_compat::capture_wayland_screenshot(&path_str) {
+        if let Ok(_) =
+            crate::engine::tools::os_tool::wayland_compat::capture_wayland_screenshot(&path_str)
+        {
             captured = true;
         }
     }

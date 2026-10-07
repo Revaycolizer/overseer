@@ -7,19 +7,27 @@ pub async fn call_native_builtin_tool(
 ) -> Result<Option<String>, DynamicToolError> {
     let output = match info.name.as_str() {
         "clipboard_read" => Some(crate::engine::tools::clipboard::native_clipboard_read().await?),
-        "clipboard_write" => Some(crate::engine::tools::clipboard::native_clipboard_write(args).await?),
+        "clipboard_write" => {
+            Some(crate::engine::tools::clipboard::native_clipboard_write(args).await?)
+        }
         "http_request" => Some(crate::engine::tools::http::native_http_request(args).await?),
         "web_extract" => Some(crate::engine::tools::web_extract::native_web_extract(args).await?),
         "web_links" => Some(crate::engine::tools::web_links::native_web_links(args).await?),
         "web_browse" => Some(crate::engine::tools::web_browse::native_stealth_browse(args).await?),
-        "stealth_browse" => Some(crate::engine::tools::web_browse::native_stealth_browse(args).await?),
+        "stealth_browse" => {
+            Some(crate::engine::tools::web_browse::native_stealth_browse(args).await?)
+        }
         "web_search" => Some(crate::engine::tools::web_search::native_stealth_search(args).await?),
-        "stealth_search" => Some(crate::engine::tools::web_search::native_stealth_search(args).await?),
+        "stealth_search" => {
+            Some(crate::engine::tools::web_search::native_stealth_search(args).await?)
+        }
         "browser_navigate" => Some(crate::engine::tools::browser::navigate(args).await?),
         "browser_screenshot" => Some(crate::engine::tools::browser::screenshot(args).await?),
         "browser_read" => Some(crate::engine::tools::browser::read_page(args).await?),
         "browser_click" => Some(crate::engine::tools::browser::click_text(args).await?),
-        "app_launcher" => Some(crate::engine::tools::app_launcher::native_app_launcher(args).await?),
+        "app_launcher" => {
+            Some(crate::engine::tools::app_launcher::native_app_launcher(args).await?)
+        }
         "write_file" => Some(crate::engine::tools::write_file::native_write_file(args).await?),
         "shell_exec" => Some(crate::engine::tools::shell_exec::native_shell_exec(args).await?),
         "document_writer" => {
@@ -28,7 +36,7 @@ pub async fn call_native_builtin_tool(
                 Ok(r) => {
                     tracing::debug!("native_document_writer returned");
                     Some(r)
-                },
+                }
                 Err(e) => {
                     tracing::error!(?e, "native_document_writer failed");
                     return Err(DynamicToolError::ExecutionFailed {
@@ -37,22 +45,46 @@ pub async fn call_native_builtin_tool(
                     });
                 }
             }
-        },
-        "export_asset" => Some(crate::engine::tools::export_asset::native_export_asset(args).await?),
+        }
+        "export_asset" => {
+            Some(crate::engine::tools::export_asset::native_export_asset(args).await?)
+        }
         "os_tool" => Some(crate::engine::tools::os_tool::native_os_tool(args).await?),
-        "vision_analysis" => Some(crate::engine::tools::vision::native_vision_analysis(args).await?),
+        "vision_analysis" => {
+            Some(crate::engine::tools::vision::native_vision_analysis(args).await?)
+        }
         "charting" => {
             let input_str = if let Some(input) = args.get("input") {
-                if input.is_string() { input.as_str().unwrap_or("").to_string() } else { input.to_string() }
-            } else { args.to_string() }.trim().to_string();
-            let req: crate::engine::tools::charting::ChartRequest = serde_json::from_str(&input_str)
-                .or_else(|_| { let val: serde_json::Value = serde_json::from_str(&input_str)?; serde_json::from_value(val) })
-                .map_err(|e| DynamicToolError::ExecutionFailed { tool: "charting".to_string(), details: e.to_string() })?;
+                if input.is_string() {
+                    input.as_str().unwrap_or("").to_string()
+                } else {
+                    input.to_string()
+                }
+            } else {
+                args.to_string()
+            }
+            .trim()
+            .to_string();
+            let req: crate::engine::tools::charting::ChartRequest =
+                serde_json::from_str(&input_str)
+                    .or_else(|_| {
+                        let val: serde_json::Value = serde_json::from_str(&input_str)?;
+                        serde_json::from_value(val)
+                    })
+                    .map_err(|e| DynamicToolError::ExecutionFailed {
+                        tool: "charting".to_string(),
+                        details: e.to_string(),
+                    })?;
             match crate::engine::tools::charting::generate_chart_svg(req.clone()) {
                 Ok(_) => Some(serde_json::to_string(&req).unwrap_or(input_str)),
-                Err(e) => return Err(DynamicToolError::ExecutionFailed { tool: "charting".to_string(), details: e }),
+                Err(e) => {
+                    return Err(DynamicToolError::ExecutionFailed {
+                        tool: "charting".to_string(),
+                        details: e,
+                    })
+                }
             }
-        },
+        }
         _ => None,
     };
 

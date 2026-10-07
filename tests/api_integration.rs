@@ -34,7 +34,12 @@ impl TestApp {
         ));
 
         let (wake_tx, _) = tokio::sync::broadcast::channel(16);
-        let state = Arc::new(ServerState { db, agent_system, browser_pool, wake_tx });
+        let state = Arc::new(ServerState {
+            db,
+            agent_system,
+            browser_pool,
+            wake_tx,
+        });
 
         let app: Router = Router::new()
             .merge(overseer::server::conversations::router())
@@ -61,20 +66,32 @@ impl TestApp {
 
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
-        Self { client: reqwest::Client::new(), base_url }
+        Self {
+            client: reqwest::Client::new(),
+            base_url,
+        }
     }
 
     async fn get(&self, path: &str) -> (u16, Option<Value>) {
-        let r = self.client.get(&format!("{}{}", self.base_url, path))
-            .send().await.unwrap();
+        let r = self
+            .client
+            .get(&format!("{}{}", self.base_url, path))
+            .send()
+            .await
+            .unwrap();
         let status = r.status().as_u16();
         let body = r.json().await.ok();
         (status, body)
     }
 
     async fn post(&self, path: &str, body: &Value) -> (u16, Option<Value>) {
-        let r = self.client.post(&format!("{}{}", self.base_url, path))
-            .json(body).send().await.unwrap();
+        let r = self
+            .client
+            .post(&format!("{}{}", self.base_url, path))
+            .json(body)
+            .send()
+            .await
+            .unwrap();
         let status = r.status().as_u16();
         let body = r.json().await.ok();
         (status, body)
@@ -112,7 +129,11 @@ async fn test_health() {
 async fn test_settings() {
     let app = TestApp::new().await;
 
-    app.post_ok("/api/settings", &serde_json::json!({"key": "k", "value": "v"})).await;
+    app.post_ok(
+        "/api/settings",
+        &serde_json::json!({"key": "k", "value": "v"}),
+    )
+    .await;
     let body = app.get_ok("/api/settings?key=k").await;
     assert_eq!(body, "v");
 
@@ -137,7 +158,9 @@ async fn test_conversations_crud() {
     let app = TestApp::new().await;
 
     // Create
-    let body = app.post_ok("/api/conversations", &serde_json::json!({"title": "Test"})).await;
+    let body = app
+        .post_ok("/api/conversations", &serde_json::json!({"title": "Test"}))
+        .await;
     let conv_id: i64 = serde_json::from_value(body).unwrap();
 
     // List — should contain ours
@@ -147,10 +170,18 @@ async fn test_conversations_crud() {
     assert_eq!(convs[0]["title"], "Test");
 
     // Update title
-    app.post_ok("/api/conversations/update_title", &serde_json::json!({"id": conv_id, "title": "Updated"})).await;
+    app.post_ok(
+        "/api/conversations/update_title",
+        &serde_json::json!({"id": conv_id, "title": "Updated"}),
+    )
+    .await;
 
     // Delete
-    app.post_ok("/api/conversations/delete", &serde_json::json!({"id": conv_id})).await;
+    app.post_ok(
+        "/api/conversations/delete",
+        &serde_json::json!({"id": conv_id}),
+    )
+    .await;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,11 +192,18 @@ async fn test_conversations_crud() {
 async fn test_messages_crud() {
     let app = TestApp::new().await;
 
-    let body = app.post_ok("/api/conversations", &serde_json::json!({"title": "MsgTest"})).await;
+    let body = app
+        .post_ok(
+            "/api/conversations",
+            &serde_json::json!({"title": "MsgTest"}),
+        )
+        .await;
     let conv_id: i64 = serde_json::from_value(body).unwrap();
 
     // List — empty
-    let list = app.get_ok(&format!("/api/messages?conversation_id={conv_id}")).await;
+    let list = app
+        .get_ok(&format!("/api/messages?conversation_id={conv_id}"))
+        .await;
     assert!(list.as_array().unwrap().is_empty());
 
     // Send
@@ -175,14 +213,17 @@ async fn test_messages_crud() {
     let msg_id: i64 = serde_json::from_value(body).unwrap();
 
     // List — one message
-    let list = app.get_ok(&format!("/api/messages?conversation_id={conv_id}")).await;
+    let list = app
+        .get_ok(&format!("/api/messages?conversation_id={conv_id}"))
+        .await;
     let msgs = list.as_array().unwrap();
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0]["role"], "user");
     assert_eq!(msgs[0]["content"], "Hello!");
 
     // Delete
-    app.post_ok("/api/messages/delete", &serde_json::json!({"id": msg_id})).await;
+    app.post_ok("/api/messages/delete", &serde_json::json!({"id": msg_id}))
+        .await;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,9 +233,14 @@ async fn test_messages_crud() {
 #[tokio::test]
 async fn test_agents_create() {
     let app = TestApp::new().await;
-    let body = app.post_ok("/api/agents", &serde_json::json!({
-        "name": "test-agent", "description": "Test", "domain": "testing",
-    })).await;
+    let body = app
+        .post_ok(
+            "/api/agents",
+            &serde_json::json!({
+                "name": "test-agent", "description": "Test", "domain": "testing",
+            }),
+        )
+        .await;
     let id: i64 = serde_json::from_value(body).unwrap();
     assert!(id > 0);
 }
@@ -203,13 +249,20 @@ async fn test_agents_create() {
 async fn test_agents_list() {
     let app = TestApp::new().await;
     // Create an agent (in-memory DB has seeded agents too)
-    app.post_ok("/api/agents", &serde_json::json!({
-        "name": "unique-agent", "description": "Test", "domain": "uniq",
-    })).await;
+    app.post_ok(
+        "/api/agents",
+        &serde_json::json!({
+            "name": "unique-agent", "description": "Test", "domain": "uniq",
+        }),
+    )
+    .await;
     let list = app.get_ok("/api/agents").await;
     let agents = list.as_array().unwrap();
     assert!(!agents.is_empty(), "Should have at least our created agent");
-    assert!(agents.iter().any(|a| a["name"] == "unique-agent"), "Our agent should be in the list");
+    assert!(
+        agents.iter().any(|a| a["name"] == "unique-agent"),
+        "Our agent should be in the list"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -219,9 +272,14 @@ async fn test_agents_list() {
 #[tokio::test]
 async fn test_tools_create() {
     let app = TestApp::new().await;
-    let body = app.post_ok("/api/tools", &serde_json::json!({
-        "name": "test-tool", "description": "Test", "language": "python",
-    })).await;
+    let body = app
+        .post_ok(
+            "/api/tools",
+            &serde_json::json!({
+                "name": "test-tool", "description": "Test", "language": "python",
+            }),
+        )
+        .await;
     let id: i64 = serde_json::from_value(body).unwrap();
     assert!(id > 0);
 }
@@ -230,13 +288,20 @@ async fn test_tools_create() {
 async fn test_tools_list() {
     let app = TestApp::new().await;
     // Create a tool (in-memory DB has seeded tools too)
-    app.post_ok("/api/tools", &serde_json::json!({
-        "name": "unique-tool", "description": "Test", "language": "rust",
-    })).await;
+    app.post_ok(
+        "/api/tools",
+        &serde_json::json!({
+            "name": "unique-tool", "description": "Test", "language": "rust",
+        }),
+    )
+    .await;
     let list = app.get_ok("/api/tools").await;
     let tools = list.as_array().unwrap();
     assert!(!tools.is_empty(), "Should have at least our created tool");
-    assert!(tools.iter().any(|t| t["name"] == "unique-tool"), "Our tool should be in the list");
+    assert!(
+        tools.iter().any(|t| t["name"] == "unique-tool"),
+        "Our tool should be in the list"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -251,13 +316,22 @@ async fn test_supervisors_crud() {
     let _ = app.get_ok("/api/supervisors").await;
 
     // Create
-    let body = app.post_ok("/api/supervisors", &serde_json::json!({
-        "name": "Test Sup", "description": "Supervises", "domain": "testing",
-    })).await;
+    let body = app
+        .post_ok(
+            "/api/supervisors",
+            &serde_json::json!({
+                "name": "Test Sup", "description": "Supervises", "domain": "testing",
+            }),
+        )
+        .await;
     let sup_id: i64 = serde_json::from_value(body).unwrap();
 
     // Delete
-    app.post_ok("/api/supervisors/delete", &serde_json::json!({"id": sup_id})).await;
+    app.post_ok(
+        "/api/supervisors/delete",
+        &serde_json::json!({"id": sup_id}),
+    )
+    .await;
 }
 
 // ---------------------------------------------------------------------------
@@ -268,14 +342,17 @@ async fn test_supervisors_crud() {
 async fn test_workflows_crud() {
     let app = TestApp::new().await;
 
-    let body = app.post_ok("/api/workflows", &serde_json::json!({"name": "Test WF"})).await;
+    let body = app
+        .post_ok("/api/workflows", &serde_json::json!({"name": "Test WF"}))
+        .await;
     let wf_id: i64 = serde_json::from_value(body).unwrap();
 
     // Get steps (empty)
     let steps = app.get_ok(&format!("/api/workflows/{wf_id}/steps")).await;
     assert!(steps.as_array().unwrap().is_empty());
 
-    app.post_ok("/api/workflows/delete", &serde_json::json!({"id": wf_id})).await;
+    app.post_ok("/api/workflows/delete", &serde_json::json!({"id": wf_id}))
+        .await;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,11 +363,15 @@ async fn test_workflows_crud() {
 async fn test_work_items() {
     let app = TestApp::new().await;
 
-    let body = app.post_ok("/api/conversations", &serde_json::json!({"title": "WI"})).await;
+    let body = app
+        .post_ok("/api/conversations", &serde_json::json!({"title": "WI"}))
+        .await;
     let conv_id: i64 = serde_json::from_value(body).unwrap();
 
     // List — empty
-    let list = app.get_ok(&format!("/api/work_items?conversation_id={conv_id}")).await;
+    let list = app
+        .get_ok(&format!("/api/work_items?conversation_id={conv_id}"))
+        .await;
     assert!(list.as_array().unwrap().is_empty());
 
     // Create
@@ -309,9 +390,14 @@ async fn test_work_items() {
 async fn test_planners() {
     let app = TestApp::new().await;
 
-    let body = app.post_ok("/api/planners", &serde_json::json!({
-        "name": "test-pln", "instructions": "Do", "model": "qwen2.5:7b",
-    })).await;
+    let body = app
+        .post_ok(
+            "/api/planners",
+            &serde_json::json!({
+                "name": "test-pln", "instructions": "Do", "model": "qwen2.5:7b",
+            }),
+        )
+        .await;
     let id: i64 = serde_json::from_value(body).unwrap();
     assert!(id > 0);
 }
@@ -323,9 +409,14 @@ async fn test_planners() {
 #[tokio::test]
 async fn test_auth_register() {
     let app = TestApp::new().await;
-    let body = app.post_ok("/v1/auth/register", &serde_json::json!({
-        "username": "user1", "display_name": "User 1", "password": "pass",
-    })).await;
+    let body = app
+        .post_ok(
+            "/v1/auth/register",
+            &serde_json::json!({
+                "username": "user1", "display_name": "User 1", "password": "pass",
+            }),
+        )
+        .await;
     assert!(body["token"].is_string());
     assert_eq!(body["user"]["username"], "user1");
 }
@@ -334,13 +425,22 @@ async fn test_auth_register() {
 async fn test_auth_login() {
     let app = TestApp::new().await;
 
-    app.post_ok("/v1/auth/register", &serde_json::json!({
-        "username": "user2", "display_name": "User 2", "password": "pass",
-    })).await;
+    app.post_ok(
+        "/v1/auth/register",
+        &serde_json::json!({
+            "username": "user2", "display_name": "User 2", "password": "pass",
+        }),
+    )
+    .await;
 
-    let body = app.post_ok("/v1/auth/login", &serde_json::json!({
-        "username": "user2", "password": "pass",
-    })).await;
+    let body = app
+        .post_ok(
+            "/v1/auth/login",
+            &serde_json::json!({
+                "username": "user2", "password": "pass",
+            }),
+        )
+        .await;
     assert!(body["token"].is_string());
     assert_eq!(body["user"]["username"], "user2");
 }
@@ -349,14 +449,23 @@ async fn test_auth_login() {
 async fn test_auth_me() {
     let app = TestApp::new().await;
 
-    let body = app.post_ok("/v1/auth/register", &serde_json::json!({
-        "username": "meuser", "display_name": "Me", "password": "pass",
-    })).await;
+    let body = app
+        .post_ok(
+            "/v1/auth/register",
+            &serde_json::json!({
+                "username": "meuser", "display_name": "Me", "password": "pass",
+            }),
+        )
+        .await;
     let token = body["token"].as_str().unwrap().to_string();
 
-    let r = app.client.get(&format!("{}/v1/auth/me", app.base_url))
+    let r = app
+        .client
+        .get(&format!("{}/v1/auth/me", app.base_url))
         .header("Authorization", format!("Bearer {token}"))
-        .send().await.unwrap();
+        .send()
+        .await
+        .unwrap();
     assert_eq!(r.status().as_u16(), 200);
     let me: Value = r.json().await.unwrap();
     assert_eq!(me["username"], "meuser");
@@ -374,7 +483,8 @@ async fn test_registry() {
     // Registry status returns info — at minimum it should be an object
     assert!(body.is_object());
 
-    app.post_ok("/api/registry/refresh", &serde_json::json!({})).await;
+    app.post_ok("/api/registry/refresh", &serde_json::json!({}))
+        .await;
 }
 
 // ---------------------------------------------------------------------------
@@ -395,21 +505,42 @@ async fn desktop_socket_creates_exact_id_and_handles_memory_without_model() {
     let app = TestApp::new().await;
     let url = app.base_url.replace("http://", "ws://") + "/api/ws/chat";
     let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
-    ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::json!({
-        "conversation_id":"0", "message":"/memory remember reply_style=concise"
-    }).to_string())).await.unwrap();
-    let session = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next()).await.unwrap().unwrap().unwrap();
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(
+        serde_json::json!({
+            "conversation_id":"0", "message":"/memory remember reply_style=concise"
+        })
+        .to_string(),
+    ))
+    .await
+    .unwrap();
+    let session = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
     let frame: Value = serde_json::from_str(session.to_text().unwrap()).unwrap();
     assert_eq!(frame["type"], "session");
     let id = frame["conversation_id"].as_str().unwrap();
     assert!(id.parse::<i64>().unwrap() > 9_007_199_254_740_991);
-    let done = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next()).await.unwrap().unwrap().unwrap();
+    let done = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
     let done: Value = serde_json::from_str(done.to_text().unwrap()).unwrap();
     assert_eq!(done["type"], "done");
-    assert!(done["response"].as_str().unwrap().contains("Remembered preference"));
-    ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::json!({
-        "conversation_id":id, "message":"/memory list"
-    }).to_string())).await.unwrap();
+    assert!(done["response"]
+        .as_str()
+        .unwrap()
+        .contains("Remembered preference"));
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(
+        serde_json::json!({
+            "conversation_id":id, "message":"/memory list"
+        })
+        .to_string(),
+    ))
+    .await
+    .unwrap();
     let session = ws.next().await.unwrap().unwrap();
     let frame: Value = serde_json::from_str(session.to_text().unwrap()).unwrap();
     assert_eq!(frame["conversation_id"], id);
@@ -420,13 +551,28 @@ async fn desktop_socket_creates_exact_id_and_handles_memory_without_model() {
 #[tokio::test]
 async fn rejects_cross_site_requests_and_routes_credential_ids() {
     let app = TestApp::new().await;
-    let denied = app.client.post(format!("{}/api/conversations", app.base_url))
-        .header("Origin", "https://evil.example").json(&serde_json::json!({"title":"untrusted"}))
-        .send().await.unwrap();
+    let denied = app
+        .client
+        .post(format!("{}/api/conversations", app.base_url))
+        .header("Origin", "https://evil.example")
+        .json(&serde_json::json!({"title":"untrusted"}))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(denied.status(), reqwest::StatusCode::FORBIDDEN);
-    let missing = app.client.delete(format!("{}/v1/credentials/123", app.base_url)).send().await.unwrap();
+    let missing = app
+        .client
+        .delete(format!("{}/v1/credentials/123", app.base_url))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(missing.status(), reqwest::StatusCode::NOT_FOUND);
-    let missing = app.client.patch(format!("{}/v1/credentials/123", app.base_url))
-        .json(&serde_json::json!({"name":"missing"})).send().await.unwrap();
+    let missing = app
+        .client
+        .patch(format!("{}/v1/credentials/123", app.base_url))
+        .json(&serde_json::json!({"name":"missing"}))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(missing.status(), reqwest::StatusCode::NOT_FOUND);
 }

@@ -4,7 +4,10 @@ impl App {
     pub async fn refresh_conversations(&mut self) -> anyhow::Result<()> {
         self.conversations = self.client.get_conversations(100).await?;
         if self.selected_conv_id.is_some()
-            && !self.conversations.iter().any(|c| Some(c.id) == self.selected_conv_id)
+            && !self
+                .conversations
+                .iter()
+                .any(|c| Some(c.id) == self.selected_conv_id)
         {
             self.selected_conv_id = self.conversations.first().map(|c| c.id);
         }
@@ -25,7 +28,10 @@ impl App {
     pub async fn refresh_agents(&mut self) -> anyhow::Result<()> {
         self.agents = self.client.get_all_agents().await?;
         if self.selected_agent_id.is_some()
-            && !self.agents.iter().any(|a| Some(a.id) == self.selected_agent_id)
+            && !self
+                .agents
+                .iter()
+                .any(|a| Some(a.id) == self.selected_agent_id)
         {
             self.selected_agent_id = self.agents.first().map(|a| a.id);
         }
@@ -38,7 +44,10 @@ impl App {
     pub async fn refresh_supervisors(&mut self) -> anyhow::Result<()> {
         self.supervisors = self.client.get_supervisors().await?;
         if self.selected_supervisor_id.is_some()
-            && !self.supervisors.iter().any(|s| Some(s.id) == self.selected_supervisor_id)
+            && !self
+                .supervisors
+                .iter()
+                .any(|s| Some(s.id) == self.selected_supervisor_id)
         {
             self.selected_supervisor_id = self.supervisors.first().map(|s| s.id);
         }
@@ -51,7 +60,10 @@ impl App {
     pub async fn refresh_tools(&mut self) -> anyhow::Result<()> {
         self.tools = self.client.get_tools().await?;
         if self.selected_tool_id.is_some()
-            && !self.tools.iter().any(|t| Some(t.id) == self.selected_tool_id)
+            && !self
+                .tools
+                .iter()
+                .any(|t| Some(t.id) == self.selected_tool_id)
         {
             self.selected_tool_id = self.tools.first().map(|t| t.id);
         }
@@ -68,7 +80,10 @@ impl App {
             Err(_) => { /* keep existing list */ }
         }
         if self.selected_workflow_id.is_some()
-            && !self.workflows.iter().any(|w| Some(w.id) == self.selected_workflow_id)
+            && !self
+                .workflows
+                .iter()
+                .any(|w| Some(w.id) == self.selected_workflow_id)
         {
             self.selected_workflow_id = self.workflows.first().map(|w| w.id);
         }

@@ -35,11 +35,14 @@ pub async fn get_computer_supervision_state(db: &Database) -> ComputerSupervisio
         "No supervised computer session is active.",
     )
     .await;
-    let allowlist =
-        parse_allowlist(&super::super::get_setting_or(db, "computer_supervision_allowlist", "").await);
-    let max_actions = super::super::get_setting_i64(db, "computer_supervision_max_actions", 25).await;
+    let allowlist = parse_allowlist(
+        &super::super::get_setting_or(db, "computer_supervision_allowlist", "").await,
+    );
+    let max_actions =
+        super::super::get_setting_i64(db, "computer_supervision_max_actions", 25).await;
     let action_count = super::super::get_setting_i64(db, "computer_session_action_count", 0).await;
-    let timeout_ms = super::super::get_setting_i64(db, "computer_supervision_session_timeout_ms", 600_000).await;
+    let timeout_ms =
+        super::super::get_setting_i64(db, "computer_supervision_session_timeout_ms", 600_000).await;
     let approval_state = super::super::get_setting_or(db, "computer_approval_state", "idle").await;
     let pending_tool = super::super::get_setting_or(db, "computer_pending_tool", "").await;
     let pending_action = super::super::get_setting_or(db, "computer_pending_action", "").await;

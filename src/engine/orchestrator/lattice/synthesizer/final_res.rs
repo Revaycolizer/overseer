@@ -1,10 +1,10 @@
 use crate::db::Database;
 use crate::engine::orchestrator::core::response::{MessagePart, StructuredResponse};
 use crate::engine::orchestrator::dispatch::json_utils::repair_json_literals;
-use rig::providers::ollama::{self};
-use rig::client::CompletionClient;
 use rig::agent::AgentBuilder;
+use rig::client::CompletionClient;
 use rig::completion::Chat;
+use rig::providers::ollama::{self};
 use serde_json::Value;
 
 pub async fn synthesize_final_response(
@@ -16,15 +16,24 @@ pub async fn synthesize_final_response(
     query: &str,
 ) {
     let (instructions, model_name) = match sqlx::query(
-        "SELECT instructions, model FROM agents WHERE domain = 'synthesizer' LIMIT 1"
+        "SELECT instructions, model FROM agents WHERE domain = 'synthesizer' LIMIT 1",
     )
-    .fetch_optional(&db.pool).await {
+    .fetch_optional(&db.pool)
+    .await
+    {
         Ok(Some(row)) => {
             use sqlx::Row;
-            (row.get::<Option<String>, _>("instructions").unwrap_or_default(),
-             row.get::<Option<String>, _>("model").unwrap_or_else(|| "qwen2.5:7b-instruct".to_string()))
+            (
+                row.get::<Option<String>, _>("instructions")
+                    .unwrap_or_default(),
+                row.get::<Option<String>, _>("model")
+                    .unwrap_or_else(|| "qwen2.5:7b-instruct".to_string()),
+            )
         }
-        _ => ("Professional synthesizer.".to_string(), "qwen2.5:7b-instruct".to_string())
+        _ => (
+            "Professional synthesizer.".to_string(),
+            "qwen2.5:7b-instruct".to_string(),
+        ),
     };
 
     let prompt = format!(
@@ -48,36 +57,44 @@ pub async fn synthesize_final_response(
     );
 
     let agent = AgentBuilder::new(ollama_client.completion_model(&model_name))
-        .preamble(&instructions).build();
+        .preamble(&instructions)
+        .build();
 
     if let Ok(res_text) = agent.chat(prompt, history).await {
         if let Some(v) = extract_json_from_llm_output(&res_text) {
-           // println!("✅ [Synthesizer] JSON parsed successfully, applying UI governance.");
+            // println!("✅ [Synthesizer] JSON parsed successfully, applying UI governance.");
             apply_synthesis(response, &v);
         } else {
             //println!("⚠️ [Synthesizer] JSON parse FAILED on LLM output, response passes through unmodified. Raw: {:.200}", res_text);
         }
     } else {
-       // println!("❌ [Synthesizer] LLM call failed, response passes through unmodified.");
+        // println!("❌ [Synthesizer] LLM call failed, response passes through unmodified.");
     }
-
 }
 
 fn extract_json_from_llm_output(raw: &str) -> Option<Value> {
     // 1. Direct parse (ideal case)
-    if let Ok(v) = serde_json::from_str::<Value>(raw.trim()) { return Some(v); }
+    if let Ok(v) = serde_json::from_str::<Value>(raw.trim()) {
+        return Some(v);
+    }
     // 2. Strip markdown code fences: ```json ... ``` or ``` ... ```
-    let stripped = raw.trim()
-        .strip_prefix("```json").or_else(|| raw.trim().strip_prefix("```"))
+    let stripped = raw
+        .trim()
+        .strip_prefix("```json")
+        .or_else(|| raw.trim().strip_prefix("```"))
         .and_then(|s| s.trim().strip_suffix("```"))
         .unwrap_or(raw.trim());
     let repaired = repair_json_literals(stripped.trim());
-    if let Ok(v) = serde_json::from_str::<Value>(&repaired) { return Some(v); }
+    if let Ok(v) = serde_json::from_str::<Value>(&repaired) {
+        return Some(v);
+    }
     // 3. Extract first JSON object from mixed content
     if let Some(start) = repaired.find('{') {
         if let Some(end) = repaired.rfind('}') {
             let slice = &repaired[start..=end];
-            if let Ok(v) = serde_json::from_str::<Value>(slice) { return Some(v); }
+            if let Ok(v) = serde_json::from_str::<Value>(slice) {
+                return Some(v);
+            }
         }
     }
     None
@@ -86,10 +103,16 @@ fn extract_json_from_llm_output(raw: &str) -> Option<Value> {
 fn apply_synthesis(response: &mut StructuredResponse, v: &Value) {
     if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
         response.messages.clear();
-        response.messages.push(MessagePart { role: "assistant".to_string(), message: msg.to_string() });
+        response.messages.push(MessagePart {
+            role: "assistant".to_string(),
+            message: msg.to_string(),
+        });
     }
-    if v.get("keep_sources").and_then(|k| k.as_bool()) == Some(false) { response.sources.clear(); }
+    if v.get("keep_sources").and_then(|k| k.as_bool()) == Some(false) {
+        response.sources.clear();
+    }
     if v.get("keep_attachments").and_then(|k| k.as_bool()) == Some(false) {
-        response.attachments.clear(); response.artifacts.clear();
+        response.attachments.clear();
+        response.artifacts.clear();
     }
 }

@@ -1,26 +1,45 @@
+use super::ui::{ACCENT, MUTED, SURFACE, TEXT};
+use crate::backend::Message;
+use crate::engine::orchestrator::utils::json_strip::strip_embedded_json;
+use crate::engine::orchestrator::{ChartPart, StructuredResponse, SupervisorExecutionResult};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
 };
-use crate::backend::Message;
-use super::ui::{ACCENT, TEXT, MUTED, SURFACE};
-use crate::engine::orchestrator::{StructuredResponse, SupervisorExecutionResult, ChartPart};
-use crate::engine::orchestrator::utils::json_strip::strip_embedded_json;
 
 pub fn format_message(m: &Message) -> Vec<Line<'static>> {
     if m.role == "assistant" && m.content.starts_with("Saved memor") {
-        return m.content.lines().map(|s| Line::from(Span::styled(s.to_string(), Style::default().fg(TEXT)))).collect();
+        return m
+            .content
+            .lines()
+            .map(|s| Line::from(Span::styled(s.to_string(), Style::default().fg(TEXT))))
+            .collect();
     }
     let (role_label, _role_style) = if m.role == "user" {
-        ("You", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))
+        (
+            "You",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        )
     } else {
-        ("Overseer", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))
+        (
+            "Overseer",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        )
     };
 
     if m.role == "user" {
         return vec![
-            Line::from(Span::styled(format!(" {} ", role_label), Style::default().bg(SURFACE).fg(TEXT).add_modifier(Modifier::BOLD))),
-            Line::from(Span::styled(format!(" {}", strip_embedded_json(&m.content)), Style::default().fg(TEXT))),
+            Line::from(Span::styled(
+                format!(" {} ", role_label),
+                Style::default()
+                    .bg(SURFACE)
+                    .fg(TEXT)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                format!(" {}", strip_embedded_json(&m.content)),
+                Style::default().fg(TEXT),
+            )),
             Line::from(""),
         ];
     }
@@ -28,12 +47,19 @@ pub fn format_message(m: &Message) -> Vec<Line<'static>> {
     let mut structured: Option<StructuredResponse> = serde_json::from_str(&m.content).ok();
     if structured.is_none() {
         if let Ok(res) = serde_json::from_str::<SupervisorExecutionResult>(&m.content) {
-            structured = Some(crate::engine::orchestrator::utils::formatter::format_supervisor_result(&res));
+            structured =
+                Some(crate::engine::orchestrator::utils::formatter::format_supervisor_result(&res));
         }
     }
 
     if let Some(res) = structured {
-        let mut lines = vec![Line::from(Span::styled(" Overseer ", Style::default().bg(SURFACE).fg(TEXT).add_modifier(Modifier::BOLD)))];
+        let mut lines = vec![Line::from(Span::styled(
+            " Overseer ",
+            Style::default()
+                .bg(SURFACE)
+                .fg(TEXT)
+                .add_modifier(Modifier::BOLD),
+        ))];
         for sub_msg in res.messages {
             lines.push(Line::from(Span::styled(
                 format!(" {}", strip_embedded_json(&sub_msg.message)),
@@ -45,15 +71,27 @@ pub fn format_message(m: &Message) -> Vec<Line<'static>> {
         }
         if !res.artifacts.is_empty() {
             lines.push(Line::from(vec![
-                Span::styled("[ARTIFACTS] ", Style::default().fg(MUTED).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "[ARTIFACTS] ",
+                    Style::default().fg(MUTED).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(res.artifacts.join(", "), Style::default().fg(MUTED)),
             ]));
         }
         lines
     } else {
         vec![
-            Line::from(Span::styled(" Overseer ", Style::default().bg(SURFACE).fg(TEXT).add_modifier(Modifier::BOLD))),
-            Line::from(Span::styled(format!(" {}", strip_embedded_json(&m.content)), Style::default().fg(TEXT))),
+            Line::from(Span::styled(
+                " Overseer ",
+                Style::default()
+                    .bg(SURFACE)
+                    .fg(TEXT)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                format!(" {}", strip_embedded_json(&m.content)),
+                Style::default().fg(TEXT),
+            )),
             Line::from(""),
         ]
     }
@@ -61,16 +99,31 @@ pub fn format_message(m: &Message) -> Vec<Line<'static>> {
 
 fn format_chart(c: &ChartPart) -> Vec<Line<'static>> {
     let title = c.title.as_deref().unwrap_or("Chart");
-    let mut lines = vec![Line::from(Span::styled(format!("📊 [CHART: {}] ({})", title, c.chart_type), Style::default().fg(MUTED).add_modifier(Modifier::BOLD)))];
+    let mut lines = vec![Line::from(Span::styled(
+        format!("📊 [CHART: {}] ({})", title, c.chart_type),
+        Style::default().fg(MUTED).add_modifier(Modifier::BOLD),
+    ))];
     if let (Some(lbls), Some(vals)) = (&c.labels, &c.data) {
         let is_pie = c.chart_type.to_lowercase() == "pie";
         let is_line = c.chart_type.to_lowercase() == "line";
-        let sum: f64 = if is_pie { vals.iter().sum() } else { vals.iter().cloned().fold(0.0, f64::max) };
+        let sum: f64 = if is_pie {
+            vals.iter().sum()
+        } else {
+            vals.iter().cloned().fold(0.0, f64::max)
+        };
         if !is_line {
             for (lbl, &val) in lbls.iter().zip(vals.iter()) {
-                let width = if sum > 0.0 { (val / sum * 20.0) as usize } else { 0 };
+                let width = if sum > 0.0 {
+                    (val / sum * 20.0) as usize
+                } else {
+                    0
+                };
                 let bar = "█".repeat(width);
-                let val_str = if is_pie { format!(" {:.1}% ({:.1})", val / sum * 100.0, val) } else { format!(" ({:.1})", val) };
+                let val_str = if is_pie {
+                    format!(" {:.1}% ({:.1})", val / sum * 100.0, val)
+                } else {
+                    format!(" ({:.1})", val)
+                };
                 lines.push(Line::from(vec![
                     Span::styled(format!("  {:12}: ", lbl), Style::default().fg(MUTED)),
                     Span::styled(bar, Style::default().fg(ACCENT)),
@@ -78,7 +131,11 @@ fn format_chart(c: &ChartPart) -> Vec<Line<'static>> {
                 ]));
             }
         } else {
-            let trend: Vec<String> = lbls.iter().zip(vals.iter()).map(|(l, v)| format!("{}({:.1})", l, v)).collect();
+            let trend: Vec<String> = lbls
+                .iter()
+                .zip(vals.iter())
+                .map(|(l, v)| format!("{}({:.1})", l, v))
+                .collect();
             lines.push(Line::from(vec![
                 Span::styled("  Trend: ", Style::default().fg(MUTED)),
                 Span::styled(trend.join(" ➔ "), Style::default().fg(TEXT)),

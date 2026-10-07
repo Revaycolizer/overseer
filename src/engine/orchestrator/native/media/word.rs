@@ -1,16 +1,16 @@
 // src/engine/orchestrator/native/media/word.rs
-use std::path::Path;
 use docx_rs::*;
+use std::path::Path;
 
 /// Extracts text from a Word (.docx) file natively.
 pub fn extract_text(path: &Path) -> anyhow::Result<String> {
     tracing::info!(?path, "Extracting Word document");
-    
+
     let file = std::fs::read(path)?;
     let docx = read_docx(&file)?;
-    
+
     let mut full_text = String::new();
-    
+
     // Simple traversal of the document elements
     for child in docx.document.children {
         if let DocumentChild::Paragraph(p) = child {
@@ -26,10 +26,10 @@ pub fn extract_text(path: &Path) -> anyhow::Result<String> {
             full_text.push('\n');
         }
     }
-    
+
     if full_text.trim().is_empty() {
         anyhow::bail!("Word extraction returned empty text");
     }
-    
+
     Ok(full_text)
 }

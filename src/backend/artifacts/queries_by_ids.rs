@@ -1,5 +1,5 @@
-use crate::db::Database;
 use super::queries::Artifact;
+use crate::db::Database;
 
 pub async fn get_artifacts_by_ids(
     db: &Database,

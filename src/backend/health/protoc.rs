@@ -1,6 +1,6 @@
-use std::process::Command;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+use std::process::Command;
 
 pub(crate) fn locate_protoc() -> Option<String> {
     let mut candidates = Vec::new();

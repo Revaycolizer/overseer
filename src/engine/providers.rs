@@ -126,7 +126,14 @@ pub async fn resolve_model(cfg: &ProviderConfig) -> ProviderConfig {
     // The configured model isn't pulled — pick an available one that supports
     // tool-calling (so the agent keeps working) instead of just the first tag.
     const TOOL_FAMILIES: &[&str] = &[
-        "qwen", "llama3", "llama-3", "mistral", "hermes", "command-r", "firefunction", "granite",
+        "qwen",
+        "llama3",
+        "llama-3",
+        "mistral",
+        "hermes",
+        "command-r",
+        "firefunction",
+        "granite",
     ];
     let chosen = available
         .iter()
@@ -156,7 +163,10 @@ pub async fn complete_chat(
     system: &str,
     user: &str,
 ) -> anyhow::Result<String> {
-    let client = reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(5)).timeout(std::time::Duration::from_secs(180)).build()?;
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(180))
+        .build()?;
     match cfg.provider {
         Provider::OpenAI => {
             let body = serde_json::json!({
@@ -266,7 +276,10 @@ pub async fn complete_with_tools(
     messages: &[AgentMessage],
     tools: &[ToolSpec],
 ) -> anyhow::Result<AgentTurn> {
-    let client = reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(5)).timeout(std::time::Duration::from_secs(180)).build()?;
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(180))
+        .build()?;
     match cfg.provider {
         Provider::OpenAI => openai_with_tools(&client, cfg, system, messages, tools).await,
         Provider::Anthropic => anthropic_with_tools(&client, cfg, system, messages, tools).await,
@@ -441,7 +454,8 @@ async fn openai_with_tools(
                 .unwrap_or_default()
                 .to_string();
             let args_str = c["function"]["arguments"].as_str().unwrap_or("{}");
-            let arguments = serde_json::from_str(args_str).map_err(|error| anyhow::anyhow!("Invalid model tool arguments: {error}"))?;
+            let arguments = serde_json::from_str(args_str)
+                .map_err(|error| anyhow::anyhow!("Invalid model tool arguments: {error}"))?;
             turn.tool_calls.push(ToolCall {
                 id: c["id"].as_str().unwrap_or_default().to_string(),
                 name,
@@ -592,7 +606,11 @@ mod tests {
         use axum::{http::HeaderMap, routing::post, Json, Router};
         for provider in [Provider::OpenAI, Provider::Anthropic] {
             let expected = provider.clone();
-            let route = if matches!(provider, Provider::OpenAI) { "/chat/completions" } else { "/v1/messages" };
+            let route = if matches!(provider, Provider::OpenAI) {
+                "/chat/completions"
+            } else {
+                "/v1/messages"
+            };
             let app = Router::new().route(route, post(move |headers: HeaderMap, Json(body): Json<serde_json::Value>| {
                 let expected = expected.clone();
                 async move {
@@ -612,9 +630,25 @@ mod tests {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let address = listener.local_addr().unwrap();
             let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-            let cfg = ProviderConfig { provider, api_key:"test-key".into(), base_url:format!("http://{address}"), model:"test-model".into() };
-            let tools = vec![ToolSpec { name:"read_file".into(), description:"Read a file".into(), parameters:serde_json::json!({"type":"object"}) }];
-            let turn = complete_with_tools(&cfg, "Test system", &[AgentMessage::User("Read the README".into())], &tools).await.unwrap();
+            let cfg = ProviderConfig {
+                provider,
+                api_key: "test-key".into(),
+                base_url: format!("http://{address}"),
+                model: "test-model".into(),
+            };
+            let tools = vec![ToolSpec {
+                name: "read_file".into(),
+                description: "Read a file".into(),
+                parameters: serde_json::json!({"type":"object"}),
+            }];
+            let turn = complete_with_tools(
+                &cfg,
+                "Test system",
+                &[AgentMessage::User("Read the README".into())],
+                &tools,
+            )
+            .await
+            .unwrap();
             assert_eq!(turn.text.as_deref(), Some("Working"));
             assert_eq!(turn.tool_calls.len(), 1);
             assert_eq!(turn.tool_calls[0].id, "call-test");
@@ -622,5 +656,4 @@ mod tests {
             task.abort();
         }
     }
-
 }

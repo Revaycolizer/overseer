@@ -1,10 +1,13 @@
-use tokio::process::Command;
 use crate::engine::tools::error::DynamicToolError;
+use tokio::process::Command;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-pub async fn run_powershell_hidden(script: &str, tool_name: &str) -> Result<String, DynamicToolError> {
+pub async fn run_powershell_hidden(
+    script: &str,
+    tool_name: &str,
+) -> Result<String, DynamicToolError> {
     let mut command = Command::new("powershell");
     command
         .arg("-NoProfile")

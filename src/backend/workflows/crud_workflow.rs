@@ -1,5 +1,5 @@
-use crate::db::Database;
 use super::models::Workflow;
+use crate::db::Database;
 
 pub async fn get_workflows(db: &Database) -> anyhow::Result<Vec<Workflow>> {
     let rows = sqlx::query_as::<_, Workflow>(

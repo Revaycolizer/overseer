@@ -1,6 +1,6 @@
+use crate::engine::tools::error::DynamicToolError;
 use serde_json::json;
 use tokio::process::Command;
-use crate::engine::tools::error::DynamicToolError;
 
 pub async fn macos_desktop_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     let active_app_out = Command::new("osascript")

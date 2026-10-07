@@ -2,8 +2,8 @@ use crate::engine::tools::error::DynamicToolError;
 
 #[cfg(windows)]
 pub async fn handle_launch(app: &str) -> Result<String, DynamicToolError> {
-    use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
     use crate::engine::tools::os_tool::fields::escape_powershell_single_quoted;
+    use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
 
     let escaped = escape_powershell_single_quoted(app);
     let script = format!(
@@ -56,7 +56,11 @@ fn as_url(target: &str) -> Option<String> {
         return Some(format!("https://{t}"));
     }
     // bare domain like example.com — no spaces, no slash, has a dot
-    if !t.contains(' ') && !t.contains('/') && t.contains('.') && t.split('.').all(|p| !p.is_empty()) {
+    if !t.contains(' ')
+        && !t.contains('/')
+        && t.contains('.')
+        && t.split('.').all(|p| !p.is_empty())
+    {
         return Some(format!("https://{t}"));
     }
     None
@@ -64,9 +68,9 @@ fn as_url(target: &str) -> Option<String> {
 
 #[cfg(not(windows))]
 pub async fn handle_launch(app: &str) -> Result<String, DynamicToolError> {
+    use crate::engine::tools::os_tool::handlers::focus_app::desktop_file::find_linux_desktop_file;
     use serde_json::json;
     use tokio::process::Command;
-    use crate::engine::tools::os_tool::handlers::focus_app::desktop_file::find_linux_desktop_file;
 
     let ok = |method: &str, detail: String| {
         Ok(json!({
@@ -80,9 +84,15 @@ pub async fn handle_launch(app: &str) -> Result<String, DynamicToolError> {
     };
 
     if cfg!(target_os = "macos") {
-        let status = Command::new("open").arg("-a").arg(app).status().await.map_err(|e| {
-            DynamicToolError::ExecutionFailed { tool: "os_tool".to_string(), details: format!("open -a {app}: {e}") }
-        })?;
+        let status = Command::new("open")
+            .arg("-a")
+            .arg(app)
+            .status()
+            .await
+            .map_err(|e| DynamicToolError::ExecutionFailed {
+                tool: "os_tool".to_string(),
+                details: format!("open -a {app}: {e}"),
+            })?;
         if !status.success() {
             return Err(DynamicToolError::ExecutionFailed {
                 tool: "os_tool".to_string(),
@@ -121,8 +131,15 @@ pub async fn handle_launch(app: &str) -> Result<String, DynamicToolError> {
         return ok("exec", format!("Launched '{app}'."));
     }
     if let Some(desktop_file) = find_linux_desktop_file(app).await {
-        if Command::new("gtk-launch").arg(&desktop_file).spawn().is_ok() {
-            return ok("desktop-file", format!("Launched '{app}' via {desktop_file}."));
+        if Command::new("gtk-launch")
+            .arg(&desktop_file)
+            .spawn()
+            .is_ok()
+        {
+            return ok(
+                "desktop-file",
+                format!("Launched '{app}' via {desktop_file}."),
+            );
         }
     }
 

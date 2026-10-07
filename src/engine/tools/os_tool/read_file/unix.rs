@@ -1,7 +1,10 @@
-use serde_json::json;
 use crate::engine::tools::error::DynamicToolError;
+use serde_json::json;
 
-pub async fn windows_read_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
+pub async fn windows_read_file_json(
+    tool_name: &str,
+    path: &str,
+) -> Result<String, DynamicToolError> {
     let content =
         tokio::fs::read_to_string(path)
             .await

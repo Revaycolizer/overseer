@@ -63,9 +63,12 @@ impl LatticeCoordinator {
 
     /// Load configuration from database settings.
     pub async fn from_settings(db: &crate::db::Database) -> Self {
-        let max_conc = crate::backend::get_setting_i64(db, "lattice_max_concurrency", 4).await as usize;
-        let threshold = crate::backend::get_setting_or(db, "lattice_grounding_threshold", "0.3").await
-            .parse::<f32>().unwrap_or(0.3);
+        let max_conc =
+            crate::backend::get_setting_i64(db, "lattice_max_concurrency", 4).await as usize;
+        let threshold = crate::backend::get_setting_or(db, "lattice_grounding_threshold", "0.3")
+            .await
+            .parse::<f32>()
+            .unwrap_or(0.3);
         let enabled = crate::backend::get_setting_or(db, "lattice_enabled", "true").await == "true";
 
         Self {
@@ -109,7 +112,9 @@ impl LatticeCoordinator {
             for fact in context {
                 cell.add_fact(fact);
             }
-            self.scheduler.dispatch_cell_task(&tasks[0], &mut cell).await;
+            self.scheduler
+                .dispatch_cell_task(&tasks[0], &mut cell)
+                .await;
             crate::engine::orchestrator::state::sync::sync_cell_to_global(
                 &cell,
                 &mut self.global_state,
@@ -227,18 +232,8 @@ impl LatticeCoordinator {
             "meaning of",
         ];
         let creative_keywords = [
-            "write",
-            "create",
-            "compose",
-            "draft",
-            "story",
-            "poem",
-            "essay",
-            "article",
-            "blog",
-            "content",
-            "generate",
-            "design",
+            "write", "create", "compose", "draft", "story", "poem", "essay", "article", "blog",
+            "content", "generate", "design",
         ];
         let technical_keywords = [
             "code",
@@ -268,14 +263,22 @@ impl LatticeCoordinator {
             "break down",
         ];
 
-        let mut research_score =
-            research_keywords.iter().filter(|kw| lower.contains(*kw)).count();
-        let creative_score =
-            creative_keywords.iter().filter(|kw| lower.contains(*kw)).count();
-        let technical_score =
-            technical_keywords.iter().filter(|kw| lower.contains(*kw)).count();
-        let analysis_score =
-            analysis_keywords.iter().filter(|kw| lower.contains(*kw)).count();
+        let mut research_score = research_keywords
+            .iter()
+            .filter(|kw| lower.contains(*kw))
+            .count();
+        let creative_score = creative_keywords
+            .iter()
+            .filter(|kw| lower.contains(*kw))
+            .count();
+        let technical_score = technical_keywords
+            .iter()
+            .filter(|kw| lower.contains(*kw))
+            .count();
+        let analysis_score = analysis_keywords
+            .iter()
+            .filter(|kw| lower.contains(*kw))
+            .count();
 
         // Short queries are typically simple
         if lower.split_whitespace().count() <= 3 && research_score == 0 && creative_score == 0 {
@@ -309,8 +312,11 @@ impl LatticeCoordinator {
             GoalType::Research
         } else if technical_score >= max_score && creative_score >= max_score {
             // Tie between technical and creative — check domain-specific keywords
-            if lower.contains("function") || lower.contains("code") || lower.contains("implement")
-                || lower.contains("sort") || lower.contains("algorithm")
+            if lower.contains("function")
+                || lower.contains("code")
+                || lower.contains("implement")
+                || lower.contains("sort")
+                || lower.contains("algorithm")
             {
                 GoalType::Technical
             } else {
@@ -351,7 +357,8 @@ mod tests {
     #[test]
     fn test_decompose_creative_goal() {
         let coordinator = LatticeCoordinator::new();
-        let tasks = coordinator.decompose_goal("Write a short story about a robot learning to paint");
+        let tasks =
+            coordinator.decompose_goal("Write a short story about a robot learning to paint");
         assert_eq!(tasks.len(), 3);
         assert!(tasks[0].contains("Ideation"));
         assert!(tasks[1].contains("Drafting"));
@@ -361,12 +368,15 @@ mod tests {
     #[test]
     fn test_decompose_technical_goal() {
         let coordinator = LatticeCoordinator::new();
-        let tasks =
-            coordinator.decompose_goal("Implement a binary search tree in Rust with tests");
+        let tasks = coordinator.decompose_goal("Implement a binary search tree in Rust with tests");
         // 'implement' triggers technical, 'search' triggers research.
         // With tied scores, technical wins due to extra keyword check.
         // But without an atlas, research falls back to 2 tasks.
-        assert!(tasks.len() >= 2, "Expected at least 2 tasks, got {}", tasks.len());
+        assert!(
+            tasks.len() >= 2,
+            "Expected at least 2 tasks, got {}",
+            tasks.len()
+        );
     }
 
     #[test]
@@ -383,7 +393,11 @@ mod tests {
         let tasks = coordinator.decompose_goal("Compare Rust and Go programming languages");
         // 'compare' triggers both analysis and research keywords.
         // The goal decomposition may produce 2 or 3 tasks depending on keyword matching.
-        assert!(tasks.len() >= 2, "Expected at least 2 tasks, got {}", tasks.len());
+        assert!(
+            tasks.len() >= 2,
+            "Expected at least 2 tasks, got {}",
+            tasks.len()
+        );
         assert!(tasks[0].contains("Research") || tasks[0].contains("gathering"));
     }
 
@@ -427,6 +441,8 @@ mod tests {
 
         // Result should be a non-empty structured prompt
         assert!(!result.is_empty());
-        assert!(result.contains("LATTICE") || result.contains("FACTS") || result.contains("EVIDENCE"));
+        assert!(
+            result.contains("LATTICE") || result.contains("FACTS") || result.contains("EVIDENCE")
+        );
     }
 }

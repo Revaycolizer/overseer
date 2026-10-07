@@ -1,6 +1,6 @@
-use tokio::process::Command;
 use crate::engine::tools::error::DynamicToolError;
 use crate::engine::tools::input::object_tool_input;
+use tokio::process::Command;
 
 pub async fn native_app_launcher(args: &serde_json::Value) -> Result<String, DynamicToolError> {
     let input = object_tool_input(args);

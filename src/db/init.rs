@@ -25,7 +25,7 @@ impl Database {
             .log_statements(log::LevelFilter::Off)
             .log_slow_statements(log::LevelFilter::Warn, std::time::Duration::from_secs(30));
 
-       // println!("📜 Running database migrations (Internal Connection)...");
+        // println!("📜 Running database migrations (Internal Connection)...");
         let pool = SqlitePoolOptions::new()
             .max_connections(1) // Single connection for SQLite is often faster and avoids locks
             .acquire_timeout(std::time::Duration::from_secs(30))
@@ -46,17 +46,18 @@ impl Database {
             let migrator = sqlx::migrate::Migrator::new(std::path::Path::new("./migrations"))
                 .await
                 .context("failed to create filesystem migrator for development")?;
-            
+
             if let Err(error) = migrator.run(&pool).await {
                 if super::migration::try_reconcile_known_migration_checksum(&pool, &error)
                     .await
                     .context("failed while attempting to reconcile known migration checksums")?
                 {
-                    migrator.run(&pool)
-                        .await
-                        .context("failed while applying developer migrations after reconciliation")?;
+                    migrator.run(&pool).await.context(
+                        "failed while applying developer migrations after reconciliation",
+                    )?;
                 } else {
-                    return Err(error).context("failed while applying developer database migrations");
+                    return Err(error)
+                        .context("failed while applying developer database migrations");
                 }
             }
         } else {
@@ -66,12 +67,12 @@ impl Database {
                     .await
                     .context("failed while attempting to reconcile known migration checksums")?
                 {
-                    sqlx::migrate!("./migrations")
-                        .run(&pool)
-                        .await
-                        .context("failed while applying production migrations after reconciliation")?;
+                    sqlx::migrate!("./migrations").run(&pool).await.context(
+                        "failed while applying production migrations after reconciliation",
+                    )?;
                 } else {
-                    return Err(error).context("failed while applying production database migrations");
+                    return Err(error)
+                        .context("failed while applying production database migrations");
                 }
             }
         }
@@ -103,7 +104,11 @@ impl Database {
             pool: pool.clone(),
             kernel: Arc::new(std::sync::OnceLock::new()),
             snowflake: Arc::new(Mutex::new(generator)),
-            lancedb_uri: data_dir.join("data").join("lancedb").to_string_lossy().to_string(),
+            lancedb_uri: data_dir
+                .join("data")
+                .join("lancedb")
+                .to_string_lossy()
+                .to_string(),
             remote_url: None,
             http_client: reqwest::Client::new(),
         };

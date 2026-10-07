@@ -1,15 +1,15 @@
 pub mod cell;
+pub mod consistency;
+pub mod evidence;
 pub mod global;
 pub mod sync;
 pub mod update;
-pub mod consistency;
-pub mod evidence;
 
 pub use cell::CellState;
+pub use evidence::{EvidenceDag, EvidenceNode, EvidenceStatus};
 pub use global::GlobalState;
 pub use sync::sync_cell_to_global;
-pub use update::{update_state_from_findings, preview_state_update};
-pub use evidence::{EvidenceDag, EvidenceNode, EvidenceStatus};
+pub use update::{preview_state_update, update_state_from_findings};
 
 use serde::{Deserialize, Serialize};
 
@@ -38,28 +38,40 @@ impl StructuredState {
             next_id: 1,
         }
     }
-    
+
     pub fn add_legacy_context(&mut self, context: &str) {
         if !context.trim().is_empty() {
-            self.derived_insights.push(format!("Previous Findings/Context:\n{}", context));
+            self.derived_insights
+                .push(format!("Previous Findings/Context:\n{}", context));
         }
     }
 
     pub fn to_prompt_string(&self) -> String {
         let mut out = String::from("═══ STRUCTURED_STATE (EVIDENCE-FIRST) ═══\n");
         out.push_str("GROUNDED EVIDENCE:\n");
-        for e in &self.evidence { 
-            out.push_str(&format!("[{}] {} (Source: {}) [ID: {}]\n", e.id, e.text, e.source, e.snowflake_id)); 
+        for e in &self.evidence {
+            out.push_str(&format!(
+                "[{}] {} (Source: {}) [ID: {}]\n",
+                e.id, e.text, e.source, e.snowflake_id
+            ));
         }
         out.push_str("\nDERIVED_INSIGHTS:\n");
-        for i in &self.derived_insights { out.push_str(&format!("- {}\n", i)); }
+        for i in &self.derived_insights {
+            out.push_str(&format!("- {}\n", i));
+        }
         out.push_str("\nUNKNOWNS / GAPS:\n");
-        for u in &self.unknowns { out.push_str(&format!("- {}\n", u)); }
+        for u in &self.unknowns {
+            out.push_str(&format!("- {}\n", u));
+        }
         out.push_str("══════════════════════");
         out
     }
 
     pub fn get_known_urls(&self) -> std::collections::HashSet<String> {
-        self.evidence.iter().map(|e| e.source.clone()).filter(|s| s.starts_with("http")).collect()
+        self.evidence
+            .iter()
+            .map(|e| e.source.clone())
+            .filter(|s| s.starts_with("http"))
+            .collect()
     }
 }

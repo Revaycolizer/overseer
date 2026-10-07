@@ -1,16 +1,18 @@
+use super::ServerState;
 use axum::{
-    routing::post,
-    extract::{State, Json, Path},
+    extract::{Json, Path, State},
     http::StatusCode,
+    routing::post,
     Router,
 };
 use serde_json::Value;
 use std::sync::Arc;
-use super::ServerState;
 
 pub fn router() -> Router<Arc<ServerState>> {
-    Router::new()
-        .route("/v1/workflows/webhook/:workflow_id/:token", post(webhook_trigger))
+    Router::new().route(
+        "/v1/workflows/webhook/:workflow_id/:token",
+        post(webhook_trigger),
+    )
 }
 
 async fn webhook_trigger(
@@ -27,16 +29,26 @@ async fn webhook_trigger(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let graph = crate::engine::workflow::graph::WorkflowGraph {
-        nodes: nodes.into_iter().map(|(id, node_type, config_json)| {
-            crate::engine::workflow::graph::WorkflowNode {
-                id, workflow_id, node_type, label: String::new(), config_json,
-            }
-        }).collect(),
+        nodes: nodes
+            .into_iter()
+            .map(
+                |(id, node_type, config_json)| crate::engine::workflow::graph::WorkflowNode {
+                    id,
+                    workflow_id,
+                    node_type,
+                    label: String::new(),
+                    config_json,
+                },
+            )
+            .collect(),
         edges: vec![],
     };
 
     let runner = crate::engine::workflow::runner::WorkflowRunner::new(graph, state.db.clone());
-    let results = runner.execute().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let results = runner
+        .execute()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(serde_json::json!({"results": results})))
 }

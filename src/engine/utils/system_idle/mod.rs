@@ -1,6 +1,6 @@
-mod windows;
-mod macos;
 mod linux;
+mod macos;
+mod windows;
 
 pub fn get_system_idle_secs() -> u64 {
     #[cfg(target_os = "windows")]

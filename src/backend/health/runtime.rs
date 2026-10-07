@@ -1,14 +1,15 @@
-use crate::db::Database;
-use super::RuntimeHealth;
 use super::models::try_get_available_models;
 use super::protoc::locate_protoc;
+use super::RuntimeHealth;
+use crate::db::Database;
 
 pub async fn get_runtime_health(db: &Database) -> RuntimeHealth {
     let strict_models = try_get_available_models().await.unwrap_or_default();
     let ollama_reachable = !strict_models.is_empty() || try_get_available_models().await.is_ok();
     let selected_runtime_model =
         super::super::get_setting_or(db, "default_chat_model", "qwen2.5:7b-instruct").await;
-    let title_model = super::super::get_setting_or(db, "title_generator_model", "qwen2.5:7b-instruct").await;
+    let title_model =
+        super::super::get_setting_or(db, "title_generator_model", "qwen2.5:7b-instruct").await;
     let python_command =
         crate::engine::utils::discovery::detect_python_command().map(|parts| parts.join(" "));
     let protoc_path = locate_protoc();

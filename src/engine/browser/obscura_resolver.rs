@@ -39,13 +39,19 @@ pub fn resolve_obscura() -> Result<PathBuf> {
          curl -LO https://github.com/{}/releases/latest/download/obscura-{}.tar.gz\n  \
          tar xzf obscura-*.tar.gz\n  \
          sudo mv obscura /usr/local/bin/",
-        GITHUB_REPO, triple
+        GITHUB_REPO,
+        triple
     );
 }
 
 pub async fn download_obscura() -> Result<PathBuf> {
-    let triple = platform_triple()
-        .ok_or_else(|| anyhow::anyhow!("Unsupported platform: {}-{}", std::env::consts::OS, std::env::consts::ARCH))?;
+    let triple = platform_triple().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Unsupported platform: {}-{}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        )
+    })?;
 
     let url = format!(
         "https://github.com/{GITHUB_REPO}/releases/latest/download/obscura-{triple}.tar.gz",

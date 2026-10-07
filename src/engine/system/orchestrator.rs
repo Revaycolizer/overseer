@@ -1,7 +1,7 @@
 // src/engine/system/orchestrator.rs
 use crate::db::Database;
-use crate::engine::system::AgentSystem;
 use crate::engine::orchestrator::planning::master::MasterPlanner;
+use crate::engine::system::AgentSystem;
 use crate::engine::tools::StructuredPerceptionTool;
 
 pub async fn orchestrate_request(
@@ -15,9 +15,9 @@ pub async fn orchestrate_request(
         .await
         .unwrap_or_default();
 
-    let history = super::history_builder::build_history(
-        db, &system.ollama_client, messages, user_query
-    ).await;
+    let history =
+        super::history_builder::build_history(db, &system.ollama_client, messages, user_query)
+            .await;
 
     let all_agents = crate::backend::get_agents(db).await.unwrap_or_default();
     // V4.17.8: if the primary planner model isn't reachable (e.g.
@@ -26,14 +26,11 @@ pub async fn orchestrate_request(
     // of model names tried in order; on the first one that
     // resolves we use it for the planner. If the chain is empty
     // we keep the existing single-model behaviour.
-    let planner_model = crate::backend::resolve_model_with_fallbacks(
-        db,
-        "planner_model",
-        "qwen2.5:7b-instruct",
-    )
-    .await;
+    let planner_model =
+        crate::backend::resolve_model_with_fallbacks(db, "planner_model", "qwen2.5:7b-instruct")
+            .await;
     let instructions = crate::backend::get_setting(db, "master_planner_instructions").await;
-    
+
     let master_planner = MasterPlanner::new(
         &system.ollama_client,
         &planner_model,
@@ -55,5 +52,6 @@ pub async fn orchestrate_request(
         &memory_context,
         &system.ollama_client,
         token_sender,
-    ).await
+    )
+    .await
 }

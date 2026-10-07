@@ -32,7 +32,8 @@ pub type MessageCache = LruCache<i64, Vec<Message>>;
 
 static MESSAGES_CACHE: OnceLock<Arc<RwLock<MessageCache>>> = OnceLock::new();
 static WORKFLOW_CACHE: OnceLock<Arc<RwLock<LruCache<String, serde_json::Value>>>> = OnceLock::new();
-static BROWSERBASE_CACHE: OnceLock<Arc<RwLock<LruCache<String, serde_json::Value>>>> = OnceLock::new();
+static BROWSERBASE_CACHE: OnceLock<Arc<RwLock<LruCache<String, serde_json::Value>>>> =
+    OnceLock::new();
 
 pub fn messages() -> Arc<RwLock<MessageCache>> {
     MESSAGES_CACHE

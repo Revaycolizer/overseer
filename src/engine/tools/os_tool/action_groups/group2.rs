@@ -1,8 +1,6 @@
 pub fn infer_action_group_2(lower: &str) -> Option<String> {
-    if matches!(
-        lower,
-        "find_files" | "search_files" | "locate_file"
-    ) || (lower.contains("find") && (lower.contains("file") || lower.contains("path")))
+    if matches!(lower, "find_files" | "search_files" | "locate_file")
+        || (lower.contains("find") && (lower.contains("file") || lower.contains("path")))
         || (lower.contains("locate") && lower.contains("file"))
         || (lower.contains("search") && lower.contains("file"))
     {

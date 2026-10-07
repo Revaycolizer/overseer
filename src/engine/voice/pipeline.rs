@@ -15,13 +15,10 @@ pub async fn execute_voice_command(
     // 1. Voice Fast-path check
     if let Some(fast_result) = try_voice_fast_path(db, command).await {
         // Save the user message
-        let _ = crate::backend::add_message(
-            db, conversation_id, "user", command, false,
-        ).await;
+        let _ = crate::backend::add_message(db, conversation_id, "user", command, false).await;
         // Save the assistant response
-        let _ = crate::backend::add_message(
-            db, conversation_id, "assistant", &fast_result, false,
-        ).await;
+        let _ = crate::backend::add_message(db, conversation_id, "assistant", &fast_result, false)
+            .await;
         // Speak the response using Piper/TTS!
         crate::engine::voice::tts::speak_locally(&fast_result);
         tracing::info!("Voice command fast-path result");
@@ -29,17 +26,13 @@ pub async fn execute_voice_command(
     }
 
     // Save the user message
-    let _ = crate::backend::add_message(
-        db, conversation_id, "user", command, false,
-    ).await;
+    let _ = crate::backend::add_message(db, conversation_id, "user", command, false).await;
 
     // Run through the AI orchestrator (uses existing tools: os_tool, app_launcher, etc.)
     let response = agent.orchestrate(db, conversation_id, command, None).await;
 
     // Save the assistant response
-    let _ = crate::backend::add_message(
-        db, conversation_id, "assistant", &response, false,
-    ).await;
+    let _ = crate::backend::add_message(db, conversation_id, "assistant", &response, false).await;
 
     // Speak the response using Piper/TTS!
     crate::engine::voice::tts::speak_locally(&response);
@@ -50,16 +43,24 @@ pub async fn execute_voice_command(
 
 async fn try_voice_fast_path(db: &Database, command: &str) -> Option<String> {
     let lower = command.trim().trim_end_matches('.').to_lowercase();
-    
+
     if let Some(vol_res) = super::fast_path_utils::handle_volume_fast_path(&lower).await {
         return Some(vol_res);
     }
-    
+
     // Pattern 1: Open/Launch application
     // Examples: "open firefox", "launch chrome", "open terminal", "start spotify"
     // Note: exclude URLs here so they fall through to open_url
-    let args = if (lower.starts_with("open ") || lower.starts_with("launch ") || lower.starts_with("start ")) 
-        && !(lower.contains("http://") || lower.contains("https://") || lower.contains(".com") || lower.contains(".org") || lower.contains(".net") || lower.contains(".io") || lower.contains("www.")) 
+    let args = if (lower.starts_with("open ")
+        || lower.starts_with("launch ")
+        || lower.starts_with("start "))
+        && !(lower.contains("http://")
+            || lower.contains("https://")
+            || lower.contains(".com")
+            || lower.contains(".org")
+            || lower.contains(".net")
+            || lower.contains(".io")
+            || lower.contains("www."))
     {
         let target = if lower.starts_with("open ") {
             command.trim().split_at(5).1.trim()
@@ -75,10 +76,15 @@ async fn try_voice_fast_path(db: &Database, command: &str) -> Option<String> {
     }
     // Pattern 2: Open URL
     // Examples: "open url google.com", "open google.com", "go to github.com", "navigate to youtube.com"
-    else if lower.starts_with("open url ") 
-        || lower.starts_with("go to ") 
+    else if lower.starts_with("open url ")
+        || lower.starts_with("go to ")
         || lower.starts_with("navigate to ")
-        || (lower.starts_with("open ") && (lower.contains(".com") || lower.contains(".org") || lower.contains(".net") || lower.contains(".io") || lower.contains("www.")))
+        || (lower.starts_with("open ")
+            && (lower.contains(".com")
+                || lower.contains(".org")
+                || lower.contains(".net")
+                || lower.contains(".io")
+                || lower.contains("www.")))
     {
         let mut target = if lower.starts_with("open url ") {
             command.trim().split_at(9).1.trim().to_string()
@@ -100,21 +106,33 @@ async fn try_voice_fast_path(db: &Database, command: &str) -> Option<String> {
     }
     // Pattern 3: Screenshot
     // Examples: "take a screenshot", "capture screenshot", "screenshot", "capture my screen"
-    else if lower.contains("screenshot") || lower.contains("capture the screen") || lower.contains("capture my screen") {
+    else if lower.contains("screenshot")
+        || lower.contains("capture the screen")
+        || lower.contains("capture my screen")
+    {
         serde_json::json!({
             "action": "screenshot"
         })
     }
     // Pattern 4: List processes
     // Examples: "what's running", "list processes", "show running apps", "show background tasks"
-    else if lower.contains("what's running") || lower.contains("whats running") || lower.contains("list processes") || lower.contains("show processes") || lower.contains("background tasks") || lower.contains("running apps") {
+    else if lower.contains("what's running")
+        || lower.contains("whats running")
+        || lower.contains("list processes")
+        || lower.contains("show processes")
+        || lower.contains("background tasks")
+        || lower.contains("running apps")
+    {
         serde_json::json!({
             "action": "list_processes"
         })
     }
     // Pattern 5: Focus a window
     // Examples: "focus firefox", "switch to chrome", "bring up terminal"
-    else if lower.starts_with("focus ") || lower.starts_with("switch to ") || lower.starts_with("bring up ") {
+    else if lower.starts_with("focus ")
+        || lower.starts_with("switch to ")
+        || lower.starts_with("bring up ")
+    {
         let target = if lower.starts_with("focus ") {
             command.trim().split_at(6).1.trim()
         } else if lower.starts_with("switch to ") {
@@ -171,20 +189,35 @@ async fn try_voice_fast_path(db: &Database, command: &str) -> Option<String> {
     }
     // Pattern 9: Get desktop state
     // Examples: "what's on screen", "what windows are open", "show desktop state", "what do you see"
-    else if lower.contains("what's on screen") || lower.contains("whats on screen") || lower.contains("windows are open") || lower.contains("desktop state") || lower.contains("what do you see") {
+    else if lower.contains("what's on screen")
+        || lower.contains("whats on screen")
+        || lower.contains("windows are open")
+        || lower.contains("desktop state")
+        || lower.contains("what do you see")
+    {
         serde_json::json!({
             "action": "get_state"
         })
     }
     // Pattern 10: Clipboard
     // Examples: "read clipboard", "what's in clipboard", "copy this: hello", "paste"
-    else if lower.contains("read clipboard") || lower.contains("what's in clipboard") || lower.contains("whats in clipboard") || lower == "paste" {
+    else if lower.contains("read clipboard")
+        || lower.contains("what's in clipboard")
+        || lower.contains("whats in clipboard")
+        || lower == "paste"
+    {
         return match crate::engine::tools::clipboard::native_clipboard_read().await {
-            Ok(content) => Some(format!("Clipboard contains: {}", if content.len() > 200 { &content[..200] } else { &content })),
+            Ok(content) => Some(format!(
+                "Clipboard contains: {}",
+                if content.len() > 200 {
+                    &content[..200]
+                } else {
+                    &content
+                }
+            )),
             Err(e) => Some(format!("Could not read clipboard: {}", e)),
         };
-    }
-    else {
+    } else {
         return None;
     };
 
@@ -217,17 +250,22 @@ async fn try_voice_fast_path(db: &Database, command: &str) -> Option<String> {
                 if let Some(summary) = val.get("summary").and_then(|s| s.as_str()) {
                     return Some(summary.to_string());
                 }
-                
+
                 // Fallbacks if summary is missing
                 let action = val.get("action").and_then(|a| a.as_str()).unwrap_or("");
-                let ok = val.get("ok").and_then(|o| o.as_bool())
+                let ok = val
+                    .get("ok")
+                    .and_then(|o| o.as_bool())
                     .or_else(|| val.get("success").and_then(|s| s.as_bool()))
                     .unwrap_or(false);
-                    
+
                 if ok {
                     match action {
                         "launch" => {
-                            let app = val.get("app").and_then(|a| a.as_str()).unwrap_or("application");
+                            let app = val
+                                .get("app")
+                                .and_then(|a| a.as_str())
+                                .unwrap_or("application");
                             return Some(format!("Launched {}.", app));
                         }
                         "open_url" => {
@@ -248,7 +286,10 @@ async fn try_voice_fast_path(db: &Database, command: &str) -> Option<String> {
         }
         Err(e) => {
             tracing::error!(?e, "Fast-path tool failed");
-            Some(format!("Sorry, I couldn't complete that action. Error: {}", e))
+            Some(format!(
+                "Sorry, I couldn't complete that action. Error: {}",
+                e
+            ))
         }
     }
 }
@@ -259,5 +300,7 @@ async fn get_voice_conversation(db: &Database) -> i64 {
             return c.id;
         }
     }
-    crate::backend::add_conversation(db, "Voice Commands").await.unwrap_or(0)
+    crate::backend::add_conversation(db, "Voice Commands")
+        .await
+        .unwrap_or(0)
 }

@@ -9,7 +9,10 @@ pub struct SileroVad {
 
 impl SileroVad {
     pub fn new() -> Self {
-        let model_dir = get_overseer_data_dir().join("assets").join("voice").join("models");
+        let model_dir = get_overseer_data_dir()
+            .join("assets")
+            .join("voice")
+            .join("models");
         let model_path = model_dir.join("silero_vad.onnx");
         if !model_path.exists() {
             let _ = std::fs::create_dir_all(&model_dir);
@@ -33,8 +36,12 @@ impl SileroVad {
         let session = match &mut self.session {
             Some(s) => s,
             None => {
-                if audio_data.is_empty() { return false; }
-                let rms = (audio_data.iter().map(|&x| x * x).sum::<f32>() / audio_data.len() as f32).sqrt();
+                if audio_data.is_empty() {
+                    return false;
+                }
+                let rms = (audio_data.iter().map(|&x| x * x).sum::<f32>()
+                    / audio_data.len() as f32)
+                    .sqrt();
                 return rms > crate::engine::voice::wake_word::get_vad_threshold();
             }
         };
@@ -56,7 +63,10 @@ impl SileroVad {
                 if let Some(prob_val) = outputs.get("output") {
                     if let Ok(prob_tensor) = prob_val.try_extract_tensor::<f32>() {
                         let prob = *prob_tensor.1.first().unwrap_or(&0.0f32);
-                        if let Some(state_val) = outputs.get("stateN").or_else(|| outputs.get("output_state")) {
+                        if let Some(state_val) = outputs
+                            .get("stateN")
+                            .or_else(|| outputs.get("output_state"))
+                        {
                             if let Ok(state_tensor) = state_val.try_extract_tensor::<f32>() {
                                 self.state = state_tensor.1.to_vec();
                             }

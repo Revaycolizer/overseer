@@ -41,7 +41,9 @@ pub fn parse(input: &str) -> Option<SlashCommand> {
     }
 
     if trimmed == "/model" || trimmed == "/models" {
-        return Some(SlashCommand::Model { name: String::new() });
+        return Some(SlashCommand::Model {
+            name: String::new(),
+        });
     }
 
     if trimmed == "/settings" {
@@ -58,16 +60,24 @@ pub fn parse(input: &str) -> Option<SlashCommand> {
     }
 
     if let Some(arg) = trimmed.strip_prefix("/export ") {
-        return Some(SlashCommand::Export { format: arg.trim().to_string() });
+        return Some(SlashCommand::Export {
+            format: arg.trim().to_string(),
+        });
     }
     if let Some(arg) = trimmed.strip_prefix("/search ") {
-        return Some(SlashCommand::Search { query: arg.trim().to_string() });
+        return Some(SlashCommand::Search {
+            query: arg.trim().to_string(),
+        });
     }
     if let Some(arg) = trimmed.strip_prefix("/model ") {
-        return Some(SlashCommand::Model { name: arg.trim().to_string() });
+        return Some(SlashCommand::Model {
+            name: arg.trim().to_string(),
+        });
     }
     if let Some(arg) = trimmed.strip_prefix("/rename ") {
-        return Some(SlashCommand::Rename { title: arg.trim().to_string() });
+        return Some(SlashCommand::Rename {
+            title: arg.trim().to_string(),
+        });
     }
 
     None
@@ -94,8 +104,8 @@ pub fn get_suggestions(input: &str) -> Vec<&'static str> {
     if input.is_empty() {
         return commands;
     }
-    commands.into_iter()
+    commands
+        .into_iter()
         .filter(|cmd| cmd.starts_with(input))
         .collect()
 }
-

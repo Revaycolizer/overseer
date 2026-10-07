@@ -79,7 +79,10 @@ pub async fn maybe_compact(
 
     let total_tokens = count_messages_tokens(&messages);
     if total_tokens <= threshold || messages.len() < KEEP_RECENT_TURNS + 2 {
-        return CompactResult { messages, compacted: 0 };
+        return CompactResult {
+            messages,
+            compacted: 0,
+        };
     }
 
     let split_point = messages.len().saturating_sub(KEEP_RECENT_TURNS * 2);
@@ -91,14 +94,20 @@ pub async fn maybe_compact(
         id: 0,
         conversation_id: 0,
         role: "system".to_string(),
-        content: format!("<memory>Previous conversation summary:\n{}</memory>", summary),
+        content: format!(
+            "<memory>Previous conversation summary:\n{}</memory>",
+            summary
+        ),
         created_at: chrono::Utc::now().naive_utc(),
         hide_evidence: false,
         attachments: vec![],
     });
     compacted.extend_from_slice(recent);
 
-    CompactResult { messages: compacted, compacted: split_point }
+    CompactResult {
+        messages: compacted,
+        compacted: split_point,
+    }
 }
 
 async fn summarize_turns(
@@ -127,7 +136,10 @@ async fn summarize_turns(
     match agent.prompt(&prompt).await {
         Ok(summary) => summary,
         Err(e) => {
-            tracing::warn!(?e, "Memory compaction summarization failed, using truncated raw text");
+            tracing::warn!(
+                ?e,
+                "Memory compaction summarization failed, using truncated raw text"
+            );
             text.chars().take(500).collect()
         }
     }

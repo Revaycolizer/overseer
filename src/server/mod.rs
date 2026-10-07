@@ -1,9 +1,9 @@
 mod setup;
-use axum::Router;
 use crate::db::Database;
 use crate::engine::system::AgentSystem;
-use std::sync::Arc;
+use axum::Router;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::signal;
 use tower_governor::GovernorLayer;
 
@@ -15,7 +15,11 @@ pub struct ServerState {
     pub wake_tx: tokio::sync::broadcast::Sender<()>,
 }
 
-pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port: u16) -> anyhow::Result<()> {
+pub async fn run_server(
+    db: Arc<Database>,
+    agent_system: Arc<AgentSystem>,
+    port: u16,
+) -> anyhow::Result<()> {
     crate::engine::workflow::credentials::migrate_legacy(&db).await?;
     let data_dir = crate::db::get_overseer_data_dir();
     let pool = crate::engine::browser::pool::BrowserPool::new(
@@ -36,7 +40,9 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
     if voice_on == "true" || voice_on == "1" {
         let vdb = db.clone();
         let vagent = agent_system.clone();
-        tokio::spawn(async move { crate::engine::voice_service::run_voice_service(vdb, vagent).await });
+        tokio::spawn(
+            async move { crate::engine::voice_service::run_voice_service(vdb, vagent).await },
+        );
     } else {
         tracing::info!("voice service disabled (set setting 'voice_always_on' = true to enable)");
     }
@@ -49,7 +55,12 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         tokio::spawn(async move { crate::engine::wake_service::run_wake_service(wdb, wt).await });
     }
 
-    let state = Arc::new(ServerState { db, agent_system, browser_pool: browser_pool.clone(), wake_tx });
+    let state = Arc::new(ServerState {
+        db,
+        agent_system,
+        browser_pool: browser_pool.clone(),
+        wake_tx,
+    });
 
     let app = Router::new()
         .merge(setup::router())
@@ -99,11 +110,14 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
                         let _ = closed.send(());
                     });
                     let _ = receiver.await;
-                } else { std::future::pending::<()>().await; }
+                } else {
+                    std::future::pending::<()>().await;
+                }
             };
             let terminate = async {
                 #[cfg(unix)]
-                if let Ok(mut signal) = signal::unix::signal(signal::unix::SignalKind::terminate()) {
+                if let Ok(mut signal) = signal::unix::signal(signal::unix::SignalKind::terminate())
+                {
                     signal.recv().await;
                     return;
                 }
@@ -131,29 +145,29 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
     Ok(())
 }
 
-pub mod conversations;
-pub mod messages;
 pub mod agents;
-pub mod supervisors;
-pub mod tools;
-pub mod workflow_triggers;
-pub mod workflows;
-pub mod work_items;
-pub mod planners;
-pub mod supervision;
-pub mod versions;
 pub mod artifacts;
 pub mod auth;
 pub mod browser;
-pub mod workflow_templates;
-pub mod credentials;
 pub mod browser_hitl;
 pub mod browser_recording;
 pub mod browser_relay;
+pub mod conversations;
+pub mod credentials;
+pub mod events;
+pub mod messages;
 pub mod metrics;
 pub mod misc;
 pub mod openapi;
+pub mod planners;
+pub mod supervision;
+pub mod supervisors;
+pub mod tools;
+pub mod versions;
+pub mod work_items;
+pub mod workflow_templates;
+pub mod workflow_triggers;
+pub mod workflows;
 pub mod ws;
-pub mod events;
 
 pub mod access;

@@ -1,6 +1,8 @@
+use crate::engine::orchestrator::core::response::{MessagePart, SourcePart, StructuredResponse};
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
-use crate::engine::orchestrator::core::response::{StructuredResponse, MessagePart, SourcePart};
-use crate::engine::orchestrator::utils::format_helpers::{normalize_summary, extract_artifact_path, is_html_noise};
+use crate::engine::orchestrator::utils::format_helpers::{
+    extract_artifact_path, is_html_noise, normalize_summary,
+};
 use crate::engine::orchestrator::utils::json_strip::strip_embedded_json;
 
 pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredResponse {
@@ -17,20 +19,22 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
         // emitting it as the proper JSON shape. Strip any embedded
         // JSON shell so the renderer shows just the prose answer
         // instead of "answer + duplicate JSON".
-        structured.messages.extend(
-            res.messages
-                .iter()
-                .cloned()
-                .map(|mut m| {
-                    m.message = strip_embedded_json(&m.message);
-                    m
-                }),
-        );
+        structured
+            .messages
+            .extend(res.messages.iter().cloned().map(|mut m| {
+                m.message = strip_embedded_json(&m.message);
+                m
+            }));
     } else {
         // Fallback synthesis from summary and evidence
         let mut message = final_summary.clone();
         let lower = message.to_lowercase();
-        let is_generic = lower == "task completed." || lower == "done." || lower == "finished." || lower == "user task completed" || lower == "task completed" || message.is_empty();
+        let is_generic = lower == "task completed."
+            || lower == "done."
+            || lower == "finished."
+            || lower == "user task completed"
+            || lower == "task completed"
+            || message.is_empty();
 
         // STYLE-AWARE PROMOTION: If message is generic but we have findings, promote them.
         if is_generic && !res.evidence.is_empty() {
@@ -39,17 +43,22 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
             } else {
                 "\n\n### Findings:\n"
             };
-            
+
             let mut findings_str = String::from(findings_label);
             if res.report_style.as_deref() == Some("concise") {
-                 findings_str.push_str(&res.evidence.join(", "));
+                findings_str.push_str(&res.evidence.join(", "));
             } else {
-                 for e in &res.evidence {
-                     findings_str.push_str(&format!("- {}\n", e));
-                 }
+                for e in &res.evidence {
+                    findings_str.push_str(&format!("- {}\n", e));
+                }
             }
-            
-            if lower == "task completed." || lower == "done." || lower == "finished." || lower == "user task completed" || lower == "task completed" {
+
+            if lower == "task completed."
+                || lower == "done."
+                || lower == "finished."
+                || lower == "user task completed"
+                || lower == "task completed"
+            {
                 message = format!("{}{}", message, findings_str);
             } else {
                 message = findings_str;
@@ -67,7 +76,9 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
         }
 
         if !message.is_empty() {
-            let is_generic_now = message.to_lowercase().contains("task completed") || message.to_lowercase().contains("done.") || message.is_empty();
+            let is_generic_now = message.to_lowercase().contains("task completed")
+                || message.to_lowercase().contains("done.")
+                || message.is_empty();
             // Skip generic summary if we have better content coming (charts, etc.)
             if !is_generic_now || (res.charts.is_empty() && res.artifacts.is_empty()) {
                 structured.messages.push(MessagePart {
@@ -78,20 +89,32 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
         }
     }
 
-
     // 2. Evidence -> Sources
     if !res.hide_evidence {
         for e in &res.evidence {
             if is_html_noise(e) {
                 continue;
             }
-            
+
             // Try to parse as JSON if it's already structured evidence (e.g. from a search tool)
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(e) {
-                let title = v.get("title").or(v.get("source")).and_then(|v| v.as_str()).unwrap_or("Evidence");
-                let link = v.get("url").or(v.get("link")).and_then(|v| v.as_str()).unwrap_or("");
-                let desc = v.get("snippet").or(v.get("description")).or(v.get("summary")).and_then(|v| v.as_str()).unwrap_or(e);
-                
+                let title = v
+                    .get("title")
+                    .or(v.get("source"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Evidence");
+                let link = v
+                    .get("url")
+                    .or(v.get("link"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let desc = v
+                    .get("snippet")
+                    .or(v.get("description"))
+                    .or(v.get("summary"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(e);
+
                 structured.sources.push(SourcePart {
                     source: title.to_string(),
                     link: link.to_string(),
@@ -121,7 +144,7 @@ pub fn format_supervisor_result(res: &SupervisorExecutionResult) -> StructuredRe
     // 4. Attachments (Legacy/Additional)
     for a in &res.artifacts {
         if a.contains("assets/") || a.contains("./assets") {
-             structured.attachments.push(a.clone());
+            structured.attachments.push(a.clone());
         }
     }
 

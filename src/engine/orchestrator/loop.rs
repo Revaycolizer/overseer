@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use crate::db::Database;
 use crate::engine::voice::stt_optimizer::SpeechOptimizer;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 pub struct AgentOrchestrator {
     pub is_tts_speaking: Arc<AtomicBool>,
@@ -27,13 +27,20 @@ impl AgentOrchestrator {
         }
     }
 
-    pub async fn process_voice_input(&self, raw_audio: &[f32]) -> Result<(), Box<dyn std::error::Error>> {
-        if self.is_tts_speaking.load(Ordering::SeqCst) || crate::engine::voice::tts::is_tts_speaking() {
+    pub async fn process_voice_input(
+        &self,
+        raw_audio: &[f32],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if self.is_tts_speaking.load(Ordering::SeqCst)
+            || crate::engine::voice::tts::is_tts_speaking()
+        {
             return Ok(());
         }
         crate::engine::voice::earcons::play_listening_chime();
         let transcript = self.speech_engine.transcribe_stream(raw_audio);
-        if transcript.trim().is_empty() { return Ok(()); }
+        if transcript.trim().is_empty() {
+            return Ok(());
+        }
 
         if let Some(fast_action) = self.match_fast_path(&transcript) {
             self.execute_action(fast_action).await?;
@@ -78,13 +85,23 @@ impl AgentOrchestrator {
                 // proceeds on a deterministic Allow.
                 let args = serde_json::json!({ "action": "launch", "target": app });
                 match crate::engine::kernel::evaluate_named(
-                    &self.db_conn, "computer", ActionKind::ComputerControl, "app_launcher", &args, &["app_launcher".to_string()],
+                    &self.db_conn,
+                    "computer",
+                    ActionKind::ComputerControl,
+                    "app_launcher",
+                    &args,
+                    &["app_launcher".to_string()],
                 )
                 .await
                 {
-                    PolicyDecision::Allow => { std::process::Command::new(&app).spawn()?; }
+                    PolicyDecision::Allow => {
+                        std::process::Command::new(&app).spawn()?;
+                    }
                     _ => {
-                        println!("🛡️ Kernel blocked voice LaunchApp('{}') — not authorized.", app);
+                        println!(
+                            "🛡️ Kernel blocked voice LaunchApp('{}') — not authorized.",
+                            app
+                        );
                     }
                 }
             }
@@ -94,7 +111,12 @@ impl AgentOrchestrator {
                 // array (never a shell-interpreted string).
                 let args = serde_json::json!({ "action": "shell", "command": cmd });
                 match crate::engine::kernel::evaluate_named(
-                    &self.db_conn, "computer", ActionKind::ShellCommand, "shell", &args, &[],
+                    &self.db_conn,
+                    "computer",
+                    ActionKind::ShellCommand,
+                    "shell",
+                    &args,
+                    &[],
                 )
                 .await
                 {
@@ -114,7 +136,12 @@ impl AgentOrchestrator {
                 let args = serde_json::json!({ "action": "screenshot" });
                 if matches!(
                     crate::engine::kernel::evaluate_named(
-                        &self.db_conn, "computer", ActionKind::ComputerControl, "os_tool", &args, &["os_tool".to_string()],
+                        &self.db_conn,
+                        "computer",
+                        ActionKind::ComputerControl,
+                        "os_tool",
+                        &args,
+                        &["os_tool".to_string()],
                     )
                     .await,
                     PolicyDecision::Allow
@@ -136,7 +163,12 @@ impl AgentOrchestrator {
                 });
                 let kind = crate::engine::kernel::classify_action_kind(&tool, "computer");
                 match crate::engine::kernel::evaluate_named(
-                    &self.db_conn, "computer", kind, &tool.name, &args, &[tool.name.clone()],
+                    &self.db_conn,
+                    "computer",
+                    kind,
+                    &tool.name,
+                    &args,
+                    &[tool.name.clone()],
                 )
                 .await
                 {
@@ -145,7 +177,10 @@ impl AgentOrchestrator {
                             Ok(output) => {
                                 tracing::debug!(?output, "Dynamic tool output");
                                 self.is_tts_speaking.store(true, Ordering::SeqCst);
-                                crate::engine::voice::tts::speak_locally(&format!("Executed tool {}", tool.name));
+                                crate::engine::voice::tts::speak_locally(&format!(
+                                    "Executed tool {}",
+                                    tool.name
+                                ));
                                 self.is_tts_speaking.store(false, Ordering::SeqCst);
                             }
                             Err(e) => {
@@ -156,7 +191,9 @@ impl AgentOrchestrator {
                     _ => {
                         tracing::warn!(tool = %tool.name, "Kernel blocked voice tool — requires approval or not authorized");
                         self.is_tts_speaking.store(true, Ordering::SeqCst);
-                        crate::engine::voice::tts::speak_locally("That action requires approval and can't be run by voice.");
+                        crate::engine::voice::tts::speak_locally(
+                            "That action requires approval and can't be run by voice.",
+                        );
                         self.is_tts_speaking.store(false, Ordering::SeqCst);
                     }
                 }
@@ -166,11 +203,17 @@ impl AgentOrchestrator {
     }
 
     async fn capture_accessibility_and_pixels(&self) -> String {
-        let acc = crate::engine::vision::accessibility::capture_accessibility_tree().await.unwrap_or_default();
+        let acc = crate::engine::vision::accessibility::capture_accessibility_tree()
+            .await
+            .unwrap_or_default();
         format!("Screen: Active Window [Editor]. Accessibility: {}", acc)
     }
 
-    async fn resolve_next_agent_step(&self, goal: &str, context: &str) -> Result<Option<Action>, Box<dyn std::error::Error>> {
+    async fn resolve_next_agent_step(
+        &self,
+        goal: &str,
+        context: &str,
+    ) -> Result<Option<Action>, Box<dyn std::error::Error>> {
         let lower = goal.to_lowercase();
 
         // 1. Query database-defined tools first to execute them dynamically
@@ -182,9 +225,15 @@ impl AgentOrchestrator {
         }
 
         // 2. Fall back to local fast-path heuristics for OS actions
-        if lower.contains("firefox") && context.contains("Firefox") { return Ok(None); }
-        if lower.contains("firefox") { return Ok(Some(Action::LaunchApp("firefox".to_string()))); }
-        if lower.contains("screenshot") { return Ok(Some(Action::CaptureScreenVerify)); }
+        if lower.contains("firefox") && context.contains("Firefox") {
+            return Ok(None);
+        }
+        if lower.contains("firefox") {
+            return Ok(Some(Action::LaunchApp("firefox".to_string())));
+        }
+        if lower.contains("screenshot") {
+            return Ok(Some(Action::CaptureScreenVerify));
+        }
 
         Ok(None)
     }

@@ -12,6 +12,6 @@ pub mod backend;
 pub mod db;
 pub mod engine;
 pub mod mcp;
-pub mod skills;
 pub mod server;
+pub mod skills;
 pub mod tui;

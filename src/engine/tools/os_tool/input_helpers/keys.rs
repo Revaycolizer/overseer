@@ -1,5 +1,5 @@
-use enigo::Key;
 use crate::engine::tools::input::read_string_field;
+use enigo::Key;
 
 pub fn extract_key_tokens(input: &serde_json::Value) -> Vec<String> {
     if let Some(keys) = input.get("keys").and_then(|value| value.as_array()) {

@@ -2,8 +2,8 @@ use crate::engine::tools::error::DynamicToolError;
 
 #[cfg(windows)]
 pub async fn handle_open_url(url: &str) -> Result<String, DynamicToolError> {
-    use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
     use crate::engine::tools::os_tool::fields::escape_powershell_single_quoted;
+    use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
 
     let escaped = escape_powershell_single_quoted(url);
     let script = format!(
@@ -18,15 +18,17 @@ pub async fn handle_open_url(url: &str) -> Result<String, DynamicToolError> {
     use serde_json::json;
     use tokio::process::Command;
 
-    let cmd = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-    let status = Command::new(cmd)
-        .arg(url)
-        .status()
-        .await
-        .map_err(|e| DynamicToolError::ExecutionFailed {
+    let cmd = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let status = Command::new(cmd).arg(url).status().await.map_err(|e| {
+        DynamicToolError::ExecutionFailed {
             tool: "os_tool".to_string(),
             details: format!("Failed to open URL using {}: {}", cmd, e),
-        })?;
+        }
+    })?;
     if !status.success() {
         return Err(DynamicToolError::ExecutionFailed {
             tool: "os_tool".to_string(),
@@ -38,7 +40,8 @@ pub async fn handle_open_url(url: &str) -> Result<String, DynamicToolError> {
         "url": url,
         "success": true,
         "summary": format!("Opened URL '{}' using {}.", url, cmd)
-    }).to_string())
+    })
+    .to_string())
 }
 
 pub async fn handle_wait(duration_ms: u64) -> Result<String, DynamicToolError> {

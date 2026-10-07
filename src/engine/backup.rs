@@ -25,9 +25,9 @@ pub async fn create_backup(db: &Database, rotation: Option<usize>) -> anyhow::Re
 
     // VACUUM INTO creates a compact, clean copy
     sqlx::query("VACUUM INTO ?")
-    .bind(backup_path.to_string_lossy().as_ref())
-    .execute(&db.pool)
-    .await?;
+        .bind(backup_path.to_string_lossy().as_ref())
+        .execute(&db.pool)
+        .await?;
 
     // The database alone cannot decrypt v2 credentials after a disk loss.
     let key = data_dir.join("credentials.key");

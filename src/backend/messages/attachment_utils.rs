@@ -1,5 +1,5 @@
-use crate::db::Database;
 use super::extraction::{extract_local_file_paths_from_content, is_image_file_path};
+use crate::db::Database;
 
 pub async fn attach_assistant_files_from_content(
     db: &Database,
@@ -32,17 +32,24 @@ pub async fn attach_assistant_files_from_content(
         let mut extracted_content = None;
 
         if !is_image {
-            let extension = path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.to_ascii_lowercase());
+            let extension = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.to_ascii_lowercase());
             match extension.as_deref() {
                 Some("pdf") => {
-                    if let Ok(text) = crate::engine::orchestrator::native::media::pdf::extract_text(&path) {
+                    if let Ok(text) =
+                        crate::engine::orchestrator::native::media::pdf::extract_text(&path)
+                    {
                         if !text.trim().is_empty() {
                             extracted_content = Some(text);
                         }
                     }
                 }
                 Some("docx") => {
-                    if let Ok(text) = crate::engine::orchestrator::native::media::word::extract_text(&path) {
+                    if let Ok(text) =
+                        crate::engine::orchestrator::native::media::word::extract_text(&path)
+                    {
                         if !text.trim().is_empty() {
                             extracted_content = Some(text);
                         }
@@ -58,15 +65,9 @@ pub async fn attach_assistant_files_from_content(
             }
         }
 
-        let attachment_id = super::add_attachment(
-            db,
-            message_id,
-            &filename,
-            &file_path,
-            &content_type,
-            size,
-        )
-        .await?;
+        let attachment_id =
+            super::add_attachment(db, message_id, &filename, &file_path, &content_type, size)
+                .await?;
 
         if let Some(text) = extracted_content {
             let _ = super::update_attachment_content(db, attachment_id, &text).await;

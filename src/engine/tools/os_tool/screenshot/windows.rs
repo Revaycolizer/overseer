@@ -1,6 +1,6 @@
 use crate::engine::tools::error::DynamicToolError;
-use crate::engine::tools::vision::runtime_artifacts_dir;
 use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
+use crate::engine::tools::vision::runtime_artifacts_dir;
 
 pub async fn capture_windows_screenshot_json(tool_name: &str) -> Result<String, DynamicToolError> {
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S-%3f");

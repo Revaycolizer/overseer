@@ -1,13 +1,13 @@
-use std::sync::Arc;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
-use overseer::db::Database;
 use overseer::backend::client::BackendClient;
+use overseer::db::Database;
 use overseer::tui::app::App;
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,7 +37,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     if let Some(idx) = args.iter().position(|arg| arg == "--url") {
-        let value = args.get(idx + 1).filter(|value| !value.starts_with('-'))
+        let value = args
+            .get(idx + 1)
+            .filter(|value| !value.starts_with('-'))
             .ok_or("--url requires a URL")?;
         if !args.iter().any(|arg| arg == "--remote" || arg == "remote") {
             return Err("--url requires --remote".into());
@@ -48,7 +50,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let is_remote = args.iter().any(|arg| arg == "--remote" || arg == "remote");
-    let remote_url = args.iter().position(|arg| arg == "--url").and_then(|idx| args.get(idx + 1)).map(|s| s.as_str()).unwrap_or("http://127.0.0.1:8080");
+    let remote_url = args
+        .iter()
+        .position(|arg| arg == "--url")
+        .and_then(|idx| args.get(idx + 1))
+        .map(|s| s.as_str())
+        .unwrap_or("http://127.0.0.1:8080");
 
     let db = if is_remote {
         Database::new_remote(remote_url).await
@@ -61,7 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client: Arc<dyn BackendClient + Send + Sync> = if db.is_remote() {
         Arc::new(db.remote_client())
     } else {
-        Arc::new(overseer::backend::LocalClient::new(db.clone(), agent_system.clone()))
+        Arc::new(overseer::backend::LocalClient::new(
+            db.clone(),
+            agent_system.clone(),
+        ))
     };
 
     // Initialization may fail (for example, when the remote daemon is offline).
@@ -77,7 +87,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let res = run_app(&mut terminal, &mut app).await;
 
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     terminal.show_cursor()?;
 
     if let Err(err) = res {
@@ -103,7 +117,10 @@ where
             redraw = false;
         }
 
-        if app.is_orchestrating.load(std::sync::atomic::Ordering::SeqCst) {
+        if app
+            .is_orchestrating
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
             if last_refresh.elapsed() >= std::time::Duration::from_secs(1) {
                 let _ = app.refresh_conversations().await;
                 redraw = true;
@@ -165,7 +182,9 @@ where
             match event::read()? {
                 Event::Key(key) if key.kind == event::KeyEventKind::Press => {
                     if (key.code == KeyCode::Char('q') || key.code == KeyCode::Char('c'))
-                        && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
+                        && key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL)
                     {
                         app.cancel_current_orchestrate();
                         return Ok(());

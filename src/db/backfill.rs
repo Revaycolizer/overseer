@@ -13,7 +13,7 @@ impl Database {
 
         let mut tx = conn.begin().await?;
 
-       // println!("🔄 Backfilling Missing Snowflake IDs...");
+        // println!("🔄 Backfilling Missing Snowflake IDs...");
 
         // 1. Backfill settings
         let settings_to_backfill: Vec<(String,)> =
@@ -67,7 +67,7 @@ impl Database {
                 .execute(&mut *tx)
                 .await?;
 
-        //    println!("✅ Migrated agent ID {} -> {}", old_id, new_id);
+            //    println!("✅ Migrated agent ID {} -> {}", old_id, new_id);
         }
 
         tx.commit().await?;

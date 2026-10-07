@@ -1,5 +1,5 @@
-use crate::db::Database;
 use super::types::{WorkItem, WorkItemEvent};
+use crate::db::Database;
 
 pub async fn get_work_items_for_conversation(
     db: &Database,

@@ -85,9 +85,17 @@ async fn native_os_tool_captures_screenshot() {
         .await
         .expect("screenshot should succeed");
     let value: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
-    assert_eq!(value["status"], "success", "screenshot should report success: {}", raw);
+    assert_eq!(
+        value["status"], "success",
+        "screenshot should report success: {}",
+        raw
+    );
     let path = value["path"].as_str().expect("screenshot path");
-    assert!(std::path::Path::new(path).exists(), "screenshot file should exist at {}", path);
+    assert!(
+        std::path::Path::new(path).exists(),
+        "screenshot file should exist at {}",
+        path
+    );
     assert!(value["mime"] == "image/png", "mime should be image/png");
 }
 

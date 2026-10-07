@@ -7,6 +7,6 @@
 //! and supervisors as MCP resources) and a **client** (for the TUI to connect
 //! to external MCP servers).
 
-pub mod server;
 pub mod client;
+pub mod server;
 pub mod types;

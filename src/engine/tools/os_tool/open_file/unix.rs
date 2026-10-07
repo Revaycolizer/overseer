@@ -1,8 +1,11 @@
+use crate::engine::tools::error::DynamicToolError;
 use serde_json::json;
 use tokio::process::Command;
-use crate::engine::tools::error::DynamicToolError;
 
-pub async fn windows_open_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
+pub async fn windows_open_file_json(
+    tool_name: &str,
+    path: &str,
+) -> Result<String, DynamicToolError> {
     let mut target_path = path.to_string();
 
     if !cfg!(target_os = "macos") && !std::path::Path::new(&target_path).exists() {

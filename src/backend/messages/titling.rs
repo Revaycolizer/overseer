@@ -10,11 +10,10 @@ use crate::db::Database;
 /// the LLM and overwrote the refined title when the LLM returned
 /// empty / errored.
 pub async fn is_first_user_message(db: &Database, conversation_id: i64) -> bool {
-    let count_row: Result<(i64,), _> = sqlx::query_as(
-        "SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND role = 'user'",
-    )
-    .bind(conversation_id)
-    .fetch_one(&db.pool)
-    .await;
+    let count_row: Result<(i64,), _> =
+        sqlx::query_as("SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND role = 'user'")
+            .bind(conversation_id)
+            .fetch_one(&db.pool)
+            .await;
     count_row.map(|row| row.0 == 1).unwrap_or(false)
 }

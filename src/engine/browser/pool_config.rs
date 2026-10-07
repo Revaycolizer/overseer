@@ -5,6 +5,9 @@ pub struct PoolConfig {
 
 impl Default for PoolConfig {
     fn default() -> Self {
-        Self { max_sessions: 4, stealth: false }
+        Self {
+            max_sessions: 4,
+            stealth: false,
+        }
     }
 }

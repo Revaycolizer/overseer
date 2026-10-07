@@ -11,10 +11,13 @@ pub struct ConversationSearchResult {
 
 pub fn extract_clean_text(content: &str) -> String {
     let trimmed = content.trim();
-    if (trimmed.starts_with('{') && trimmed.ends_with('}')) || (trimmed.starts_with('[') && trimmed.ends_with(']')) {
+    if (trimmed.starts_with('{') && trimmed.ends_with('}'))
+        || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+    {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
             if let Some(arr) = val.get("messages").and_then(|v| v.as_array()) {
-                let prose = arr.iter()
+                let prose = arr
+                    .iter()
                     .filter_map(|m| m.get("message").and_then(|v| v.as_str()))
                     .map(|s| s.trim())
                     .filter(|s| !s.is_empty())
@@ -38,11 +41,20 @@ pub fn extract_clean_text(content: &str) -> String {
 fn clean_text_markers(text: &str) -> String {
     let re = regex::Regex::new(r"\[E[0-9]+\]").unwrap();
     let text = re.replace_all(text, "").to_string();
-    let text = text.lines().filter(|line| {
-        let t = line.trim();
-        if t == "ARTIFACT_CONTEXT:" || t == "WORK_ITEM_CONTEXT:" { return false; }
-        !(t.contains("[[ATTACH_IMAGE:") || t.contains("[[ATTACH_FILE:") || t.contains("[[ARTIFACT_REF:") || t.contains("[[WORK_ITEM_REF:"))
-    }).collect::<Vec<_>>().join("\n");
+    let text = text
+        .lines()
+        .filter(|line| {
+            let t = line.trim();
+            if t == "ARTIFACT_CONTEXT:" || t == "WORK_ITEM_CONTEXT:" {
+                return false;
+            }
+            !(t.contains("[[ATTACH_IMAGE:")
+                || t.contains("[[ATTACH_FILE:")
+                || t.contains("[[ARTIFACT_REF:")
+                || t.contains("[[WORK_ITEM_REF:"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     text.trim().to_string()
 }
 

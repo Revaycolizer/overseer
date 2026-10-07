@@ -1,4 +1,3 @@
-
 pub fn build_dispatch_prompt(
     query: &str,
     step: &str,
@@ -6,7 +5,7 @@ pub fn build_dispatch_prompt(
     state_str: &str,
     style: &str,
     history: &str,
-    retry_msg: Option<&str>
+    retry_msg: Option<&str>,
 ) -> String {
     let retry_inject = match retry_msg {
         Some(msg) => format!("\n\n⚠️ RETRY NOTICE: Your previous response was rejected. REASON: {}\nIMMEDIATE ACTION: You must call a tool NOW. Do NOT plan or describe future intent.", msg),

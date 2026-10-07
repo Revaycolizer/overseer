@@ -9,7 +9,11 @@ pub struct RetryPolicy {
 
 impl Default for RetryPolicy {
     fn default() -> Self {
-        Self { max_attempts: 3, backoff_ms: 500, max_backoff_ms: 5000 }
+        Self {
+            max_attempts: 3,
+            backoff_ms: 500,
+            max_backoff_ms: 5000,
+        }
     }
 }
 

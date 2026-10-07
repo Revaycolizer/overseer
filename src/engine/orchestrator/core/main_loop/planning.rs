@@ -1,9 +1,11 @@
 use crate::db::Database;
-use crate::engine::orchestrator::planning::{master::MasterPlanner, decisions::*, planner_utils, planner::MacroTask};
 use crate::engine::orchestrator::discovery;
+use crate::engine::orchestrator::planning::{
+    decisions::*, master::MasterPlanner, planner::MacroTask, planner_utils,
+};
 use crate::engine::utils::discovery::AgentInfo;
-use rig::providers::ollama;
 use rig::completion::Message;
+use rig::providers::ollama;
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -22,9 +24,20 @@ pub async fn resolve_macro_tasks(
     }
 
     let http_client = reqwest::Client::new();
-    let discovered_agents = discovery::discover_semantic_agents(db, &http_client, clean_query, 8, ollama_client).await;
-    
-    let mut macro_tasks = match timeout(Duration::from_millis(90000), master_planner.plan(ollama_client, clean_query, history.clone(), discovered_agents.clone())).await {
+    let discovered_agents =
+        discovery::discover_semantic_agents(db, &http_client, clean_query, 8, ollama_client).await;
+
+    let mut macro_tasks = match timeout(
+        Duration::from_millis(90000),
+        master_planner.plan(
+            ollama_client,
+            clean_query,
+            history.clone(),
+            discovered_agents.clone(),
+        ),
+    )
+    .await
+    {
         Ok(plan) => planner_utils::sanitize_plan(&plan, clean_query),
         Err(_) => vec![],
     };
@@ -36,10 +49,17 @@ pub async fn resolve_macro_tasks(
 
     if is_artifact_task && macro_tasks.len() == 1 {
         let retry_prompt = format!("{}\n\n⚠️ COORDINATION FAILURE: Decompose this into at least TWO steps: 1. Research 2. Generation.", clean_query);
-        if let Ok(plan) = timeout(Duration::from_millis(60000), master_planner.plan(ollama_client, &retry_prompt, history, discovered_agents)).await {
+        if let Ok(plan) = timeout(
+            Duration::from_millis(60000),
+            master_planner.plan(ollama_client, &retry_prompt, history, discovered_agents),
+        )
+        .await
+        {
             macro_tasks = planner_utils::sanitize_plan(&plan, clean_query);
         }
-        if macro_tasks.len() == 1 { macro_tasks = planner_utils::force_decompose_artifact_plan(clean_query); }
+        if macro_tasks.len() == 1 {
+            macro_tasks = planner_utils::force_decompose_artifact_plan(clean_query);
+        }
     }
     macro_tasks
 }

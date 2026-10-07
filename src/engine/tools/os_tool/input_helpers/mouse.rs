@@ -1,6 +1,6 @@
-use enigo::{Enigo, Settings};
 use crate::engine::tools::error::DynamicToolError;
 use crate::engine::tools::input::read_i64_field;
+use enigo::{Enigo, Settings};
 
 pub fn extract_coordinates(input: &serde_json::Value) -> Option<(i32, i32)> {
     let x = read_i64_field(input, &["x", "left"]).map(|value| value as i32);

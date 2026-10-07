@@ -1,10 +1,10 @@
+pub mod agents;
 pub mod conversations;
 pub mod messages;
-pub mod agents;
-pub mod workflows;
-pub mod work_items;
-pub mod planners;
 pub mod misc;
+pub mod planners;
+pub mod work_items;
+pub mod workflows;
 
 use crate::backend::client::BackendClient;
 use crate::db::Database;
@@ -24,7 +24,11 @@ impl LocalClient {
             crate::engine::browser::pool_config::PoolConfig::default(),
             data_dir,
         ));
-        Self { db, agent_system, browser_pool }
+        Self {
+            db,
+            agent_system,
+            browser_pool,
+        }
     }
 }
 

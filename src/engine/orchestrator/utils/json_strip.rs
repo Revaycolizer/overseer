@@ -30,7 +30,9 @@ pub fn strip_embedded_json(text: &str) -> String {
         }
     }
 
-    let Some(end_idx) = end else { return text.to_string(); };
+    let Some(end_idx) = end else {
+        return text.to_string();
+    };
 
     let candidate = &text[start..=end_idx];
     if serde_json::from_str::<serde_json::Value>(candidate).is_err() {
@@ -61,7 +63,12 @@ fn tidy_leftover(s: &str) -> String {
     let trimmed = s.trim();
     // Strip stray leading punctuation left dangling by the removed JSON.
     let trimmed = trimmed
-        .trim_start_matches(|c: char| matches!(c, '\'' | '"' | '`' | ',' | ':' | ';' | '-' | '.' | ' ' | '\t' | '\n'))
+        .trim_start_matches(|c: char| {
+            matches!(
+                c,
+                '\'' | '"' | '`' | ',' | ':' | ';' | '-' | '.' | ' ' | '\t' | '\n'
+            )
+        })
         .trim();
 
     // Collapse runs of whitespace to single spaces.

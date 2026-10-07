@@ -1,9 +1,6 @@
 use serde_json::{json, Value};
 
-pub fn process_unix_search_results(
-    file_lines: Vec<String>,
-    query: &str,
-) -> Vec<Value> {
+pub fn process_unix_search_results(file_lines: Vec<String>, query: &str) -> Vec<Value> {
     let lower_query = query.to_lowercase();
     let mut tokens: Vec<String> = lower_query
         .split(|c: char| c.is_whitespace() || matches!(c, '?' | '.' | ',' | ':' | ';' | '\\' | '/'))

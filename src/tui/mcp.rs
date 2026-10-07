@@ -1,3 +1,5 @@
+use super::app::App;
+use super::ui::{ACCENT, MUTED, SUCCESS, SURFACE, TEXT, WARN};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -5,12 +7,9 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
-use super::app::App;
-use super::ui::{ACCENT, MUTED, SUCCESS, SURFACE, TEXT, WARN};
 
 pub fn draw_mcp(f: &mut Frame, app: &mut App, area: Rect) {
-    let chunks = Layout::vertical([Constraint::Length(8), Constraint::Min(0)])
-        .split(area);
+    let chunks = Layout::vertical([Constraint::Length(8), Constraint::Min(0)]).split(area);
 
     draw_mcp_status(f, app, chunks[0]);
     draw_mcp_detail(f, app, chunks[1]);
@@ -23,7 +22,10 @@ fn draw_mcp_status(f: &mut Frame, app: &mut App, area: Rect) {
 
     let lines = vec![
         Line::from(vec![
-            Span::styled("Model Context Protocol (MCP)", Style::new().fg(ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Model Context Protocol (MCP)",
+                Style::new().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
             Span::raw("  "),
             if connected {
                 Span::styled("● CONNECTED", Style::new().fg(SUCCESS))
@@ -56,9 +58,12 @@ fn draw_mcp_status(f: &mut Frame, app: &mut App, area: Rect) {
     ];
 
     f.render_widget(
-        Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).border_style(Style::new().fg(SURFACE))
-                .title(Span::styled(" Connection ", Style::new().fg(ACCENT)))),
+        Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::new().fg(SURFACE))
+                .title(Span::styled(" Connection ", Style::new().fg(ACCENT))),
+        ),
         area,
     );
 }
@@ -73,7 +78,10 @@ fn draw_mcp_detail(f: &mut Frame, app: &mut App, area: Rect) {
         )));
     } else {
         if !app.mcp_tools.is_empty() {
-            lines.push(Line::from(Span::styled("Tools:", Style::new().fg(ACCENT).add_modifier(Modifier::BOLD))));
+            lines.push(Line::from(Span::styled(
+                "Tools:",
+                Style::new().fg(ACCENT).add_modifier(Modifier::BOLD),
+            )));
             for tool in &app.mcp_tools {
                 lines.push(Line::from(vec![
                     Span::styled("  • ", Style::new().fg(SUCCESS)),
@@ -86,7 +94,10 @@ fn draw_mcp_detail(f: &mut Frame, app: &mut App, area: Rect) {
         }
 
         if !app.mcp_resources.is_empty() {
-            lines.push(Line::from(Span::styled("Resources:", Style::new().fg(ACCENT).add_modifier(Modifier::BOLD))));
+            lines.push(Line::from(Span::styled(
+                "Resources:",
+                Style::new().fg(ACCENT).add_modifier(Modifier::BOLD),
+            )));
             for res in &app.mcp_resources {
                 lines.push(Line::from(vec![
                     Span::styled("  ◆ ", Style::new().fg(ACCENT)),
@@ -100,8 +111,12 @@ fn draw_mcp_detail(f: &mut Frame, app: &mut App, area: Rect) {
 
     f.render_widget(
         Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).border_style(Style::new().fg(SURFACE))
-                .title(Span::styled(" Discovery ", Style::new().fg(ACCENT))))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::new().fg(SURFACE))
+                    .title(Span::styled(" Discovery ", Style::new().fg(ACCENT))),
+            )
             .wrap(Wrap { trim: false }),
         area,
     );

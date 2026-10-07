@@ -9,7 +9,6 @@
 ///
 /// Swap in `tiktoken-rs` later if model-specific accuracy becomes
 /// important. The estimator stays as a fast fallback either way.
-
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 
@@ -17,8 +16,7 @@ use std::sync::{OnceLock, RwLock};
 static MODEL_CONTEXT_CACHE: OnceLock<RwLock<HashMap<String, usize>>> = OnceLock::new();
 
 fn model_cache() -> &'static RwLock<HashMap<String, usize>> {
-    MODEL_CONTEXT_CACHE
-        .get_or_init(|| RwLock::new(HashMap::new()))
+    MODEL_CONTEXT_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
 /// Known context window sizes for common local models.
@@ -49,7 +47,11 @@ pub fn get_model_context_size(model: &str) -> usize {
     let model_lower = model.to_lowercase();
 
     // Check cache
-    if let Some(size) = model_cache().read().ok().and_then(|c| c.get(&model_lower).copied()) {
+    if let Some(size) = model_cache()
+        .read()
+        .ok()
+        .and_then(|c| c.get(&model_lower).copied())
+    {
         return size;
     }
 
@@ -74,7 +76,11 @@ pub async fn fetch_model_context_size(model: &str) -> Option<usize> {
     let model_lower = model.to_lowercase();
 
     // Already cached?
-    if let Some(size) = model_cache().read().ok().and_then(|c| c.get(&model_lower).copied()) {
+    if let Some(size) = model_cache()
+        .read()
+        .ok()
+        .and_then(|c| c.get(&model_lower).copied())
+    {
         return Some(size);
     }
 
@@ -99,21 +105,25 @@ pub async fn fetch_model_context_size(model: &str) -> Option<usize> {
                         .and_then(|v| v.as_u64())
                     {
                         let size = ctx as usize;
-                        let _ = model_cache().write().map(|mut c| c.insert(model_lower, size));
+                        let _ = model_cache()
+                            .write()
+                            .map(|mut c| c.insert(model_lower, size));
                         return Some(size);
                     }
                     // Also check modelfile for num_ctx parameter
-                    if let Some(ctx) = data
-                        .get("modelfile")
-                        .and_then(|m| m.as_str())
-                        .and_then(|s| {
-                            s.lines()
-                                .find(|l| l.trim().starts_with("num_ctx"))
-                                .and_then(|l| l.split_whitespace().nth(1))
-                                .and_then(|n| n.parse::<usize>().ok())
-                        })
+                    if let Some(ctx) =
+                        data.get("modelfile")
+                            .and_then(|m| m.as_str())
+                            .and_then(|s| {
+                                s.lines()
+                                    .find(|l| l.trim().starts_with("num_ctx"))
+                                    .and_then(|l| l.split_whitespace().nth(1))
+                                    .and_then(|n| n.parse::<usize>().ok())
+                            })
                     {
-                        let _ = model_cache().write().map(|mut c| c.insert(model_lower, ctx));
+                        let _ = model_cache()
+                            .write()
+                            .map(|mut c| c.insert(model_lower, ctx));
                         return Some(ctx);
                     }
                     None
@@ -222,7 +232,11 @@ mod tests {
         // Need > 16384 * 4 = 65536 chars to be "approaching"
         let text = "a".repeat(70000);
         let warning = token_budget_warning(&text, "qwen2.5:7b-instruct");
-        assert!(warning.is_some(), "Expected warning for text ~{} chars", text.len());
+        assert!(
+            warning.is_some(),
+            "Expected warning for text ~{} chars",
+            text.len()
+        );
     }
 
     #[test]

@@ -1,10 +1,10 @@
 use crate::db::Database;
-use crate::engine::utils::discovery::AgentInfo;
-use crate::engine::orchestrator::discovery::dynamic::ChatAgent;
 use crate::engine::orchestrator::core::event_logger::record_event;
-use crate::engine::orchestrator::core::response::{StructuredResponse, MessagePart};
-use rig::providers::ollama;
+use crate::engine::orchestrator::core::response::{MessagePart, StructuredResponse};
+use crate::engine::orchestrator::discovery::dynamic::ChatAgent;
+use crate::engine::utils::discovery::AgentInfo;
 use rig::completion::Message;
+use rig::providers::ollama;
 
 pub async fn handle_direct_chat(
     db: &Database,
@@ -98,14 +98,14 @@ e.g. `/open <app, path, or url>` or `/do <goal>`. Keep replies concise and speci
     } else {
         chat_agent.chat(clean_query, history.to_vec()).await
     };
-    
+
     // ARCHITECTURE V3.4: UNIFORM PROTOCOL ENFORCEMENT
     // If the agent returned a SupervisorExecutionResult JSON, we must parse and format it.
     let response = if raw_response.trim().starts_with('{') && raw_response.trim().ends_with('}') {
         let parsed = crate::engine::orchestrator::dispatch::parsers::parse_supervisor_result(
-            raw_response.clone(), 
-            false, 
-            Some("detailed".to_string())
+            raw_response.clone(),
+            false,
+            Some("detailed".to_string()),
         );
         crate::engine::orchestrator::utils::formatter::format_supervisor_result(&parsed)
     } else {
@@ -134,7 +134,8 @@ e.g. `/open <app, path, or url>` or `/do <goal>`. Keep replies concise and speci
 
     let final_json = serde_json::to_string(&response).unwrap_or_default();
     if let Some(rid) = run_id {
-        let _ = crate::backend::finish_execution_run(db, rid, "completed", Some(&final_json), None).await;
+        let _ = crate::backend::finish_execution_run(db, rid, "completed", Some(&final_json), None)
+            .await;
     }
 
     final_json

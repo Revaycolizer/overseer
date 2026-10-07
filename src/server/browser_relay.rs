@@ -1,21 +1,19 @@
+use super::ServerState;
 use axum::{
-    extract::{ws::{WebSocket, WebSocketUpgrade, Message as WsMessage}},
+    extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
 use std::sync::Arc;
-use super::ServerState;
 
-pub async fn handler(
-    ws: WebSocketUpgrade,
-    state: Arc<ServerState>,
-    id: i64,
-) -> impl IntoResponse {
+pub async fn handler(ws: WebSocketUpgrade, state: Arc<ServerState>, id: i64) -> impl IntoResponse {
     ws.on_upgrade(move |client_ws| relay(client_ws, state, id))
 }
 
 async fn relay(client_ws: WebSocket, state: Arc<ServerState>, id: i64) {
-    let Some(obscura_url) = state.browser_pool.get_cdp_url(id).await else { return };
+    let Some(obscura_url) = state.browser_pool.get_cdp_url(id).await else {
+        return;
+    };
     let obscura_ws = match tokio_tungstenite::connect_async(&obscura_url).await {
         Ok((ws, _)) => ws,
         Err(_) => return,
@@ -32,7 +30,9 @@ async fn relay(client_ws: WebSocket, state: Arc<ServerState>, id: i64) {
                 WsMessage::Close(_) => break,
                 _ => continue,
             };
-            let _ = obscura_tx.send(tokio_tungstenite::tungstenite::Message::Text(data)).await;
+            let _ = obscura_tx
+                .send(tokio_tungstenite::tungstenite::Message::Text(data))
+                .await;
         }
     };
 
@@ -44,7 +44,9 @@ async fn relay(client_ws: WebSocket, state: Arc<ServerState>, id: i64) {
                 tokio_tungstenite::tungstenite::Message::Close(_) => break,
                 _ => continue,
             };
-            if client_tx.send(payload).await.is_err() { break; }
+            if client_tx.send(payload).await.is_err() {
+                break;
+            }
         }
     };
 

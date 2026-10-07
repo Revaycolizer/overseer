@@ -6,11 +6,11 @@
 
 use std::collections::HashMap;
 
-use overseer::engine::orchestrator::atlas::{AgentAtlas, search_atlas, group_into_cells};
-use overseer::engine::orchestrator::swarm::{calculate_consensus, SwarmVerifier};
+use overseer::engine::orchestrator::atlas::{group_into_cells, search_atlas, AgentAtlas};
 use overseer::engine::orchestrator::lattice::coordinator::LatticeCoordinator;
 use overseer::engine::orchestrator::lattice::scheduler::SwarmScheduler;
 use overseer::engine::orchestrator::state::{CellState, EvidenceDag, EvidenceNode, EvidenceStatus};
+use overseer::engine::orchestrator::swarm::{calculate_consensus, SwarmVerifier};
 use overseer::engine::utils::discovery::AgentInfo;
 
 // ---------------------------------------------------------------------------
@@ -19,10 +19,16 @@ use overseer::engine::utils::discovery::AgentInfo;
 
 fn make_agent(id: i64, name: &str, domain: &str, desc: &str) -> AgentInfo {
     AgentInfo {
-        id, name: name.into(), description: desc.into(),
-        tools: vec![], instructions: String::new(), model: String::new(),
-        domain: domain.into(), version: "1.0".into(),
-        code: None, source_files: vec![],
+        id,
+        name: name.into(),
+        description: desc.into(),
+        tools: vec![],
+        instructions: String::new(),
+        model: String::new(),
+        domain: domain.into(),
+        version: "1.0".into(),
+        code: None,
+        source_files: vec![],
         response_format: "json".into(),
     }
 }
@@ -39,14 +45,27 @@ fn make_atlas(agents: Vec<AgentInfo>) -> AgentAtlas {
 fn test_atlas_search_tfidf_scoring() {
     // Agents with different domain/description relevance
     let atlas = make_atlas(vec![
-        make_agent(1, "web_search", "web", "Searches the internet for information"),
+        make_agent(
+            1,
+            "web_search",
+            "web",
+            "Searches the internet for information",
+        ),
         make_agent(2, "file_manager", "files", "Manages local file operations"),
-        make_agent(3, "code_runner", "code", "Executes and compiles source code"),
+        make_agent(
+            3,
+            "code_runner",
+            "code",
+            "Executes and compiles source code",
+        ),
     ]);
     // Search for code-related terms — should rank code_runner highest
     let results = search_atlas(&atlas, "compile and run source code", 3);
     assert!(!results.is_empty(), "should return results");
-    assert_eq!(results[0].name, "code_runner", "code_runner should be first");
+    assert_eq!(
+        results[0].name, "code_runner",
+        "code_runner should be first"
+    );
 }
 
 #[test]
@@ -69,8 +88,18 @@ fn test_atlas_search_returns_all_when_limit_exceeds_count() {
 #[test]
 fn test_atlas_search_deduplicates_results() {
     let atlas = make_atlas(vec![
-        make_agent(1, "web1", "web", "Web search tool for finding information on the internet"),
-        make_agent(2, "web2", "web", "Another web search tool for internet information"),
+        make_agent(
+            1,
+            "web1",
+            "web",
+            "Web search tool for finding information on the internet",
+        ),
+        make_agent(
+            2,
+            "web2",
+            "web",
+            "Another web search tool for internet information",
+        ),
     ]);
     let results = search_atlas(&atlas, "web search tool", 5);
     // Both should appear, but no duplicates
@@ -101,16 +130,30 @@ fn test_group_into_cells_multiple_domains() {
         make_agent(3, "c", "chat", "Chat assistant"),
     ];
     let cells = group_into_cells(&agents);
-    assert!(cells.len() >= 3, "expected >=3 cells for 3 domains, got {}", cells.len());
+    assert!(
+        cells.len() >= 3,
+        "expected >=3 cells for 3 domains, got {}",
+        cells.len()
+    );
 }
 
 #[test]
 fn test_group_into_cells_large_group_splits() {
     let agents: Vec<AgentInfo> = (0..10)
-        .map(|i| make_agent(i, &format!("agent_{i}"), "web", "A web-related agent tool for searching"))
+        .map(|i| {
+            make_agent(
+                i,
+                &format!("agent_{i}"),
+                "web",
+                "A web-related agent tool for searching",
+            )
+        })
         .collect();
     let cells = group_into_cells(&agents);
-    assert!(cells.len() > 1, "large group should split into multiple cells");
+    assert!(
+        cells.len() > 1,
+        "large group should split into multiple cells"
+    );
 }
 
 // ===========================================================================
@@ -151,7 +194,10 @@ fn test_consensus_all_different() {
         "Third topic nothing in common words here three.".to_string(),
     ];
     let result = calculate_consensus(&outputs);
-    assert!(result.is_some(), "even all-different outputs should return one");
+    assert!(
+        result.is_some(),
+        "even all-different outputs should return one"
+    );
 }
 
 #[test]
@@ -167,7 +213,9 @@ fn test_consensus_single_element() {
 
 fn cell_with_facts(facts: Vec<&str>) -> CellState {
     let mut cell = CellState::new("test_cell");
-    for f in facts { cell.add_fact(f.to_string()); }
+    for f in facts {
+        cell.add_fact(f.to_string());
+    }
     cell
 }
 
@@ -179,18 +227,21 @@ fn test_verifier_high_confidence_match() {
         "Quantum computing uses superposition for computation.",
         &cell,
     );
-    assert!(score > 0.5, "expected high score for matching content, got {score}");
+    assert!(
+        score > 0.5,
+        "expected high score for matching content, got {score}"
+    );
 }
 
 #[test]
 fn test_verifier_no_match_score_low() {
     let cell = cell_with_facts(vec!["Python is a programming language."]);
     let verifier = SwarmVerifier::new(0.5);
-    let score = verifier.verify_claims(
-        "Mount Everest is the tallest mountain.",
-        &cell,
+    let score = verifier.verify_claims("Mount Everest is the tallest mountain.", &cell);
+    assert!(
+        score < 0.5,
+        "expected low score for unrelated content, got {score}"
     );
-    assert!(score < 0.5, "expected low score for unrelated content, got {score}");
 }
 
 #[test]
@@ -218,9 +269,15 @@ fn test_verifier_empty_sentences_vacuously_true() {
 fn test_coordinator_research_decomposition() {
     let coord = LatticeCoordinator::new();
     let tasks = coord.decompose_goal("What is quantum computing and how does entanglement work?");
-    assert!(tasks.len() >= 2, "research goal should decompose into >=2 tasks");
-    assert!(tasks[0].contains("Information gathering") || tasks[0].contains("Research"), 
-            "first task should be research-like: {}", tasks[0]);
+    assert!(
+        tasks.len() >= 2,
+        "research goal should decompose into >=2 tasks"
+    );
+    assert!(
+        tasks[0].contains("Information gathering") || tasks[0].contains("Research"),
+        "first task should be research-like: {}",
+        tasks[0]
+    );
 }
 
 #[test]
@@ -228,7 +285,10 @@ fn test_coordinator_creative_decomposition() {
     let coord = LatticeCoordinator::new();
     let tasks = coord.decompose_goal("Write a short story about a robot learning empathy");
     assert_eq!(tasks.len(), 3, "creative goal should produce 3 tasks");
-    assert!(tasks[0].contains("Ideation"), "first creative task should be ideation");
+    assert!(
+        tasks[0].contains("Ideation"),
+        "first creative task should be ideation"
+    );
     assert!(tasks[1].contains("Drafting"), "second should be drafting");
 }
 
@@ -331,7 +391,11 @@ fn test_cell_state_deduplicates_facts() {
     let mut cell = CellState::new("test");
     cell.add_fact("Same fact".to_string());
     cell.add_fact("Same fact".to_string());
-    assert_eq!(cell.facts.len(), 1, "duplicate facts should be deduplicated");
+    assert_eq!(
+        cell.facts.len(),
+        1,
+        "duplicate facts should be deduplicated"
+    );
 }
 
 #[test]
@@ -346,5 +410,8 @@ fn test_cell_state_tracks_sources() {
 fn test_cell_state_prompt_includes_id() {
     let cell = CellState::new("custom-cell-id");
     let prompt = cell.to_prompt_string();
-    assert!(prompt.contains("custom-cell-id"), "prompt should include cell id");
+    assert!(
+        prompt.contains("custom-cell-id"),
+        "prompt should include cell id"
+    );
 }

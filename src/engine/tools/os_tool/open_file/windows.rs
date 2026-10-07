@@ -1,8 +1,11 @@
 use crate::engine::tools::error::DynamicToolError;
-use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
 use crate::engine::tools::os_tool::fields::escape_powershell_single_quoted;
+use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
 
-pub async fn windows_open_file_json(tool_name: &str, path: &str) -> Result<String, DynamicToolError> {
+pub async fn windows_open_file_json(
+    tool_name: &str,
+    path: &str,
+) -> Result<String, DynamicToolError> {
     let escaped_path = escape_powershell_single_quoted(path);
     let script = format!(
         r#"

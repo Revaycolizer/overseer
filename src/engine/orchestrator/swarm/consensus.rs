@@ -18,10 +18,7 @@ pub fn calculate_consensus(outputs: &[String]) -> Option<String> {
 
     // 1. Tokenise and build document-frequency map
     let mut doc_freq: HashMap<String, usize> = HashMap::new();
-    let tokenised: Vec<Vec<String>> = outputs
-        .iter()
-        .map(|text| tokenise(text))
-        .collect();
+    let tokenised: Vec<Vec<String>> = outputs.iter().map(|text| tokenise(text)).collect();
 
     let num_docs = outputs.len();
     for tokens in &tokenised {
@@ -66,19 +63,20 @@ pub fn calculate_consensus(outputs: &[String]) -> Option<String> {
 /// Tokenise text into lowercased terms, removing stop-words and short tokens.
 fn tokenise(text: &str) -> Vec<String> {
     const STOP_WORDS: &[&str] = &[
-        "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-        "of", "by", "with", "from", "as", "is", "was", "are", "were", "be",
-        "been", "being", "have", "has", "had", "do", "does", "did", "will",
-        "would", "could", "should", "may", "might", "shall", "can", "it",
-        "its", "this", "that", "these", "those", "i", "we", "you", "he",
-        "she", "they", "me", "him", "her", "us", "them", "my", "your",
-        "his", "her", "our", "their", "not", "no", "nor", "so", "if",
-        "then", "than", "too", "very", "just", "about", "also", "more", "over",
+        "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "by", "with",
+        "from", "as", "is", "was", "are", "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "could", "should", "may", "might", "shall", "can",
+        "it", "its", "this", "that", "these", "those", "i", "we", "you", "he", "she", "they", "me",
+        "him", "her", "us", "them", "my", "your", "his", "her", "our", "their", "not", "no", "nor",
+        "so", "if", "then", "than", "too", "very", "just", "about", "also", "more", "over",
     ];
     let stop_set: HashSet<&str> = STOP_WORDS.iter().copied().collect();
 
     text.split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
         .filter(|w| w.len() > 2 && !stop_set.contains(w.as_str()))
         .collect()
 }

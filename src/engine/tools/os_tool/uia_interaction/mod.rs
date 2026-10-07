@@ -1,3 +1,11 @@
+#[cfg(not(windows))]
+pub mod unix;
+#[cfg(not(windows))]
+pub mod unix_handler;
+#[cfg(not(windows))]
+pub mod unix_sim;
+#[cfg(windows)]
+pub mod windows;
 #[cfg(windows)]
 pub mod windows_script1;
 #[cfg(windows)]
@@ -6,14 +14,6 @@ pub mod windows_script2;
 pub mod windows_script3;
 #[cfg(windows)]
 pub mod windows_script4;
-#[cfg(windows)]
-pub mod windows;
-#[cfg(not(windows))]
-pub mod unix;
-#[cfg(not(windows))]
-pub mod unix_sim;
-#[cfg(not(windows))]
-pub mod unix_handler;
 
 #[cfg(windows)]
 pub use windows::windows_uia_interaction_json;

@@ -25,15 +25,21 @@ pub async fn get_supervisor_agents(
         agents.push(AgentInfo {
             id: agent_id,
             name: r.get("name"),
-            description: r.get::<Option<String>, _>("description").unwrap_or_default(),
-            instructions: r.get::<Option<String>, _>("instructions").unwrap_or_default(),
+            description: r
+                .get::<Option<String>, _>("description")
+                .unwrap_or_default(),
+            instructions: r
+                .get::<Option<String>, _>("instructions")
+                .unwrap_or_default(),
             model: r.get::<Option<String>, _>("model").unwrap_or_default(),
             domain: domain.clone(),
             version: r.get::<Option<String>, _>("version").unwrap_or_default(),
             code: r.get("code"),
             tools: vec![], // Empty placeholders as per original
             source_files: vec![],
-            response_format: r.get::<Option<String>, _>("response_format").unwrap_or_else(|| "json".to_string()),
+            response_format: r
+                .get::<Option<String>, _>("response_format")
+                .unwrap_or_else(|| "json".to_string()),
         });
     }
 

@@ -1,7 +1,7 @@
 // src/engine/system/history_builder.rs
 use crate::db::Database;
 use crate::engine::orchestrator::native::media;
-use rig::completion::{Message, AssistantContent};
+use rig::completion::{AssistantContent, Message};
 use rig::message::UserContent;
 use rig::providers::ollama;
 
@@ -11,35 +11,44 @@ pub async fn build_history(
     messages: Vec<crate::backend::Message>,
     user_query: &str,
 ) -> Vec<Message> {
-    let compacted = crate::engine::orchestrator::memory_compactor::maybe_compact(
-        messages, ollama_client, db,
-    ).await;
+    let compacted =
+        crate::engine::orchestrator::memory_compactor::maybe_compact(messages, ollama_client, db)
+            .await;
     let messages = compacted.messages;
     let mut history = Vec::new();
     let msg_count = messages.len();
-    
+
     for (i, m) in messages.into_iter().enumerate() {
         let is_current = i == msg_count - 1;
-        
+
         if m.role == "user" {
             let content_text = strip_internal_message_markers(&m.content);
-            let mut contents = vec![UserContent::text(
-                if content_text.is_empty() { "(user message)".to_string() } else { content_text }
-            )];
+            let mut contents = vec![UserContent::text(if content_text.is_empty() {
+                "(user message)".to_string()
+            } else {
+                content_text
+            })];
 
             for att in m.attachments {
                 let media_content = if is_current {
                     if att.extracted_content.is_none() {
-                        let generic = media::process_attachment(db, ollama_client, &att.file_path, None).await;
-                        let _ = crate::backend::update_attachment_content(db, att.id, &generic).await;
+                        let generic =
+                            media::process_attachment(db, ollama_client, &att.file_path, None)
+                                .await;
+                        let _ =
+                            crate::backend::update_attachment_content(db, att.id, &generic).await;
                     }
-                    media::process_attachment(db, ollama_client, &att.file_path, Some(user_query)).await
+                    media::process_attachment(db, ollama_client, &att.file_path, Some(user_query))
+                        .await
                 } else {
                     if let Some(cached) = att.extracted_content {
                         cached
                     } else {
-                        let extracted = media::process_attachment(db, ollama_client, &att.file_path, None).await;
-                        let _ = crate::backend::update_attachment_content(db, att.id, &extracted).await;
+                        let extracted =
+                            media::process_attachment(db, ollama_client, &att.file_path, None)
+                                .await;
+                        let _ =
+                            crate::backend::update_attachment_content(db, att.id, &extracted).await;
                         extracted
                     }
                 };
@@ -57,13 +66,13 @@ pub async fn build_history(
                     }
                 }
             }
-            history.push(Message::User { 
-                content: rig::OneOrMany::many(contents).expect("Non-empty contents") 
+            history.push(Message::User {
+                content: rig::OneOrMany::many(contents).expect("Non-empty contents"),
             });
         } else if m.role == "assistant" {
-            history.push(Message::Assistant { 
-                id: Some(m.id.to_string()), 
-                content: rig::OneOrMany::one(AssistantContent::text(m.content.clone())) 
+            history.push(Message::Assistant {
+                id: Some(m.id.to_string()),
+                content: rig::OneOrMany::one(AssistantContent::text(m.content.clone())),
             });
         }
     }
@@ -88,5 +97,9 @@ fn add_image_to_contents(contents: &mut Vec<UserContent>, bytes: Vec<u8>, conten
 }
 
 fn strip_internal_message_markers(content: &str) -> String {
-    content.replace("<shadow_context>", "").replace("</shadow_context>", "").trim().to_string()
+    content
+        .replace("<shadow_context>", "")
+        .replace("</shadow_context>", "")
+        .trim()
+        .to_string()
 }

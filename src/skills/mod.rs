@@ -14,12 +14,12 @@
 //! followed by detailed markdown instructions that teach the AI how to
 //! perform the skill's task.
 
-pub mod registry;
 pub mod loader;
+pub mod registry;
 pub use registry::InstalledSkill;
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// A fully resolved, installable skill in the open-standard format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,4 +57,6 @@ pub struct SkillManifest {
     pub tags: Vec<String>,
 }
 
-fn default_version() -> String { "1.0.0".into() }
+fn default_version() -> String {
+    "1.0.0".into()
+}

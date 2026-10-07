@@ -95,6 +95,7 @@ impl McpClient {
             anyhow::bail!("MCP error: {} (code {})", err.message, err.code);
         }
 
-        json.result.ok_or_else(|| anyhow::anyhow!("MCP returned no result"))
+        json.result
+            .ok_or_else(|| anyhow::anyhow!("MCP returned no result"))
     }
 }

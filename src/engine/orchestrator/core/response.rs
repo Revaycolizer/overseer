@@ -68,48 +68,67 @@ impl StructuredResponse {
         if other.status == "failed" || other.status == "error" {
             self.status = "failed".to_string();
         }
-        
+
         // Add unique artifacts
         for a in other.artifacts {
-            if !self.artifacts.contains(&a) { self.artifacts.push(a); }
+            if !self.artifacts.contains(&a) {
+                self.artifacts.push(a);
+            }
         }
 
         let is_generic = |m: &str| {
             let t = m.trim().to_lowercase();
             t == "task completed." || t == "done." || t == "finished." || t == "success."
         };
-        
+
         let is_intermediate_findings = |m: &str| {
-            m.contains("### Findings") || m.contains("KNOWLEDGE_FROM_PREVIOUS_STEPS") || m.contains("research results")
+            m.contains("### Findings")
+                || m.contains("KNOWLEDGE_FROM_PREVIOUS_STEPS")
+                || m.contains("research results")
         };
 
         for m in other.messages {
             let m_trimmed = m.message.trim();
-            if m_trimmed.is_empty() { continue; }
-            
+            if m_trimmed.is_empty() {
+                continue;
+            }
+
             // 1. If an existing message already contains the new one, skip it.
-            if self.messages.iter().any(|e| e.message.trim().contains(m_trimmed)) {
+            if self
+                .messages
+                .iter()
+                .any(|e| e.message.trim().contains(m_trimmed))
+            {
                 continue;
             }
 
             // 2. If the new message is specific (e.g. from office/generation) and we have intermediate research noise, clear the noise.
             let is_new_specific = !is_generic(m_trimmed) && !is_intermediate_findings(m_trimmed);
-            if is_new_specific && self.messages.iter().any(|e| is_intermediate_findings(e.message.trim())) {
-                self.messages.retain(|e| !is_intermediate_findings(e.message.trim()));
+            if is_new_specific
+                && self
+                    .messages
+                    .iter()
+                    .any(|e| is_intermediate_findings(e.message.trim()))
+            {
+                self.messages
+                    .retain(|e| !is_intermediate_findings(e.message.trim()));
             }
 
             // 3. If the new message is generic and we already have a NON-generic message, skip it.
-            if is_generic(m_trimmed) && self.messages.iter().any(|e| !is_generic(e.message.trim())) {
+            if is_generic(m_trimmed) && self.messages.iter().any(|e| !is_generic(e.message.trim()))
+            {
                 continue;
             }
 
             // 4. If the new message is specific and we ONLY have generic ones, clear them first.
-            if !is_generic(m_trimmed) && self.messages.iter().all(|e| is_generic(e.message.trim())) {
+            if !is_generic(m_trimmed) && self.messages.iter().all(|e| is_generic(e.message.trim()))
+            {
                 self.messages.clear();
             }
 
             // 5. Remove any existing messages that are contained within (or equal to) the new one.
-            self.messages.retain(|e| !m_trimmed.contains(e.message.trim()));
+            self.messages
+                .retain(|e| !m_trimmed.contains(e.message.trim()));
 
             // 6. Add the new comprehensive message.
             self.messages.push(m);
@@ -117,17 +136,27 @@ impl StructuredResponse {
 
         // Add unique sources
         for s in other.sources {
-            if !self.sources.iter().any(|existing| existing.description == s.description) {
+            if !self
+                .sources
+                .iter()
+                .any(|existing| existing.description == s.description)
+            {
                 self.sources.push(s);
             }
         }
-        
+
         // ... rest of the merge logic (attachments, charts, etc.)
         for a in other.attachments {
-            if !self.attachments.contains(&a) { self.attachments.push(a); }
+            if !self.attachments.contains(&a) {
+                self.attachments.push(a);
+            }
         }
         for c in other.charts {
-            if !self.charts.iter().any(|existing| existing.title == c.title && existing.chart_type == c.chart_type) {
+            if !self
+                .charts
+                .iter()
+                .any(|existing| existing.title == c.title && existing.chart_type == c.chart_type)
+            {
                 self.charts.push(c);
             }
         }

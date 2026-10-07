@@ -25,10 +25,12 @@ async fn main() {
         .await
         .expect("set mode");
 
-    let conv = overseer::backend::add_conversation(&db, "live-demo").await.expect("conv");
-    let goal = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "List the files in /tmp using the shell, then tell me how many there are.".to_string());
+    let conv = overseer::backend::add_conversation(&db, "live-demo")
+        .await
+        .expect("conv");
+    let goal = std::env::args().nth(1).unwrap_or_else(|| {
+        "List the files in /tmp using the shell, then tell me how many there are.".to_string()
+    });
 
     println!("── Overseer live agent demo ──");
     println!("mode: {mode}");

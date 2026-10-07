@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use regex::Regex;
 use crate::engine::tools::utils::{clean_text_content, decode_html_entities};
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResult {

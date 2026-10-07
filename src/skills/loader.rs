@@ -24,8 +24,12 @@ impl std::fmt::Display for SkillParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SkillParseError::Io(e) => write!(f, "IO error: {}", e),
-            SkillParseError::MissingFrontmatter => write!(f, "SKILL.md missing YAML frontmatter (---)"),
-            SkillParseError::MissingBody => write!(f, "SKILL.md missing markdown body after frontmatter"),
+            SkillParseError::MissingFrontmatter => {
+                write!(f, "SKILL.md missing YAML frontmatter (---)")
+            }
+            SkillParseError::MissingBody => {
+                write!(f, "SKILL.md missing markdown body after frontmatter")
+            }
             SkillParseError::InvalidFormat(e) => write!(f, "Invalid skill format: {}", e),
         }
     }
@@ -34,7 +38,9 @@ impl std::fmt::Display for SkillParseError {
 impl std::error::Error for SkillParseError {}
 
 impl From<std::io::Error> for SkillParseError {
-    fn from(e: std::io::Error) -> Self { SkillParseError::Io(e) }
+    fn from(e: std::io::Error) -> Self {
+        SkillParseError::Io(e)
+    }
 }
 
 /// Minimal YAML frontmatter parser (no dependency on serde_yaml).
@@ -75,7 +81,8 @@ fn parse_frontmatter(yaml_str: &str) -> Result<SkillManifest, SkillParseError> {
                     "author" => author = val,
                     "license" => license = val,
                     "tags" => {
-                        tags = value.trim()
+                        tags = value
+                            .trim()
                             .trim_matches(&['[', ']'][..])
                             .split(',')
                             .map(|s| s.trim().trim_matches('"').to_string())
@@ -104,10 +111,14 @@ fn parse_frontmatter(yaml_str: &str) -> Result<SkillManifest, SkillParseError> {
     }
 
     if name.is_empty() {
-        return Err(SkillParseError::InvalidFormat("name is required in frontmatter".into()));
+        return Err(SkillParseError::InvalidFormat(
+            "name is required in frontmatter".into(),
+        ));
     }
     if description.is_empty() {
-        return Err(SkillParseError::InvalidFormat("description is required in frontmatter".into()));
+        return Err(SkillParseError::InvalidFormat(
+            "description is required in frontmatter".into(),
+        ));
     }
 
     Ok(SkillManifest {
@@ -115,7 +126,11 @@ fn parse_frontmatter(yaml_str: &str) -> Result<SkillManifest, SkillParseError> {
         description,
         compatibility,
         metadata,
-        version: if version.is_empty() { "1.0.0".into() } else { version },
+        version: if version.is_empty() {
+            "1.0.0".into()
+        } else {
+            version
+        },
         author,
         license,
         tags,
@@ -144,7 +159,9 @@ pub fn parse_skill_md(content: &str, skill_root: &Path) -> Result<StandardSkill,
     }
 
     let rest = &content[3..].trim_start();
-    let end = rest.find("\n---").ok_or(SkillParseError::MissingFrontmatter)?;
+    let end = rest
+        .find("\n---")
+        .ok_or(SkillParseError::MissingFrontmatter)?;
 
     let yaml_str = &rest[..end];
     let body = rest[end + 4..].trim();
@@ -157,15 +174,21 @@ pub fn parse_skill_md(content: &str, skill_root: &Path) -> Result<StandardSkill,
 
     let scripts_dir = if skill_root.join("scripts").is_dir() {
         Some("scripts".to_string())
-    } else { None };
+    } else {
+        None
+    };
 
     let references_dir = if skill_root.join("references").is_dir() {
         Some("references".to_string())
-    } else { None };
+    } else {
+        None
+    };
 
     let assets_dir = if skill_root.join("assets").is_dir() {
         Some("assets".to_string())
-    } else { None };
+    } else {
+        None
+    };
 
     Ok(StandardSkill {
         manifest,
@@ -192,24 +215,23 @@ pub async fn load_skill_from_dir(path: &Path) -> Result<StandardSkill, SkillPars
 
 /// Built-in skills shipped with Overseer.
 pub fn builtin_skills() -> Vec<StandardSkill> {
-    vec![
-        StandardSkill {
-            manifest: SkillManifest {
-                name: "web-researcher".into(),
-                description: "Research any topic using web search and synthesis".into(),
-                compatibility: "Overseer 0.1.4+".into(),
-                metadata: {
-                    let mut m = HashMap::new();
-                    m.insert("agents".into(), "researcher".into());
-                    m.insert("tools".into(), "web_search,web_extract,web_browse".into());
-                    m
-                },
-                version: "1.0.0".into(),
-                author: "Overseer".into(),
-                license: "MIT".into(),
-                tags: vec!["research".into(), "web".into()],
+    vec![StandardSkill {
+        manifest: SkillManifest {
+            name: "web-researcher".into(),
+            description: "Research any topic using web search and synthesis".into(),
+            compatibility: "Overseer 0.1.4+".into(),
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("agents".into(), "researcher".into());
+                m.insert("tools".into(), "web_search,web_extract,web_browse".into());
+                m
             },
-            instructions: "\
+            version: "1.0.0".into(),
+            author: "Overseer".into(),
+            license: "MIT".into(),
+            tags: vec!["research".into(), "web".into()],
+        },
+        instructions: "\
 # Web Researcher
 
 ## Overview
@@ -223,12 +245,12 @@ into a structured report with citations.
 3. **Extract content** — use `web_extract` to pull detailed information
 4. **Cross-reference** — check multiple sources to verify facts
 5. **Synthesize** — produce a structured report
-".into(),
-            scripts_dir: None,
-            references_dir: None,
-            assets_dir: None,
-        },
-    ]
+"
+        .into(),
+        scripts_dir: None,
+        references_dir: None,
+        assets_dir: None,
+    }]
 }
 
 #[cfg(test)]
@@ -265,7 +287,10 @@ tags: [test, demo]
     #[test]
     fn test_parse_skill_md_missing_frontmatter() {
         let result = parse_skill_md("# Just markdown\nno frontmatter", Path::new("/tmp"));
-        assert!(matches!(result.unwrap_err(), SkillParseError::MissingFrontmatter));
+        assert!(matches!(
+            result.unwrap_err(),
+            SkillParseError::MissingFrontmatter
+        ));
     }
 
     #[test]

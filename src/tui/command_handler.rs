@@ -44,7 +44,8 @@ pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()
         }
         SlashCommand::Export { format: fmt } => {
             if fmt != "md" && fmt != "json" {
-                app.status_message = "Only `/export md` and `/export json` are supported".to_string();
+                app.status_message =
+                    "Only `/export md` and `/export json` are supported".to_string();
             } else if let Some(conv_id) = app.selected_conv_id {
                 let (content, extension) = match fmt.as_str() {
                     "md" => (app.client.export_conversation_markdown(conv_id).await, "md"),
@@ -53,9 +54,22 @@ pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()
                 };
                 let content = content.unwrap_or_default();
                 if !content.is_empty() {
-                    let safe = app.conversations.iter()
+                    let safe = app
+                        .conversations
+                        .iter()
                         .find(|c| c.id == conv_id)
-                        .map(|c| c.title.chars().map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect::<String>())
+                        .map(|c| {
+                            c.title
+                                .chars()
+                                .map(|c| {
+                                    if c.is_alphanumeric() || c == '_' || c == '-' {
+                                        c
+                                    } else {
+                                        '_'
+                                    }
+                                })
+                                .collect::<String>()
+                        })
                         .unwrap_or_else(|| format!("conv_{conv_id}"));
                     let filename = format!("{safe}.{extension}");
                     let _ = app.client.export_to_downloads(&filename, &content).await;
@@ -75,7 +89,8 @@ pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()
                 app.search_query = q.clone();
                 match app.client.search_messages(&q).await {
                     Ok(results) => {
-                        app.status_message = format!("Found {} matches. ESC to clear.", results.len());
+                        app.status_message =
+                            format!("Found {} matches. ESC to clear.", results.len());
                         app.search_results = Some(results);
                     }
                     Err(e) => app.status_message = format!("Search failed: {e}"),
@@ -92,13 +107,20 @@ pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()
             } else if let Err(e) = app.select_model(name.trim()).await {
                 app.status_message = format!("Model selection failed: {e}");
             }
-            app.input.clear(); app.input_cursor = 0;
+            app.input.clear();
+            app.input_cursor = 0;
         }
         SlashCommand::Regenerate => {
             if let Some(last_msg) = app.messages.last().cloned() {
                 if last_msg.role == "assistant" {
                     let _ = app.client.delete_message(last_msg.id).await;
-                    if let Some(last_user) = app.messages.iter().filter(|m| m.role == "user").last().cloned() {
+                    if let Some(last_user) = app
+                        .messages
+                        .iter()
+                        .filter(|m| m.role == "user")
+                        .last()
+                        .cloned()
+                    {
                         app.input = last_user.content;
                         app.input_cursor = app.input.len();
                         let _ = app.send_message().await;

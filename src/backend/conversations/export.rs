@@ -12,7 +12,10 @@ pub async fn export_conversation_markdown(
     .await?
     .ok_or_else(|| anyhow::anyhow!("conversation {conversation_id} not found"))?;
     let messages = crate::backend::routing_wrappers::conversations::get_messages_page(
-        db, conversation_id, None, 1_000_000,
+        db,
+        conversation_id,
+        None,
+        1_000_000,
     )
     .await
     .unwrap_or_default();
@@ -34,9 +37,9 @@ pub async fn export_conversation_markdown(
         if let Ok(structured) =
             serde_json::from_str::<crate::engine::orchestrator::StructuredResponse>(&m.content)
         {
-            out.push_str(&crate::engine::orchestrator::utils::formatter::format_for_markdown(
-                &structured,
-            ));
+            out.push_str(
+                &crate::engine::orchestrator::utils::formatter::format_for_markdown(&structured),
+            );
         } else {
             out.push_str(&m.content);
         }
@@ -56,7 +59,10 @@ pub async fn export_conversation_json(
     .await?
     .ok_or_else(|| anyhow::anyhow!("conversation {conversation_id} not found"))?;
     let messages = crate::backend::routing_wrappers::conversations::get_messages_page(
-        db, conversation_id, None, 1_000_000,
+        db,
+        conversation_id,
+        None,
+        1_000_000,
     )
     .await
     .unwrap_or_default();

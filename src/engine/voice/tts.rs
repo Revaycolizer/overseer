@@ -28,11 +28,19 @@ fn resolve_bin(name: &str) -> String {
 /// Checks both the XDG data dir and the standard ~/.local/share location, since
 /// a snap-launched shell can override XDG_DATA_HOME to the snap's private dir.
 fn find_piper_model() -> Option<String> {
-    let mut candidates = vec![
-        crate::db::get_overseer_data_dir().join("assets").join("voice").join("models"),
-    ];
+    let mut candidates = vec![crate::db::get_overseer_data_dir()
+        .join("assets")
+        .join("voice")
+        .join("models")];
     if let Some(h) = dirs::home_dir() {
-        candidates.push(h.join(".local").join("share").join("overseer").join("assets").join("voice").join("models"));
+        candidates.push(
+            h.join(".local")
+                .join("share")
+                .join("overseer")
+                .join("assets")
+                .join("voice")
+                .join("models"),
+        );
     }
     candidates.push(std::path::PathBuf::from("assets/voice/models"));
     for d in candidates {
@@ -79,9 +87,16 @@ pub fn speak_locally(text: &str) {
 
     let clean_text = speech_text
         .chars()
-        .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '.' || *c == ',' || *c == '!' || *c == '?')
+        .filter(|c| {
+            c.is_alphanumeric()
+                || c.is_whitespace()
+                || *c == '.'
+                || *c == ','
+                || *c == '!'
+                || *c == '?'
+        })
         .collect::<String>();
-    
+
     tracing::info!("Local TTS synthesis");
 
     TTS_SPEAKING_COUNT.fetch_add(1, Ordering::SeqCst);
@@ -113,13 +128,23 @@ pub fn speak_locally(text: &str) {
                 if let Ok(status) = child.wait() {
                     if status.success() && std::path::Path::new(&temp_wav_str).exists() {
                         #[cfg(target_os = "linux")]
-                        { let _ = Command::new("aplay").arg(&temp_wav_str).output(); }
+                        {
+                            let _ = Command::new("aplay").arg(&temp_wav_str).output();
+                        }
                         #[cfg(target_os = "macos")]
-                        { let _ = Command::new("afplay").arg(&temp_wav_str).output(); }
+                        {
+                            let _ = Command::new("afplay").arg(&temp_wav_str).output();
+                        }
                         #[cfg(target_os = "windows")]
                         {
-                            let play_script = format!("(New-Object System.Media.SoundPlayer '{}').PlaySync()", temp_wav_str);
-                            let _ = Command::new("powershell").arg("-Command").arg(&play_script).output();
+                            let play_script = format!(
+                                "(New-Object System.Media.SoundPlayer '{}').PlaySync()",
+                                temp_wav_str
+                            );
+                            let _ = Command::new("powershell")
+                                .arg("-Command")
+                                .arg(&play_script)
+                                .output();
                         }
                         play_finished();
                         return;
@@ -165,9 +190,7 @@ pub fn speak_locally(text: &str) {
             }
 
             if Command::new("espeak").arg("--version").output().is_ok() {
-                let _ = Command::new("espeak")
-                    .arg(&clean_text)
-                    .output();
+                let _ = Command::new("espeak").arg(&clean_text).output();
             }
             // On Linux, the piper/macOS/Windows branches above don't apply, so
             // fall through to the closing play_finished() below.

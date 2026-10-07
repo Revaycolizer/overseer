@@ -16,7 +16,8 @@ pub async fn add_planner(
     domain: &str,
 ) -> anyhow::Result<i64> {
     let id = db.next_id().await;
-    let model = super::resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
+    let model =
+        super::resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
     sqlx::query(
         "INSERT INTO planners (id, name, description, domain, model, version, instructions, code, response_format) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )

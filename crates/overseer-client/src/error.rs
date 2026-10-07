@@ -15,7 +15,10 @@ pub enum ClientError {
 
     /// The server returned a non-2xx status with a textual error body.
     #[error("API error (status {status}): {body}")]
-    Api { status: reqwest::StatusCode, body: String },
+    Api {
+        status: reqwest::StatusCode,
+        body: String,
+    },
 
     /// The response body could not be parsed as the expected type.
     #[error("response parse error: {0}")]

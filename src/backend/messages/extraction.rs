@@ -25,11 +25,18 @@ fn normalize_candidate(line: &str) -> Option<&str> {
     }
 
     let lower = trimmed.to_lowercase();
-    let is_file = [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".zip", ".json", ".txt", ".png", ".jpg", ".jpeg", ".webp"]
-        .iter()
-        .any(|ext| lower.ends_with(ext));
+    let is_file = [
+        ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".zip", ".json", ".txt", ".png", ".jpg",
+        ".jpeg", ".webp",
+    ]
+    .iter()
+    .any(|ext| lower.ends_with(ext));
 
-    if is_file { Some(trimmed) } else { None }
+    if is_file {
+        Some(trimmed)
+    } else {
+        None
+    }
 }
 
 fn extract_markdown_image_target(line: &str) -> Option<String> {

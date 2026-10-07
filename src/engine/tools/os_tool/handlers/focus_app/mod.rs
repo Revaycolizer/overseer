@@ -1,15 +1,15 @@
-pub mod focus;
 pub mod desktop_file;
+pub mod focus;
 pub mod launch;
 pub mod url_wait;
 
 use crate::engine::tools::error::DynamicToolError;
-use crate::engine::tools::os_tool::target_extraction::extract_os_tool_target;
-use crate::engine::tools::os_tool::uia_interaction::windows_uia_interaction_json;
 use crate::engine::tools::input::read_i64_field;
 use crate::engine::tools::os_tool::handlers::focus_app::focus::handle_focus;
 use crate::engine::tools::os_tool::handlers::focus_app::launch::handle_launch;
 use crate::engine::tools::os_tool::handlers::focus_app::url_wait::{handle_open_url, handle_wait};
+use crate::engine::tools::os_tool::target_extraction::extract_os_tool_target;
+use crate::engine::tools::os_tool::uia_interaction::windows_uia_interaction_json;
 
 pub async fn handle_focus_app_action(
     action: &str,
@@ -25,12 +25,8 @@ pub async fn handle_focus_app_action(
                 handle_focus(&target).await
             }
         }
-        "focus_element" => {
-            windows_uia_interaction_json("os_tool", "focus_element", input).await
-        }
-        "invoke_element" => {
-            windows_uia_interaction_json("os_tool", "invoke_element", input).await
-        }
+        "focus_element" => windows_uia_interaction_json("os_tool", "focus_element", input).await,
+        "invoke_element" => windows_uia_interaction_json("os_tool", "invoke_element", input).await,
         "launch" => {
             let app = extract_os_tool_target(input, "launch");
             handle_launch(&app).await
@@ -46,9 +42,10 @@ pub async fn handle_focus_app_action(
             handle_open_url(&url).await
         }
         "wait" => {
-            let duration_ms = read_i64_field(input, &["milliseconds", "ms", "duration_ms", "duration"])
-                .unwrap_or(1000)
-                .clamp(0, 30_000) as u64;
+            let duration_ms =
+                read_i64_field(input, &["milliseconds", "ms", "duration_ms", "duration"])
+                    .unwrap_or(1000)
+                    .clamp(0, 30_000) as u64;
             handle_wait(duration_ms).await
         }
         _ => Err(DynamicToolError::ExecutionFailed {

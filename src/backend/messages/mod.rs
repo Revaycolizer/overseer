@@ -1,6 +1,6 @@
-pub mod extraction;
 pub mod attachment_utils;
 pub mod crud;
+pub mod extraction;
 pub mod pagination;
 pub mod titling;
 pub mod types;
@@ -18,7 +18,7 @@ pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result
         "SELECT id, conversation_id, role, content, created_at, hide_evidence
          FROM messages
          WHERE conversation_id = ?
-         ORDER BY created_at ASC"
+         ORDER BY created_at ASC",
     )
     .bind(conversation_id)
     .fetch_all(&db.pool)
@@ -49,8 +49,9 @@ pub async fn get_messages(db: &Database, conversation_id: i64) -> anyhow::Result
         let created_at_str: String = row.get("created_at");
         let hide_evidence: i64 = row.get("hide_evidence");
 
-        let created_at = chrono::NaiveDateTime::parse_from_str(&created_at_str, "%Y-%m-%d %H:%M:%S")
-            .unwrap_or_else(|_| chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc());
+        let created_at =
+            chrono::NaiveDateTime::parse_from_str(&created_at_str, "%Y-%m-%d %H:%M:%S")
+                .unwrap_or_else(|_| chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc());
 
         messages.push(Message {
             id: msg_id,

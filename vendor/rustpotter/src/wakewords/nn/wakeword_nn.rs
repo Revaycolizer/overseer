@@ -395,19 +395,46 @@ mod overseer_compatibility_tests {
 
     #[test]
     fn all_model_types_preserve_predictions_after_weight_serialization() {
-        for model_type in [ModelType::Tiny, ModelType::Small, ModelType::Medium, ModelType::Large] {
+        for model_type in [
+            ModelType::Tiny,
+            ModelType::Small,
+            ModelType::Medium,
+            ModelType::Large,
+        ] {
             let variables = VarMap::new();
-            let model = init_model(model_type.clone(), &variables, &Device::Cpu, 1300, 13, 2, None).unwrap();
+            let model = init_model(
+                model_type.clone(),
+                &variables,
+                &Device::Cpu,
+                1300,
+                13,
+                2,
+                None,
+            )
+            .unwrap();
             let input = Tensor::from_vec(vec![0.25f32; 1300], (1, 1300), &Device::Cpu).unwrap();
             let expected = model.forward(&input).unwrap().to_vec2::<f32>().unwrap();
             let saved = WakewordModel {
-                labels: vec!["hey_overseer".into(), "none".into()], train_size: 100,
-                mfcc_size: 13, m_type: model_type, weights: get_tensors_data(variables), rms_level: 0.1,
+                labels: vec!["hey_overseer".into(), "none".into()],
+                train_size: 100,
+                mfcc_size: 13,
+                m_type: model_type,
+                weights: get_tensors_data(variables),
+                rms_level: 0.1,
             };
             let bytes = saved.save_to_buffer().unwrap();
             let loaded = WakewordModel::load_from_buffer(&bytes).unwrap();
             let restored_variables = VarMap::new();
-            let restored = init_model(loaded.m_type.clone(), &restored_variables, &Device::Cpu, 1300, 13, 2, Some(&loaded)).unwrap();
+            let restored = init_model(
+                loaded.m_type.clone(),
+                &restored_variables,
+                &Device::Cpu,
+                1300,
+                13,
+                2,
+                Some(&loaded),
+            )
+            .unwrap();
             let actual = restored.forward(&input).unwrap().to_vec2::<f32>().unwrap();
             assert_eq!(expected, actual, "serialized model changed predictions");
             assert!(actual.iter().flatten().all(|value| value.is_finite()));

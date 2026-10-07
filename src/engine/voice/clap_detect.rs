@@ -10,7 +10,10 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use ringbuf::{HeapRb, traits::{Split, Producer, Consumer}};
+use ringbuf::{
+    traits::{Consumer, Producer, Split},
+    HeapRb,
+};
 
 pub static IS_CLAP_LISTENING: AtomicBool = AtomicBool::new(false);
 
@@ -115,7 +118,9 @@ fn run(tx: mpsc::Sender<()>) -> anyhow::Result<()> {
                 tracing::info!(peak, "clap: transient detected"); // tune LOUD from this
                 let now = Instant::now();
                 match first_clap {
-                    Some(t) if now.duration_since(t) >= MIN_GAP && now.duration_since(t) <= MAX_GAP => {
+                    Some(t)
+                        if now.duration_since(t) >= MIN_GAP && now.duration_since(t) <= MAX_GAP =>
+                    {
                         if last_fire.elapsed() >= COOLDOWN {
                             let _ = tx.send(());
                             last_fire = now;

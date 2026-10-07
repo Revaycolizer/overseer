@@ -1,7 +1,7 @@
 #[cfg(target_os = "windows")]
 pub fn get_idle_secs() -> u64 {
-    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
     use windows::Win32::System::SystemInformation::GetTickCount;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 
     unsafe {
         let mut info = LASTINPUTINFO {

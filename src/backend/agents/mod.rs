@@ -1,5 +1,5 @@
-pub mod queries;
 pub mod crud;
+pub mod queries;
 
-pub use queries::*;
 pub use crud::*;
+pub use queries::*;

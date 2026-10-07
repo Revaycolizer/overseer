@@ -1,11 +1,11 @@
 // src/db/mod.rs — Database struct, types, and re-exports
-mod init;
-mod seed_core;
-mod seed_agents;
-mod seed_tools;
-mod seed_supervisors;
 mod backfill;
+mod init;
 mod migration;
+mod seed_agents;
+mod seed_core;
+mod seed_supervisors;
+mod seed_tools;
 #[cfg(feature = "memory")]
 mod vector_sync;
 

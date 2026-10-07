@@ -32,4 +32,6 @@ pub use approval::{ApprovalRecord, ApprovalStatus, ApprovalStore, APPROVAL_SCHEM
 pub use error::{KernelError, KernelResult};
 pub use events::{KernelEvent, KernelEventKind, TraceSink};
 pub use kernel::{ExecutionOutcome, Kernel, Resolution};
-pub use policy::{classify_risk, evaluate, ActionRisk, PolicyConfig, PolicyDecision, KERNEL_POLICY_VERSION};
+pub use policy::{
+    classify_risk, evaluate, ActionRisk, PolicyConfig, PolicyDecision, KERNEL_POLICY_VERSION,
+};

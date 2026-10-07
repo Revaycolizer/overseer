@@ -1,12 +1,12 @@
+use base64::{engine::general_purpose, Engine as _};
 use rig::{
     agent::Agent,
     agent::AgentBuilder,
     client::CompletionClient,
     completion::{Chat, Message, Prompt},
-    providers::ollama,
     message::UserContent,
+    providers::ollama,
 };
-use base64::{engine::general_purpose, Engine as _};
 
 #[derive(Clone)]
 pub struct OverseerAgent {
@@ -65,10 +65,8 @@ impl ChatAgent {
         // path: a single String return, errors coerced to a friendly
         // placeholder.
         use rig::streaming::StreamingPrompt;
-        match crate::engine::streaming::collect_stream(
-            self.agent.stream_prompt(&full_prompt).await,
-        )
-        .await
+        match crate::engine::streaming::collect_stream(self.agent.stream_prompt(&full_prompt).await)
+            .await
         {
             Ok(s) => s,
             Err(_) => "Chat error: streaming completion failed".to_string(),
@@ -115,7 +113,11 @@ impl VisionGeneralAgent {
         };
 
         let b64 = general_purpose::STANDARD.encode(image_data);
-        let ext = image_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        let ext = image_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
         let media_type = match ext.as_str() {
             "png" => Some(rig::message::ImageMediaType::PNG),
             "webp" => Some(rig::message::ImageMediaType::WEBP),
@@ -134,8 +136,8 @@ impl VisionGeneralAgent {
         ];
 
         self.agent
-            .prompt(rig::completion::Message::User { 
-                content: rig::OneOrMany::many(content).expect("Non-empty contents") 
+            .prompt(rig::completion::Message::User {
+                content: rig::OneOrMany::many(content).expect("Non-empty contents"),
             })
             .await
             .unwrap_or_else(|e| format!("Vision perception error: {}", e))

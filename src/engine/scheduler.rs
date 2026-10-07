@@ -83,13 +83,15 @@ pub async fn due_schedules(db: &Database, now: i64) -> Vec<Schedule> {
     .await
     .unwrap_or_default()
     .into_iter()
-    .map(|(id, conversation_id, goal, interval_secs, next_run_at)| Schedule {
-        id,
-        conversation_id,
-        goal,
-        interval_secs,
-        next_run_at,
-    })
+    .map(
+        |(id, conversation_id, goal, interval_secs, next_run_at)| Schedule {
+            id,
+            conversation_id,
+            goal,
+            interval_secs,
+            next_run_at,
+        },
+    )
     .collect()
 }
 
@@ -97,22 +99,19 @@ pub async fn due_schedules(db: &Database, now: i64) -> Vec<Schedule> {
 pub async fn mark_ran(db: &Database, sched: &Schedule, now: i64) {
     if sched.interval_secs > 0 {
         let next = now + sched.interval_secs;
-        let _ = sqlx::query(
-            "UPDATE scheduled_goals SET last_run_at = ?, next_run_at = ? WHERE id = ?",
-        )
-        .bind(now)
-        .bind(next)
-        .bind(sched.id)
-        .execute(&db.pool)
-        .await;
+        let _ =
+            sqlx::query("UPDATE scheduled_goals SET last_run_at = ?, next_run_at = ? WHERE id = ?")
+                .bind(now)
+                .bind(next)
+                .bind(sched.id)
+                .execute(&db.pool)
+                .await;
     } else {
-        let _ = sqlx::query(
-            "UPDATE scheduled_goals SET last_run_at = ?, enabled = 0 WHERE id = ?",
-        )
-        .bind(now)
-        .bind(sched.id)
-        .execute(&db.pool)
-        .await;
+        let _ = sqlx::query("UPDATE scheduled_goals SET last_run_at = ?, enabled = 0 WHERE id = ?")
+            .bind(now)
+            .bind(sched.id)
+            .execute(&db.pool)
+            .await;
     }
 }
 
@@ -126,13 +125,15 @@ pub async fn list_schedules(db: &Database) -> Vec<Schedule> {
     .await
     .unwrap_or_default()
     .into_iter()
-    .map(|(id, conversation_id, goal, interval_secs, next_run_at)| Schedule {
-        id,
-        conversation_id,
-        goal,
-        interval_secs,
-        next_run_at,
-    })
+    .map(
+        |(id, conversation_id, goal, interval_secs, next_run_at)| Schedule {
+            id,
+            conversation_id,
+            goal,
+            interval_secs,
+            next_run_at,
+        },
+    )
     .collect()
 }
 
@@ -151,7 +152,9 @@ pub async fn run_scheduler(db: Arc<Database>) {
             let s = sched.clone();
             tokio::spawn(async move {
                 tracing::info!(id = s.id, goal = %s.goal, "scheduler firing goal");
-                let _ = crate::engine::agent_loop::run_agent(&db2, s.conversation_id, &s.goal, None).await;
+                let _ =
+                    crate::engine::agent_loop::run_agent(&db2, s.conversation_id, &s.goal, None)
+                        .await;
             });
         }
         tokio::time::sleep(Duration::from_secs(TICK_SECS)).await;
@@ -168,8 +171,12 @@ mod tests {
         let conv = crate::backend::add_conversation(&db, "t").await.unwrap();
 
         // A goal due in the past (repeating hourly) and one due far in the future.
-        let past = add_schedule(&db, conv, "morning brief", 3600, now_unix() - 10).await.unwrap();
-        let _future = add_schedule(&db, conv, "later", 0, now_unix() + 10_000).await.unwrap();
+        let past = add_schedule(&db, conv, "morning brief", 3600, now_unix() - 10)
+            .await
+            .unwrap();
+        let _future = add_schedule(&db, conv, "later", 0, now_unix() + 10_000)
+            .await
+            .unwrap();
 
         let now = now_unix();
         let due = due_schedules(&db, now).await;
@@ -178,19 +185,31 @@ mod tests {
 
         // Reschedule the repeating goal → it moves into the future.
         mark_ran(&db, &due[0], now).await;
-        assert!(due_schedules(&db, now).await.is_empty(), "no longer due after reschedule");
+        assert!(
+            due_schedules(&db, now).await.is_empty(),
+            "no longer due after reschedule"
+        );
         let all = list_schedules(&db).await;
-        assert_eq!(all.len(), 2, "both still enabled (one repeating, one pending)");
+        assert_eq!(
+            all.len(),
+            2,
+            "both still enabled (one repeating, one pending)"
+        );
     }
 
     #[tokio::test]
     async fn one_shot_disables_after_running() {
         let db = crate::db::Database::new_in_memory().await.unwrap();
         let conv = crate::backend::add_conversation(&db, "t").await.unwrap();
-        let _ = add_schedule(&db, conv, "once", 0, now_unix() - 1).await.unwrap();
+        let _ = add_schedule(&db, conv, "once", 0, now_unix() - 1)
+            .await
+            .unwrap();
         let due = due_schedules(&db, now_unix()).await;
         assert_eq!(due.len(), 1);
         mark_ran(&db, &due[0], now_unix()).await;
-        assert!(list_schedules(&db).await.is_empty(), "one-shot is disabled after running");
+        assert!(
+            list_schedules(&db).await.is_empty(),
+            "one-shot is disabled after running"
+        );
     }
 }

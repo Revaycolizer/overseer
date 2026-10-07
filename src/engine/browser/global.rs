@@ -1,6 +1,6 @@
+use super::pool::BrowserPool;
 use std::sync::Arc;
 use std::sync::OnceLock;
-use super::pool::BrowserPool;
 
 static POOL: OnceLock<Arc<BrowserPool>> = OnceLock::new();
 

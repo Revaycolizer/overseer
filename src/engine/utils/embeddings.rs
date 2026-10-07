@@ -3,7 +3,6 @@
 /// Uses `nomic-embed-text` model by default (768-dimensional vectors).
 /// All functions are async and fallible — if Ollama is unreachable they
 /// return `None` so callers can fall back to keyword-based methods.
-
 use serde_json::Value;
 
 /// Default embedding model.
@@ -35,7 +34,11 @@ pub async fn embed_text(client: &reqwest::Client, text: &str) -> Option<Vec<f32>
         .and_then(|e| e.as_array())
         .and_then(|e| e.first())
         .and_then(|e| e.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_f64().map(|f| f as f32))
+                .collect()
+        })
 }
 
 /// Embed multiple texts in a single API call (batch).
@@ -64,7 +67,11 @@ pub async fn embed_batch(client: &reqwest::Client, texts: &[&str]) -> Option<Vec
             arr.iter()
                 .map(|item| {
                     item.as_array()
-                        .map(|v| v.iter().filter_map(|x| x.as_f64().map(|f| f as f32)).collect())
+                        .map(|v| {
+                            v.iter()
+                                .filter_map(|x| x.as_f64().map(|f| f as f32))
+                                .collect()
+                        })
                         .unwrap_or_default()
                 })
                 .collect()

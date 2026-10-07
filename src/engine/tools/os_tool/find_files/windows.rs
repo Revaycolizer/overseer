@@ -1,10 +1,13 @@
-use serde_json::json;
 use crate::engine::tools::error::DynamicToolError;
-use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
 use crate::engine::tools::os_tool::fields::escape_powershell_single_quoted;
+use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
 use crate::engine::tools::os_tool::workspace_search::search_workspace_files_fast;
+use serde_json::json;
 
-pub async fn windows_find_files_json(tool_name: &str, query: &str) -> Result<String, DynamicToolError> {
+pub async fn windows_find_files_json(
+    tool_name: &str,
+    query: &str,
+) -> Result<String, DynamicToolError> {
     if let Some(results) = search_workspace_files_fast(query).await {
         let cwd = std::env::current_dir()
             .ok()

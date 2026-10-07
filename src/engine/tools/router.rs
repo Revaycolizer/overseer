@@ -1,8 +1,8 @@
+use crate::engine::tools::error::DynamicToolError;
+use crate::engine::utils::discovery::ToolInfo;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde_json::json;
-use crate::engine::tools::error::DynamicToolError;
-use crate::engine::utils::discovery::ToolInfo;
 
 pub struct DynamicToolRouter {
     pub tools: Vec<ToolInfo>,

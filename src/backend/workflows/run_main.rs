@@ -32,14 +32,17 @@ pub async fn run_workflow(
         return Ok(run_id);
     }
 
-    let conversation_id = match crate::backend::add_conversation(db, &format!("Workflow Run: {}", workflow.name)).await {
-        Ok(id) => id,
-        Err(err) => {
-            let message = format!("Failed to create workflow conversation: {}", err);
-            super::run_helper::fail_workflow_run(db, run_id, &message).await?;
-            return Ok(run_id);
-        }
-    };
+    let conversation_id =
+        match crate::backend::add_conversation(db, &format!("Workflow Run: {}", workflow.name))
+            .await
+        {
+            Ok(id) => id,
+            Err(err) => {
+                let message = format!("Failed to create workflow conversation: {}", err);
+                super::run_helper::fail_workflow_run(db, run_id, &message).await?;
+                return Ok(run_id);
+            }
+        };
     sqlx::query("UPDATE workflow_runs SET conversation_id = ? WHERE id = ?")
         .bind(conversation_id)
         .bind(run_id)
@@ -48,7 +51,16 @@ pub async fn run_workflow(
 
     let mut last_output = String::new();
     for step in steps {
-        match super::run_step::execute_step(db, agent_system, conversation_id, run_id, &step, &workflow.name).await? {
+        match super::run_step::execute_step(
+            db,
+            agent_system,
+            conversation_id,
+            run_id,
+            &step,
+            &workflow.name,
+        )
+        .await?
+        {
             Ok(output) => {
                 last_output = output;
             }

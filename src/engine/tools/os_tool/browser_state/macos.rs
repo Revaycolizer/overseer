@@ -1,6 +1,6 @@
+use crate::engine::tools::error::DynamicToolError;
 use serde_json::json;
 use tokio::process::Command;
-use crate::engine::tools::error::DynamicToolError;
 
 pub async fn macos_browser_state_json(tool_name: &str) -> Result<String, DynamicToolError> {
     let script = "tell application \"System Events\" to get name of every window of (every process whose background only is false and (name contains \"Chrome\" or name contains \"Firefox\" or name contains \"Safari\" or name contains \"Edge\" or name contains \"Brave\"))";

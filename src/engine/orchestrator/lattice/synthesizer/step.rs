@@ -1,10 +1,10 @@
 use crate::db::Database;
 use crate::engine::orchestrator::core::result::SupervisorExecutionResult;
 use crate::engine::orchestrator::utils::format_helpers::{sanitize_links, strip_grounding_markers};
-use rig::providers::ollama::{self};
-use rig::client::CompletionClient;
 use rig::agent::AgentBuilder;
+use rig::client::CompletionClient;
 use rig::completion::Prompt;
+use rig::providers::ollama::{self};
 
 pub async fn synthesize_step_result(
     db: &Database,
@@ -16,7 +16,7 @@ pub async fn synthesize_step_result(
     if result.hide_evidence && matches!(report_style, "help" | "delivery" | "artifact") {
         result.evidence.clear();
     }
-    
+
     let (instructions, model_name) = match sqlx::query(
         "SELECT instructions, model FROM agents WHERE domain = 'synthesizer' LIMIT 1"
     )
@@ -51,12 +51,15 @@ pub async fn synthesize_step_result(
     );
 
     let agent = AgentBuilder::new(ollama_client.completion_model(&model_name))
-        .preamble(&instructions).build();
+        .preamble(&instructions)
+        .build();
 
     if let Ok(res_text) = agent.prompt(prompt).await {
         let clean = strip_grounding_markers(&res_text)
             .trim_start_matches("Professional Summary:")
-            .trim_start_matches("Summary:").trim().to_string();
+            .trim_start_matches("Summary:")
+            .trim()
+            .to_string();
         result.summary = sanitize_links(&clean);
     } else {
         result.summary = sanitize_links(&strip_grounding_markers(&result.summary));

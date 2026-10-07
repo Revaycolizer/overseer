@@ -14,12 +14,16 @@ pub async fn get_tools(db: &Database) -> anyhow::Result<Vec<ToolInfo>> {
         tools.push(ToolInfo {
             id: r.get("id"),
             name: r.get("name"),
-            description: r.get::<Option<String>, _>("description").unwrap_or_default(),
+            description: r
+                .get::<Option<String>, _>("description")
+                .unwrap_or_default(),
             code: r.get::<Option<String>, _>("code").unwrap_or_default(),
             language: r.get::<Option<String>, _>("language").unwrap_or_default(),
             script_path: r.get("script_path"),
             required_intent: r.get("required_intent"),
-            safety_level: r.get::<Option<String>, _>("safety_level").unwrap_or_else(|| "standard".to_string()),
+            safety_level: r
+                .get::<Option<String>, _>("safety_level")
+                .unwrap_or_else(|| "standard".to_string()),
             version: r.get::<Option<String>, _>("version").unwrap_or_default(),
         });
     }

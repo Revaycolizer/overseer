@@ -3,7 +3,7 @@ pub fn set_thread_priority_and_affinity() {
     unsafe {
         // Set nice value to -10 (high priority)
         libc::setpriority(libc::PRIO_PROCESS, 0, -10);
-        
+
         // Pin to CPU 0
         let mut cpuset: libc::cpu_set_t = std::mem::zeroed();
         let cpuset_ptr = &mut cpuset as *mut libc::cpu_set_t as *mut libc::c_ulong;
@@ -14,7 +14,7 @@ pub fn set_thread_priority_and_affinity() {
     #[cfg(target_os = "windows")]
     unsafe {
         use windows::Win32::System::Threading::{
-            GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_HIGHEST, SetThreadAffinityMask
+            GetCurrentThread, SetThreadAffinityMask, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
         };
         let thread_handle = GetCurrentThread();
         let _ = SetThreadPriority(thread_handle, THREAD_PRIORITY_HIGHEST);

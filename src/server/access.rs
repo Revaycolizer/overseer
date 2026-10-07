@@ -2,9 +2,9 @@
 //! DNS rebinding before they can reach local tools or credential storage.
 use axum::{
     extract::Request,
-    http::{HeaderMap, StatusCode, Method},
+    http::{HeaderMap, Method, StatusCode},
     middleware::Next,
-    response::{Response, IntoResponse},
+    response::{IntoResponse, Response},
 };
 
 fn trusted_authority(value: &str) -> bool {
@@ -50,15 +50,36 @@ pub async fn guard(request: Request, next: Next) -> Result<Response, StatusCode>
     // Native webviews and the local development UI need authenticated REST
     // preflights. Origins have already passed the loopback trust check above.
     if request.method() == Method::OPTIONS && origin.is_some() {
-        let allowed = request.headers().get("access-control-request-headers")
-            .and_then(|v| v.to_str().ok()).unwrap_or("").split(',')
-            .all(|h| matches!(h.trim().to_ascii_lowercase().as_str(), "" | "authorization" | "content-type"));
-        if !allowed { return Err(StatusCode::FORBIDDEN); }
+        let allowed = request
+            .headers()
+            .get("access-control-request-headers")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .split(',')
+            .all(|h| {
+                matches!(
+                    h.trim().to_ascii_lowercase().as_str(),
+                    "" | "authorization" | "content-type"
+                )
+            });
+        if !allowed {
+            return Err(StatusCode::FORBIDDEN);
+        }
         let mut response = StatusCode::NO_CONTENT.into_response();
-        response.headers_mut().insert("access-control-allow-origin", origin.unwrap());
-        response.headers_mut().insert("access-control-allow-methods", "GET, POST, PATCH, DELETE, OPTIONS".parse().unwrap());
-        response.headers_mut().insert("access-control-allow-headers", "Authorization, Content-Type".parse().unwrap());
-        response.headers_mut().insert("vary", "Origin".parse().unwrap());
+        response
+            .headers_mut()
+            .insert("access-control-allow-origin", origin.unwrap());
+        response.headers_mut().insert(
+            "access-control-allow-methods",
+            "GET, POST, PATCH, DELETE, OPTIONS".parse().unwrap(),
+        );
+        response.headers_mut().insert(
+            "access-control-allow-headers",
+            "Authorization, Content-Type".parse().unwrap(),
+        );
+        response
+            .headers_mut()
+            .insert("vary", "Origin".parse().unwrap());
         return Ok(response);
     }
     let path = request.uri().path();
@@ -76,8 +97,12 @@ pub async fn guard(request: Request, next: Next) -> Result<Response, StatusCode>
                 {
                     let mut response = StatusCode::UNAUTHORIZED.into_response();
                     if let Some(origin) = origin {
-                        response.headers_mut().insert("access-control-allow-origin", origin);
-                        response.headers_mut().insert("vary", "Origin".parse().unwrap());
+                        response
+                            .headers_mut()
+                            .insert("access-control-allow-origin", origin);
+                        response
+                            .headers_mut()
+                            .insert("vary", "Origin".parse().unwrap());
                     }
                     return Ok(response);
                 }
@@ -86,8 +111,12 @@ pub async fn guard(request: Request, next: Next) -> Result<Response, StatusCode>
     }
     let mut response = next.run(request).await;
     if let Some(origin) = origin {
-        response.headers_mut().insert("access-control-allow-origin", origin);
-        response.headers_mut().insert("vary", "Origin".parse().unwrap());
+        response
+            .headers_mut()
+            .insert("access-control-allow-origin", origin);
+        response
+            .headers_mut()
+            .insert("vary", "Origin".parse().unwrap());
     }
     Ok(response)
 }

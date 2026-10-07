@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
+use super::StructuredState;
 use rig::agent::AgentBuilder;
 use rig::client::CompletionClient;
-use rig::providers::ollama;
 use rig::completion::Prompt;
-use super::StructuredState;
+use rig::providers::ollama;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConflictReport {
@@ -18,7 +18,11 @@ pub async fn check_contradictions(
     new_text: &str,
 ) -> ConflictReport {
     if state.evidence.is_empty() {
-        return ConflictReport { has_conflict: false, conflicting_id: None, reason: None };
+        return ConflictReport {
+            has_conflict: false,
+            conflicting_id: None,
+            reason: None,
+        };
     }
 
     // ARCHITECTURE V3: CONTRADICTION GUARD
@@ -32,13 +36,16 @@ pub async fn check_contradictions(
         new_text, state.to_prompt_string()
     );
 
-    let agent = AgentBuilder::new(ollama_client.completion_model("llama3.2:3b"))
-        .build();
+    let agent = AgentBuilder::new(ollama_client.completion_model("llama3.2:3b")).build();
     if let Ok(resp) = agent.prompt(&check_prompt).await {
         if let Ok(report) = serde_json::from_str::<ConflictReport>(&resp) {
             return report;
         }
     }
 
-    ConflictReport { has_conflict: false, conflicting_id: None, reason: None }
+    ConflictReport {
+        has_conflict: false,
+        conflicting_id: None,
+        reason: None,
+    }
 }

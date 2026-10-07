@@ -17,7 +17,9 @@ pub async fn add_supervisor(
     domain: &str,
 ) -> anyhow::Result<i64> {
     let id = db.next_id().await;
-    let model = crate::backend::resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct").await;
+    let model =
+        crate::backend::resolve_model_name(db, None, "default_chat_model", "qwen2.5:7b-instruct")
+            .await;
     sqlx::query(
         "INSERT INTO supervisors (id, name, description, domain, model, version, instructions, code, bypass_synthesizer, fast_path_keywords, verification_agent_id, routing_priority, hide_evidence, report_style, skip_fast_path_if_artifacts, artifact_fast_path_keywords, response_format)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"

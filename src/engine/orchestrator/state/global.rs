@@ -27,9 +27,13 @@ impl GlobalState {
     pub fn to_prompt_string(&self) -> String {
         let mut s = String::from("═══ GLOBAL LATTICE STATE ═══\n");
         s.push_str("VERIFIED FACTS:\n");
-        for f in &self.verified_facts { s.push_str(&format!("- {}\n", f)); }
+        for f in &self.verified_facts {
+            s.push_str(&format!("- {}\n", f));
+        }
         s.push_str("\nAUTHORITATIVE SOURCES:\n");
-        for src in &self.authoritative_sources { s.push_str(&format!("- {}\n", src)); }
+        for src in &self.authoritative_sources {
+            s.push_str(&format!("- {}\n", src));
+        }
         s
     }
 }

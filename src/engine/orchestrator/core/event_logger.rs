@@ -1,6 +1,6 @@
 use crate::db::Database;
-use serde_json::json;
 use crate::engine::orchestrator::utils::artifact_utils::*;
+use serde_json::json;
 
 pub async fn record_event(
     db: &Database,
@@ -17,18 +17,10 @@ pub async fn record_event(
 ) {
     if let Some(run_id) = execution_run_id {
         let _ = crate::backend::log_execution_event(
-            db,
-            run_id,
-            *sequence,
-            event_type,
-            status,
-            domain,
-            step_text,
-            tool_name,
-            model_name,
-            message,
-            details,
-        ).await;
+            db, run_id, *sequence, event_type, status, domain, step_text, tool_name, model_name,
+            message, details,
+        )
+        .await;
         *sequence += 1;
     }
 }
@@ -48,23 +40,59 @@ pub async fn persist_step_artifacts(
 
     for artifact in artifacts {
         let trimmed = artifact.trim();
-        if trimmed.is_empty() || !seen.insert(trimmed.to_string()) { continue; }
+        if trimmed.is_empty() || !seen.insert(trimmed.to_string()) {
+            continue;
+        }
 
         let (kind, content_type) = infer_artifact_kind_and_content_type(trimmed);
         let label = infer_artifact_label(&kind, step, trimmed);
         let is_file_like = matches!(kind.as_str(), "image" | "file");
         let file_path = is_file_like.then_some(trimmed);
-        let content = if is_file_like { Some(summary) } else { Some(trimmed) };
+        let content = if is_file_like {
+            Some(summary)
+        } else {
+            Some(trimmed)
+        };
         let metadata = json!({ "source": "supervisor_result", "domain": domain, "step_text": step, "raw_value": trimmed }).to_string();
 
-        if let Ok(_) = crate::backend::create_artifact(db, conversation_id, execution_run_id, Some(domain), Some(step), &kind, &label, content, file_path, content_type.as_deref(), Some(&metadata)).await {
+        if let Ok(_) = crate::backend::create_artifact(
+            db,
+            conversation_id,
+            execution_run_id,
+            Some(domain),
+            Some(step),
+            &kind,
+            &label,
+            content,
+            file_path,
+            content_type.as_deref(),
+            Some(&metadata),
+        )
+        .await
+        {
             recorded.push(json!({ "kind": kind, "label": label, "value": trimmed }));
         }
     }
 
     if !recorded.is_empty() {
         let details = json!({ "count": recorded.len(), "artifacts": recorded }).to_string();
-        record_event(db, execution_run_id, event_sequence, "artifacts_recorded", "completed", Some(domain), Some(step), None, None, Some(&format!("Recorded {} artifacts for this step.", recorded.len())), Some(&details)).await;
+        record_event(
+            db,
+            execution_run_id,
+            event_sequence,
+            "artifacts_recorded",
+            "completed",
+            Some(domain),
+            Some(step),
+            None,
+            None,
+            Some(&format!(
+                "Recorded {} artifacts for this step.",
+                recorded.len()
+            )),
+            Some(&details),
+        )
+        .await;
     }
 }
 
@@ -78,7 +106,20 @@ pub async fn tool_call(
     model: &str,
     input: &str,
 ) {
-    record_event(db, run_id, seq, "tool_call", "running", Some(domain), Some(step), Some(tool), Some(model), Some(&format!("Invoking tool '{}'.", tool)), Some(input)).await;
+    record_event(
+        db,
+        run_id,
+        seq,
+        "tool_call",
+        "running",
+        Some(domain),
+        Some(step),
+        Some(tool),
+        Some(model),
+        Some(&format!("Invoking tool '{}'.", tool)),
+        Some(input),
+    )
+    .await;
 }
 
 pub async fn tool_result(
@@ -93,11 +134,27 @@ pub async fn tool_result(
     success: bool,
 ) {
     let (status, msg) = if success {
-        ("completed", format!("Tool '{}' completed successfully.", tool))
+        (
+            "completed",
+            format!("Tool '{}' completed successfully.", tool),
+        )
     } else {
         ("failed", format!("Tool '{}' execution failed.", tool))
     };
-    record_event(db, run_id, seq, "tool_result", status, Some(domain), Some(step), Some(tool), Some(model), Some(&msg), Some(output)).await;
+    record_event(
+        db,
+        run_id,
+        seq,
+        "tool_result",
+        status,
+        Some(domain),
+        Some(step),
+        Some(tool),
+        Some(model),
+        Some(&msg),
+        Some(output),
+    )
+    .await;
 }
 
 pub async fn route_completed(
@@ -110,7 +167,20 @@ pub async fn route_completed(
     res: &crate::engine::orchestrator::core::result::SupervisorExecutionResult,
 ) {
     let details = serde_json::to_string(res).unwrap_or_default();
-    record_event(db, run_id, seq, "single_domain_route", "completed", Some(domain), Some(step), None, Some(model), Some(&format!("Domain '{}' execution completed.", domain)), Some(&details)).await;
+    record_event(
+        db,
+        run_id,
+        seq,
+        "single_domain_route",
+        "completed",
+        Some(domain),
+        Some(step),
+        None,
+        Some(model),
+        Some(&format!("Domain '{}' execution completed.", domain)),
+        Some(&details),
+    )
+    .await;
 }
 
 pub async fn route_failed(
@@ -122,7 +192,20 @@ pub async fn route_failed(
     model: &str,
     reason: &str,
 ) {
-    record_event(db, run_id, seq, "single_domain_route", "failed", Some(domain), Some(step), None, Some(model), Some(reason), None).await;
+    record_event(
+        db,
+        run_id,
+        seq,
+        "single_domain_route",
+        "failed",
+        Some(domain),
+        Some(step),
+        None,
+        Some(model),
+        Some(reason),
+        None,
+    )
+    .await;
 }
 
 pub async fn micro_step(
@@ -135,7 +218,20 @@ pub async fn micro_step(
     message: &str,
     details: Option<&str>,
 ) {
-    record_event(db, run_id, seq, "micro_step", status, Some(domain), Some(step), None, None, Some(message), details).await;
+    record_event(
+        db,
+        run_id,
+        seq,
+        "micro_step",
+        status,
+        Some(domain),
+        Some(step),
+        None,
+        None,
+        Some(message),
+        details,
+    )
+    .await;
 }
 
 pub async fn simple(
@@ -147,5 +243,18 @@ pub async fn simple(
     message: &str,
     details: Option<&str>,
 ) {
-    record_event(db, run_id, seq, event_type, status, None, None, None, None, Some(message), details).await;
+    record_event(
+        db,
+        run_id,
+        seq,
+        event_type,
+        status,
+        None,
+        None,
+        None,
+        None,
+        Some(message),
+        details,
+    )
+    .await;
 }

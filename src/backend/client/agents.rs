@@ -1,5 +1,5 @@
-use crate::engine::utils::discovery::{AgentInfo, ToolInfo};
 use crate::db::Supervisor;
+use crate::engine::utils::discovery::{AgentInfo, ToolInfo};
 
 #[async_trait::async_trait]
 pub trait AgentClient {
@@ -23,10 +23,23 @@ pub trait ToolClient {
 pub trait SupervisorClient {
     async fn get_supervisors(&self) -> anyhow::Result<Vec<Supervisor>>;
     async fn get_supervisor_tools(&self, supervisor_id: i64) -> anyhow::Result<Vec<ToolInfo>>;
-    async fn add_supervisor(&self, name: &str, description: &str, domain: &str) -> anyhow::Result<i64>;
+    async fn add_supervisor(
+        &self,
+        name: &str,
+        description: &str,
+        domain: &str,
+    ) -> anyhow::Result<i64>;
     async fn update_supervisor(&self, supervisor: Supervisor) -> anyhow::Result<()>;
     async fn delete_supervisor(&self, id: i64) -> anyhow::Result<()>;
     async fn get_supervisor_agents(&self, supervisor_id: i64) -> anyhow::Result<Vec<AgentInfo>>;
-    async fn link_agent_to_supervisor(&self, supervisor_id: i64, agent_id: i64) -> anyhow::Result<()>;
-    async fn unlink_agent_from_supervisor(&self, supervisor_id: i64, agent_id: i64) -> anyhow::Result<()>;
+    async fn link_agent_to_supervisor(
+        &self,
+        supervisor_id: i64,
+        agent_id: i64,
+    ) -> anyhow::Result<()>;
+    async fn unlink_agent_from_supervisor(
+        &self,
+        supervisor_id: i64,
+        agent_id: i64,
+    ) -> anyhow::Result<()>;
 }

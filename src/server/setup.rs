@@ -1,17 +1,31 @@
 //! Explicit, tool-free provider check used by desktop first-run setup.
+use super::ServerState;
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use serde::Deserialize;
 use std::sync::Arc;
-use super::ServerState;
 
 #[derive(Deserialize)]
-struct Check { provider: String, model: String, #[serde(default)] api_key: String }
+struct Check {
+    provider: String,
+    model: String,
+    #[serde(default)]
+    api_key: String,
+}
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new().route("/api/setup/test", post(test))
 }
-async fn test(State(state): State<Arc<ServerState>>, Json(check): Json<Check>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    if !matches!(check.provider.as_str(), "ollama" | "openai" | "anthropic") || check.model.trim().is_empty() || check.model.len()>256 {
-        return Err((StatusCode::BAD_REQUEST,"Choose a supported provider and a model.".into()));
+async fn test(
+    State(state): State<Arc<ServerState>>,
+    Json(check): Json<Check>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    if !matches!(check.provider.as_str(), "ollama" | "openai" | "anthropic")
+        || check.model.trim().is_empty()
+        || check.model.len() > 256
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Choose a supported provider and a model.".into(),
+        ));
     }
     let result = tokio::time::timeout(std::time::Duration::from_secs(45), async {
         if check.provider == "ollama" {

@@ -3,9 +3,16 @@ use super::recorder::FrameRecorder;
 use tokio::sync::broadcast;
 
 impl BrowserPool {
-    pub async fn start_recording(&self, id: i64, quality: u8) -> anyhow::Result<broadcast::Receiver<Vec<u8>>> {
+    pub async fn start_recording(
+        &self,
+        id: i64,
+        quality: u8,
+    ) -> anyhow::Result<broadcast::Receiver<Vec<u8>>> {
         let mut inner = self.inner.lock().await;
-        let session = inner.sessions.get_mut(&id).ok_or_else(|| anyhow::anyhow!("Session {id} not found"))?;
+        let session = inner
+            .sessions
+            .get_mut(&id)
+            .ok_or_else(|| anyhow::anyhow!("Session {id} not found"))?;
 
         if let Some(ref existing) = session.recorder {
             return Ok(existing.subscribe());

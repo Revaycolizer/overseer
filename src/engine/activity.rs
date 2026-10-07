@@ -11,7 +11,9 @@ pub struct EngineActivity {
 
 impl EngineActivity {
     pub const fn new() -> Self {
-        Self { counter: AtomicU64::new(0) }
+        Self {
+            counter: AtomicU64::new(0),
+        }
     }
 
     pub fn bump(&self) -> u64 {
@@ -33,11 +35,14 @@ pub fn engine_activity() -> &'static EngineActivity {
     &ENGINE_ACTIVITY
 }
 
-static RUN_CANCELLATIONS: std::sync::OnceLock<std::sync::RwLock<std::collections::HashMap<i64, tokio::sync::watch::Sender<bool>>>> = std::sync::OnceLock::new();
+static RUN_CANCELLATIONS: std::sync::OnceLock<
+    std::sync::RwLock<std::collections::HashMap<i64, tokio::sync::watch::Sender<bool>>>,
+> = std::sync::OnceLock::new();
 
 pub fn register_cancellation(run_id: i64) -> tokio::sync::watch::Receiver<bool> {
     let (tx, rx) = tokio::sync::watch::channel(false);
-    let lock = RUN_CANCELLATIONS.get_or_init(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+    let lock =
+        RUN_CANCELLATIONS.get_or_init(|| std::sync::RwLock::new(std::collections::HashMap::new()));
     if let Ok(mut map) = lock.write() {
         map.insert(run_id, tx);
     }
@@ -63,10 +68,11 @@ pub fn remove_cancellation(run_id: i64) {
 }
 
 pub async fn force_unload_ollama_model(model_name: &str) {
-    let base = std::env::var("OLLAMA_API_BASE")
-        .unwrap_or_else(|_| "http://localhost:11434".to_string());
+    let base =
+        std::env::var("OLLAMA_API_BASE").unwrap_or_else(|_| "http://localhost:11434".to_string());
     let client = reqwest::Client::new();
-    let _ = client.post(format!("{}/api/chat", base))
+    let _ = client
+        .post(format!("{}/api/chat", base))
         .json(&serde_json::json!({
             "model": model_name,
             "keep_alive": 0

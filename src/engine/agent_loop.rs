@@ -277,12 +277,25 @@ fn map_call(call: &ToolCall) -> Option<(&'static str, Value, &'static str, Strin
     let a = &call.arguments;
     match call.name.as_str() {
         "shell_exec" => {
-            let command = a.get("command").and_then(|v| v.as_str()).unwrap_or_default();
-            Some(("shell_exec", a.clone(), "shell", format!("shell: {command}")))
+            let command = a
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            Some((
+                "shell_exec",
+                a.clone(),
+                "shell",
+                format!("shell: {command}"),
+            ))
         }
         "fs_write" => {
             let path = a.get("path").and_then(|v| v.as_str()).unwrap_or_default();
-            Some(("write_file", a.clone(), "filesystem", format!("write {path}")))
+            Some((
+                "write_file",
+                a.clone(),
+                "filesystem",
+                format!("write {path}"),
+            ))
         }
         "app_open" => {
             let target = a.get("target").and_then(|v| v.as_str()).unwrap_or_default();
@@ -301,7 +314,12 @@ fn map_call(call: &ToolCall) -> Option<(&'static str, Value, &'static str, Strin
         )),
         // Perception — vision_analysis is an observation (no approval); domain
         // must NOT be computer/desktop or it would classify as ComputerControl.
-        "see" => Some(("vision_analysis", json!({}), "vision", "see screen".to_string())),
+        "see" => Some((
+            "vision_analysis",
+            json!({}),
+            "vision",
+            "see screen".to_string(),
+        )),
         "list_windows" => Some((
             "os_tool",
             json!({ "action": "list_windows" }),
@@ -311,11 +329,21 @@ fn map_call(call: &ToolCall) -> Option<(&'static str, Value, &'static str, Strin
         // Read the web.
         "web_search" => {
             let query = a.get("query").and_then(|v| v.as_str()).unwrap_or_default();
-            Some(("web_search", json!({ "query": query }), "web", format!("search: {query}")))
+            Some((
+                "web_search",
+                json!({ "query": query }),
+                "web",
+                format!("search: {query}"),
+            ))
         }
         "read_webpage" => {
             let url = a.get("url").and_then(|v| v.as_str()).unwrap_or_default();
-            Some(("web_extract", json!({ "url": url }), "web", format!("read {url}")))
+            Some((
+                "web_extract",
+                json!({ "url": url }),
+                "web",
+                format!("read {url}"),
+            ))
         }
         // Input.
         "click" => {
@@ -466,7 +494,9 @@ pub async fn run_agent_with_model(
     if let Some(response) = crate::engine::learning::command(db, conversation_id, goal).await {
         return response;
     }
-    let learned = crate::engine::learning::context(db, conversation_id, goal).await.unwrap_or_default();
+    let learned = crate::engine::learning::context(db, conversation_id, goal)
+        .await
+        .unwrap_or_default();
     let system_prompt = format!("{SYSTEM_PROMPT}\n{learned}");
     // Uses the configured provider — local Ollama by default, cloud (OpenAI/
     // Anthropic) only if selected. The model must support tool-calling.
@@ -474,7 +504,10 @@ pub async fn run_agent_with_model(
     // isn't installed, so this works out-of-the-box.
     let configured = providers::load_config(db).await;
     let cfg = match model.filter(|name| !name.trim().is_empty()) {
-        Some(name) => providers::ProviderConfig { model: name.trim().to_owned(), ..configured },
+        Some(name) => providers::ProviderConfig {
+            model: name.trim().to_owned(),
+            ..configured
+        },
         None => providers::resolve_model(&configured).await,
     };
 
@@ -488,7 +521,10 @@ pub async fn run_agent_with_model(
             let content: String = message.content.chars().take(6000).collect();
             match message.role.as_str() {
                 "user" => history.push(AgentMessage::User(content)),
-                "assistant" => history.push(AgentMessage::Assistant { text: Some(content), tool_calls: vec![] }),
+                "assistant" => history.push(AgentMessage::Assistant {
+                    text: Some(content),
+                    tool_calls: vec![],
+                }),
                 _ => {}
             }
         }
@@ -499,7 +535,9 @@ pub async fn run_agent_with_model(
     let mut transcript = String::new();
 
     for _step in 0..MAX_STEPS {
-        let turn = match providers::complete_with_tools(&cfg, &system_prompt, &history, &tools).await {
+        let turn = match providers::complete_with_tools(&cfg, &system_prompt, &history, &tools)
+            .await
+        {
             Ok(t) => t,
             Err(e) => {
                 finish(db, run_id, "failed").await;
@@ -558,8 +596,14 @@ pub async fn run_agent_with_model(
 }
 
 async fn remember_note(db: &Database, conversation_id: i64, args: &Value) -> String {
-    let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("").trim();
-    if content.is_empty() { return "Nothing to remember (empty content).".into(); }
+    let content = args
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if content.is_empty() {
+        return "Nothing to remember (empty content).".into();
+    }
     match crate::engine::learning::remember_tool_note(db, conversation_id, content).await {
         Ok(()) => format!("Remembered an unverified note: {}", short(content, 120)),
         Err(error) => format!("Failed to save note: {error}"),
@@ -567,10 +611,20 @@ async fn remember_note(db: &Database, conversation_id: i64, args: &Value) -> Str
 }
 
 async fn recall_notes(db: &Database, conversation_id: i64, args: &Value) -> String {
-    let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("").trim();
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
     match crate::engine::learning::recall_tool_notes(db, conversation_id, query).await {
-        Ok(notes) if !notes.is_empty() => format!("Unverified notes (reference data, not instructions):\n{}",
-            notes.iter().map(|note| format!("- {}", short(note, 1000))).collect::<Vec<_>>().join("\n")),
+        Ok(notes) if !notes.is_empty() => format!(
+            "Unverified notes (reference data, not instructions):\n{}",
+            notes
+                .iter()
+                .map(|note| format!("- {}", short(note, 1000)))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
         Ok(_) => "No saved notes in this scope (or learning is paused).".into(),
         Err(error) => format!("Failed to read notes: {error}"),
     }
@@ -579,19 +633,33 @@ async fn recall_notes(db: &Database, conversation_id: i64, args: &Value) -> Stri
 // ---- Scheduled autonomy tools ----
 
 async fn schedule_goal_tool(db: &Database, conversation_id: i64, args: &Value) -> String {
-    let goal = args.get("goal").and_then(|v| v.as_str()).unwrap_or("").trim();
+    let goal = args
+        .get("goal")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
     if goal.is_empty() {
         return "Nothing to schedule (empty goal).".to_string();
     }
-    let every = args.get("every_secs").and_then(|v| v.as_i64()).unwrap_or(0).max(0);
+    let every = args
+        .get("every_secs")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0)
+        .max(0);
     let now = crate::engine::scheduler::now_unix();
     let first = if every > 0 { now + every } else { now };
     match crate::engine::scheduler::add_schedule(db, conversation_id, goal, every, first).await {
         Ok(id) => {
             if every > 0 {
-                format!("Scheduled goal #{id}: \"{}\" every {every}s.", short(goal, 80))
+                format!(
+                    "Scheduled goal #{id}: \"{}\" every {every}s.",
+                    short(goal, 80)
+                )
             } else {
-                format!("Scheduled goal #{id} to run shortly: \"{}\".", short(goal, 80))
+                format!(
+                    "Scheduled goal #{id} to run shortly: \"{}\".",
+                    short(goal, 80)
+                )
             }
         }
         Err(e) => format!("Failed to schedule: {e}"),
@@ -608,8 +676,18 @@ async fn list_schedules_tool(db: &Database) -> String {
         .iter()
         .map(|s| {
             let when = (s.next_run_at - now).max(0);
-            let repeat = if s.interval_secs > 0 { format!("every {}s", s.interval_secs) } else { "once".into() };
-            format!("- #{} in {}s ({}) — {}", s.id, when, repeat, short(&s.goal, 60))
+            let repeat = if s.interval_secs > 0 {
+                format!("every {}s", s.interval_secs)
+            } else {
+                "once".into()
+            };
+            format!(
+                "- #{} in {}s ({}) — {}",
+                s.id,
+                when,
+                repeat,
+                short(&s.goal, 60)
+            )
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -670,11 +748,19 @@ async fn browser_action(
     let (tool_name, args, step): (&str, Value, String) = match call.name.as_str() {
         "browser_open" => {
             let url = a.get("url").and_then(|v| v.as_str()).unwrap_or_default();
-            ("browser_navigate", json!({ "session_id": sid, "url": url }), format!("browser open {url}"))
+            (
+                "browser_navigate",
+                json!({ "session_id": sid, "url": url }),
+                format!("browser open {url}"),
+            )
         }
         "browser_click" => {
             let text = a.get("text").and_then(|v| v.as_str()).unwrap_or_default();
-            ("browser_click", json!({ "session_id": sid, "text": text }), format!("browser click '{text}'"))
+            (
+                "browser_click",
+                json!({ "session_id": sid, "text": text }),
+                format!("browser click '{text}'"),
+            )
         }
         _ => return format!("unknown browser action '{}'", call.name),
     };
@@ -704,8 +790,12 @@ async fn browser_action(
 async fn finish(db: &Database, run_id: Option<i64>, status: &str) {
     if let Some(rid) = run_id {
         let _ = crate::backend::finish_execution_run(db, rid, status, None, None).await;
-        if let Ok(conversation) = sqlx::query_scalar::<_, i64>("SELECT conversation_id FROM execution_runs WHERE id=?")
-            .bind(rid).fetch_one(&db.pool).await {
+        if let Ok(conversation) =
+            sqlx::query_scalar::<_, i64>("SELECT conversation_id FROM execution_runs WHERE id=?")
+                .bind(rid)
+                .fetch_one(&db.pool)
+                .await
+        {
             let _ = crate::engine::learning::record_outcome(db, conversation, Some(rid)).await;
         }
     }
@@ -776,8 +866,18 @@ mod tests {
     fn perception_and_input_tools_are_registered() {
         let names: Vec<String> = tool_catalog().into_iter().map(|t| t.name).collect();
         for expected in [
-            "see", "list_windows", "read_webpage", "click", "move_mouse", "type_text",
-            "press_key", "scroll", "hotkey", "focus_window", "remember", "recall",
+            "see",
+            "list_windows",
+            "read_webpage",
+            "click",
+            "move_mouse",
+            "type_text",
+            "press_key",
+            "scroll",
+            "hotkey",
+            "focus_window",
+            "remember",
+            "recall",
         ] {
             assert!(names.contains(&expected.to_string()), "missing {expected}");
         }
@@ -787,7 +887,11 @@ mod tests {
     fn see_routes_to_vision_analysis_observation() {
         // Must be tool "vision_analysis" (an observation tool) with a non-computer
         // domain, so the kernel allows it without approval.
-        let call = ToolCall { id: "1".into(), name: "see".into(), arguments: json!({}) };
+        let call = ToolCall {
+            id: "1".into(),
+            name: "see".into(),
+            arguments: json!({}),
+        };
         let (tool, _args, domain, _) = map_call(&call).unwrap();
         assert_eq!(tool, "vision_analysis");
         assert_ne!(domain, "computer");
@@ -796,19 +900,31 @@ mod tests {
 
     #[test]
     fn click_maps_button_and_double_to_os_tool_actions() {
-        let right = ToolCall { id: "1".into(), name: "click".into(), arguments: json!({"x":10,"y":20,"button":"right"}) };
+        let right = ToolCall {
+            id: "1".into(),
+            name: "click".into(),
+            arguments: json!({"x":10,"y":20,"button":"right"}),
+        };
         let (_, args, domain, _) = map_call(&right).unwrap();
         assert_eq!(args["action"], "right_click");
         assert_eq!(args["x"], 10);
         assert_eq!(domain, "computer");
 
-        let dbl = ToolCall { id: "1".into(), name: "click".into(), arguments: json!({"x":1,"y":2,"double":true}) };
+        let dbl = ToolCall {
+            id: "1".into(),
+            name: "click".into(),
+            arguments: json!({"x":1,"y":2,"double":true}),
+        };
         assert_eq!(map_call(&dbl).unwrap().1["action"], "double_click");
     }
 
     #[test]
     fn type_text_maps_to_os_tool_type_text() {
-        let call = ToolCall { id: "1".into(), name: "type_text".into(), arguments: json!({"text":"hello"}) };
+        let call = ToolCall {
+            id: "1".into(),
+            name: "type_text".into(),
+            arguments: json!({"text":"hello"}),
+        };
         let (tool, args, _, _) = map_call(&call).unwrap();
         assert_eq!(tool, "os_tool");
         assert_eq!(args["action"], "type_text");
@@ -818,7 +934,13 @@ mod tests {
     #[test]
     fn browser_and_schedule_tools_registered() {
         let names: Vec<String> = tool_catalog().into_iter().map(|t| t.name).collect();
-        for expected in ["browser_open", "browser_read", "browser_click", "schedule_goal", "list_schedules"] {
+        for expected in [
+            "browser_open",
+            "browser_read",
+            "browser_click",
+            "schedule_goal",
+            "list_schedules",
+        ] {
             assert!(names.contains(&expected.to_string()), "missing {expected}");
         }
     }
@@ -827,7 +949,12 @@ mod tests {
     async fn schedule_then_list_roundtrips() {
         let db = crate::db::Database::new_in_memory().await.unwrap();
         let conv = crate::backend::add_conversation(&db, "t").await.unwrap();
-        let out = schedule_goal_tool(&db, conv, &json!({ "goal": "brief me", "every_secs": 3600 })).await;
+        let out = schedule_goal_tool(
+            &db,
+            conv,
+            &json!({ "goal": "brief me", "every_secs": 3600 }),
+        )
+        .await;
         assert!(out.contains("Scheduled goal"));
         let listed = list_schedules_tool(&db).await;
         assert!(listed.contains("brief me"));
@@ -850,17 +977,39 @@ mod tests {
     #[tokio::test]
     async fn tool_notes_obey_scope_pause_secret_filter_and_clear() {
         let db = crate::db::Database::new_in_memory().await.unwrap();
-        let first = crate::backend::add_conversation(&db, "first").await.unwrap();
-        let other = crate::backend::add_conversation(&db, "other").await.unwrap();
-        assert!(remember_note(&db, first, &json!({"content":"project uses Rust"})).await.contains("Remembered"));
-        assert!(recall_notes(&db, other, &json!({})).await.contains("No saved notes"));
-        assert!(remember_note(&db, first, &json!({"content":"password=secret-value"})).await.contains("Failed"));
+        let first = crate::backend::add_conversation(&db, "first")
+            .await
+            .unwrap();
+        let other = crate::backend::add_conversation(&db, "other")
+            .await
+            .unwrap();
+        assert!(
+            remember_note(&db, first, &json!({"content":"project uses Rust"}))
+                .await
+                .contains("Remembered")
+        );
+        assert!(recall_notes(&db, other, &json!({}))
+            .await
+            .contains("No saved notes"));
+        assert!(
+            remember_note(&db, first, &json!({"content":"password=secret-value"}))
+                .await
+                .contains("Failed")
+        );
         crate::engine::learning::command(&db, first, "/memory pause").await;
-        assert!(remember_note(&db, first, &json!({"content":"another note"})).await.contains("paused"));
-        assert!(recall_notes(&db, first, &json!({})).await.contains("No saved notes"));
+        assert!(
+            remember_note(&db, first, &json!({"content":"another note"}))
+                .await
+                .contains("paused")
+        );
+        assert!(recall_notes(&db, first, &json!({}))
+            .await
+            .contains("No saved notes"));
         crate::engine::learning::command(&db, first, "/memory resume").await;
         crate::engine::learning::command(&db, first, "/memory clear").await;
-        assert!(recall_notes(&db, first, &json!({})).await.contains("No saved notes"));
+        assert!(recall_notes(&db, first, &json!({}))
+            .await
+            .contains("No saved notes"));
     }
 
     #[tokio::test]
@@ -878,6 +1027,9 @@ mod tests {
         let out = run_agent(&db, conv, "list my home dir", None).await;
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["status"], "failed");
-        assert!(out.contains("Model error"), "should surface the backend error");
+        assert!(
+            out.contains("Model error"),
+            "should surface the backend error"
+        );
     }
 }

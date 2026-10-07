@@ -1,6 +1,6 @@
+use crate::engine::tools::error::DynamicToolError;
 use std::path::PathBuf;
 use tokio::process::Command;
-use crate::engine::tools::error::DynamicToolError;
 
 pub fn get_unix_search_roots() -> Vec<PathBuf> {
     let home = std::env::var("HOME").unwrap_or_default();

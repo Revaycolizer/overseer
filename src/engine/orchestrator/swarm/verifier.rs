@@ -76,15 +76,18 @@ impl SwarmVerifier {
 /// with common stop-words removed.
 fn tokenise_set(text: &str) -> HashSet<String> {
     const STOP_WORDS: &[&str] = &[
-        "the", "and", "for", "are", "was", "were", "has", "had", "but", "not",
-        "this", "that", "with", "from", "they", "have", "been", "would", "could",
-        "should", "will", "more", "than", "then", "also", "about", "just", "very",
-        "what", "when", "where", "which", "who", "whom", "how", "may", "might",
+        "the", "and", "for", "are", "was", "were", "has", "had", "but", "not", "this", "that",
+        "with", "from", "they", "have", "been", "would", "could", "should", "will", "more", "than",
+        "then", "also", "about", "just", "very", "what", "when", "where", "which", "who", "whom",
+        "how", "may", "might",
     ];
     let stop: HashSet<&str> = STOP_WORDS.iter().copied().collect();
 
     text.split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
         .filter(|w| w.len() > 2 && !stop.contains(w.as_str()))
         .collect()
 }
@@ -148,14 +151,16 @@ mod tests {
             "Quantum computing uses superposition and entanglement.",
             &cell,
         );
-        assert!(score < 0.5, "Expected low grounding score for unrelated content, got {}", score);
+        assert!(
+            score < 0.5,
+            "Expected low grounding score for unrelated content, got {}",
+            score
+        );
     }
 
     #[test]
     fn test_confidence_threshold() {
-        let cell = cell_with_facts(vec![
-            "The sky is blue".to_string(),
-        ]);
+        let cell = cell_with_facts(vec!["The sky is blue".to_string()]);
         let verifier = SwarmVerifier::new(0.9); // Very high threshold
         let score = verifier.verify_claims("The sky appears blue during daytime.", &cell);
         // Should still find some overlap

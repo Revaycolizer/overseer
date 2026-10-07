@@ -1,7 +1,9 @@
-use std::path::PathBuf;
+use crate::engine::tools::os_tool::workspace_search::scoring::{
+    score_file_match, tokenize_file_query,
+};
 use serde_json::json;
+use std::path::PathBuf;
 use tokio::process::Command;
-use crate::engine::tools::os_tool::workspace_search::scoring::{score_file_match, tokenize_file_query};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;

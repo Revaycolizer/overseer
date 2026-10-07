@@ -39,12 +39,10 @@ pub async fn delete_conversation_setting(
     conversation_id: i64,
     key: &str,
 ) -> anyhow::Result<()> {
-    sqlx::query(
-        "DELETE FROM conversation_settings WHERE conversation_id = ? AND key = ?",
-    )
-    .bind(conversation_id)
-    .bind(key)
-    .execute(&db.pool)
-    .await?;
+    sqlx::query("DELETE FROM conversation_settings WHERE conversation_id = ? AND key = ?")
+        .bind(conversation_id)
+        .bind(key)
+        .execute(&db.pool)
+        .await?;
     Ok(())
 }

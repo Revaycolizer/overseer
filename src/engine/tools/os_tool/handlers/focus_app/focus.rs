@@ -2,8 +2,8 @@ use crate::engine::tools::error::DynamicToolError;
 
 #[cfg(windows)]
 pub async fn handle_focus(target: &str) -> Result<String, DynamicToolError> {
-    use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
     use crate::engine::tools::os_tool::fields::escape_powershell_single_quoted;
+    use crate::engine::tools::os_tool::powershell::run_powershell_hidden;
 
     let escaped = escape_powershell_single_quoted(target);
     let script = format!(
@@ -42,7 +42,8 @@ pub async fn handle_focus(target: &str) -> Result<String, DynamicToolError> {
             "target": target,
             "success": true,
             "summary": format!("Focused Mac app '{}' using AppleScript.", target)
-        }).to_string())
+        })
+        .to_string())
     } else {
         let status = Command::new("wmctrl")
             .arg("-a")
@@ -59,11 +60,15 @@ pub async fn handle_focus(target: &str) -> Result<String, DynamicToolError> {
                 "target": target,
                 "success": true,
                 "summary": format!("Focused window matching '{}' using wmctrl.", target)
-            }).to_string());
+            })
+            .to_string());
         }
         Err(DynamicToolError::ExecutionFailed {
             tool: "os_tool".to_string(),
-            details: format!("wmctrl could not find or focus a window matching '{}'.", target),
+            details: format!(
+                "wmctrl could not find or focus a window matching '{}'.",
+                target
+            ),
         })
     }
 }

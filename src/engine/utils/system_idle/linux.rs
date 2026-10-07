@@ -42,9 +42,12 @@ fn get_gnome_idle_secs() -> Option<u64> {
         .args([
             "call",
             "--session",
-            "--dest", "org.gnome.Mutter.IdleMonitor",
-            "--object-path", "/org/gnome/Mutter/IdleMonitor/Core",
-            "--method", "org.gnome.Mutter.IdleMonitor.GetIdletime",
+            "--dest",
+            "org.gnome.Mutter.IdleMonitor",
+            "--object-path",
+            "/org/gnome/Mutter/IdleMonitor/Core",
+            "--method",
+            "org.gnome.Mutter.IdleMonitor.GetIdletime",
         ])
         .output()
         .ok()?;

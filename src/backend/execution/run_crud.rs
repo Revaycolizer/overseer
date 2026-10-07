@@ -114,12 +114,14 @@ pub async fn build_evidence_dag_from_run(
     let chunks: Vec<crate::engine::orchestrator::state::EvidenceChunk> = tool_results
         .into_iter()
         .enumerate()
-        .map(|(i, (event_type, summary))| crate::engine::orchestrator::state::EvidenceChunk {
-            id: format!("E{}", i + 1),
-            snowflake_id: (i + 1) as i64,
-            text: summary,
-            source: format!("execution_run:{}:{}", rid, event_type),
-        })
+        .map(
+            |(i, (event_type, summary))| crate::engine::orchestrator::state::EvidenceChunk {
+                id: format!("E{}", i + 1),
+                snowflake_id: (i + 1) as i64,
+                text: summary,
+                source: format!("execution_run:{}:{}", rid, event_type),
+            },
+        )
         .collect();
 
     Some(EvidenceDag::from_evidence_chunks(&chunks))
@@ -136,16 +138,31 @@ mod tests {
         let run = start_execution_run(&db, conv, "q").await.unwrap();
 
         // No tool events yet -> the truthfulness gate must report no action.
-        assert!(!run_produced_action(&db, Some(run)).await, "no events -> false");
+        assert!(
+            !run_produced_action(&db, Some(run)).await,
+            "no events -> false"
+        );
 
         // A completed tool result flips it to true.
         crate::backend::log_execution_event(
-            &db, run, 1, "tool_result", "completed", Some("computer"), Some("step"),
-            Some("os_tool"), None, Some("ok"), None,
+            &db,
+            run,
+            1,
+            "tool_result",
+            "completed",
+            Some("computer"),
+            Some("step"),
+            Some("os_tool"),
+            None,
+            Some("ok"),
+            None,
         )
         .await
         .unwrap();
-        assert!(run_produced_action(&db, Some(run)).await, "completed tool_result -> true");
+        assert!(
+            run_produced_action(&db, Some(run)).await,
+            "completed tool_result -> true"
+        );
 
         // No run at all -> false (direct-chat with no tools).
         assert!(!run_produced_action(&db, None).await, "no run -> false");

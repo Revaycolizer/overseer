@@ -1,6 +1,6 @@
+use crate::db::Database;
 use std::str::FromStr;
 use std::sync::Arc;
-use crate::db::Database;
 
 pub struct WorkflowScheduler {
     db: Arc<Database>,
@@ -34,7 +34,9 @@ impl WorkflowScheduler {
         for (workflow_id, config_json) in schedules {
             let cfg: serde_json::Value = serde_json::from_str(&config_json).unwrap_or_default();
             let expr = cfg.get("cron").and_then(|v| v.as_str()).unwrap_or("");
-            if expr.is_empty() { continue; }
+            if expr.is_empty() {
+                continue;
+            }
             if let Ok(schedule) = cron::Schedule::from_str(expr) {
                 let now = chrono::Utc::now();
                 if schedule.upcoming(chrono::Utc).take(1).any(|t| {
@@ -57,9 +59,18 @@ impl WorkflowScheduler {
         .unwrap_or_default();
 
         let graph = crate::engine::workflow::graph::WorkflowGraph {
-            nodes: nodes.into_iter().map(|(id, node_type, config_json)| {
-                crate::engine::workflow::graph::WorkflowNode { id, workflow_id, node_type, label: String::new(), config_json }
-            }).collect(),
+            nodes: nodes
+                .into_iter()
+                .map(
+                    |(id, node_type, config_json)| crate::engine::workflow::graph::WorkflowNode {
+                        id,
+                        workflow_id,
+                        node_type,
+                        label: String::new(),
+                        config_json,
+                    },
+                )
+                .collect(),
             edges: vec![],
         };
 

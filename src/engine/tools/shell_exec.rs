@@ -56,7 +56,12 @@ pub async fn native_shell_exec(args: &Value) -> Result<String, DynamicToolError>
     let output = match tokio::time::timeout(Duration::from_millis(timeout_ms), run).await {
         Ok(Ok(o)) => o,
         Ok(Err(e)) => return Err(fail(format!("failed to run command: {e}"))),
-        Err(_) => return Err(DynamicToolError::TimedOut { tool: "shell_exec".to_string(), timeout_ms }),
+        Err(_) => {
+            return Err(DynamicToolError::TimedOut {
+                tool: "shell_exec".to_string(),
+                timeout_ms,
+            })
+        }
     };
 
     let mut stdout = String::from_utf8_lossy(&output.stdout).to_string();

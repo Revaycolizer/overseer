@@ -47,18 +47,23 @@ async fn handle_mcp_request(
 }
 
 async fn handle_tools_list(state: &Arc<ServerState>, id: u64) -> JsonRpcResponse {
-    let tools = crate::backend::get_tools(&state.db).await.unwrap_or_default();
+    let tools = crate::backend::get_tools(&state.db)
+        .await
+        .unwrap_or_default();
 
-    let mcp_tools: Vec<McpTool> = tools.iter().map(|t| McpTool {
-        name: t.name.clone(),
-        description: t.description.clone(),
-        input_schema: Some(serde_json::json!({
-            "type": "object",
-            "properties": {
-                "input": { "type": "string", "description": "The input for the tool" }
-            }
-        })),
-    }).collect();
+    let mcp_tools: Vec<McpTool> = tools
+        .iter()
+        .map(|t| McpTool {
+            name: t.name.clone(),
+            description: t.description.clone(),
+            input_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "input": { "type": "string", "description": "The input for the tool" }
+                }
+            })),
+        })
+        .collect();
 
     JsonRpcResponse {
         jsonrpc: "2.0".into(),
@@ -70,7 +75,10 @@ async fn handle_tools_list(state: &Arc<ServerState>, id: u64) -> JsonRpcResponse
 
 async fn handle_tools_call(state: &Arc<ServerState>, id: u64, params: &Value) -> JsonRpcResponse {
     let _name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let _arguments = params.get("arguments").cloned().unwrap_or(Value::Object(Default::default()));
+    let _arguments = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or(Value::Object(Default::default()));
 
     JsonRpcResponse {
         jsonrpc: "2.0".into(),
@@ -86,8 +94,12 @@ async fn handle_tools_call(state: &Arc<ServerState>, id: u64, params: &Value) ->
 }
 
 async fn handle_resources_list(state: &Arc<ServerState>, id: u64) -> JsonRpcResponse {
-    let agents = crate::backend::get_agents(&state.db).await.unwrap_or_default();
-    let supervisors = crate::backend::get_supervisors(&state.db).await.unwrap_or_default();
+    let agents = crate::backend::get_agents(&state.db)
+        .await
+        .unwrap_or_default();
+    let supervisors = crate::backend::get_supervisors(&state.db)
+        .await
+        .unwrap_or_default();
 
     let mut resources = Vec::new();
 
@@ -117,29 +129,51 @@ async fn handle_resources_list(state: &Arc<ServerState>, id: u64) -> JsonRpcResp
     }
 }
 
-async fn handle_resources_read(state: &Arc<ServerState>, id: u64, params: &Value) -> JsonRpcResponse {
+async fn handle_resources_read(
+    state: &Arc<ServerState>,
+    id: u64,
+    params: &Value,
+) -> JsonRpcResponse {
     let uri = params.get("uri").and_then(|v| v.as_str()).unwrap_or("");
 
     let contents = if let Some(domain) = uri.strip_prefix("agent://") {
-        let agents = crate::backend::get_agents(&state.db).await.unwrap_or_default();
-        agents.iter().find(|a| a.domain == domain).map(|a| serde_json::to_string_pretty(a).unwrap_or_default())
+        let agents = crate::backend::get_agents(&state.db)
+            .await
+            .unwrap_or_default();
+        agents
+            .iter()
+            .find(|a| a.domain == domain)
+            .map(|a| serde_json::to_string_pretty(a).unwrap_or_default())
     } else if let Some(domain) = uri.strip_prefix("supervisor://") {
-        let supervisors = crate::backend::get_supervisors(&state.db).await.unwrap_or_default();
-        supervisors.iter().find(|s| s.domain == domain).map(|s| serde_json::to_string_pretty(s).unwrap_or_default())
+        let supervisors = crate::backend::get_supervisors(&state.db)
+            .await
+            .unwrap_or_default();
+        supervisors
+            .iter()
+            .find(|s| s.domain == domain)
+            .map(|s| serde_json::to_string_pretty(s).unwrap_or_default())
     } else {
         None
     };
 
     match contents {
         Some(text) => JsonRpcResponse {
-            jsonrpc: "2.0".into(), id,
-            result: Some(serde_json::json!({ "contents": [{ "uri": uri, "mime_type": "application/json", "text": text }] })),
+            jsonrpc: "2.0".into(),
+            id,
+            result: Some(
+                serde_json::json!({ "contents": [{ "uri": uri, "mime_type": "application/json", "text": text }] }),
+            ),
             error: None,
         },
         None => JsonRpcResponse {
-            jsonrpc: "2.0".into(), id,
+            jsonrpc: "2.0".into(),
+            id,
             result: None,
-            error: Some(JsonRpcError { code: ERROR_INVALID_PARAMS, message: format!("Resource '{}' not found", uri), data: None }),
+            error: Some(JsonRpcError {
+                code: ERROR_INVALID_PARAMS,
+                message: format!("Resource '{}' not found", uri),
+                data: None,
+            }),
         },
     }
 }

@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use serde_json::Value;
+use std::path::PathBuf;
 
 pub fn generate_csv(
     dir: &PathBuf,
@@ -14,7 +14,10 @@ pub fn generate_csv(
     wtr.write_record(headers).map_err(|e| e.to_string())?;
     for row in data {
         if let Some(arr) = row.as_array() {
-            let record: Vec<String> = arr.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect();
+            let record: Vec<String> = arr
+                .iter()
+                .map(|v| v.as_str().unwrap_or("").to_string())
+                .collect();
             wtr.write_record(record).map_err(|e| e.to_string())?;
         }
     }
