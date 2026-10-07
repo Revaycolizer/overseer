@@ -1,9 +1,14 @@
+/** Exact decimal record ID returned by the SDK. */
+export type ApiId = string;
+/** Accepted input: decimal string, bigint, or a safe integer. */
+export type IdInput = string | bigint | number;
+
 /** TypeScript types matching all Overseer REST API types. */
 
 // ── Auth ──────────────────────────────────────────────────────────────
 
 export interface UserProfile {
-  id: number;
+  id: ApiId;
   username: string;
   display_name: string;
 }
@@ -16,214 +21,255 @@ export interface AuthResponse {
 // ── Conversations ─────────────────────────────────────────────────────
 
 export interface Conversation {
-  id: number;
+  id: ApiId;
   title: string;
   created_at: string;
-  updated_at: string;
 }
 
 export interface ConversationSearchResult {
-  conversation_id: number;
-  message_id: number;
-  snippet: string;
+  conversation_id: ApiId;
+  conversation_title: string;
+  message_id: ApiId;
+  content: string;
+  created_at: string;
 }
 
 // ── Messages & Attachments ────────────────────────────────────────────
 
 export interface Message {
-  id: number;
-  conversation_id: number;
+  id: ApiId;
+  conversation_id: ApiId;
   role: string;
   content: string;
   created_at: string;
   hide_evidence: boolean;
+  attachments: Attachment[];
 }
 
 export interface Attachment {
-  id: number;
-  message_id: number;
+  id: ApiId;
+  message_id: ApiId;
   filename: string;
   file_path: string;
   content_type: string;
   size: number;
+  extracted_content: string | null;
 }
 
 // ── Agents ────────────────────────────────────────────────────────────
 
 export interface ToolInfo {
-  id: number;
+  id: ApiId;
   name: string;
   description: string;
+  code: string;
   language: string;
-  code?: string;
-  version?: string;
-  tool_type?: string;
-  domain?: string;
-  parameters_json?: string | null;
-  allowed_agents_json?: string | null;
-  safety_level?: string | null;
+  script_path: string | null;
+  required_intent: string | null;
+  safety_level: string;
+  version: string;
 }
 
 export interface AgentInfo {
-  id: number;
+  id: ApiId;
   name: string;
   description: string;
+  tools: string[];
+  instructions: string;
+  model: string;
   domain: string;
-  tools?: ToolInfo[];
-  instructions?: string;
-  model?: string;
-  version?: string;
-  code?: string | null;
-  source_files?: string[];
-  response_format?: string;
+  version: string;
+  code: string | null;
+  source_files: string[];
+  response_format: string;
 }
 
 // ── Supervisors ───────────────────────────────────────────────────────
 
 export interface Supervisor {
-  id: number;
+  id: ApiId;
   name: string;
-  description: string;
+  description: string | null;
+  instructions: string | null;
+  model: string | null;
   domain: string;
-  preamble?: string;
-  model?: string;
-  temperature?: number;
-  is_active?: boolean;
-  agents?: AgentInfo[];
+  version: string | null;
+  code: string | null;
+  bypass_synthesizer: boolean;
+  fast_path_keywords: string | null;
+  verification_agent_id: ApiId | null;
+  routing_priority: number;
+  hide_evidence: boolean;
+  report_style: string | null;
+  skip_fast_path_if_artifacts: boolean;
+  artifact_fast_path_keywords: string | null;
+  response_format: string;
 }
 
 // ── Workflows ─────────────────────────────────────────────────────────
 
 export interface Workflow {
-  id: number;
+  id: ApiId;
   name: string;
-  description?: string | null;
-  status?: string;
+  description: string | null;
+  trigger_type: string;
+  trigger_config: string | null;
+  status: string;
   created_at: string;
   updated_at: string;
 }
 
 export interface WorkflowStep {
-  id: number;
-  workflow_id: number;
-  step_order?: number;
-  name?: string;
-  tool_name?: string | null;
-  config_json?: string | null;
+  id: ApiId;
+  workflow_id: ApiId;
+  step_order: number;
+  name: string;
+  prompt: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WorkflowRun {
-  id: number;
-  workflow_id: number;
+  id: ApiId;
+  workflow_id: ApiId;
+  conversation_id: ApiId | null;
   status: string;
-  started_at: string;
-  finished_at?: string | null;
-  result_summary?: string | null;
+  summary: string | null;
+  error_message: string | null;
+  created_at: string;
+  finished_at: string | null;
 }
 
 export interface WorkflowStepRun {
-  id: number;
-  run_id: number;
-  step_name: string;
+  id: ApiId;
+  workflow_run_id: ApiId;
+  workflow_step_id: ApiId;
+  execution_run_id: ApiId | null;
+  step_order: number;
   status: string;
-  output_json?: string | null;
-  started_at: string;
-  finished_at?: string | null;
+  output: string | null;
+  error_message: string | null;
+  created_at: string;
+  finished_at: string | null;
 }
 
 // ── Work Items ────────────────────────────────────────────────────────
 
 export interface WorkItem {
-  id: number;
-  conversation_id: number;
+  id: ApiId;
+  conversation_id: ApiId;
   title: string;
+  brief: string | null;
   status: string;
-  surface_kind?: string;
+  surface_kind: string;
+  assigned_domain: string | null;
+  prompt: string;
+  source_artifact_ids_json: string | null;
+  metadata_json: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface WorkItemEvent {
-  id: number;
-  work_item_id: number;
-  execution_run_id?: number | null;
+  id: ApiId;
+  work_item_id: ApiId;
+  execution_run_id: ApiId | null;
   event_type: string;
-  status?: string | null;
-  summary?: string | null;
+  status: string | null;
+  summary: string | null;
+  metadata_json: string | null;
   created_at: string;
 }
 
 // ── Artifacts ─────────────────────────────────────────────────────────
 
 export interface Artifact {
-  id: number;
-  conversation_id: number;
-  execution_run_id?: number | null;
+  id: ApiId;
+  conversation_id: ApiId;
+  execution_run_id: ApiId | null;
+  domain: string | null;
+  step_text: string | null;
   kind: string;
   label: string;
-  content?: string | null;
-  file_path?: string | null;
-  content_type?: string | null;
+  content: string | null;
+  file_path: string | null;
+  content_type: string | null;
+  metadata_json: string | null;
   created_at: string;
 }
 
 // ── Planners ──────────────────────────────────────────────────────────
 
 export interface Planner {
-  id: number;
+  id: ApiId;
   name: string;
-  instructions: string;
-  model?: string;
-  is_active?: boolean;
+  description: string | null;
+  instructions: string | null;
+  model: string | null;
+  domain: string;
+  version: string | null;
+  code: string | null;
+  response_format: string;
 }
 
 // ── Version Control ───────────────────────────────────────────────────
 
 export interface EntityVersion {
-  id: number;
-  entity_type: string;
-  entity_id: number;
-  tag: string;
+  id: ApiId;
+  version_tag: string;
+  changelog: string | null;
   created_at: string;
-  description?: string | null;
 }
 
 // ── Health / System ───────────────────────────────────────────────────
 
 export interface RuntimeHealth {
-  status: string;
-  version: string;
-  uptime_secs: number;
-  db_connected: boolean;
   ollama_reachable: boolean;
+  ollama_endpoint: string;
+  available_models: string[];
+  selected_runtime_model: string;
+  runtime_model_available: boolean;
+  title_model: string;
+  title_model_available: boolean;
+  python_command: string | null;
+  protoc_path: string | null;
+  runtime_dir: string;
+  native_runtime: boolean;
 }
 
 export interface SystemLoad {
-  cpu_percent: number;
-  memory_percent: number;
-  agent_count: number;
-  active_conversations: number;
+  label: string;
+  usage: number;
 }
 
 export interface RuntimeRegistryStatus {
-  last_refresh?: string | null;
-  agent_count: number;
-  tool_count: number;
+  status: string;
+  refreshed_at: string | null;
+  error: string | null;
 }
 
 // ── Supervision ───────────────────────────────────────────────────────
 
 export interface ComputerSupervisionState {
-  enabled: boolean;
-  allowlist?: string;
-  pending_action?: Record<string, unknown> | null;
-  recent_executions?: string[];
+  supervision_mode: string;
+  session_state: string;
+  session_note: string;
+  allowlist: string[];
+  max_actions: number;
+  action_count: number;
+  timeout_ms: number;
+  approval_state: string;
+  pending_tool: string;
+  pending_action: string;
+  pending_domain: string;
+  session_started_at: string | null;
 }
 
 // ── Credentials ───────────────────────────────────────────────────────
 
 export interface CredentialSummary {
-  id: number;
+  id: ApiId;
   name: string;
   cred_type?: string;
 }
@@ -231,7 +277,7 @@ export interface CredentialSummary {
 // ── Workflow Templates ────────────────────────────────────────────────
 
 export interface WorkflowTemplate {
-  id: number;
+  id: ApiId;
   name: string;
   description?: string | null;
   category?: string;
@@ -240,7 +286,8 @@ export interface WorkflowTemplate {
 // ── Browser ───────────────────────────────────────────────────────────
 
 export interface BrowserSessionInfo {
-  session?: { id: number };
+  id?: ApiId;
+  session?: { id: ApiId };
   exists?: boolean;
 }
 
@@ -254,4 +301,12 @@ export class ApiError extends Error {
     super(`API error ${status}: ${body}`);
     this.name = 'ApiError';
   }
+}
+
+export interface ServiceHealth {
+  status: string;
+  version: string;
+  uptime_secs: number;
+  db_connected: boolean;
+  ollama_reachable: boolean;
 }

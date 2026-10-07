@@ -58,7 +58,9 @@ export default function Chat({
   const [muted, setMuted] = useState(false);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    if (messages.length > 0) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }
   }, [messages, approvals]);
 
   function autosize() {
@@ -112,6 +114,7 @@ export default function Chat({
                   <div className="approval-meta">
                     <code>{a.tool}</code> · {a.kind.replace(/_/g, " ")}
                   </div>
+                  {a.reason && <p className="approval-reason">{a.reason}</p>}
                 </div>
               </div>
               <div className="approval-actions">
@@ -208,20 +211,12 @@ export default function Chat({
             {messages.map((m) =>
               m.role === "assistant" && m.text.length === 0 ? null : (
                 <div key={m.id} className={`msg ${m.role}`}>
-                  {m.role === "assistant" && (
-                    <span className="ava" aria-hidden>
-                      <span className="ava-core" />
-                    </span>
-                  )}
                   <div className="bubble">{m.text}</div>
                 </div>
               )
             )}
             {thinking && (
               <div className="msg assistant">
-                <span className="ava thinking" aria-hidden>
-                  <span className="ava-core" />
-                </span>
                 <div className="bubble thinking-bubble">
                   <span className="dot" />
                   <span className="dot" />
@@ -243,6 +238,7 @@ export default function Chat({
                 <div className="approval-meta">
                   <code>{a.tool}</code> · {a.kind.replace(/_/g, " ")}
                 </div>
+                {a.reason && <p className="approval-reason">{a.reason}</p>}
               </div>
             </div>
             <div className="approval-actions">
@@ -296,9 +292,10 @@ export default function Chat({
             </button>
             <textarea
               ref={taRef}
+              aria-label={persona ? `Message ${persona.name}` : "Message Overseer"}
               value={input}
               rows={1}
-              placeholder={connected ? (persona ? `Message ${persona.name}…` : "Ask Overseer to do something…  (type / for commands)") : "Start the engine:  overseer --server"}
+              placeholder={connected ? (persona ? `Message ${persona.name}…` : "Ask Overseer to do something…  (type / for commands)") : "Waiting for Overseer…"}
               onChange={(e) => {
                 setInput(e.target.value);
                 autosize();
@@ -334,7 +331,7 @@ export default function Chat({
                 onSend(input);
                 requestAnimationFrame(autosize);
               }}
-              disabled={busy || !input.trim()}
+              disabled={busy || !connected || !input.trim()}
               aria-label="Send"
             >
               {busy ? (

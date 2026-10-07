@@ -73,6 +73,7 @@ export type {
   EntityVersion,
   // Health / System
   RuntimeHealth,
+  ServiceHealth,
   SystemLoad,
   RuntimeRegistryStatus,
   // Supervision
@@ -84,3 +85,7 @@ export type {
   // Browser
   BrowserSessionInfo,
 } from './types.js';
+
+export type { ApiId, IdInput } from './types.js';
+export { ChatAPI } from './chat.js';
+export type { ChatEvent, ChatRequest, ChatOptions, ApprovalEvent } from './chat.js';

@@ -1,3 +1,4 @@
+mod setup;
 use axum::Router;
 use crate::db::Database;
 use crate::engine::system::AgentSystem;
@@ -15,6 +16,7 @@ pub struct ServerState {
 }
 
 pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port: u16) -> anyhow::Result<()> {
+    crate::engine::workflow::credentials::migrate_legacy(&db).await?;
     let data_dir = crate::db::get_overseer_data_dir();
     let pool = crate::engine::browser::pool::BrowserPool::new(
         crate::engine::browser::pool_config::PoolConfig::default(),
@@ -50,6 +52,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
     let state = Arc::new(ServerState { db, agent_system, browser_pool: browser_pool.clone(), wake_tx });
 
     let app = Router::new()
+        .merge(setup::router())
         .merge(conversations::router())
         .merge(messages::router())
         .merge(agents::router())
@@ -77,6 +80,7 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
         .layer(GovernorLayer {
             config: crate::engine::resilience::server_governor(),
         })
+        .layer(axum::middleware::from_fn(access::guard))
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -86,7 +90,30 @@ pub async fn run_server(db: Arc<Database>, agent_system: Arc<AgentSystem>, port:
     let shutdown = {
         let bp = browser_pool.clone();
         async move {
-            signal::ctrl_c().await.ok();
+            let desktop_exit = async {
+                if std::env::var("OVERSEER_DESKTOP_MANAGED").as_deref() == Ok("1") {
+                    let (closed, receiver) = tokio::sync::oneshot::channel();
+                    std::thread::spawn(move || {
+                        let mut command = String::new();
+                        let _ = std::io::stdin().read_line(&mut command);
+                        let _ = closed.send(());
+                    });
+                    let _ = receiver.await;
+                } else { std::future::pending::<()>().await; }
+            };
+            let terminate = async {
+                #[cfg(unix)]
+                if let Ok(mut signal) = signal::unix::signal(signal::unix::SignalKind::terminate()) {
+                    signal.recv().await;
+                    return;
+                }
+                std::future::pending::<()>().await;
+            };
+            tokio::select! {
+                _ = signal::ctrl_c() => {},
+                _ = terminate => {},
+                _ = desktop_exit => {},
+            }
             tracing::info!("Shutting down browser sessions...");
             bp.shutdown().await;
         }
@@ -128,3 +155,5 @@ pub mod misc;
 pub mod openapi;
 pub mod ws;
 pub mod events;
+
+pub mod access;

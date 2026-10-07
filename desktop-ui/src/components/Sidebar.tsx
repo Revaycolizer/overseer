@@ -23,20 +23,18 @@ export default function Sidebar({
   return (
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div className="side-brand">
-        <span className="mark" aria-hidden>
-          <span className="mark-core" />
-        </span>
         <span className="wordmark side-word">Overseer</span>
       </div>
 
       <div className="side-group">Workspace</div>
-      <nav className="side-nav">
+      <nav className="side-nav" aria-label="Workspace">
         {NAV.map((n) => (
           <button
             key={n.id}
             className={`side-item ${view === n.id ? "active" : ""}`}
             onClick={() => onNavigate(n.id)}
             title={n.label}
+            aria-current={view === n.id ? "page" : undefined}
           >
             <span className="side-bar" aria-hidden />
             <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -52,7 +50,7 @@ export default function Sidebar({
           <span className="pulse" />
           <span className="side-label">{connected ? "Engine online" : "Engine offline"}</span>
         </div>
-        <button className="side-collapse" onClick={onToggle} title={collapsed ? "Expand" : "Collapse"}>
+        <button className="side-collapse" onClick={onToggle} title={collapsed ? "Expand" : "Collapse"} aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d={collapsed ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"} />
           </svg>

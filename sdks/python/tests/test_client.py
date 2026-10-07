@@ -45,14 +45,14 @@ async def test_connection_refused() -> None:
 @pytest.mark.asyncio
 async def test_model_creation() -> None:
     """Pydantic models can be created from dicts."""
-    conv = Conversation(id=1, title="Test", created_at="2024-01-01T00:00:00", updated_at="2024-01-01T00:00:00")
+    conv = Conversation(id=1, title="Test", created_at="2024-01-01T00:00:00")
     assert conv.id == 1
     assert conv.title == "Test"
 
-    agent = AgentInfo(id=1, name="test-agent", description="Test", domain="test")
+    agent = AgentInfo(id=1, name="test-agent", description="Test", domain="test", tools=["read_file"], instructions="Assist", model="local", version="1", source_files=[], response_format="json")
     assert agent.name == "test-agent"
 
-    tool = ToolInfo(id=1, name="test-tool", description="Test", language="python")
+    tool = ToolInfo(id=1, name="test-tool", description="Test", language="python", code="", safety_level="low", version="1")
     assert tool.name == "test-tool"
 
 

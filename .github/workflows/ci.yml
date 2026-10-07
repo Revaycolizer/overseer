@@ -6,6 +6,35 @@ on:
   pull_request:
 
 jobs:
+  desktop-ui-macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: desktop-ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop-ui/pnpm-lock.yaml
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache desktop Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop-ui/src-tauri -> target
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build desktop app (unsigned, no installer)
+        run: pnpm tauri build --no-bundle -- --locked
+
   cargo-check:
     runs-on: windows-latest
 
@@ -65,6 +94,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Cargo check (no desktop features)
         run: cargo check --lib
+      - name: Test GTK safety backport with optimizations
+        run: CARGO_TARGET_DIR=target cargo test --manifest-path vendor/glib/Cargo.toml --lib variant_iter --release
+      - name: Check GTK template macros
+        run: CARGO_TARGET_DIR=target cargo check --manifest-path vendor/gtk3-macros/Cargo.toml
 
   cargo-check-macos:
     runs-on: macos-latest
@@ -73,10 +106,18 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Install protoc
+        run: brew install protobuf
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
-      - name: Cargo check (kernel + client only)
-        run: cargo check -p overseer-kernel -p overseer-client
+      - name: Cargo check (engine, terminal, kernel, and client)
+        run: cargo check --workspace --lib --bins
+      - name: Run deterministic workspace tests
+        run: cargo test --locked --workspace
+      - name: Test optional vector memory persistence
+        run: cargo test --locked --lib --features memory engine::memory::tests::local_memory_table_round_trip
+      - name: Test wake-word inference compatibility
+        run: CARGO_TARGET_DIR=target cargo test --manifest-path vendor/rustpotter/Cargo.toml --lib
 
   security-audit:
     runs-on: ubuntu-latest
@@ -88,6 +129,6 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit
       - name: Audit dependencies
-        run: cargo audit --ignore RUSTSEC-2025-0028 || echo "Audit completed with ignored advisories (see above)"
-      - name: Check for outdated deps
-        run: cargo outdated --exit-code 1 || echo "Some deps outdated (non-blocking)"
+        run: |
+          cargo audit --deny warnings
+          cargo audit --file desktop-ui/src-tauri/Cargo.lock --deny warnings

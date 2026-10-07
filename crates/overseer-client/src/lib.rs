@@ -28,7 +28,7 @@
 //!
 //! ## Feature Coverage
 //!
-//! The client covers every endpoint exposed by the Overseer REST API:
+//! Typed methods cover the main REST resources; `request_json` supports additional JSON routes:
 //!
 //! | Category         | Methods |
 //! |------------------|---------|

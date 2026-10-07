@@ -11,8 +11,8 @@
  *   node scripts/client.js agents list
  */
 
-const BASE_URL = process.env.OVESEER_BASE_URL || 'http://localhost:8080';
-let TOKEN = process.env.OVESEER_TOKEN || '';
+const BASE_URL = process.env.OVERSEER_BASE_URL || process.env.OVESEER_BASE_URL || 'http://localhost:8080';
+let TOKEN = process.env.OVERSEER_API_TOKEN || process.env.OVESEER_TOKEN || '';
 
 // ── HTTP helpers ──────────────────────────────────────────────────────
 

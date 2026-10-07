@@ -1,0 +1,50 @@
+name: SDK contracts and packages
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  javascript:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: sdks/typescript/package-lock.json
+      - run: python3 sdks/generate-types.py --check
+      - run: npm ci
+        working-directory: sdks/typescript
+      - run: npm test
+        working-directory: sdks/typescript
+      - run: npm pack
+        working-directory: sdks/typescript
+      - run: npm ci && npm run compile
+        working-directory: sdks/examples/vscode-extension
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.12', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e 'sdks/python[streaming,dev]'
+      - run: python -m pytest sdks/python/tests
+      - run: python -m build sdks/python
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p overseer-client
+      - run: cargo package --locked -p overseer-client --allow-dirty

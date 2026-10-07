@@ -1,0 +1,63 @@
+import {fileURLToPath} from "node:url";
+import {spawn,execFileSync} from 'node:child_process';
+import {createServer} from 'node:http';
+import {mkdtemp,rm} from 'node:fs/promises';
+const root=fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
+const dir=await mkdtemp('/private/tmp/overseer-desktop-history-');
+const token='isolated-desktop-history-verification';
+let cloudRequests=0;
+const cloud=createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;const data=JSON.parse(body);cloudRequests++;if(data.tools)throw Error('setup requested tools');const key=req.headers.authorization?.replace('Bearer ','') || req.headers['x-api-key'];res.setHeader('Content-Type','application/json');if(key!=='test-key-good'){res.statusCode=401;res.end(JSON.stringify({error:{message:'Invalid key'}}));return;}res.end(JSON.stringify(req.url.includes('/v1/messages')?{content:[{type:'text',text:'OK'}]}:{choices:[{message:{content:'OK'}}]}));});
+await new Promise(resolve=>cloud.listen(18569,'127.0.0.1',resolve));
+const daemon=spawn(root+'/target/release/overseer',['--server','--port','18467'],{cwd:dir,env:{...process.env,OVERSEER_DATA_DIR:dir+'/data',OVERSEER_API_TOKEN:token,OVERSEER_DESKTOP_MANAGED:'1'},stdio:['pipe','ignore','ignore']});
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+const api=async(path,body)=>{const r=await fetch('http://127.0.0.1:18467'+path,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body?(typeof body === "string" ? body : JSON.stringify(body)):undefined});if(!r.ok)throw Error('API '+r.status);return r.text()};
+let chrome,ws;
+try{
+ for(let n=0;n<100;n++){try{await api('/healthz');break}catch{if(n===99)throw Error('daemon not ready');await delay(100)}}
+ const preflight = await fetch('http://127.0.0.1:18467/api/messages', {method:'OPTIONS',headers:{Origin:'http://127.0.0.1:4173','Access-Control-Request-Method':'GET','Access-Control-Request-Headers':'authorization'}});
+ if(preflight.status!==204 || preflight.headers.get('access-control-allow-origin')!=='http://127.0.0.1:4173')throw Error('trusted preflight rejected');
+ const blocked = await fetch('http://127.0.0.1:18467/api/messages', {method:'OPTIONS',headers:{Origin:'https://evil.example','Access-Control-Request-Method':'GET'}});
+ if(blocked.status!==403)throw Error('untrusted origin accepted');
+ const unauthorized = await fetch('http://127.0.0.1:18467/api/messages?conversation_id=1', {headers:{Origin:'http://127.0.0.1:4173'}});
+ if(unauthorized.status!==401)throw Error('REST authentication bypassed');
+ await api('/api/settings',{key:'openai_base_url',value:'http://127.0.0.1:18569/v1'});
+ await api('/api/settings',{key:'anthropic_base_url',value:'http://127.0.0.1:18569'});
+ const invalid=await fetch('http://127.0.0.1:18467/api/setup/test',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({provider:'invalid',model:'fixture-model'})});
+ if(invalid.status!==400)throw Error('unsupported provider accepted');
+ const denied=await fetch('http://127.0.0.1:18467/api/setup/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'openai',model:'fixture-model'})});
+ if(denied.status!==401)throw Error('setup authentication bypassed');
+ const id=await api('/api/conversations',{title:'Desktop history acceptance'});
+ await api('/api/messages',JSON.stringify({conversation_id:'__EXACT__',role:'user',content:'Saved desktop question',hide_evidence:false}).replace('"__EXACT__"',id.trim()));
+ await api('/api/messages',JSON.stringify({conversation_id:'__EXACT__',role:'assistant',content:'Saved desktop answer',hide_evidence:false}).replace('"__EXACT__"',id.trim()));
+ chrome=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless','--no-first-run','--no-default-browser-check','--user-data-dir='+dir+'/chrome','--remote-debugging-port=9241','about:blank'],{stdio:'ignore'});
+ let pages;for(let n=0;n<100;n++){try{pages=await(await fetch('http://127.0.0.1:9241/json')).json();break}catch{await delay(100)}}
+ ws=new WebSocket(pages.find(p=>p.type==='page').webSocketDebuggerUrl);await new Promise(r=>ws.addEventListener('open',r,{once:true}));
+ let seq=0;const pending=new Map();ws.addEventListener('message',e=>{const v=JSON.parse(e.data);if(v.id){pending.get(v.id)?.(v);pending.delete(v.id)}});
+ const call=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,v=>v.error?reject(v.error):resolve(v.result));ws.send(JSON.stringify({id,method,params}))});
+ const evaluate=async expression=>{const v=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(v.exceptionDetails)throw Error(JSON.stringify(v.exceptionDetails));return v.result.value};
+ const waitFor=async(check,label)=>{const deadline=Date.now()+15000;while(Date.now()<deadline){if(await check())return;await delay(100);}throw Error(label+'; saved completion: '+await api('/api/settings?key=desktop_setup_complete')+'; cloud requests: '+cloudRequests+'; UI: '+await evaluate('document.body.innerText'));};
+ await call('Page.enable');await call('Runtime.enable');await call('Network.enable');await call('Network.setCacheDisabled',{cacheDisabled:true});
+ await call('Page.addScriptToEvaluateOnNewDocument',{source:`if(location.origin==='http://127.0.0.1:4173'){localStorage.setItem('overseer.wsUrl','ws://127.0.0.1:18467/api/ws/chat');localStorage.setItem('overseer.token',${JSON.stringify(token)});localStorage.setItem('overseer.conv',${JSON.stringify(id.trim())});}`});
+ await call('Page.navigate',{url:'http://127.0.0.1:4173'});await waitFor(()=>evaluate("document.body.innerText.includes('Make Overseer yours')"),'setup not shown');
+ if(!await evaluate("document.body.innerText.includes('Make Overseer yours')"))throw Error('setup not shown');
+ const selectProvider=async value=>{await evaluate(`(()=>{const e=document.querySelector('fieldset select');e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`);await delay(100);};
+ const setInput=async(type,text)=>{await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(type)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(text)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);await delay(80);};
+ await selectProvider('openai');await setInput('fieldset input:not([type=password])','fixture-model');await setInput('fieldset input[type=password]','wrong-key');
+ await evaluate("document.querySelector('button[type=submit]').click()");await waitFor(()=>evaluate("document.body.innerText.includes('model check failed')"),'failed key error not shown');
+ if(!await evaluate("document.body.innerText.includes('model check failed')"))throw Error('failed key error not shown');
+ if(JSON.parse(await api('/api/settings?key=desktop_setup_complete'))==='true')throw Error('failed test completed setup');
+ await setInput('fieldset input[type=password]','test-key-good');await evaluate("document.querySelector('button[type=submit]').click()");await waitFor(async()=>JSON.parse(await api('/api/settings?key=desktop_setup_complete'))==='true','setup not saved');await waitFor(()=>evaluate("!document.body.innerText.includes('Make Overseer yours')"),'setup did not open chat');
+ if(await evaluate("document.body.innerText.includes('Make Overseer yours')"))throw Error('valid setup did not open chat');
+ if(JSON.parse(await api('/api/settings?key=desktop_setup_complete'))!=='true')throw Error('setup not persisted');
+ const stored=execFileSync('python3',['-c',"import sqlite3,sys; v=sqlite3.connect(sys.argv[1]).execute(\"select value from settings where key='openai_api_key'\").fetchone()[0]; assert v.startswith('v2:') and v != 'test-key-good'",dir+'/data/overseer.db']);
+ await call('Page.reload');await delay(300);await waitFor(()=>evaluate("!!document.querySelector('textarea')"),'completed chat did not reload');if(await evaluate("document.body.innerText.includes('Make Overseer yours')"))throw Error('completed setup shown again');
+ await api('/api/settings',{key:'desktop_setup_complete',value:''});await call('Page.reload');await delay(300);await waitFor(()=>evaluate("!!document.querySelector('fieldset select')"),'reset setup form missing');
+ for(const width of [320,440,1100]){await call('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:false});await delay(80);if(!await evaluate('document.documentElement.scrollWidth<=innerWidth'))throw Error('setup overflow '+width)}
+ await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Set up later').click()");await delay(100);if(JSON.parse(await api('/api/settings?key=desktop_setup_complete'))==='true')throw Error('defer marked complete');
+ await call('Page.reload');await delay(300);await waitFor(()=>evaluate("!!document.querySelector('fieldset select')"),'deferred setup form missing');await selectProvider('anthropic');await setInput('fieldset input:not([type=password])','fixture-model');await setInput('fieldset input[type=password]','test-key-good');await evaluate("document.querySelector('button[type=submit]').click()");await waitFor(async()=>JSON.parse(await api('/api/settings?key=desktop_setup_complete'))==='true','setup not saved');await waitFor(()=>evaluate("!document.body.innerText.includes('Make Overseer yours')"),'setup did not open chat');
+ if(JSON.parse(await api('/api/settings?key=llm_provider'))!=='anthropic')throw Error('Anthropic setup not saved');
+ if(cloudRequests!==3)throw Error('Unexpected automatic test requests: '+cloudRequests);
+ daemon.stdin.end();await Promise.race([new Promise(r=>daemon.once('exit',r)),delay(5000).then(()=>{throw Error('backend pipe EOF did not shut down')})]);
+ console.log('PASS: first-run gate, failed-key retry, OpenAI/Anthropic fixture completions, encrypted credentials, completion persistence, defer and responsive layout.');
+ await call('Browser.close');
+}finally{cloud.close();ws?.close();chrome?.kill();if(daemon.exitCode===null)daemon.kill('SIGKILL');await delay(500);await rm(dir,{recursive:true,force:true,maxRetries:10,retryDelay:200})}

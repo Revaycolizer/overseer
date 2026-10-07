@@ -35,8 +35,8 @@ pub fn router() -> Router<Arc<ServerState>> {
 async fn get_setting(State(s): State<Arc<ServerState>>, Query(q): Query<KeyQuery>) -> Result<Json<Option<String>>, String> {
     Ok(Json(Some(crate::backend::get_setting(&s.db, &q.key).await)))
 }
-async fn set_setting(State(s): State<Arc<ServerState>>, Json(p): Json<KeyVal>) -> Result<(), String> {
-    crate::backend::set_setting(&s.db, &p.key, &p.value).await.map_err(|e| e.to_string())
+async fn set_setting(State(s): State<Arc<ServerState>>, Json(p): Json<KeyVal>) -> Result<(), (axum::http::StatusCode, String)> {
+    crate::backend::set_setting(&s.db, &p.key, &p.value).await.map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 async fn get_all_settings(State(s): State<Arc<ServerState>>) -> Result<Json<std::collections::HashMap<String, String>>, String> {
     Ok(Json(crate::backend::get_all_settings(&s.db).await))
@@ -82,8 +82,9 @@ async fn refresh_registry(State(s): State<Arc<ServerState>>) -> Result<(), Strin
 async fn get_registry_status(State(s): State<Arc<ServerState>>) -> Result<Json<RuntimeRegistryStatus>, String> {
     Ok(Json(crate::backend::get_runtime_registry_status(&s.db).await))
 }
-async fn get_models(State(_s): State<Arc<ServerState>>) -> Result<Json<Vec<String>>, String> {
-    Ok(Json(crate::backend::get_available_models().await))
+async fn get_models(State(_s): State<Arc<ServerState>>) -> Result<Json<Vec<String>>, (axum::http::StatusCode, String)> {
+    crate::backend::try_get_available_models().await.map(Json)
+        .map_err(|e| (axum::http::StatusCode::SERVICE_UNAVAILABLE, format!("Ollama unavailable: {e}")))
 }
 async fn orchestrate(State(s): State<Arc<ServerState>>, Json(p): Json<OrchestratePayload>) -> Result<String, String> {
     Ok(s.agent_system.orchestrate(&s.db, p.conversation_id, &p.query, None).await)

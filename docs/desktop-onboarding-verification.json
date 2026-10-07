@@ -1,0 +1,29 @@
+{
+  "verified_at_utc": "2026-10-06T11:29:09.121958+00:00",
+  "platform": "macOS Apple Silicon",
+  "scope": "Desktop first-run provider/model setup and explicit tool-free connection test",
+  "checks": {
+    "frontend_build": "passed",
+    "desktop_bundle_build": "passed; ad hoc signed",
+    "root_library_tests": {
+      "passed": 125,
+      "failed": 0,
+      "ignored": 4
+    },
+    "onboarding_browser": "First-run gate, invalid-key recovery, completion persistence, defer without completion, encrypted cloud credentials and 320/440/1100 layout passed",
+    "cloud_provider_checks": "OpenAI and Anthropic completion fixtures passed; no live cloud accounts used",
+    "local_provider_check": "Real installed huihui_ai/qwen3-abliterated:14b completed the tool-free setup check after dependency remediation; isolated temporary database and no settings changes",
+    "native_bundle_startup_and_cleanup": "passed after final build",
+    "chat_history_regression": "authenticated restore/send/reload passed after final build"
+  },
+  "verification_script": "scripts/verify-desktop-onboarding.mjs",
+  "limitations": [
+    "Cloud tests use local fixtures; real provider/account acceptance remains outstanding",
+    "Connection check verifies a text response, not model tool-calling capabilities",
+    "Setup writes settings after a successful check; setup completion is marked last",
+    "Native UI interaction and other desktop platforms still need acceptance; Mac notarization and platform acceptance remain"
+  ],
+  "backend_binary_sha256": "4d52040d1e2af0853dcd118505c764b33aff03424c89c6c46e91763633a2c452",
+  "desktop_binary_sha256": "431f005b8859d990292e25e57a261f68eb05864ebf78a6b6fa3d53a1986ddb54",
+  "dependency_verification_report": "dependency-verification.json"
+}

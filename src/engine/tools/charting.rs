@@ -1,22 +1,16 @@
-use charming::{
-    component::{Axis, Grid, Legend, Title},
-    element::{AreaStyle, AxisType, ItemStyle, Label, LineStyle, Tooltip, Trigger},
-    series::{Bar, Line, Pie},
-    Chart, ImageRenderer,
-};
+use plotters::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChartRequest {
-    pub chart_type: String, // "bar", "line", "pie"
+    pub chart_type: String,
     pub title: String,
     pub labels: Vec<String>,
     pub data: Vec<f64>,
 }
 
+/// Render SVG directly, without embedding a JavaScript runtime in the backend.
 pub fn generate_chart_svg(req: ChartRequest) -> Result<String, String> {
-    // Convert f64 data to charming's expected format
-
     if req.labels.len() != req.data.len() {
         return Err(format!(
             "Labels count ({}) does not match data count ({})",
@@ -24,213 +18,178 @@ pub fn generate_chart_svg(req: ChartRequest) -> Result<String, String> {
             req.data.len()
         ));
     }
-
-    // Reject single data point for pie charts
-    if req.chart_type == "pie" && req.data.len() < 2 {
-        return Err("Pie chart requires at least 2 data points".to_string());
+    if req.data.is_empty() || req.data.len() > 1000 {
+        return Err("Charts require between 1 and 1000 data points".into());
     }
-    let _data_values: Vec<charming::datatype::DataPoint> = req
+    if req
         .data
         .iter()
-        .map(|&v| charming::datatype::DataPoint::Value(charming::datatype::CompositeValue::from(v)))
-        .collect();
-
-    let svg = match req.chart_type.to_lowercase().as_str() {
-        "bar" => render_bar(&req.title, &req.labels, &req.data),
-        "line" => render_line(&req.title, &req.labels, &req.data),
-        "pie" => render_pie(&req.title, &req.labels, &req.data),
-        _ => return Err(format!("Unsupported chart type: {}", req.chart_type)),
-    }?;
-
-    Ok(svg)
-}
-
-fn make_renderer() -> ImageRenderer {
-    ImageRenderer::new(1200, 600)
-}
-
-fn render_bar(title: &str, labels: &[String], data: &[f64]) -> Result<String, String> {
-    let chart = Chart::new()
-        .background_color("#ffffff")
-        .title(Title::new().text(title).left("center").top("10"))
-        .grid(
-            Grid::new()
-                .left("10%")
-                .right("5%")
-                .top("15%")
-                .bottom("20%")
-                .contain_label(true),
-        )
-        .tooltip(Tooltip::new().trigger(Trigger::Axis))
-        .x_axis(
-            Axis::new()
-                .type_(AxisType::Category)
-                .data(labels.to_vec())
-                .axis_label(
-                    charming::element::AxisLabel::new()
-                        .interval(0)
-                        .rotate(0.0)
-                        .font_size(12.0),
+        .any(|value| !value.is_finite() || value.abs() > 1e100)
+    {
+        return Err("Chart values must be finite and have magnitude at most 1e100".into());
+    }
+    let kind = req.chart_type.to_lowercase();
+    if !["bar", "line", "pie"].contains(&kind.as_str()) {
+        return Err(format!("Unsupported chart type: {}", req.chart_type));
+    }
+    if kind == "pie"
+        && (req.data.len() < 2
+            || req.data.iter().any(|value| *value < 0.0)
+            || req.data.iter().sum::<f64>() <= 0.0)
+    {
+        return Err(
+            "Pie charts require at least two nonnegative values with a positive total".into(),
+        );
+    }
+    let mut svg = String::new();
+    {
+        let root = SVGBackend::with_string(&mut svg, (1200, 600)).into_drawing_area();
+        root.fill(&WHITE).map_err(|error| error.to_string())?;
+        let color = RGBColor(59, 130, 246);
+        if kind == "pie" {
+            root.draw(&Text::new(
+                req.title.as_str(),
+                (600, 30),
+                ("sans-serif", 24).into_font().color(&BLACK).pos(
+                    plotters::style::text_anchor::Pos::new(
+                        plotters::style::text_anchor::HPos::Center,
+                        plotters::style::text_anchor::VPos::Top,
+                    ),
                 ),
-        )
-        .y_axis(
-            Axis::new().type_(AxisType::Value).min(0.0).axis_label(
-                charming::element::AxisLabel::new()
-                    .show(true)
-                    .font_size(12.0),
-            ),
-        )
-        .series(
-            Bar::new()
-                .name("Value")
-                .data(data.iter().map(|&v| v).collect::<Vec<f64>>())
-                .item_style(ItemStyle::new().color("#3b82f6").border_radius(4.0_f64))
-                .label(Label::new().show(true)),
-        );
-
-    make_renderer()
-        .render(&chart)
-        .map_err(|e| format!("Bar render error: {e:?}"))
-}
-
-fn render_line(title: &str, labels: &[String], data: &[f64]) -> Result<String, String> {
-    let min_val = data.iter().cloned().fold(f64::INFINITY, f64::min);
-    let max_val = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let _range = max_val - min_val;
-
-    // Always start from 0 if min is close to 0, otherwise add padding
-    let y_min = 0.0_f64; // always start from 0
-    let y_max = (max_val * 1.3).ceil();
-
-    let chart = Chart::new()
-        .background_color("#ffffff")
-        .title(Title::new().text(title).left("center").top("10"))
-        .grid(
-            Grid::new()
-                .left("12%")
-                .right("8%")
-                .top("20%")
-                .bottom("15%")
-                .contain_label(true),
-        )
-        .tooltip(Tooltip::new().trigger(Trigger::Axis))
-        .x_axis(
-            Axis::new()
-                .type_(AxisType::Category)
-                .data(labels.to_vec())
-                .boundary_gap(false)
-                .axis_label(charming::element::AxisLabel::new().show(true).interval(0)),
-        )
-        .y_axis(Axis::new().type_(AxisType::Value).min(y_min).max(y_max))
-        .series(
-            Line::new()
-                .name("Value")
-                .data(data.iter().map(|&v| v).collect::<Vec<f64>>())
-                .smooth(false)
-                .symbol_size(10)
-                .item_style(ItemStyle::new().color("#3b82f6"))
-                .line_style(LineStyle::new().width(3).color("#3b82f6"))
-                .area_style(AreaStyle::new().opacity(0.15))
-                .label(Label::new().show(true)),
-        );
-
-    make_renderer()
-        .render(&chart)
-        .map_err(|e| format!("Line render error: {e:?}"))
-}
-
-fn render_pie(title: &str, labels: &[String], data: &[f64]) -> Result<String, String> {
-    let pie_data: Vec<(f64, String)> = data
-        .iter()
-        .zip(labels.iter())
-        .map(|(&v, l)| (v, l.clone()))
-        .collect();
-
-    let chart = Chart::new()
-        .background_color("#ffffff")
-        .title(Title::new().text(title).left("center").top("16"))
-        .tooltip(Tooltip::new().trigger(Trigger::Item))
-        .legend(Legend::new().bottom("0").left("center"))
-        .series(
-            Pie::new()
-                .name("Value")
-                .data(pie_data)
-                .radius(vec!["35%", "65%"])
-                .center(vec!["50%", "50%"])
-                //         .label(
-                //     Label::new()
-                //         .show(true)
-                //         .formatter("{b}: {c}")  // name: value
-                // )
-                .label(
-                    Label::new().show(true).formatter("{c}"), // name: value
-                )
-                .item_style(ItemStyle::new().border_radius(6.0_f64)),
-        );
-
-    make_renderer()
-        .render(&chart)
-        .map_err(|e| format!("Pie render error: {e:?}"))
+            ))
+            .map_err(|error| error.to_string())?;
+            let center = (600, 315);
+            let radius = 210.0;
+            let colors: Vec<RGBColor> = (0..req.data.len())
+                .map(|index| {
+                    let (r, g, b) = Palette99::pick(index).rgb();
+                    RGBColor(r, g, b)
+                })
+                .collect();
+            let labels: Vec<String> = req
+                .labels
+                .iter()
+                .zip(&req.data)
+                .map(|(label, value)| format!("{label}: {value}"))
+                .collect();
+            let mut pie = Pie::new(&center, &radius, &req.data, &colors, &labels);
+            pie.label_style(("sans-serif", 14).into_font());
+            pie.percentages(("sans-serif", 14).into_font());
+            root.draw(&pie).map_err(|error| error.to_string())?;
+        } else {
+            let min = req.data.iter().copied().fold(0.0, f64::min);
+            let max = req.data.iter().copied().fold(0.0, f64::max);
+            let padding = ((max - min) * 0.1).max(1.0);
+            let low = if min < 0.0 { min - padding } else { 0.0 };
+            let high = max + padding;
+            let mut chart = ChartBuilder::on(&root)
+                .caption(&req.title, ("sans-serif", 24))
+                .margin(25)
+                .x_label_area_size(70)
+                .y_label_area_size(75)
+                .build_cartesian_2d(0.0..req.data.len() as f64, low..high)
+                .map_err(|error| error.to_string())?;
+            chart
+                .configure_mesh()
+                .disable_x_mesh()
+                .x_labels(req.labels.len().min(12))
+                .x_label_formatter(&|x| {
+                    let index = x.floor() as usize;
+                    req.labels.get(index).cloned().unwrap_or_default()
+                })
+                .draw()
+                .map_err(|error| error.to_string())?;
+            if kind == "bar" {
+                chart
+                    .draw_series(req.data.iter().enumerate().map(|(index, value)| {
+                        Rectangle::new(
+                            [(index as f64 + 0.15, 0.0), (index as f64 + 0.85, *value)],
+                            color.filled(),
+                        )
+                    }))
+                    .map_err(|error| error.to_string())?;
+            } else {
+                chart
+                    .draw_series(LineSeries::new(
+                        req.data
+                            .iter()
+                            .enumerate()
+                            .map(|(index, value)| (index as f64 + 0.5, *value)),
+                        color.stroke_width(3),
+                    ))
+                    .map_err(|error| error.to_string())?;
+                chart
+                    .draw_series(req.data.iter().enumerate().map(|(index, value)| {
+                        Circle::new((index as f64 + 0.5, *value), 4, color.filled())
+                    }))
+                    .map_err(|error| error.to_string())?;
+            }
+            chart
+                .draw_series(req.data.iter().enumerate().map(|(index, value)| {
+                    Text::new(
+                        value.to_string(),
+                        (index as f64 + 0.5, *value),
+                        ("sans-serif", 12).into_font(),
+                    )
+                }))
+                .map_err(|error| error.to_string())?;
+        }
+        root.present().map_err(|error| error.to_string())?;
+    }
+    Ok(svg)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    // charming's `ImageRenderer` renders via a V8/deno_core engine (SSR), which is
-    // NOT safe to initialize from multiple threads at once — doing so segfaults.
-    // Serialize the chart tests so the default parallel `cargo test` is stable.
-    static CHART_TEST_LOCK: Mutex<()> = Mutex::new(());
-
-    fn chart_test_guard() -> std::sync::MutexGuard<'static, ()> {
-        CHART_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    fn request(kind: &str, values: Vec<f64>) -> ChartRequest {
+        ChartRequest {
+            chart_type: kind.into(),
+            title: "Sales < & >".into(),
+            labels: values
+                .iter()
+                .enumerate()
+                .map(|(index, _)| format!("Item {index}"))
+                .collect(),
+            data: values,
+        }
     }
 
     #[test]
-    fn test_bar_chart() {
-        let _guard = chart_test_guard();
-        let req = ChartRequest {
-            chart_type: "bar".to_string(),
-            title: "Fruit Sales".to_string(),
-            labels: vec![
-                "Apples".to_string(),
-                "Bananas".to_string(),
-                "Oranges".to_string(),
-            ],
-            data: vec![10.0, 20.0, 15.0],
-        };
-        let result = generate_chart_svg(req).unwrap();
-        assert!(result.contains("<svg"));
+    fn renders_all_supported_charts_and_escapes_text() {
+        for kind in ["bar", "line", "pie"] {
+            let svg = generate_chart_svg(request(kind, vec![10.0, 20.0, 15.0])).unwrap();
+            assert!(svg.contains("<svg"));
+            assert!(svg.contains("Sales &lt; &amp; &gt;"));
+            assert!(svg.contains("Item 0"));
+            assert!(!svg.contains("NaN"));
+        }
     }
 
     #[test]
-    fn test_line_chart() {
-        let _guard = chart_test_guard();
-        let req = ChartRequest {
-            chart_type: "line".to_string(),
-            title: "Next.js Growth".to_string(),
-            labels: vec!["2024".to_string(), "2025".to_string(), "2026".to_string()],
-            data: vec![1.8, 2.7, 3.0],
-        };
-        let result = generate_chart_svg(req).unwrap();
-        assert!(result.contains("<svg"));
+    fn handles_zero_and_negative_cartesian_values() {
+        for values in [vec![0.0, 0.0], vec![-10.0, 5.0]] {
+            for kind in ["bar", "line"] {
+                assert!(generate_chart_svg(request(kind, values.clone())).is_ok());
+            }
+        }
     }
 
     #[test]
-    fn test_pie_chart() {
-        let _guard = chart_test_guard();
-        let req = ChartRequest {
-            chart_type: "pie".to_string(),
-            title: "Market Share".to_string(),
-            labels: vec![
-                "Next.js".to_string(),
-                "Nuxt".to_string(),
-                "Other".to_string(),
-            ],
-            data: vec![45.0, 30.0, 25.0],
-        };
-        let result = generate_chart_svg(req).unwrap();
-        assert!(result.contains("<svg"));
+    fn rejects_invalid_data() {
+        for (kind, values) in [
+            ("pie", vec![0.0, 0.0]),
+            ("pie", vec![-1.0, 2.0]),
+            ("pie", vec![1.0]),
+            ("bar", vec![]),
+            ("line", vec![f64::NAN]),
+            ("bar", vec![f64::INFINITY]),
+        ] {
+            assert!(generate_chart_svg(request(kind, values)).is_err());
+        }
+        let mut req = request("bar", vec![1.0]);
+        req.labels.clear();
+        assert!(generate_chart_svg(req).is_err());
     }
 }

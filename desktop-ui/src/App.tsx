@@ -1,3 +1,5 @@
+import Onboarding from "./screens/Onboarding";
+import { initialConnection, managed, refreshConnection, startupError } from "./lib/connection";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./App.css";
@@ -22,16 +24,20 @@ import {
 const DEFAULT_URL = "ws://127.0.0.1:8080/api/ws/chat";
 
 export default function App() {
-  const [url] = useState(() => localStorage.getItem("overseer.wsUrl") || DEFAULT_URL);
-  const [token] = useState(() => localStorage.getItem("overseer.token") || "");
-  const [conversationId] = useState(() => Number(localStorage.getItem("overseer.conv")) || 1);
+  const [url, setUrl] = useState(() => initialConnection.url || DEFAULT_URL);
+  const [token, setToken] = useState(() => initialConnection.token);
+  const [conversationId, setConversationId] = useState(() => localStorage.getItem("overseer.conv") || "0");
 
+  const [setupDone, setSetupDone] = useState(false);
+  useEffect(() => setSetupDone(false), [url, token]);
   const [view, setView] = useState<View>("chat");
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("overseer.sidebar") === "1");
   const [isFs, setIsFs] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [connected, setConnected] = useState(false);
+  const [historyReady, setHistoryReady] = useState(false);
+  const [connectionError, setConnectionError] = useState(startupError);
   const [busy, setBusy] = useState(false);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [listening, setListening] = useState(false);
@@ -49,7 +55,6 @@ export default function App() {
   const greetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
   const idRef = useRef(1);
   const nextId = () => ++idRef.current;
 
@@ -61,21 +66,49 @@ export default function App() {
     let retry = 0;
     let timer: ReturnType<typeof setTimeout>;
     const connect = () => {
+      if (startupError) return;
       const ws = new WebSocket(url);
       wsRef.current = ws;
       ws.onopen = () => {
+        if (closed || wsRef.current !== ws) return;
         retry = 0;
         setConnected(true);
         if (token) ws.send(JSON.stringify({ token }));
+        setHistoryReady(false);
+        const id = localStorage.getItem("overseer.conv") || "0";
+        const restore = async () => {
+          if (id === "0") { setConnectionError(""); setHistoryReady(true); return; }
+          try {
+            const endpoint = new URL(url);
+            endpoint.protocol = endpoint.protocol === "wss:" ? "https:" : "http:";
+            endpoint.pathname = "/api/messages";
+            endpoint.search = new URLSearchParams({ conversation_id: id }).toString();
+            const response = await fetch(endpoint, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(10000) });
+            if (!response.ok) throw new Error(`History request failed (${response.status})`);
+            const rows = JSON.parse((await response.text()).replace(/("id"\s*:\s*)(-?\d+)/g, '$1"$2"')) as { id: string; role: string; content: string }[];
+            if (!Array.isArray(rows)) throw new Error("Unexpected history response");
+            if (closed || wsRef.current !== ws) return;
+            setMessages(rows.filter(m => m.role === "user" || m.role === "assistant").map(m => ({ id: `db:${m.id}`, role: m.role as "user" | "assistant", text: m.role === "assistant" ? parseAssistant(m.content) : m.content })));
+            setConnectionError("");
+            setHistoryReady(true);
+          } catch (error) {
+            if (!closed) setConnectionError(`Could not restore saved chat: ${String(error)}`);
+          }
+        };
+        void restore();
       };
       ws.onmessage = (ev) => {
-        let frame: { type: string; text?: string; response?: string; error?: string };
+        if (closed || wsRef.current !== ws) return;
+        let frame: { type: string; text?: string; response?: string; error?: string; conversation_id?: string };
         try {
           frame = JSON.parse(ev.data);
         } catch {
           return;
         }
-        if (frame.type === "token" && frame.text) appendAssistant(frame.text);
+        if (frame.type === "session" && frame.conversation_id) {
+          localStorage.setItem("overseer.conv", frame.conversation_id);
+          setConversationId(frame.conversation_id);
+        } else if (frame.type === "token" && frame.text) appendAssistant(frame.text);
         else if (frame.type === "approval") {
           const a = frame as unknown as Approval;
           setApprovals((prev) => (prev.some((x) => x.id === a.id) ? prev : [...prev, a]));
@@ -110,7 +143,7 @@ export default function App() {
             voiceModeRef.current = false;
             setVoiceMode(false); // stop the hands-free loop on a miss
           }
-          setGreeting(frame.error || "Voice unavailable");
+          appendAssistant(`⚠️ ${frame.error || "Voice unavailable"}`);
         } else if (frame.type === "error") {
           setBusy(false);
           setApprovals([]);
@@ -125,10 +158,28 @@ export default function App() {
         }
       };
       ws.onclose = () => {
+        if (closed || wsRef.current !== ws) return;
+        setHistoryReady(false);
         setConnected(false);
+        setBusy(false);
+        setListening(false);
+        setApprovals([]);
+        voiceModeRef.current = false;
+        setVoiceMode(false);
         if (!closed) {
           retry = Math.min(retry + 1, 6);
-          timer = setTimeout(connect, Math.min(400 * 2 ** retry, 5000));
+          timer = setTimeout(async () => {
+            if (managed && url === initialConnection.url) {
+              try {
+                const connection = await refreshConnection();
+                if (closed) return;
+                if (connection.url !== url || connection.token !== token) {
+                  setUrl(connection.url); setToken(connection.token); return;
+                }
+              } catch (error) { setConnectionError(String(error)); }
+            }
+            if (!closed) connect();
+          }, Math.min(400 * 2 ** retry, 5000));
         }
       };
     };
@@ -171,19 +222,6 @@ export default function App() {
   const winMinimize = () => getCurrentWindow().minimize().catch(() => {});
   const winExitFs = () => getCurrentWindow().setFullscreen(false).catch(() => {});
   const winClose = () => getCurrentWindow().close().catch(() => {});
-
-  // ---- Pointer-reactive aurora ----
-  useEffect(() => {
-    const el = stageRef.current?.querySelector<HTMLElement>(".aurora");
-    if (!el) return;
-    const onMove = (e: PointerEvent) => {
-      const r = document.documentElement;
-      el.style.setProperty("--mx", `${(e.clientX / r.clientWidth) * 100}%`);
-      el.style.setProperty("--my", `${(e.clientY / r.clientHeight) * 100}%`);
-    };
-    window.addEventListener("pointermove", onMove);
-    return () => window.removeEventListener("pointermove", onMove);
-  }, []);
 
   // ---- Greet on summon (window becomes visible, e.g. via the tray hotkey) ----
   useEffect(() => {
@@ -244,14 +282,14 @@ export default function App() {
 
   function send(raw: string, opts?: { speak?: boolean }) {
     const text = raw.trim();
-    if (!text || busy) return;
+    if (!text || busy || !historyReady) return;
     const speak = opts?.speak ?? voiceModeRef.current;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       setMessages((prev) => [
         ...prev,
         { role: "user", text, id: nextId() },
-        { role: "assistant", text: "⚠️ Not connected to the Overseer engine. Start it in a terminal:\n\n    overseer --server\n\n(it listens on 127.0.0.1:8080). Then send again.", id: nextId() },
+        { role: "assistant", text: "⚠️ Overseer is reconnecting. Please wait and try again.", id: nextId() },
       ]);
       setInput("");
       return;
@@ -267,7 +305,7 @@ export default function App() {
       { role: "user", text, id: nextId() },
       { role: "assistant", text: "", id: nextId() },
     ]);
-    ws.send(JSON.stringify({ conversation_id: conversationId, message: payload, speak }));
+    ws.send(JSON.stringify({ conversation_id: conversationId, message: payload, speak, model: activePersona?.model || undefined }));
     setInput("");
     setBusy(true);
   }
@@ -298,8 +336,8 @@ export default function App() {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(ok ? { approve: id } : { reject: id }));
+      setApprovals((prev) => prev.filter((a) => a.id !== id));
     }
-    setApprovals((prev) => prev.filter((a) => a.id !== id));
   };
 
   // ---- Persona management ----
@@ -337,7 +375,7 @@ export default function App() {
   };
 
   return (
-    <div className="stage" ref={stageRef}>
+    <div className="stage">
       <div className="aurora" aria-hidden />
       <div className="grain" aria-hidden />
 
@@ -357,9 +395,6 @@ export default function App() {
 
       {greeting && !idle && (
         <div className="greet">
-          <span className="mark" aria-hidden>
-            <span className="mark-core" />
-          </span>
           {greeting}
         </div>
       )}
@@ -373,7 +408,7 @@ export default function App() {
             <div className="topbar">
               <div className="spacer" />
               <div className="bar-right">
-                <div className={`conn ${connected ? "on" : "off"}`}>
+                <div className={`conn ${connected ? "on" : "off"}`} role="status">
                   <span className="pulse" />
                   {connected ? "connected" : "offline"}
                 </div>
@@ -381,11 +416,19 @@ export default function App() {
             </div>
 
             <div className="main-body">
-              {view === "chat" && (
+              {(!connected || !historyReady || connectionError) && (
+                <div className="connection-notice" role="status">
+                  <strong>{connectionError ? "Overseer needs attention" : connected ? "Restoring saved chat…" : "Starting Overseer…"}</strong>
+                  <span>{connectionError || (managed ? "Your local backend starts automatically. This window reconnects if the connection is interrupted." : "Connecting to the backend configured in Settings.")}</span>
+                  {connectionError && <button onClick={() => window.location.reload()}>Retry connection</button>}
+                </div>
+              )}
+              {view === "chat" && connected && historyReady && !setupDone && <Onboarding url={url} token={token} onComplete={() => setSetupDone(true)} />}
+              {view === "chat" && (setupDone || !connected || !historyReady) && (
                 <Chat
                   messages={messages}
                   busy={busy}
-                  connected={connected}
+                  connected={connected && historyReady}
                   persona={activePersona}
                   approvals={approvals}
                   onResolve={resolveApproval}
@@ -415,6 +458,18 @@ export default function App() {
                   connected={connected}
                   wsUrl={url}
                   personaCount={personas.length}
+                  token={token}
+                  onConnectionSave={(nextUrl, nextToken) => {
+                    if (managed && nextUrl === initialConnection.url) {
+                      localStorage.removeItem("overseer.wsUrl");
+                      localStorage.removeItem("overseer.token");
+                    } else {
+                      localStorage.setItem("overseer.wsUrl", nextUrl);
+                      localStorage.setItem("overseer.token", nextToken);
+                    }
+                    setUrl(nextUrl);
+                    setToken(nextToken);
+                  }}
                 />
               )}
             </div>

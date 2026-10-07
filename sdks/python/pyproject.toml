@@ -1,13 +1,14 @@
 [build-system]
-requires = ["setuptools>=75.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "overseer-pysdk"
-version = "0.1.1"
+version = "0.2.0"
 description = "Python client for the Overseer AI orchestration platform"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
     { name = "Revaycolizer", email = "albinuslucas@gmail.com" },
@@ -22,7 +23,6 @@ keywords = ["ai", "agent", "orchestration", "client", "overseer"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -45,3 +45,10 @@ include = ["overseer*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+
+[project.optional-dependencies]
+streaming = ["websockets>=15,<18"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "build>=1"]
+
+[tool.setuptools.package-data]
+overseer = ["py.typed"]

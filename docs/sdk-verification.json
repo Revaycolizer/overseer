@@ -1,0 +1,61 @@
+{
+  "verified_at_utc": "2026-10-05T12:18:09.715830+00:00",
+  "sdk_version": "0.2.0",
+  "platform": "macOS Apple Silicon",
+  "node": "v22.23.3",
+  "python": "Python 3.14.7",
+  "tests": {
+    "javascript": {
+      "passed": 10
+    },
+    "python": {
+      "passed": 12
+    },
+    "rust": {
+      "contract_passed": 5,
+      "doc_examples_passed": 2
+    }
+  },
+  "live_verification": {
+    "status": "passed",
+    "command": "python sdks/verify-live.py",
+    "isolation": "temporary authenticated daemon/database per SDK; no resident database access",
+    "coverage": [
+      "REST ID round trips above JavaScript safe integer range",
+      "response model decoding",
+      "Bearer token rejection and successful authenticated calls",
+      "JavaScript and Python streamed memory commands"
+    ]
+  },
+  "package_checks": {
+    "javascript": "npm pack; installed ESM and CommonJS imports passed",
+    "python": "wheel and sdist built; installed wheel passes Python tests",
+    "rust": "cargo package with verification passed"
+  },
+  "vscode_example": "compiled; streamed approval UI and SecretStorage implemented; native interaction not acceptance-tested",
+  "type_contracts": "python3 sdks/generate-types.py --check passed",
+  "registry_publication": false,
+  "artifacts": {
+    "overseer-client-0.2.0.tgz": {
+      "bytes": 22718,
+      "sha256": "073a1b78406962774696b7ced4152c2a4932a3a36844b496c99aee78d0a61d6d"
+    },
+    "overseer_pysdk-0.2.0-py3-none-any.whl": {
+      "bytes": 16061,
+      "sha256": "010adf88a0a5f9ffbedc09987e267d09735c1671f950f3d4ab18f1cf9dd2dbcb"
+    },
+    "overseer_pysdk-0.2.0.tar.gz": {
+      "bytes": 17855,
+      "sha256": "df3389b455ceb181c030ba1eb5b67f731c85dce96a25f0531603b47f912ba760"
+    },
+    "overseer-client-0.2.0.crate": {
+      "bytes": 24981,
+      "sha256": "9bb92cf80713c427ca6a9e876f1414a50d1dc1c4a7dfb04f2c907bd109545d11"
+    }
+  },
+  "limits": [
+    "Paid cloud conversations and OS tool execution were not exercised by SDK checks",
+    "CI includes Node 24 and Python 3.10/3.12; those versions were not locally run",
+    "Rust client is REST-only; streaming is available in JavaScript and Python"
+  ]
+}

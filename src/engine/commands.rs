@@ -40,6 +40,10 @@ pub fn parse(input: &str) -> Option<SlashCommand> {
         return Some(SlashCommand::Quit);
     }
 
+    if trimmed == "/model" || trimmed == "/models" {
+        return Some(SlashCommand::Model { name: String::new() });
+    }
+
     if trimmed == "/settings" {
         return Some(SlashCommand::Settings);
     }
@@ -71,6 +75,7 @@ pub fn parse(input: &str) -> Option<SlashCommand> {
 
 pub fn get_suggestions(input: &str) -> Vec<&'static str> {
     let commands = vec![
+        "/memory ",
         "/help",
         "/new",
         "/export md",

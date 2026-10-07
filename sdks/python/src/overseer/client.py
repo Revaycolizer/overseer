@@ -7,6 +7,9 @@ from urllib.parse import urlencode
 import httpx
 
 from .auth import AuthManager
+from .chat import ChatAPI
+from urllib.parse import urlsplit
+import math
 from .models import (
     AgentInfo,
     Artifact,
@@ -21,6 +24,7 @@ from .models import (
     Message,
     Planner,
     RuntimeHealth,
+    ServiceHealth,
     RuntimeRegistryStatus,
     Supervisor,
     SystemLoad,
@@ -50,8 +54,14 @@ class OverseerClient:
         base_url: str = "http://localhost:8080",
         token: Optional[str] = None,
         timeout: float = 30.0,
+        *, transport: Optional[httpx.AsyncBaseTransport] = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        parsed = urlsplit(self.base_url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+            raise ValueError("base_url must be an HTTP(S) server origin without credentials")
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout must be positive")
         self._auth = AuthManager()
         if token:
             self._auth.token = token
@@ -59,8 +69,11 @@ class OverseerClient:
             base_url=self.base_url,
             timeout=httpx.Timeout(timeout),
             headers=self._default_headers(),
+            transport=transport,
+            follow_redirects=False,
         )
         # Namespaced API modules
+        self.chat = ChatAPI(self.base_url, lambda: self.token)
         self.conversations = _ConversationsAPI(self)
         self.messages = _MessagesAPI(self)
         self.agents = _AgentsAPI(self)
@@ -80,7 +93,7 @@ class OverseerClient:
 
     def _default_headers(self) -> dict[str, str]:
         return {
-            "User-Agent": "overseer-client-py/0.1",
+            "User-Agent": "overseer-client-py/0.2.0",
             "Accept": "application/json",
         }
 
@@ -89,7 +102,7 @@ class OverseerClient:
         return self._auth.token
 
     @token.setter
-    def token(self, value: str) -> None:
+    def token(self, value: Optional[str]) -> None:
         self._auth.token = value
 
     @property
@@ -114,12 +127,14 @@ class OverseerClient:
         params: Optional[dict[str, Any]] = None,
         json_body: Any = None,
     ) -> httpx.Response:
+        if not path.startswith("/") or path.startswith("//"):
+            raise ValueError("path must be relative to the configured server")
         url = path
         if params:
             url = f"{path}?{urlencode({k: str(v) for k, v in params.items() if v is not None})}"
         headers = self.auth_header
         r = await self._http.request(method, url, json=json_body, headers=headers)
-        if r.status_code >= 400:
+        if not r.is_success:
             body = r.text[:500]
             raise httpx.HTTPStatusError(
                 f"API error {r.status_code}: {body}",
@@ -142,7 +157,7 @@ class OverseerClient:
 
     async def _get_json(self, path: str, params: Optional[dict] = None, model: Optional[type] = None) -> Any:
         r = await self._get(path, params=params)
-        data = r.json()
+        data = r.json() if r.content else None
         if model and isinstance(data, list):
             return [model(**item) for item in data]
         if model and isinstance(data, dict):
@@ -151,12 +166,17 @@ class OverseerClient:
 
     async def _post_json(self, path: str, body: Any = None, model: Optional[type] = None) -> Any:
         r = await self._post(path, body)
-        data = r.json()
+        data = r.json() if r.content else None
         if model and isinstance(data, list):
             return [model(**item) for item in data]
         if model and isinstance(data, dict):
             return model(**data)
         return data
+
+    async def request(self, method: str, path: str, *, body: Any = None, params: Optional[dict[str, Any]] = None) -> Any:
+        """Call an additional JSON endpoint on the configured server."""
+        response = await self._request(method, path, params=params, json_body=body)
+        return response.json() if response.content else None
 
     # ── Auth ───────────────────────────────────────────────────────────
 
@@ -604,8 +624,11 @@ class _SystemAPI:
     def __init__(self, client: OverseerClient) -> None:
         self._client = client
 
-    async def health(self) -> RuntimeHealth:
-        return await self._client._get_json("/health", model=RuntimeHealth)
+    async def health(self) -> ServiceHealth:
+        return await self._client._get_json("/healthz", model=ServiceHealth)
+
+    async def runtime_health(self) -> RuntimeHealth:
+        return await self._client._get_json("/api/health", model=RuntimeHealth)
 
     async def load(self) -> SystemLoad:
         return await self._client._get_json("/api/system/load", model=SystemLoad)

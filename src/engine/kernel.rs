@@ -6,12 +6,10 @@
 //! approval — runs the immutable action, recording the full lifecycle to the
 //! execution trace. There is no other authorized path to `call_dynamic_tool`.
 
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::Value;
-use sqlx::SqlitePool;
 
 use overseer_kernel::{
     ActionKind, ActionRequest, ActionRisk, ExecutionOutcome, Kernel, KernelEvent, PolicyConfig,
@@ -21,18 +19,15 @@ use overseer_kernel::{
 use crate::db::Database;
 use crate::engine::utils::discovery::ToolInfo;
 
-/// Process-wide kernel. Overseer runs a single local database, so one kernel
-/// instance owns all approval coordination and the emergency-stop state.
-static KERNEL: OnceLock<Kernel> = OnceLock::new();
-
 /// Default time a run will wait for a human approval before it expires (ms).
 const DEFAULT_APPROVAL_WAIT_MS: u64 = 300_000;
 
-/// Get (initializing on first use) the global kernel bound to `pool`.
-pub fn global_kernel(pool: &SqlitePool) -> &'static Kernel {
-    KERNEL.get_or_init(|| {
+/// One kernel per database, shared by its clones. Independent databases must
+/// never share approval waiters, emergency-stop state, or the approval ledger.
+pub fn database_kernel(db: &Database) -> &Kernel {
+    db.kernel.get_or_init(|| {
         Kernel::new(
-            pool.clone(),
+            db.pool.clone(),
             Some(Duration::from_millis(DEFAULT_APPROVAL_WAIT_MS)),
         )
     })
@@ -225,8 +220,7 @@ where
     F: FnOnce(ActionRequest) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>> + Send,
 {
-    let pool = db.pool.clone();
-    let kernel = global_kernel(&pool);
+    let kernel = database_kernel(db);
 
     // On any error reading supervision state, fall back to the most restrictive
     // sensible default (approval_required) rather than failing open.
@@ -319,7 +313,7 @@ pub async fn evaluate_named(
 
 /// Approve the given pending approval. Returns true if this call resolved it.
 pub fn approve(db: &Database, approval_id: &str, resolver: &str) -> bool {
-    let kernel = global_kernel(&db.pool);
+    let kernel = database_kernel(db);
     kernel.resolve_approval(
         approval_id,
         Resolution::Approved {
@@ -330,7 +324,7 @@ pub fn approve(db: &Database, approval_id: &str, resolver: &str) -> bool {
 
 /// Reject the given pending approval. Returns true if this call resolved it.
 pub fn reject(db: &Database, approval_id: &str, resolver: &str) -> bool {
-    let kernel = global_kernel(&db.pool);
+    let kernel = database_kernel(db);
     kernel.resolve_approval(
         approval_id,
         Resolution::Rejected {
@@ -342,7 +336,7 @@ pub fn reject(db: &Database, approval_id: &str, resolver: &str) -> bool {
 /// Emergency stop for a run: block new actions, cancel any waiting approval, and
 /// abort in-flight execution. Also records an `emergency_stop` trace event.
 pub async fn emergency_stop(db: &Database, run_id: i64) {
-    let kernel = global_kernel(&db.pool);
+    let kernel = database_kernel(db);
     let cancelled = kernel.emergency_stop(run_id).await.unwrap_or_default();
     let seq: i64 = sqlx::query_scalar::<_, i64>(
         "SELECT COALESCE(MAX(sequence), -1) + 1 FROM execution_events WHERE run_id = ?",
@@ -370,7 +364,7 @@ pub async fn emergency_stop(db: &Database, run_id: i64) {
 
 /// Global emergency stop: halt every known run (panic button).
 pub async fn emergency_stop_all(db: &Database) -> Vec<String> {
-    let kernel = global_kernel(&db.pool);
+    let kernel = database_kernel(db);
     kernel.emergency_stop_all().await.unwrap_or_default()
 }
 
@@ -379,7 +373,7 @@ pub async fn list_pending_approvals(
     db: &Database,
     run_id: Option<i64>,
 ) -> Vec<overseer_kernel::ApprovalRecord> {
-    let kernel = global_kernel(&db.pool);
+    let kernel = database_kernel(db);
     kernel
         .store()
         .list_pending(run_id)
@@ -395,9 +389,8 @@ mod bridge_tests {
     //! suspend/approve/reject/emergency) with a recording/safe executor — no real
     //! desktop mutation.
     //!
-    //! NOTE: the kernel is a process-global `OnceLock` bound to the first pool it
-    //! sees, so all phases run within ONE test on ONE `Database`. This is the only
-    //! main-crate test that touches the global kernel.
+    //! Each database owns its kernel; these phases share one database while
+    //! other tests can exercise independent approval ledgers concurrently.
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};

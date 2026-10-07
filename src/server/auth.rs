@@ -28,7 +28,7 @@ pub fn router() -> Router<Arc<ServerState>> {
         .route("/v1/auth/login", post(login))
         .route("/v1/auth/logout", post(logout))
         .route("/v1/auth/me", get(me))
-        .route("/v1/users/{id}/avatar", get(get_avatar))
+        .route("/v1/users/:id/avatar", get(get_avatar))
 }
 
 async fn get_user_from_token(state: &Arc<ServerState>, headers: &HeaderMap) -> Result<UserProfile, StatusCode> {

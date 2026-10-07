@@ -1,0 +1,130 @@
+{
+  "verified_at_utc": "2026-10-06T11:29:09.121958+00:00",
+  "platform": "macOS Apple Silicon",
+  "public_launch_ready": false,
+  "audits": {
+    "root": {
+      "command": "cargo audit --deny warnings",
+      "vulnerabilities": 0,
+      "warnings": 0,
+      "lockfile_sha256": "d479215ada06b7ec9a3d5e660b1fc326d1259f9f23e34d8d054417b5eb731492",
+      "advisory_database_commit": "ef6173cbc5c50ec8166f9a5b28f07834144373ee"
+    },
+    "desktop": {
+      "command": "cargo audit --file desktop-ui/src-tauri/Cargo.lock --deny warnings",
+      "vulnerabilities": 0,
+      "warnings": 0,
+      "lockfile_sha256": "a867e491bb7acafd51c24a6267a43fcbd089c890b199c68f7900bbf127ed94bf",
+      "advisory_database_commit": "ef6173cbc5c50ec8166f9a5b28f07834144373ee"
+    }
+  },
+  "changes": [
+    "Ratatui 0.30.2 and Crossterm 0.29",
+    "SQLx 0.9, bind-based backup and attachment queries; Rust 1.94 minimum",
+    "LanceDB 0.39 and Arrow 58; adapted batch readers and streaming queries",
+    "PDF generation with lopdf 0.45 and skrifa 0.48; Unicode, pagination and data rows",
+    "Plotters SVG charts replace Charming/V8 SSR",
+    "Corrected HTTP quota refill to 100 ms per request with the existing 32-request burst cap"
+  ],
+  "local_maintenance_patches": [
+    {
+      "path": "vendor/rustpotter",
+      "change": "Upstream 3.0.2 with Candle core/nn 0.11 and model inference compatibility tests",
+      "source_digest_sha256": "a2ef92215fbc5c5a7db1750dd1df1a7cb4e7578b387bf290490096d4b2f2546b"
+    },
+    {
+      "path": "vendor/pdf-extract",
+      "change": "Upstream 0.12.1 with lopdf 0.45 and infallible page-content API adaptation",
+      "source_digest_sha256": "3cc5857f3938deac55f9b4d137c31677e8eba8008005987642b1867e21cb7cf8"
+    },
+    {
+      "path": "vendor/paste",
+      "change": "Small facade that re-exports maintained pastey; contains no old paste implementation",
+      "source_digest_sha256": "4efa3d0fa583ce65a2fffce4f00b8a98350cb3c783c67eecd7a7c35f6964d289"
+    },
+    {
+      "path": "vendor/glib",
+      "change": "GTK3-compatible 0.18.5 with mutable out-pointer fix backported for RUSTSEC-2024-0429",
+      "source_digest_sha256": "35add596931bfc98a622163926a97a875f5186edef3d0a49d59a0567c3fbe0f7"
+    },
+    {
+      "path": "vendor/glib-macros",
+      "change": "Upstream 0.18.5 with proc-macro-error3 3.1.1 and updated import paths",
+      "source_digest_sha256": "b7627c6cd33d18fc3ed341b64171fa1f2e8b397ecf677cf9132141e233fe21ae"
+    },
+    {
+      "path": "vendor/gtk3-macros",
+      "change": "Upstream 0.18.2 with proc-macro-error3 3.1.1 and updated import paths",
+      "source_digest_sha256": "2756fdb01259baaa12a5dfae17c11c7547864bc01fd10ffb16445aa9a2b7ed95"
+    }
+  ],
+  "verification": {
+    "workspace_tests": {
+      "passed": 238,
+      "failed": 0,
+      "ignored": 4
+    },
+    "root_library_tests": {
+      "passed": 125,
+      "failed": 0,
+      "ignored": 4
+    },
+    "optional_memory_build": "cargo check --locked --lib --features memory passed",
+    "optional_memory_persistence_test": "Create, add, close, reopen, count and vector search passed without Ollama or cloud requests",
+    "wakeword_tests": {
+      "passed": 6,
+      "failed": 0,
+      "coverage": "Upstream audio tests and exact inference round-trip for Tiny/Small/Medium/Large models"
+    },
+    "glib_optimized_iterator_tests": {
+      "passed": 11,
+      "failed": 0
+    },
+    "gtk3_macro_build": "passed on Mac",
+    "release_binaries": "passed; locked release builds",
+    "desktop_bundle": "passed; ad hoc signed",
+    "native_desktop_lifecycle": "two isolated launch/crash/relaunch cycles passed",
+    "desktop_history": "authenticated restore, send, reload, CORS and responsive layouts passed",
+    "desktop_onboarding": "OpenAI/Anthropic local fixtures, failed-key retry, encryption, defer and reload passed",
+    "macos_smoke_report": "../dist/macos-build-verification.json",
+    "terminal_smoke": "launch outside repository, type, Ctrl+Q and migrations passed",
+    "sdk_type_contracts": "sdks/generate-types.py --check passed",
+    "real_local_provider": {
+      "model": "huihui_ai/qwen3-abliterated:14b",
+      "result": "Explicit tool-free setup completion passed; isolated settings unchanged"
+    }
+  },
+  "artifacts": {
+    "target/release/overseer": {
+      "bytes": 23813904,
+      "sha256": "4d52040d1e2af0853dcd118505c764b33aff03424c89c6c46e91763633a2c452"
+    },
+    "target/release/overseer-tui": {
+      "bytes": 10412112,
+      "sha256": "fd974837f3542a39f82e50674e41f70220da9b65890d54aa12de511a05cf2d7b"
+    },
+    "desktop-ui/src-tauri/target/release/bundle/macos/Overseer.app/Contents/MacOS/desktop-ui": {
+      "bytes": 5929136,
+      "sha256": "431f005b8859d990292e25e57a261f68eb05864ebf78a6b6fa3d53a1986ddb54"
+    },
+    "desktop-ui/src-tauri/target/release/bundle/macos/Overseer.app/Contents/Resources/backend/overseer": {
+      "bytes": 23813904,
+      "sha256": "4d52040d1e2af0853dcd118505c764b33aff03424c89c6c46e91763633a2c452"
+    }
+  },
+  "terminal_binary_size": {
+    "previous_preview_bytes": 49964256,
+    "current_bytes": 10412112,
+    "reduction_percent": 79.2,
+    "scope": "Binary size only; not a RAM, CPU or inference benchmark"
+  },
+  "limitations": [
+    "Verification ran on Mac Apple Silicon; updated Windows/Linux releases have not been built in native CI",
+    "Mac app remains ad hoc signed and not notarized",
+    "Cloud completion checks used local fixtures; real provider accounts remain unverified",
+    "Vector persistence tested on fresh isolated tables; legacy LanceDB 0.10 datasets were not opened or migrated",
+    "Local maintenance patches require ongoing upstream/advisory tracking; registry audit results do not replace review",
+    "Four external-resource tests remain ignored; existing compiler warnings remain",
+    "Existing public terminal preview assets and Homebrew release have not been replaced"
+  ]
+}

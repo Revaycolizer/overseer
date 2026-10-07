@@ -33,7 +33,8 @@ impl TestApp {
             std::env::temp_dir(),
         ));
 
-        let state = Arc::new(ServerState { db, agent_system, browser_pool });
+        let (wake_tx, _) = tokio::sync::broadcast::channel(16);
+        let state = Arc::new(ServerState { db, agent_system, browser_pool, wake_tx });
 
         let app: Router = Router::new()
             .merge(overseer::server::conversations::router())
@@ -49,6 +50,9 @@ impl TestApp {
             .merge(overseer::server::versions::router())
             .merge(overseer::server::misc::router())
             .merge(overseer::server::auth::router())
+            .merge(overseer::server::ws::router())
+            .merge(overseer::server::credentials::router())
+            .layer(axum::middleware::from_fn(overseer::server::access::guard))
             .with_state(state);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -383,4 +387,46 @@ async fn test_models() {
     let body = app.get_ok("/api/models/available").await;
     let models = body.as_array().unwrap();
     assert!(models.iter().all(|m| m.is_string()));
+}
+
+#[tokio::test]
+async fn desktop_socket_creates_exact_id_and_handles_memory_without_model() {
+    use futures::{SinkExt, StreamExt};
+    let app = TestApp::new().await;
+    let url = app.base_url.replace("http://", "ws://") + "/api/ws/chat";
+    let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::json!({
+        "conversation_id":"0", "message":"/memory remember reply_style=concise"
+    }).to_string())).await.unwrap();
+    let session = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next()).await.unwrap().unwrap().unwrap();
+    let frame: Value = serde_json::from_str(session.to_text().unwrap()).unwrap();
+    assert_eq!(frame["type"], "session");
+    let id = frame["conversation_id"].as_str().unwrap();
+    assert!(id.parse::<i64>().unwrap() > 9_007_199_254_740_991);
+    let done = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next()).await.unwrap().unwrap().unwrap();
+    let done: Value = serde_json::from_str(done.to_text().unwrap()).unwrap();
+    assert_eq!(done["type"], "done");
+    assert!(done["response"].as_str().unwrap().contains("Remembered preference"));
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::json!({
+        "conversation_id":id, "message":"/memory list"
+    }).to_string())).await.unwrap();
+    let session = ws.next().await.unwrap().unwrap();
+    let frame: Value = serde_json::from_str(session.to_text().unwrap()).unwrap();
+    assert_eq!(frame["conversation_id"], id);
+    let done = ws.next().await.unwrap().unwrap();
+    assert!(done.to_text().unwrap().contains("concise"));
+}
+
+#[tokio::test]
+async fn rejects_cross_site_requests_and_routes_credential_ids() {
+    let app = TestApp::new().await;
+    let denied = app.client.post(format!("{}/api/conversations", app.base_url))
+        .header("Origin", "https://evil.example").json(&serde_json::json!({"title":"untrusted"}))
+        .send().await.unwrap();
+    assert_eq!(denied.status(), reqwest::StatusCode::FORBIDDEN);
+    let missing = app.client.delete(format!("{}/v1/credentials/123", app.base_url)).send().await.unwrap();
+    assert_eq!(missing.status(), reqwest::StatusCode::NOT_FOUND);
+    let missing = app.client.patch(format!("{}/v1/credentials/123", app.base_url))
+        .json(&serde_json::json!({"name":"missing"})).send().await.unwrap();
+    assert_eq!(missing.status(), reqwest::StatusCode::NOT_FOUND);
 }

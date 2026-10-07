@@ -29,9 +29,9 @@ pub fn router() -> Router<Arc<ServerState>> {
         .route("/api/workflows/:id/runs", get(get_workflow_runs))
         .route("/api/workflows/runs/:id/steps", get(get_workflow_step_runs))
         .route("/api/workflows/:id/run", post(run_workflow))
-        .route("/v1/workflows/{id}/publish", post(publish_workflow))
-        .route("/v1/workflows/{id}/versions", get(get_versions))
-        .route("/v1/workflows/{id}/versions/{v}/restore", post(restore_version))
+        .route("/v1/workflows/:id/publish", post(publish_workflow))
+        .route("/v1/workflows/:id/versions", get(get_versions))
+        .route("/v1/workflows/:id/versions/:v/restore", post(restore_version))
 }
 
 async fn get_workflows(State(state): State<Arc<ServerState>>) -> Result<Json<Vec<Workflow>>, String> {

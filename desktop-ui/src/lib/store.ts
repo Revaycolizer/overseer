@@ -11,7 +11,7 @@ export interface Persona {
 export interface Msg {
   role: "user" | "assistant";
   text: string;
-  id: number;
+  id: number | string;
 }
 
 export interface Approval {
@@ -24,6 +24,7 @@ export interface Approval {
 
 /** Slash commands surfaced in the composer palette. */
 export const SLASH_COMMANDS = [
+  { cmd: "/memory", args: "<command>", desc: "Inspect or update learning memory" },
   { cmd: "/do", args: "<goal>", desc: "Autonomous agent — plans & runs tools to reach a goal" },
   { cmd: "/write", args: "<path> <content>", desc: "Write a file (governed)" },
   { cmd: "/open", args: "<app or url>", desc: "Launch an app or open a URL" },

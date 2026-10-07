@@ -14,7 +14,7 @@ from .models import (
     AgentInfo, Artifact, Attachment, AuthResponse, BrowserSessionInfo,
     ComputerSupervisionState, Conversation, ConversationSearchResult,
     CredentialSummary, EntityVersion, Message, Planner, RuntimeHealth,
-    RuntimeRegistryStatus, Supervisor, SystemLoad, ToolInfo, UserProfile,
+    RuntimeRegistryStatus, ServiceHealth, Supervisor, SystemLoad, ToolInfo, UserProfile,
     WorkItem, WorkItemEvent, Workflow, WorkflowRun, WorkflowStep,
     WorkflowStepRun, WorkflowTemplate,
 )
@@ -24,8 +24,11 @@ __all__ = [
     "AgentInfo", "Artifact", "Attachment", "AuthResponse", "BrowserSessionInfo",
     "ComputerSupervisionState", "Conversation", "ConversationSearchResult",
     "CredentialSummary", "EntityVersion", "Message", "Planner", "RuntimeHealth",
-    "RuntimeRegistryStatus", "Supervisor", "SystemLoad", "ToolInfo", "UserProfile",
+    "RuntimeRegistryStatus", "ServiceHealth", "Supervisor", "SystemLoad", "ToolInfo", "UserProfile",
     "WorkItem", "WorkItemEvent", "Workflow", "WorkflowRun", "WorkflowStep",
     "WorkflowStepRun", "WorkflowTemplate",
 ]
-__version__ = "0.1.1"
+__version__ = "0.2.0"
+
+from .chat import ChatAPI
+__all__.append("ChatAPI")

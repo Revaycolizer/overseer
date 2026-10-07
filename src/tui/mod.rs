@@ -20,3 +20,6 @@ pub mod tab;
 pub mod tools;
 pub mod ui;
 pub mod workflows;
+
+#[cfg(test)]
+mod tests;

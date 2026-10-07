@@ -14,20 +14,8 @@
 #
 set -euo pipefail
 
-BASE_URL="${OVESEER_BASE_URL:-http://localhost:8080}"
-TOKEN="${OVESEER_TOKEN:-}"
-
-# ── Parse CLI arguments ──────────────────────────────────────────────
-POSITIONAL=()
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --base-url) BASE_URL="$2"; shift 2 ;;
-        --token)    TOKEN="$2";    shift 2 ;;
-        -h|--help)  show_help; exit 0 ;;
-        *)          POSITIONAL+=("$1"); shift ;;
-    esac
-done
-set -- "${POSITIONAL[@]}"
+BASE_URL="${OVERSEER_BASE_URL:-${OVESEER_BASE_URL:-http://localhost:8080}}"
+TOKEN="${OVERSEER_API_TOKEN:-${OVESEER_TOKEN:-}}"
 
 show_help() {
     cat <<EOF
@@ -47,15 +35,27 @@ Commands:
   models                                      List available models
 
 Environment:
-  OVESEER_BASE_URL  Server base URL (default: http://localhost:8080)
-  OVESEER_TOKEN     Bearer token for authentication
+  OVERSEER_BASE_URL Server base URL (default: http://localhost:8080)
+  OVERSEER_API_TOKEN Bearer token for authentication
 EOF
 }
+
+# ── Parse CLI arguments ──────────────────────────────────────────────
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --base-url) BASE_URL="$2"; shift 2 ;;
+        --token)    TOKEN="$2";    shift 2 ;;
+        -h|--help)  show_help; exit 0 ;;
+        *)          POSITIONAL+=("$1"); shift ;;
+    esac
+done
+set -- "${POSITIONAL[@]}"
 
 # ── HTTP helpers ─────────────────────────────────────────────────────
 curl_() {
     local method="$1" path="$2" body="${3:-}"
-    local -a args=(-s -X "$method" "${BASE_URL}${path}")
+    local -a args=(-sS --fail -X "$method" "${BASE_URL}${path}")
     if [[ -n "$TOKEN" ]]; then
         args+=(-H "Authorization: Bearer ${TOKEN}")
     fi

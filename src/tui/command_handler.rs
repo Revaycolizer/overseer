@@ -10,6 +10,8 @@ pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()
         }
         SlashCommand::Settings => {
             app.active_tab = ActiveTab::Settings;
+            app.refresh_settings_map().await?;
+            app.refresh_models().await;
             app.status_message = "Switched to Settings tab.".to_string();
             app.input.clear();
             app.input_cursor = 0;
@@ -33,7 +35,8 @@ pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()
             app.input_cursor = 0;
         }
         SlashCommand::NewConversation => {
-            let _ = app.client.add_conversation("New Conversation").await;
+            app.selected_conv_id = Some(app.client.add_conversation("New Conversation").await?);
+            app.chat_scroll = 0;
             app.input.clear();
             app.input_cursor = 0;
             app.activity.bump();
@@ -82,18 +85,14 @@ pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()
             }
         }
         SlashCommand::Model { name } => {
-            let m = name.trim().to_string();
-            if m.is_empty() {
-                app.status_message = "Please specify a model: /model <name>".to_string();
-            } else {
-                let _ = app.client.set_setting("planner_model", &m).await;
-                if let Some(cid) = app.selected_conv_id {
-                    let _ = app.client.set_conversation_setting(cid, "model", &m).await;
-                }
-                app.status_message = format!("Planner model updated to '{}' (per-conversation)", m);
-                app.input.clear();
-                app.input_cursor = 0;
+            app.refresh_models().await;
+            if name.trim().is_empty() {
+                app.active_tab = ActiveTab::Settings;
+                app.status_message = "Ollama models: Up/Down select, Enter apply, Esc back".into();
+            } else if let Err(e) = app.select_model(name.trim()).await {
+                app.status_message = format!("Model selection failed: {e}");
             }
+            app.input.clear(); app.input_cursor = 0;
         }
         SlashCommand::Regenerate => {
             if let Some(last_msg) = app.messages.last().cloned() {
@@ -118,7 +117,7 @@ pub async fn handle_slash(app: &mut App, cmd: SlashCommand) -> anyhow::Result<()
             app.input.clear();
             app.input_cursor = 0;
         }
-        SlashCommand::Quit => app.status_message = "Please press Ctrl+C or 'q' to quit".to_string(),
+        SlashCommand::Quit => app.status_message = "Press Ctrl+Q to quit".to_string(),
     }
     Ok(())
 }

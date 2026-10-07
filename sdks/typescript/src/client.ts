@@ -8,6 +8,9 @@
  *   const agents = await client.agents.list();
  */
 
+import { ChatAPI } from './chat.js';
+import { decodeJson, encodeJson, idToDecimal } from './json.js';
+import type { ApiId, IdInput } from './types.js';
 import { AuthManager } from './auth.js';
 import type {
   AgentInfo,
@@ -23,6 +26,7 @@ import type {
   Message,
   Planner,
   RuntimeHealth,
+  ServiceHealth,
   RuntimeRegistryStatus,
   Supervisor,
   SystemLoad,
@@ -47,6 +51,10 @@ export interface OverseerClientOptions {
   token?: string;
   /** Request timeout in ms (default: 30000) */
   timeout?: number;
+  /** Custom fetch implementation for extensions and tests. */
+  fetch?: FetchFn;
+  /** WebSocket factory for runtimes without native WebSocket. */
+  webSocketFactory?: (url: string) => WebSocket;
 }
 
 /**
@@ -62,6 +70,7 @@ export class OverseerClient {
   private readonly _fetch: FetchFn;
 
   // Namespaced API modules
+  readonly chat: ChatAPI;
   readonly conversations: ConversationsAPI;
   readonly messages: MessagesAPI;
   readonly agents: AgentsAPI;
@@ -81,11 +90,15 @@ export class OverseerClient {
 
   constructor(options: OverseerClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? 'http://localhost:8080').replace(/\/+$/, '');
+    const parsedUrl = new URL(this.baseUrl);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.username || parsedUrl.password || parsedUrl.pathname !== '/' || parsedUrl.search || parsedUrl.hash) throw new TypeError('baseUrl must be an HTTP(S) server origin without credentials');
     this.timeout = options.timeout ?? 30_000;
+    if (!Number.isFinite(this.timeout) || this.timeout <= 0) throw new RangeError('timeout must be positive');
     this.auth = new AuthManager();
     if (options.token) this.auth.token = options.token;
-    this._fetch = typeof fetch !== 'undefined' ? fetch.bind(globalThis) : (() => { throw new Error('fetch is not available — use Node.js 18+ or a browser') }) as FetchFn;
+    this._fetch = options.fetch ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : (() => { throw new Error('fetch is not available — use Node.js 18+ or a browser') }) as FetchFn);
 
+    this.chat = new ChatAPI(this.baseUrl, () => this.token, options.webSocketFactory);
     this.conversations = new ConversationsAPI(this);
     this.messages = new MessagesAPI(this);
     this.agents = new AgentsAPI(this);
@@ -131,20 +144,25 @@ export class OverseerClient {
   }
 
   /** Orchestrate — send query to agent system */
-  async orchestrate(conversation_id: number, query: string): Promise<string> {
+  async orchestrate(conversation_id: IdInput, query: string): Promise<string> {
     const r = await this._raw('POST', '/api/orchestrate', { conversation_id, query });
     return r.text();
   }
 
-  // ── Low-level HTTP ─────────────────────────────────────────────────
-
-  async _get<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
-    const url = this._buildUrl(path, params);
-    const r = await this._raw('GET', url);
-    return r.json() as Promise<T>;
+  /** Call an additional JSON endpoint on the configured server. */
+  async request<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+    return this._requestJson(method, path, body) as Promise<T>;
   }
 
-  async _getList<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T[]> {
+  // ── Low-level HTTP ─────────────────────────────────────────────────
+
+  async _get<T>(path: string, params?: Record<string, string | number | bigint | undefined>): Promise<T> {
+    const url = this._buildUrl(path, params);
+    const r = await this._raw('GET', url);
+    return decodeJson(await r.text()) as T;
+  }
+
+  async _getList<T>(path: string, params?: Record<string, string | number | bigint | undefined>): Promise<T[]> {
     return this._get<T[]>(path, params);
   }
 
@@ -165,14 +183,14 @@ export class OverseerClient {
     const r = await this._raw(method, path, body);
     const text = await r.text();
     if (!text) return undefined;
-    return JSON.parse(text);
+    return decodeJson(text);
   }
 
-  private _buildUrl(path: string, params?: Record<string, string | number | undefined>): string {
+  private _buildUrl(path: string, params?: Record<string, string | number | bigint | undefined>): string {
     const url = new URL(path, this.baseUrl);
     if (params) {
       for (const [key, value] of Object.entries(params)) {
-        if (value !== undefined) url.searchParams.set(key, String(value));
+        if (value !== undefined) url.searchParams.set(key, (key === "id" || key.endsWith("_id")) ? idToDecimal(value) : String(value));
       }
     }
     return url.toString();
@@ -180,23 +198,27 @@ export class OverseerClient {
 
   private async _raw(method: string, url: string, body?: unknown): Promise<Response> {
     const headers: Record<string, string> = {
-      'User-Agent': 'overseer-client-ts/0.1',
+      'User-Agent': 'overseer-client-ts/0.2.0',
       'Accept': 'application/json',
       ...this.auth.authHeaders,
     };
-    const init: RequestInit = { method, headers };
+    const target = new URL(url, this.baseUrl);
+    if (target.origin !== new URL(this.baseUrl).origin) throw new TypeError('Requests must stay on the configured server');
+    const init: RequestInit = { method, headers, redirect: 'error' };
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
-      init.body = JSON.stringify(body);
+      init.body = encodeJson(body, new URL(url, this.baseUrl).pathname === '/api/artifacts/by_ids');
     }
     const controller = new AbortController();
     init.signal = controller.signal;
     const timer = setTimeout(() => controller.abort(), this.timeout);
 
     try {
-      const r = await this._fetch(url, init);
+      const r = await this._fetch(target.toString(), init);
       if (!r.ok) await this._handleError(r);
-      return r;
+      // Keep the timeout active while the body is arriving, not just through headers.
+      const bytes = await r.arrayBuffer();
+      return new Response([204, 205, 304].includes(r.status) ? null : bytes, { status: r.status, statusText: r.statusText, headers: r.headers });
     } finally {
       clearTimeout(timer);
     }
@@ -213,21 +235,21 @@ export class OverseerClient {
 export class ConversationsAPI {
   constructor(private readonly c: OverseerClient) {}
   async list(limit = 50): Promise<Conversation[]> { return this.c._getList('/api/conversations', { limit }); }
-  async create(title: string): Promise<number> { return this.c._post('/api/conversations', { title }); }
-  async updateTitle(id: number, title: string): Promise<void> { await this.c._post('/api/conversations/update_title', { id, title }); }
-  async delete(id: number): Promise<void> { await this.c._post('/api/conversations/delete', { id }); }
+  async create(title: string): Promise<ApiId> { return this.c._post('/api/conversations', { title }); }
+  async updateTitle(id: IdInput, title: string): Promise<void> { await this.c._post('/api/conversations/update_title', { id, title }); }
+  async delete(id: IdInput): Promise<void> { await this.c._post('/api/conversations/delete', { id }); }
   async search(query: string): Promise<ConversationSearchResult[]> { return this.c._getList('/api/conversations/search', { q: query }); }
 }
 
 export class MessagesAPI {
   constructor(private readonly c: OverseerClient) {}
-  async list(conversationId: number): Promise<Message[]> { return this.c._getList('/api/messages', { conversation_id: conversationId }); }
-  async send(conversationId: number, role: string, content: string, hideEvidence = false): Promise<number> {
+  async list(conversationId: IdInput): Promise<Message[]> { return this.c._getList('/api/messages', { conversation_id: conversationId }); }
+  async send(conversationId: IdInput, role: string, content: string, hideEvidence = false): Promise<ApiId> {
     return this.c._post('/api/messages', { conversation_id: conversationId, role, content, hide_evidence: hideEvidence });
   }
-  async delete(messageId: number): Promise<void> { await this.c._post('/api/messages/delete', { id: messageId }); }
-  async listAttachments(messageId: number): Promise<Attachment[]> { return this.c._getList('/api/attachments', { message_id: messageId }); }
-  async addAttachment(messageId: number, filename: string, filePath: string, contentType: string, size: number): Promise<number> {
+  async delete(messageId: IdInput): Promise<void> { await this.c._post('/api/messages/delete', { id: messageId }); }
+  async listAttachments(messageId: IdInput): Promise<Attachment[]> { return this.c._getList('/api/attachments', { message_id: messageId }); }
+  async addAttachment(messageId: IdInput, filename: string, filePath: string, contentType: string, size: number): Promise<ApiId> {
     return this.c._post('/api/attachments', { message_id: messageId, filename, file_path: filePath, content_type: contentType, size });
   }
 }
@@ -236,7 +258,7 @@ export class AgentsAPI {
   constructor(private readonly c: OverseerClient) {}
   async list(): Promise<AgentInfo[]> { return this.c._getList('/api/agents'); }
   async listAll(): Promise<AgentInfo[]> { return this.c._getList('/api/agents/all'); }
-  async create(name: string, description: string, domain: string): Promise<number> { return this.c._post('/api/agents', { name, description, domain }); }
+  async create(name: string, description: string, domain: string): Promise<ApiId> { return this.c._post('/api/agents', { name, description, domain }); }
   async update(agent: AgentInfo): Promise<void> { await this.c._post('/api/agents/update', agent as never); }
   async getByDomain(domain: string): Promise<AgentInfo | null> { return this.c._get('/api/agents/by_domain', { domain }); }
 }
@@ -244,63 +266,63 @@ export class AgentsAPI {
 export class ToolsAPI {
   constructor(private readonly c: OverseerClient) {}
   async list(): Promise<ToolInfo[]> { return this.c._getList('/api/tools'); }
-  async create(name: string, description: string, language: string): Promise<number> { return this.c._post('/api/tools', { name, description, language }); }
+  async create(name: string, description: string, language: string): Promise<ApiId> { return this.c._post('/api/tools', { name, description, language }); }
   async update(tool: ToolInfo): Promise<void> { await this.c._post('/api/tools/update', tool as never); }
-  async linkToAgent(agentId: number, toolId: number): Promise<void> { await this.c._post('/api/tools/link', { agent_id: agentId, tool_id: toolId }); }
-  async unlinkFromAgent(agentId: number, toolId: number): Promise<void> { await this.c._post('/api/tools/unlink', { agent_id: agentId, tool_id: toolId }); }
+  async linkToAgent(agentId: IdInput, toolId: IdInput): Promise<void> { await this.c._post('/api/tools/link', { agent_id: agentId, tool_id: toolId }); }
+  async unlinkFromAgent(agentId: IdInput, toolId: IdInput): Promise<void> { await this.c._post('/api/tools/unlink', { agent_id: agentId, tool_id: toolId }); }
 }
 
 export class SupervisorsAPI {
   constructor(private readonly c: OverseerClient) {}
   async list(): Promise<Supervisor[]> { return this.c._getList('/api/supervisors'); }
-  async create(name: string, description: string, domain: string): Promise<number> { return this.c._post('/api/supervisors', { name, description, domain }); }
+  async create(name: string, description: string, domain: string): Promise<ApiId> { return this.c._post('/api/supervisors', { name, description, domain }); }
   async update(supervisor: Supervisor): Promise<void> { await this.c._post('/api/supervisors/update', supervisor as never); }
-  async delete(id: number): Promise<void> { await this.c._post('/api/supervisors/delete', { id }); }
-  async getTools(supervisorId: number): Promise<ToolInfo[]> { return this.c._getList(`/api/supervisors/${supervisorId}/tools`); }
-  async getAgents(supervisorId: number): Promise<AgentInfo[]> { return this.c._getList(`/api/supervisors/${supervisorId}/agents`); }
-  async linkAgent(supervisorId: number, agentId: number): Promise<void> { await this.c._post('/api/supervisors/link', { supervisor_id: supervisorId, agent_id: agentId }); }
-  async unlinkAgent(supervisorId: number, agentId: number): Promise<void> { await this.c._post('/api/supervisors/unlink', { supervisor_id: supervisorId, agent_id: agentId }); }
+  async delete(id: IdInput): Promise<void> { await this.c._post('/api/supervisors/delete', { id }); }
+  async getTools(supervisorId: IdInput): Promise<ToolInfo[]> { return this.c._getList(`/api/supervisors/${idToDecimal(supervisorId)}/tools`); }
+  async getAgents(supervisorId: IdInput): Promise<AgentInfo[]> { return this.c._getList(`/api/supervisors/${idToDecimal(supervisorId)}/agents`); }
+  async linkAgent(supervisorId: IdInput, agentId: IdInput): Promise<void> { await this.c._post('/api/supervisors/link', { supervisor_id: supervisorId, agent_id: agentId }); }
+  async unlinkAgent(supervisorId: IdInput, agentId: IdInput): Promise<void> { await this.c._post('/api/supervisors/unlink', { supervisor_id: supervisorId, agent_id: agentId }); }
 }
 
 export class WorkflowsAPI {
   constructor(private readonly c: OverseerClient) {}
   async list(): Promise<Workflow[]> { return this.c._getList('/api/workflows'); }
-  async create(name: string): Promise<number> { return this.c._post('/api/workflows', { name }); }
+  async create(name: string): Promise<ApiId> { return this.c._post('/api/workflows', { name }); }
   async update(workflow: Workflow): Promise<void> { await this.c._post('/api/workflows/update', workflow as never); }
-  async delete(id: number): Promise<void> { await this.c._post('/api/workflows/delete', { id }); }
-  async getSteps(workflowId: number): Promise<WorkflowStep[]> { return this.c._getList(`/api/workflows/${workflowId}/steps`); }
-  async addStep(workflowId: number): Promise<number> { return this.c._post(`/api/workflows/${workflowId}/steps`, {}); }
+  async delete(id: IdInput): Promise<void> { await this.c._post('/api/workflows/delete', { id }); }
+  async getSteps(workflowId: IdInput): Promise<WorkflowStep[]> { return this.c._getList(`/api/workflows/${idToDecimal(workflowId)}/steps`); }
+  async addStep(workflowId: IdInput): Promise<ApiId> { return this.c._post(`/api/workflows/${idToDecimal(workflowId)}/steps`, {}); }
   async updateStep(step: WorkflowStep): Promise<void> { await this.c._post('/api/workflows/steps/update', step as never); }
-  async deleteStep(stepId: number): Promise<void> { await this.c._post('/api/workflows/steps/delete', { id: stepId }); }
-  async getRuns(workflowId: number): Promise<WorkflowRun[]> { return this.c._getList(`/api/workflows/${workflowId}/runs`); }
-  async getStepRuns(runId: number): Promise<WorkflowStepRun[]> { return this.c._getList(`/api/workflows/runs/${runId}/steps`); }
-  async run(workflowId: number): Promise<number> { return this.c._post(`/api/workflows/${workflowId}/run`, {}); }
-  async publish(workflowId: number): Promise<void> { await this.c._post(`/v1/workflows/${workflowId}/publish`, {}); }
-  async getVersions(workflowId: number): Promise<Record<string, unknown>[]> { return this.c._getList(`/v1/workflows/${workflowId}/versions`); }
-  async restoreVersion(workflowId: number, version: number): Promise<void> { await this.c._post(`/v1/workflows/${workflowId}/versions/${version}/restore`, {}); }
+  async deleteStep(stepId: IdInput): Promise<void> { await this.c._post('/api/workflows/steps/delete', { id: stepId }); }
+  async getRuns(workflowId: IdInput): Promise<WorkflowRun[]> { return this.c._getList(`/api/workflows/${idToDecimal(workflowId)}/runs`); }
+  async getStepRuns(runId: IdInput): Promise<WorkflowStepRun[]> { return this.c._getList(`/api/workflows/runs/${idToDecimal(runId)}/steps`); }
+  async run(workflowId: IdInput): Promise<ApiId> { return this.c._post(`/api/workflows/${idToDecimal(workflowId)}/run`, {}); }
+  async publish(workflowId: IdInput): Promise<void> { await this.c._post(`/v1/workflows/${idToDecimal(workflowId)}/publish`, {}); }
+  async getVersions(workflowId: IdInput): Promise<Record<string, unknown>[]> { return this.c._getList(`/v1/workflows/${idToDecimal(workflowId)}/versions`); }
+  async restoreVersion(workflowId: IdInput, version: number): Promise<void> { await this.c._post(`/v1/workflows/${idToDecimal(workflowId)}/versions/${version}/restore`, {}); }
 }
 
 export class WorkItemsAPI {
   constructor(private readonly c: OverseerClient) {}
-  async list(conversationId: number): Promise<WorkItem[]> { return this.c._getList('/api/work_items', { conversation_id: conversationId }); }
-  async create(params: Record<string, unknown>): Promise<number> { return this.c._post('/api/work_items', params); }
-  async updateStatus(id: number, status: string): Promise<void> { await this.c._post('/api/work_items/update_status', { id, status }); }
-  async logEvent(params: Record<string, unknown>): Promise<number> { return this.c._post('/api/work_items/event', params); }
-  async getEvents(workItemId: number, limit = 50): Promise<WorkItemEvent[]> { return this.c._getList(`/api/work_items/${workItemId}/events`, { limit }); }
+  async list(conversationId: IdInput): Promise<WorkItem[]> { return this.c._getList('/api/work_items', { conversation_id: conversationId }); }
+  async create(params: Record<string, unknown>): Promise<ApiId> { return this.c._post('/api/work_items', params); }
+  async updateStatus(id: IdInput, status: string): Promise<void> { await this.c._post('/api/work_items/update_status', { id, status }); }
+  async logEvent(params: Record<string, unknown>): Promise<ApiId> { return this.c._post('/api/work_items/event', params); }
+  async getEvents(workItemId: IdInput, limit = 50): Promise<WorkItemEvent[]> { return this.c._getList(`/api/work_items/${idToDecimal(workItemId)}/events`, { limit }); }
 }
 
 export class ArtifactsAPI {
   constructor(private readonly c: OverseerClient) {}
-  async list(conversationId: number): Promise<Artifact[]> { return this.c._getList('/api/artifacts', { conversation_id: conversationId }); }
-  async create(params: Record<string, unknown>): Promise<number> { return this.c._post('/api/artifacts', params); }
-  async getByIds(ids: number[]): Promise<Artifact[]> { return this.c._post('/api/artifacts/by_ids', ids); }
-  async getByRun(executionRunId: number): Promise<Artifact[]> { return this.c._getList('/api/artifacts/by_run', { execution_run_id: executionRunId }); }
+  async list(conversationId: IdInput): Promise<Artifact[]> { return this.c._getList('/api/artifacts', { conversation_id: conversationId }); }
+  async create(params: Record<string, unknown>): Promise<ApiId> { return this.c._post('/api/artifacts', params); }
+  async getByIds(ids: IdInput[]): Promise<Artifact[]> { return this.c._post('/api/artifacts/by_ids', ids.map(idToDecimal)); }
+  async getByRun(executionRunId: IdInput): Promise<Artifact[]> { return this.c._getList('/api/artifacts/by_run', { execution_run_id: executionRunId }); }
 }
 
 export class PlannersAPI {
   constructor(private readonly c: OverseerClient) {}
   async list(): Promise<Planner[]> { return this.c._getList('/api/planners'); }
-  async create(params: Record<string, unknown>): Promise<number> { return this.c._post('/api/planners', params); }
+  async create(params: Record<string, unknown>): Promise<ApiId> { return this.c._post('/api/planners', params); }
 }
 
 export class SupervisionAPI {
@@ -313,52 +335,52 @@ export class SupervisionAPI {
   async listPendingApprovals(): Promise<Record<string, unknown>[]> { return this.c._getList('/api/kernel/approvals'); }
   async kernelApprove(approvalId: string): Promise<Record<string, unknown>> { return this.c._post('/api/kernel/approve', { approval_id: approvalId, resolver: 'api' }); }
   async kernelReject(approvalId: string): Promise<Record<string, unknown>> { return this.c._post('/api/kernel/reject', { approval_id: approvalId, resolver: 'api' }); }
-  async kernelEmergencyStop(runId?: number): Promise<Record<string, unknown>> { return this.c._post('/api/kernel/emergency_stop', { run_id: runId ?? null }); }
+  async kernelEmergencyStop(runId?: IdInput): Promise<Record<string, unknown>> { return this.c._post('/api/kernel/emergency_stop', { run_id: runId ?? null }); }
 }
 
 export class VersionsAPI {
   constructor(private readonly c: OverseerClient) {}
   async publish(params: Record<string, unknown>): Promise<void> { await this.c._post('/api/version/publish', params); }
-  async publishAgent(agentId: number, tag: string, description = ''): Promise<void> { await this.c._post('/api/version/publish_agent', { agent_id: agentId, tag, description }); }
-  async publishTool(toolId: number, tag: string, description = ''): Promise<void> { await this.c._post('/api/version/publish_tool', { tool_id: toolId, tag, description }); }
+  async publishAgent(agentId: IdInput, tag: string, description = ''): Promise<void> { await this.c._post('/api/version/publish_agent', { agent_id: agentId, tag, description }); }
+  async publishTool(toolId: IdInput, tag: string, description = ''): Promise<void> { await this.c._post('/api/version/publish_tool', { tool_id: toolId, tag, description }); }
   async rollback(params: Record<string, unknown>): Promise<void> { await this.c._post('/api/version/rollback', params); }
-  async getContent(entityType: string, entityId: number, tag: string): Promise<string> {
-    const r = await this.c._get<Response>(`/api/version/content`, { entity_type: entityType, entity_id: entityId, tag });
-    return r as unknown as string;
+  async getContent(entityType: string, entityId: IdInput, tag: string): Promise<string | null> {
+    const r = await this.c._get<string | null>(`/api/version/content`, { entity_type: entityType, entity_id: entityId, tag });
+    return r;
   }
-  async getHistory(entityType: string, entityId: number): Promise<EntityVersion[]> { return this.c._getList('/api/version/history', { entity_type: entityType, entity_id: entityId }); }
+  async getHistory(entityType: string, entityId: IdInput): Promise<EntityVersion[]> { return this.c._getList('/api/version/history', { entity_type: entityType, entity_id: entityId }); }
 }
 
 export class BrowserAPI {
   constructor(private readonly c: OverseerClient) {}
   async createSession(): Promise<Record<string, unknown>> { return this.c._post('/v1/browser/sessions', {}); }
-  async getSession(sessionId: number): Promise<BrowserSessionInfo> { return this.c._get(`/v1/browser/sessions/${sessionId}`); }
-  async closeSession(sessionId: number): Promise<void> { await this.c._delete(`/v1/browser/sessions/${sessionId}`); }
-  async navigate(sessionId: number, url: string): Promise<Record<string, unknown>> { return this.c._post(`/v1/browser/sessions/${sessionId}/navigate`, { url }); }
-  async screenshot(sessionId: number): Promise<Record<string, unknown>> { return this.c._get(`/v1/browser/sessions/${sessionId}/screenshot`); }
-  async setPolicy(sessionId: number, policy: Record<string, unknown>): Promise<void> { await this.c._post(`/v1/browser/sessions/${sessionId}/policy`, policy); }
-  async getAuditLog(sessionId: number): Promise<Record<string, unknown>[]> { return this.c._getList(`/v1/browser/sessions/${sessionId}/audit`); }
+  async getSession(sessionId: IdInput): Promise<BrowserSessionInfo> { return this.c._get(`/v1/browser/sessions/${idToDecimal(sessionId)}`); }
+  async closeSession(sessionId: IdInput): Promise<void> { await this.c._delete(`/v1/browser/sessions/${idToDecimal(sessionId)}`); }
+  async navigate(sessionId: IdInput, url: string): Promise<Record<string, unknown>> { return this.c._post(`/v1/browser/sessions/${idToDecimal(sessionId)}/navigate`, { url }); }
+  async screenshot(sessionId: IdInput): Promise<Record<string, unknown>> { return this.c._get(`/v1/browser/sessions/${idToDecimal(sessionId)}/screenshot`); }
+  async setPolicy(sessionId: IdInput, policy: Record<string, unknown>): Promise<void> { await this.c._post(`/v1/browser/sessions/${idToDecimal(sessionId)}/policy`, policy); }
+  async getAuditLog(sessionId: IdInput): Promise<Record<string, unknown>[]> { return this.c._getList(`/v1/browser/sessions/${idToDecimal(sessionId)}/audit`); }
   async memoryReport(): Promise<Record<string, unknown>> { return this.c._get('/v1/browser/memory'); }
-  async startRecording(sessionId: number, quality = 75): Promise<Record<string, unknown>> { return this.c._post(`/v1/browser/sessions/${sessionId}/recording/start`, { quality }); }
-  async stopRecording(sessionId: number): Promise<Record<string, unknown>> { return this.c._post(`/v1/browser/sessions/${sessionId}/recording/stop`, {}); }
-  async getRecording(sessionId: number): Promise<Record<string, unknown>> { return this.c._get(`/v1/browser/sessions/${sessionId}/recording`); }
-  async getRecordingEvents(sessionId: number): Promise<Record<string, unknown>[]> { return this.c._getList(`/v1/browser/sessions/${sessionId}/recording/events`); }
-  async resumeHITL(sessionId: number): Promise<void> { await this.c._post(`/v1/browser/sessions/${sessionId}/resume`, {}); }
+  async startRecording(sessionId: IdInput, quality = 75): Promise<Record<string, unknown>> { return this.c._post(`/v1/browser/sessions/${idToDecimal(sessionId)}/recording/start`, { quality }); }
+  async stopRecording(sessionId: IdInput): Promise<Record<string, unknown>> { return this.c._post(`/v1/browser/sessions/${idToDecimal(sessionId)}/recording/stop`, {}); }
+  async getRecording(sessionId: IdInput): Promise<Record<string, unknown>> { return this.c._get(`/v1/browser/sessions/${idToDecimal(sessionId)}/recording`); }
+  async getRecordingEvents(sessionId: IdInput): Promise<Record<string, unknown>[]> { return this.c._getList(`/v1/browser/sessions/${idToDecimal(sessionId)}/recording/events`); }
+  async resumeHITL(sessionId: IdInput): Promise<void> { await this.c._post(`/v1/browser/sessions/${idToDecimal(sessionId)}/resume`, {}); }
 }
 
 export class CredentialsAPI {
   constructor(private readonly c: OverseerClient) {}
   async list(): Promise<CredentialSummary[]> { return this.c._getList('/v1/credentials'); }
   async create(name: string, value: string, credType = 'api_key'): Promise<CredentialSummary> { return this.c._post('/v1/credentials', { name, value, cred_type: credType }); }
-  async update(id: number, params: { name?: string; value?: string }): Promise<void> { await this.c._patch(`/v1/credentials/${id}`, params); }
-  async delete(id: number): Promise<void> { await this.c._delete(`/v1/credentials/${id}`); }
+  async update(id: IdInput, params: { name?: string; value?: string }): Promise<void> { await this.c._patch(`/v1/credentials/${idToDecimal(id)}`, params); }
+  async delete(id: IdInput): Promise<void> { await this.c._delete(`/v1/credentials/${idToDecimal(id)}`); }
 }
 
 export class TemplatesAPI {
   constructor(private readonly c: OverseerClient) {}
   async list(): Promise<WorkflowTemplate[]> { return this.c._getList('/v1/workflow-templates'); }
   async create(params: Record<string, unknown>): Promise<WorkflowTemplate> { return this.c._post('/v1/workflow-templates', params); }
-  async install(templateId: number): Promise<number> { return this.c._post(`/v1/workflow-templates/${templateId}/install`, {}); }
+  async install(templateId: IdInput): Promise<ApiId> { return this.c._post(`/v1/workflow-templates/${idToDecimal(templateId)}/install`, {}); }
 }
 
 export class SettingsAPI {
@@ -370,7 +392,8 @@ export class SettingsAPI {
 
 export class SystemAPI {
   constructor(private readonly c: OverseerClient) {}
-  async health(): Promise<RuntimeHealth> { return this.c._get('/health'); }
+  async health(): Promise<ServiceHealth> { return this.c._get('/healthz'); }
+  async runtimeHealth(): Promise<RuntimeHealth> { return this.c._get('/api/health'); }
   async load(): Promise<SystemLoad> { return this.c._get('/api/system/load'); }
   async models(): Promise<string[]> { return this.c._getList('/api/models/available'); }
   async registryStatus(): Promise<RuntimeRegistryStatus> { return this.c._get('/api/registry/status'); }

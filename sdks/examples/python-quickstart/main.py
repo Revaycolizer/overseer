@@ -2,7 +2,7 @@
 """Overseer Python SDK Quickstart.
 
 Run:
-    pip install overseer-client
+    pip install -e sdks/python
     python main.py
 
 Or from repo root:
@@ -18,7 +18,7 @@ from overseer import OverseerClient
 
 async def main():
     # 1. Connect to the server
-    token = os.environ.get("OVESEER_TOKEN")
+    token = os.environ.get("OVERSEER_API_TOKEN")
     async with OverseerClient("http://localhost:8080", token=token) as client:
         # 2. Check health
         health = await client.system.health()

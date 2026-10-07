@@ -17,7 +17,7 @@ class AuthManager:
         return self._token
 
     @token.setter
-    def token(self, value: str) -> None:
+    def token(self, value: Optional[str]) -> None:
         self._token = value
 
     @property

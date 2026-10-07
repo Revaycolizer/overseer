@@ -1,0 +1,21 @@
+// Only launched by verify-live.py against a temporary daemon/database.
+import assert from 'node:assert/strict';
+import { OverseerClient, ApiError } from '../dist/index.js';
+const client = new OverseerClient({baseUrl:process.env.OVERSEER_BASE_URL,token:process.env.OVERSEER_API_TOKEN});
+assert.equal((await client.system.health()).db_connected,true);
+const id=await client.conversations.create('JavaScript SDK verification');
+assert.equal(typeof id,'string');assert.ok(BigInt(id)>9007199254740991n);
+const messageId=await client.messages.send(id,'user','SDK contract check');
+assert.ok((await client.messages.list(id)).some(m=>m.id===messageId));
+await client.conversations.updateTitle(id,'Exact ID verified');
+assert.ok((await client.conversations.list()).some(c=>c.id===id&&c.title==='Exact ID verified'));
+for(const method of ['runtimeHealth','load','registryStatus'])await client.system[method]();
+await client.agents.list();await client.tools.list();await client.supervision.getState();
+const workflow=await client.workflows.create('SDK verification');await client.workflows.list();
+const step=await client.workflows.addStep(workflow);assert.ok((await client.workflows.getSteps(workflow)).some(s=>s.id===step));
+await client.workflows.delete(workflow);
+const events=[];for await(const event of client.chat.stream({conversationId:id,message:'/memory list'}))events.push(event);
+assert.ok(events.some(e=>e.type==='session'&&e.conversation_id===id));assert.equal(events.at(-1).type,'done');
+const denied=new OverseerClient({baseUrl:process.env.OVERSEER_BASE_URL});await assert.rejects(denied.conversations.list(),e=>e instanceof ApiError&&e.status===401);
+await client.conversations.delete(id);
+console.log('JavaScript SDK: live REST, exact IDs, auth and WebSocket memory passed');

@@ -1,19 +1,22 @@
 {
   "name": "overseer-client",
-  "version": "0.1.1",
-  "description": "TypeScript client for the Overseer AI orchestration platform — zero dependencies",
+  "version": "0.2.0",
+  "description": "TypeScript client for the Overseer AI orchestration platform \u2014 zero dependencies",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "dist-cjs",
+    "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build.mjs",
     "watch": "tsc --watch",
-    "test": "node --test dist/*.test.js",
-    "prepublishOnly": "npm run build"
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "prepublishOnly": "npm run build",
+    "prepack": "npm run build"
   },
   "keywords": [
     "ai",
@@ -30,5 +33,20 @@
   "homepage": "https://github.com/revaycolizer/overseer",
   "devDependencies": {
     "typescript": "^5.6.0"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist-cjs/index.d.ts",
+        "default": "./dist-cjs/index.js"
+      }
+    }
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

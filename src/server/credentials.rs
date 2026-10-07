@@ -1,34 +1,55 @@
+use super::ServerState;
 use axum::{
-    routing::{get, post, patch, delete},
-    extract::{State, Json, Path},
+    extract::{Json, Path, State},
     http::StatusCode,
+    routing::{delete, get, patch, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use super::ServerState;
 
 #[derive(Serialize)]
-struct Credential { id: i64, name: String, cred_type: String }
+struct Credential {
+    id: i64,
+    name: String,
+    cred_type: String,
+}
 
 #[derive(Deserialize)]
-struct CreatePayload { name: String, value: String, cred_type: Option<String> }
+struct CreatePayload {
+    name: String,
+    value: String,
+    cred_type: Option<String>,
+}
 
 #[derive(Deserialize)]
-struct UpdatePayload { name: Option<String>, value: Option<String> }
+struct UpdatePayload {
+    name: Option<String>,
+    value: Option<String>,
+}
 
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
         .route("/v1/credentials", get(list).post(create))
-        .route("/v1/credentials/{id}", patch(update).delete(delete_cred))
+        .route("/v1/credentials/:id", patch(update).delete(delete_cred))
 }
 
 async fn list(State(state): State<Arc<ServerState>>) -> Result<Json<Vec<Credential>>, StatusCode> {
     let rows = sqlx::query_as::<_, (i64, String, String)>(
         "SELECT id, name, cred_type FROM credentials ORDER BY created_at DESC",
     )
-    .fetch_all(&state.db.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(rows.into_iter().map(|(id, name, cred_type)| Credential { id, name, cred_type }).collect()))
+    .fetch_all(&state.db.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(
+        rows.into_iter()
+            .map(|(id, name, cred_type)| Credential {
+                id,
+                name,
+                cred_type,
+            })
+            .collect(),
+    ))
 }
 
 async fn create(
@@ -42,7 +63,11 @@ async fn create(
     sqlx::query("INSERT INTO credentials (id, name, cred_type, encrypted_value, owner_id) VALUES (?, ?, ?, ?, 1)")
         .bind(id).bind(&payload.name).bind(&ct).bind(&encrypted)
         .execute(&state.db.pool).await.map_err(|e| (StatusCode::CONFLICT, e.to_string()))?;
-    Ok(Json(Credential { id, name: payload.name, cred_type: ct }))
+    Ok(Json(Credential {
+        id,
+        name: payload.name,
+        cred_type: ct,
+    }))
 }
 
 async fn update(
@@ -50,18 +75,29 @@ async fn update(
     Path(id): Path<i64>,
     Json(payload): Json<UpdatePayload>,
 ) -> Result<Json<()>, StatusCode> {
-    if let Some(name) = &payload.name {
-        let _ = sqlx::query("UPDATE credentials SET name = ? WHERE id = ?").bind(name).bind(id).execute(&state.db.pool).await;
-    }
-    if let Some(value) = &payload.value {
-        if let Ok(encrypted) = crate::engine::workflow::credentials::encrypt(value) {
-            let _ = sqlx::query("UPDATE credentials SET encrypted_value = ? WHERE id = ?").bind(&encrypted).bind(id).execute(&state.db.pool).await;
-        }
+    let encrypted = payload
+        .value
+        .as_deref()
+        .map(crate::engine::workflow::credentials::encrypt)
+        .transpose()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let result = sqlx::query("UPDATE credentials SET name=COALESCE(?,name), encrypted_value=COALESCE(?,encrypted_value) WHERE id=?")
+        .bind(payload.name).bind(encrypted).bind(id).execute(&state.db.pool).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
     }
     Ok(Json(()))
 }
 
 async fn delete_cred(State(state): State<Arc<ServerState>>, Path(id): Path<i64>) -> StatusCode {
-    let _ = sqlx::query("DELETE FROM credentials WHERE id = ?").bind(id).execute(&state.db.pool).await;
-    StatusCode::NO_CONTENT
+    match sqlx::query("DELETE FROM credentials WHERE id = ?")
+        .bind(id)
+        .execute(&state.db.pool)
+        .await
+    {
+        Ok(result) if result.rows_affected() > 0 => StatusCode::NO_CONTENT,
+        Ok(_) => StatusCode::NOT_FOUND,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
 }

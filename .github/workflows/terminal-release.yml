@@ -1,0 +1,89 @@
+name: Terminal release preview
+
+on:
+  push:
+    branches: ["terminal-preview/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libssl-dev libasound2-dev libxdo-dev
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install protoc --no-progress -y
+      - name: Verify native target
+        shell: bash
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: |
+          rustc -vV | grep -Fx "host: $EXPECTED_TARGET"
+      - name: Build terminal
+        run: cargo build --locked --release --bin overseer-tui
+      - name: Test terminal behavior
+        run: cargo test --locked --lib tui::tests
+      - name: Package and verify install
+        shell: bash
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: |
+          exe=target/release/overseer-tui
+          if [[ "$RUNNER_OS" == Windows ]]; then exe="$exe.exe"; fi
+          python scripts/package-terminal.py --target "$RELEASE_TARGET" --binary "$exe"
+          python scripts/verify-terminal-package.py dist/terminal
+      - name: Verify installed interactive terminal
+        if: runner.os != 'Windows'
+        run: python scripts/verify-terminal-ui.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terminal-${{ matrix.target }}
+          path: dist/terminal/*
+          if-no-files-found: error
+
+  homebrew:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: terminal-*
+          merge-multiple: true
+          path: dist/terminal
+      - name: Generate formula and combined checksums
+        run: |
+          tag=$(python3 -c 'import tomllib; print("terminal-v" + tomllib.load(open("Cargo.toml", "rb"))["package"]["version"] + "-preview.1")')
+          python3 scripts/generate-terminal-formula.py dist/terminal --tag "$tag" --repository Jeccoman/overseer-downloads --target aarch64-apple-darwin --target x86_64-unknown-linux-gnu
+          cat dist/terminal/*.sha256 > dist/terminal/SHA256SUMS.txt
+          (cd dist/terminal && sha256sum -c SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terminal-release-bundle
+          path: dist/terminal/*
+          if-no-files-found: error

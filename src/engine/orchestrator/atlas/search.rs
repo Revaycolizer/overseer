@@ -98,7 +98,9 @@ async fn semantic_search(
     query: &str,
     limit: usize,
 ) -> anyhow::Result<Vec<String>> {
-    use arrow::array::StringArray;
+    use arrow::array::{Array, StringArray};
+    use futures::TryStreamExt;
+    use lancedb::query::{ExecutableQuery, QueryBase};
 
     let embedding = crate::engine::utils::embeddings::embed_text(client, query)
         .await
@@ -107,15 +109,15 @@ async fn semantic_search(
     let db = lancedb::connect(lancedb_uri).execute().await?;
     let table = db.open_table("agent_atlas").execute().await?;
 
-    let batches = table
+    let mut batches = table
         .query()
         .nearest_to(embedding)?
-        .limit(limit as u32)
+        .limit(limit)
         .execute()
         .await?;
 
     let mut domains = Vec::new();
-    for batch in batches {
+    while let Some(batch) = batches.try_next().await? {
         if let Some(col) = batch
             .column_by_name("domain")
             .and_then(|c| c.as_any().downcast_ref::<StringArray>())

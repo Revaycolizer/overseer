@@ -1,6 +1,6 @@
 use rustpotter::{Rustpotter, RustpotterConfig, SampleFormat, AudioFmt, Endianness};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use ringbuf::HeapRb;
+use ringbuf::{HeapRb, traits::{Split, Producer, Consumer}};
 use std::sync::{atomic::{AtomicBool, AtomicU32, Ordering}, mpsc, Mutex};
 
 pub static IS_LISTENING: AtomicBool = AtomicBool::new(false);
@@ -98,7 +98,7 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
                 for sample in mono {
                     while resample_index < 1.0 {
                         let interpolated = prev_sample + resample_index * (sample - prev_sample);
-                        let _ = producer.push(interpolated);
+                        let _ = producer.try_push(interpolated);
                         resample_index += step;
                     }
                     resample_index -= 1.0;
@@ -120,7 +120,7 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
                 for sample in mono {
                     while resample_index < 1.0 {
                         let interpolated = prev_sample + resample_index * (sample - prev_sample);
-                        let _ = producer.push(interpolated);
+                        let _ = producer.try_push(interpolated);
                         resample_index += step;
                     }
                     resample_index -= 1.0;
@@ -158,12 +158,12 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
         
         let tts_active = super::tts::is_tts_speaking();
         
-        while let Some(s) = consumer.pop() {
+        while let Some(s) = consumer.try_pop() {
             if !tts_active {
                 audio_buffer.push(s);
                 if s.abs() > max_amp { max_amp = s.abs(); }
                 sample_count += 1;
-                let _ = vad_prod.push(s.abs());
+                let _ = vad_prod.try_push(s.abs());
 
                 if !is_calibrated {
                     calibration_samples.push(s);
@@ -198,7 +198,7 @@ fn run_listener(model_path: &str) -> anyhow::Result<()> {
 
         let mut recent_avg = 0.0f32;
         let mut recent_count = 0;
-        while let Some(l) = vad_cons.pop() {
+        while let Some(l) = vad_cons.try_pop() {
             recent_avg += l;
             recent_count += 1;
         }

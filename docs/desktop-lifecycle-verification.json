@@ -1,0 +1,39 @@
+{
+  "verified_at_utc": "2026-10-06T11:29:09.121958+00:00",
+  "platform": "macOS Apple Silicon",
+  "bundle": "desktop-ui/src-tauri/target/release/bundle/macos/Overseer.app",
+  "backend_binary_sha256": "4d52040d1e2af0853dcd118505c764b33aff03424c89c6c46e91763633a2c452",
+  "desktop_binary_sha256": "431f005b8859d990292e25e57a261f68eb05864ebf78a6b6fa3d53a1986ddb54",
+  "checks": {
+    "frontend_build": "passed",
+    "desktop_release_bundle": "passed; ad hoc signed",
+    "locked_desktop_metadata": "passed",
+    "engine_library_tests": {
+      "passed": 125,
+      "failed": 0,
+      "ignored": 4
+    },
+    "native_lifecycle": "Two isolated launch/crash/relaunch cycles passed; one authenticated backend shared by both windows; private port; database initialization; owned child exited after parent termination",
+    "authenticated_history": "Saved user/assistant messages restored; new memory command sent after restore; saved response restored after reload",
+    "layout_widths": [
+      320,
+      440,
+      1100
+    ],
+    "browser_access": "Trusted authenticated REST preflight passed; untrusted website rejected; requests without token rejected",
+    "managed_shutdown_pipe": "Graceful EOF shutdown passed",
+    "bundle_code_signature": "deep strict verification passed"
+  },
+  "verification_scripts": [
+    "scripts/verify-managed-desktop.py",
+    "scripts/verify-desktop-history.mjs"
+  ],
+  "limitations": [
+    "Integration verified on Mac Apple Silicon only",
+    "Mac signature is ad hoc; Developer ID signing/notarization remains pending",
+    "Native lifecycle and browser interaction tested; full native UI accessibility and cloud-provider acceptance remain outstanding",
+    "Browser history test requires Chrome, Node 22 and a preview server on 127.0.0.1:4173",
+    "Desktop build is local and has not been published"
+  ],
+  "dependency_verification_report": "dependency-verification.json"
+}

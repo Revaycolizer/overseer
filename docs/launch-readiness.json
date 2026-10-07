@@ -1,0 +1,111 @@
+{
+  "reviewed_at_utc": "2026-10-06T11:29:09.121958+00:00",
+  "public_launch_ready": false,
+  "local_platform": "macOS Apple Silicon",
+  "scope": "Launch-path review and verified fixes; not an exhaustive security assessment of every feature.",
+  "verification": {
+    "workspace_tests": {
+      "passed": 238,
+      "failed": 0,
+      "ignored": 4
+    },
+    "root_release_build": "passed; rebuilt after dependency remediation",
+    "desktop_app_bundle_build": "passed; rebuilt after dependency remediation; ad hoc signed",
+    "native_app_startup": "alive after 4 seconds; startup smoke only",
+    "desktop_layouts": "Chat, Studio, Settings, Clock at widths 320/440/1100; no page overflow",
+    "frontend_dependency_vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "desktop_rust_vulnerabilities": 0,
+    "release_smoke_report": "../dist/macos-build-verification.json",
+    "installed_ollama_model": "huihui_ai/qwen3-abliterated:14b; completion/tools/thinking capabilities confirmed",
+    "memory_controls": "Explicit preferences and unverified tool notes obey pause, scope, inspection and clear",
+    "release_smoke_checks": {
+      "desktop_bundle": "co.tz.skyconnect.overseer",
+      "desktop_code_signature": "passed",
+      "daemon_health": {
+        "status": "healthy",
+        "version": "0.1.4",
+        "uptime_secs": 0,
+        "db_connected": true,
+        "ollama_reachable": true
+      },
+      "cross_site_protection": "passed",
+      "chat_websocket_upgrade": "passed",
+      "desktop_websocket_memory_and_exact_ids": "passed",
+      "persistent_memory_commands": "save, inspect, project index, pause, resume, delete and clear passed",
+      "terminal_ollama_model_selection": {
+        "models": [
+          "huihui_ai/qwen3-abliterated:14b"
+        ],
+        "selected": "huihui_ai/qwen3-abliterated:14b"
+      },
+      "terminal_start_typing_and_quit": "passed",
+      "daemon_graceful_shutdown": "passed",
+      "websocket_token_authentication": "passed",
+      "api_token_encrypted_cloud_keys_and_backup": "passed"
+    },
+    "memory_schema_upgrade": "Existing rows, IDs and AUTOINCREMENT preserved; applied to resident database",
+    "resident_daemon": "healthy on port 8080; preference and 41 project documents preserved",
+    "sdks": {
+      "version": "0.2.0",
+      "report": "sdk-verification.json",
+      "passed_tests": 29,
+      "live_authenticated_contracts": "JavaScript, Python and Rust passed",
+      "large_javascript_ids": "preserved as exact decimal strings; validated integer tokens sent back to REST"
+    },
+    "terminal_distribution": {
+      "report": "terminal-distribution-verification.json",
+      "public_release": "https://github.com/Jeccoman/overseer-downloads/releases/tag/terminal-v0.1.4-preview.1",
+      "homebrew": "brew install Jeccoman/tap/overseer; public installation and brew test passed on Mac",
+      "source_visibility": "private",
+      "verified_native_targets": [
+        "macOS Apple Silicon",
+        "Ubuntu 24.04 x64",
+        "Windows x64"
+      ],
+      "unsupported": "Intel Mac ONNX build failed; Linux ARM not targeted",
+      "interactive_acceptance": "Mac/Linux smoke passed; Windows unverified"
+    },
+    "desktop_managed_backend": {
+      "report": "desktop-lifecycle-verification.json",
+      "bundled_backend": "passed",
+      "startup_authentication_shared_child_and_exit_cleanup": "passed on Mac Apple Silicon",
+      "persistent_chat_restore_send_and_reload": "passed with real isolated authenticated backend",
+      "root_library_tests": "125 passed; 4 ignored"
+    },
+    "desktop_first_run_setup": {
+      "report": "desktop-onboarding-verification.json",
+      "provider_and_model_selection": "Ollama/OpenAI/Anthropic",
+      "completion_gate": "Successful explicit model test required; user may defer",
+      "real_local_model_test": "passed again after dependency remediation",
+      "cloud_checks": "Local completion fixtures passed; real accounts unverified"
+    },
+    "dependency_audits": {
+      "report": "dependency-verification.json",
+      "root": "strict audit passed; zero vulnerabilities or warnings",
+      "desktop": "strict audit passed; zero vulnerabilities or warnings",
+      "local_patches": "Documented under vendor/ and verified with compatibility tests"
+    }
+  },
+  "remaining_blockers": [
+    {
+      "issue": "Mac bundle is ad hoc signed and not notarized",
+      "required_work": "Developer ID signing, notarization and clean-machine install acceptance"
+    },
+    {
+      "issue": "Acceptance coverage is incomplete",
+      "required_work": "Live cloud-provider tests with configured accounts, native desktop interaction, Windows terminal interactive acceptance and platform/accessibility permission testing; Intel Mac build fails at ONNX dependency; native CI must rebuild the updated dependency stack, and legacy optional LanceDB data needs compatibility acceptance"
+    }
+  ],
+  "known_limits": [
+    "Public terminal preview published; general product launch remains blocked",
+    "Four tests requiring optional external resources remain ignored",
+    "Existing compiler warnings remain",
+    "Strict dependency audits cover both release lockfiles; local patches are tracked under vendor/"
+  ]
+}

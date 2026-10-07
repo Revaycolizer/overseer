@@ -100,7 +100,10 @@ pub async fn setup_memory_table(db: &lancedb::Connection) -> Option<lancedb::Tab
 
     let batches = RecordBatchIterator::new(vec![Ok(batch)], schema);
     match db
-        .create_table("memories", Box::new(batches))
+        .create_table(
+            "memories",
+            Box::new(batches) as Box<dyn arrow::record_batch::RecordBatchReader + Send>,
+        )
         .execute()
         .await
     {
@@ -167,7 +170,11 @@ pub async fn store_memory(
     match batch {
         Ok(b) => {
             let batches = RecordBatchIterator::new(vec![Ok(b)], schema);
-            if let Err(e) = table.add(Box::new(batches)).execute().await {
+            if let Err(e) = table
+                .add(Box::new(batches) as Box<dyn arrow::record_batch::RecordBatchReader + Send>)
+                .execute()
+                .await
+            {
                 tracing::error!(?e, "Failed to store memory");
             } else {
                 tracing::info!("Memory stored successfully");
@@ -242,5 +249,59 @@ pub fn parse_memory_to_messages(content: &str) -> Vec<Message> {
         msgs
     } else {
         vec![]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn local_memory_table_round_trip() {
+        let directory = tempfile::tempdir().unwrap();
+        let uri = directory.path().to_str().unwrap();
+        let connection = lancedb::connect(uri).execute().await.unwrap();
+        let table = setup_memory_table(&connection).await.unwrap();
+        let schema = table.schema().await.unwrap();
+        let vector = vec![1.0f32; EMBEDDING_DIM];
+        let values = Float32Array::from(vector.clone());
+        let list = FixedSizeListArray::new(
+            Arc::new(Field::new("item", DataType::Float32, true)),
+            EMBEDDING_DIM as i32,
+            Arc::new(values),
+            None,
+        );
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(StringArray::from(vec!["test-id"])),
+                Arc::new(StringArray::from(vec!["saved example"])),
+                Arc::new(list),
+            ],
+        )
+        .unwrap();
+        let batches = Box::new(RecordBatchIterator::new(vec![Ok(batch)], schema))
+            as Box<dyn arrow::record_batch::RecordBatchReader + Send>;
+        table.add(batches).execute().await.unwrap();
+        drop(table);
+        drop(connection);
+        let connection = lancedb::connect(uri).execute().await.unwrap();
+        let table = setup_memory_table(&connection).await.unwrap();
+        assert_eq!(table.count_rows(None).await.unwrap(), 2);
+        let mut result = table
+            .vector_search(vector)
+            .unwrap()
+            .limit(1)
+            .execute()
+            .await
+            .unwrap();
+        let batch = result.try_next().await.unwrap().unwrap();
+        let content = batch
+            .column_by_name("content")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(content.value(0), "saved example");
     }
 }

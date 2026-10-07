@@ -20,6 +20,25 @@ overseer_files/assistant-*.png
 /assets/voice/
 
 **/node_modules/
+**/.pnpm-store/
+**/__pycache__/
 
 
+# SDK build output and local Python environments
+**/dist-cjs/
+**/*.egg-info/
+**/.pytest_cache/
+/sdks/python/build/
+/sdks/examples/vscode-extension/out/
+/sdks/examples/rust-quickstart/target/
 
+# Generated desktop backend resources
+desktop-ui/src-tauri/binaries/
+
+# Standalone compatibility test locks; release locks live at workspace roots.
+/vendor/**/Cargo.lock
+/vendor/**/target/
+
+# Upstream audio tests write their output next to their fixtures.
+/vendor/rustpotter/tests/resources/*_example.wav
+/vendor/rustpotter/tests/resources/oye_casa_g_1_f32.wav

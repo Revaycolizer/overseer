@@ -19,7 +19,7 @@ error_console = Console(stderr=True)
 
 
 def _make_client(token: Optional[str] = None, base_url: str = "http://localhost:8080") -> OverseerClient:
-    token = token or os.environ.get("OVESEER_TOKEN")
+    token = token or os.environ.get("OVERSEER_API_TOKEN")
     return OverseerClient(base_url, token=token)
 
 
@@ -49,8 +49,8 @@ def _print_result(data: Any, title: Optional[str] = None) -> None:
 # ── CLI Group ─────────────────────────────────────────────────────────
 
 @click.group()
-@click.option("--base-url", default="http://localhost:8080", help="Server base URL", envvar="OVESEER_BASE_URL")
-@click.option("--token", help="Bearer token", envvar="OVESEER_TOKEN")
+@click.option("--base-url", default="http://localhost:8080", help="Server base URL", envvar="OVERSEER_BASE_URL")
+@click.option("--token", help="Bearer token", envvar="OVERSEER_API_TOKEN")
 @click.option("--json", "json_output", is_flag=True, help="Raw JSON output")
 @click.pass_context
 def cli(ctx: click.Context, base_url: str, token: Optional[str], json_output: bool) -> None:
@@ -78,7 +78,7 @@ def login(ctx: click.Context, username: str, password: str) -> None:
             console.print(f"[green]✓[/green] Logged in as [bold]{username}[/bold]")
             console.print(f"Token: [yellow]{token[:20]}...[/yellow]")
             console.print("\nSet it in your environment:")
-            console.print(f"  export OVESEER_TOKEN={token}")
+            console.print(f"  export OVERSEER_API_TOKEN={token}")
     asyncio.run(run())
 
 

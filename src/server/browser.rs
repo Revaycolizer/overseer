@@ -11,12 +11,12 @@ use super::ServerState;
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
         .route("/v1/browser/sessions", post(create_session))
-        .route("/v1/browser/sessions/{id}", get(get_session).delete(close_session))
-        .route("/v1/browser/sessions/{id}/navigate", post(navigate))
-        .route("/v1/browser/sessions/{id}/screenshot", get(screenshot))
-        .route("/v1/browser/sessions/{id}/cdp", get(cdp_relay))
-        .route("/v1/browser/sessions/{id}/policy", post(set_policy))
-        .route("/v1/browser/sessions/{id}/audit", get(get_audit))
+        .route("/v1/browser/sessions/:id", get(get_session).delete(close_session))
+        .route("/v1/browser/sessions/:id/navigate", post(navigate))
+        .route("/v1/browser/sessions/:id/screenshot", get(screenshot))
+        .route("/v1/browser/sessions/:id/cdp", get(cdp_relay))
+        .route("/v1/browser/sessions/:id/policy", post(set_policy))
+        .route("/v1/browser/sessions/:id/audit", get(get_audit))
         .route("/v1/browser/memory", get(memory_report))
 }
 

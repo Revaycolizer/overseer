@@ -13,7 +13,7 @@ use overseer_client::OverseerClient;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Connect to the server
     let client = OverseerClient::new("http://localhost:8080")?
-        .with_token(std::env::var("OVESEER_TOKEN").unwrap_or_default());
+        .with_token(std::env::var("OVERSEER_API_TOKEN").unwrap_or_default());
 
     // 2. Check health
     let health = client.health().await?;

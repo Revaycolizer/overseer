@@ -40,22 +40,20 @@ impl AgentAtlas {
         lancedb_uri: &str,
         client: &reqwest::Client,
     ) -> anyhow::Result<()> {
-        use arrow::array::{Float32Array, Int64Array, StringArray, RecordBatch};
+        use arrow::array::{Int64Array, RecordBatch, StringArray};
         use arrow::datatypes::{DataType, Field, Schema};
-        use futures::stream;
+        use arrow::record_batch::RecordBatchIterator;
         use std::sync::Arc;
 
         let db = lancedb::connect(lancedb_uri).execute().await?;
 
         // Build embedding vectors for all agents
-        let text_for_embedding: Vec<&str> = self
+        let embedding_texts: Vec<String> = self
             .agents
             .iter()
-            .map(|a| {
-                // Clear cache so we always get fresh text
-                Box::leak(Box::new(format!("{}: {}", a.domain, a.description)))
-            })
+            .map(|agent| format!("{}: {}", agent.domain, agent.description))
             .collect();
+        let text_for_embedding: Vec<&str> = embedding_texts.iter().map(String::as_str).collect();
 
         let embed_results =
             crate::engine::utils::embeddings::embed_batch(client, &text_for_embedding).await;
@@ -96,34 +94,40 @@ impl AgentAtlas {
         ]));
 
         let dim = crate::engine::utils::embeddings::EMBEDDING_DIM;
+        let count = ids.len();
         let batch = RecordBatch::try_new(
             schema.clone(),
             vec![
                 Arc::new(Int64Array::from(ids)),
-                Arc::new(
-                    arrow::array::FixedSizeListArray::from_iter_primitive::<Float32Array, _, _>(
-                        vectors.chunks(dim).map(|c| Some(c.iter().map(|&x| Some(x)))),
-                        dim as i32,
-                    ),
-                ),
+                Arc::new(arrow::array::FixedSizeListArray::from_iter_primitive::<
+                    arrow::datatypes::Float32Type,
+                    _,
+                    _,
+                >(
+                    vectors
+                        .chunks(dim)
+                        .map(|c| Some(c.iter().map(|&x| Some(x)))),
+                    dim as i32,
+                )),
                 Arc::new(StringArray::from(domains)),
                 Arc::new(StringArray::from(descriptions)),
             ],
         )?;
 
         // Drop old table if exists, create fresh
-        let _ = db.drop_table("agent_atlas").execute().await;
+        let _ = db.drop_table("agent_atlas", &[]).await;
         let table = db
             .create_table(
                 "agent_atlas",
-                Box::new(stream::once(async move { Ok(batch.clone()) })),
+                Box::new(RecordBatchIterator::new(vec![Ok(batch)], schema))
+                    as Box<dyn arrow::record_batch::RecordBatchReader + Send>,
             )
             .execute()
             .await?;
 
         tracing::info!(
             "AgentAtlas: indexed {} agents into LanceDB table 'agent_atlas'",
-            ids.len()
+            count
         );
         let _ = table;
         Ok(())

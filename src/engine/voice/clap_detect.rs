@@ -10,7 +10,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use ringbuf::HeapRb;
+use ringbuf::{HeapRb, traits::{Split, Producer, Consumer}};
 
 pub static IS_CLAP_LISTENING: AtomicBool = AtomicBool::new(false);
 
@@ -49,7 +49,7 @@ fn run(tx: mpsc::Sender<()>) -> anyhow::Result<()> {
             &cfg,
             move |data: &[f32], _: &_| {
                 for c in data.chunks(channels.max(1)) {
-                    let _ = prod.push(c[0].abs());
+                    let _ = prod.try_push(c[0].abs());
                 }
             },
             |err| tracing::debug!(?err, "clap stream error"),
@@ -59,7 +59,7 @@ fn run(tx: mpsc::Sender<()>) -> anyhow::Result<()> {
             &cfg,
             move |data: &[i16], _: &_| {
                 for c in data.chunks(channels.max(1)) {
-                    let _ = prod.push((c[0] as f32 / 32768.0).abs());
+                    let _ = prod.try_push((c[0] as f32 / 32768.0).abs());
                 }
             },
             |err| tracing::debug!(?err, "clap stream error"),
@@ -90,11 +90,11 @@ fn run(tx: mpsc::Sender<()>) -> anyhow::Result<()> {
         // Skip while speaking (TTS) or while a voice utterance is being recorded,
         // so we don't fight the recorder for the mic or mishear our own output.
         if super::tts::is_tts_speaking() || super::local_stt_rec::RECORDING.load(Ordering::SeqCst) {
-            while cons.pop().is_some() {}
+            while cons.try_pop().is_some() {}
             std::thread::sleep(Duration::from_millis(50));
             continue;
         }
-        while let Some(s) = cons.pop() {
+        while let Some(s) = cons.try_pop() {
             win.push(s);
             if win.len() < WIN {
                 continue;

@@ -48,17 +48,20 @@ pub async fn get_messages_page(
     }
 
     let ids: Vec<i64> = rows.iter().map(|r| r.get::<i64, _>("id")).collect();
-    let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    let attachments_sql = format!(
+    let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
         "SELECT id, message_id, filename, file_path, content_type, size, extracted_content
-         FROM attachments WHERE message_id IN ({}) ORDER BY id ASC",
-        placeholders
+         FROM attachments WHERE message_id IN (",
     );
-    let mut q = sqlx::query_as::<_, Attachment>(&attachments_sql);
+    let mut values = query.separated(",");
     for id in &ids {
-        q = q.bind(*id);
+        values.push_bind(*id);
     }
-    let attachments = q.fetch_all(&db.pool).await.unwrap_or_default();
+    query.push(") ORDER BY id ASC");
+    let attachments = query
+        .build_query_as::<Attachment>()
+        .fetch_all(&db.pool)
+        .await
+        .unwrap_or_default();
 
     let mut by_message: HashMap<i64, Vec<Attachment>> = HashMap::new();
     for att in attachments {
@@ -70,8 +73,13 @@ pub async fn get_messages_page(
         let id: i64 = row.get("id");
         let created_at_str: String = row.get("created_at");
         let hide_evidence: i64 = row.get("hide_evidence");
-        let created_at = chrono::NaiveDateTime::parse_from_str(&created_at_str, "%Y-%m-%d %H:%M:%S")
-            .unwrap_or_else(|_| chrono::DateTime::from_timestamp(0, 0).unwrap_or_default().naive_utc());
+        let created_at =
+            chrono::NaiveDateTime::parse_from_str(&created_at_str, "%Y-%m-%d %H:%M:%S")
+                .unwrap_or_else(|_| {
+                    chrono::DateTime::from_timestamp(0, 0)
+                        .unwrap_or_default()
+                        .naive_utc()
+                });
         messages.push(Message {
             id,
             conversation_id: row.get("conversation_id"),

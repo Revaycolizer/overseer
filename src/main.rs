@@ -10,16 +10,56 @@ fn main() {
         .init();
 
     let args: Vec<String> = std::env::args().collect();
-    tracing::info!(?args, "Overseer launched");
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!("Overseer {}\n\nUsage: overseer [--server] [--port PORT]\n       overseer backup | export | migrate-check | info\n\nTerminal: overseer-tui\nDesktop: open the Overseer app after starting this daemon.", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
+        println!("Overseer {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+    for arg in args.iter().skip(1).filter(|arg| arg.starts_with('-')) {
+        if ![
+            "--server",
+            "--port",
+            "--backup",
+            "--export",
+            "--migrate-check",
+            "--info",
+        ]
+        .contains(&arg.as_str())
+        {
+            eprintln!("Unknown option: {arg}. Use --help for usage.");
+            std::process::exit(2);
+        }
+    }
+    let port = match args.iter().position(|arg| arg == "--port") {
+        Some(index) => match args
+            .get(index + 1)
+            .and_then(|value| value.parse::<u16>().ok())
+            .filter(|port| *port > 0)
+        {
+            Some(port) => port,
+            None => {
+                eprintln!("--port requires a number from 1 to 65535");
+                std::process::exit(2);
+            }
+        },
+        None => 8080,
+    };
 
     if args.len() > 1 && (args[1] == "server" || args[1] == "--server") {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             tracing::info!("Initializing Database for Server...");
             let db = overseer::db::Database::new().await.unwrap();
-            let agent_system = std::sync::Arc::new(overseer::engine::system::AgentSystem::new(db.clone()));
-            if let Err(e) = overseer::server::run_server(std::sync::Arc::new(db), agent_system, 8080).await {
+            let agent_system =
+                std::sync::Arc::new(overseer::engine::system::AgentSystem::new(db.clone()));
+            if let Err(e) =
+                overseer::server::run_server(std::sync::Arc::new(db), agent_system, port).await
+            {
                 tracing::error!(?e, "Server error");
+                std::process::exit(1);
             }
         });
         return;
@@ -29,12 +69,10 @@ fn main() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             match overseer::db::Database::new().await {
-                Ok(db) => {
-                    match overseer::engine::backup::create_backup(&db, None).await {
-                        Ok(path) => println!("✅ Backup created: {}", path.display()),
-                        Err(e) => eprintln!("❌ Backup failed: {}", e),
-                    }
-                }
+                Ok(db) => match overseer::engine::backup::create_backup(&db, None).await {
+                    Ok(path) => println!("✅ Backup created: {}", path.display()),
+                    Err(e) => eprintln!("❌ Backup failed: {}", e),
+                },
                 Err(e) => eprintln!("❌ Database init failed: {}", e),
             }
         });
@@ -45,12 +83,10 @@ fn main() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             match overseer::db::Database::new().await {
-                Ok(db) => {
-                    match overseer::engine::backup::export_all_conversations(&db).await {
-                        Ok(json) => println!("{}", json),
-                        Err(e) => eprintln!("❌ Export failed: {}", e),
-                    }
-                }
+                Ok(db) => match overseer::engine::backup::export_all_conversations(&db).await {
+                    Ok(json) => println!("{}", json),
+                    Err(e) => eprintln!("❌ Export failed: {}", e),
+                },
                 Err(e) => eprintln!("❌ Database init failed: {}", e),
             }
         });
@@ -61,19 +97,19 @@ fn main() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             match overseer::db::Database::new().await {
-                Ok(db) => {
-                    match overseer::engine::backup::migration_dry_run(&db).await {
-                        Ok(pending) => {
-                            if pending.is_empty() {
-                                println!("✅ All migrations applied.");
-                            } else {
-                                println!("📋 Pending migrations:");
-                                for m in pending { println!("   {}", m); }
+                Ok(db) => match overseer::engine::backup::migration_dry_run(&db).await {
+                    Ok(pending) => {
+                        if pending.is_empty() {
+                            println!("✅ All migrations applied.");
+                        } else {
+                            println!("📋 Pending migrations:");
+                            for m in pending {
+                                println!("   {}", m);
                             }
                         }
-                        Err(e) => eprintln!("❌ Check failed: {}", e),
                     }
-                }
+                    Err(e) => eprintln!("❌ Check failed: {}", e),
+                },
                 Err(e) => eprintln!("❌ Database init failed: {}", e),
             }
         });
@@ -97,9 +133,10 @@ fn main() {
         let agent_system =
             std::sync::Arc::new(overseer::engine::system::AgentSystem::new(db.clone()));
         if let Err(e) =
-            overseer::server::run_server(std::sync::Arc::new(db), agent_system, 8080).await
+            overseer::server::run_server(std::sync::Arc::new(db), agent_system, port).await
         {
             tracing::error!(?e, "Server error");
+            std::process::exit(1);
         }
     });
 }

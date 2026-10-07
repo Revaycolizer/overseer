@@ -18,11 +18,11 @@ let client: OverseerClient | null = null;
 /**
  * Get or create the Overseer client from VS Code settings.
  */
-function getClient(): OverseerClient {
+async function getClient(secrets: vscode.SecretStorage): Promise<OverseerClient> {
     if (!client) {
         const config = vscode.workspace.getConfiguration('overseer');
         const baseUrl = config.get<string>('baseUrl', 'http://localhost:8080');
-        const token = config.get<string>('token', '');
+        const token = await secrets.get('overseer.apiToken') ?? process.env.OVERSEER_API_TOKEN;
         client = new OverseerClient({ baseUrl, token });
     }
     return client;
@@ -39,7 +39,7 @@ export function activate(context: vscode.ExtensionContext) {
         'overseer.listConversations',
         async () => {
             try {
-                const c = getClient();
+                const c = await getClient(context.secrets);
                 const conversations = await c.conversations.list();
                 const items = conversations.map(conv => ({
                     label: `#${conv.id}`,
@@ -76,15 +76,26 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             try {
-                const c = getClient();
+                const c = await getClient(context.secrets);
                 // Use conversation 1, or let user pick
                 const conversations = await c.conversations.list();
                 const convId = conversations.length > 0 ? conversations[0].id : await c.conversations.create('VS Code');
 
-                vscode.window.withProgress(
+                await vscode.window.withProgress(
                     { location: vscode.ProgressLocation.Notification, title: 'Overseer processing...' },
                     async () => {
-                        const result = await c.orchestrate(convId, selection);
+                        let result = '';
+                        for await (const event of c.chat.stream({ conversationId: convId, message: selection }, {
+                            onApproval: async approval => {
+                                const decision = await vscode.window.showWarningMessage(
+                                    `${approval.tool}: ${approval.summary}\n${approval.reason}`,
+                                    { modal: true }, 'Approve action', 'Reject action'
+                                );
+                                return decision === 'Approve action';
+                            },
+                        })) {
+                            if (event.type === 'done') result = event.response;
+                        }
                         // Show result in a new document
                         const doc = await vscode.workspace.openTextDocument({
                             content: result,
@@ -110,7 +121,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (!title) return;
 
             try {
-                const c = getClient();
+                const c = await getClient(context.secrets);
                 const id = await c.conversations.create(title);
                 vscode.window.showInformationMessage(
                     `Created conversation #${id}: ${title}`
@@ -121,7 +132,18 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    context.subscriptions.push(listConversations, orchestrateSelection, createConversation);
+    const setToken = vscode.commands.registerCommand('overseer.setToken', async () => {
+        const token = await vscode.window.showInputBox({ prompt: 'Daemon API token (empty to clear)', password: true, ignoreFocusOut: true });
+        if (token === undefined) return;
+        if (token) await context.secrets.store('overseer.apiToken', token);
+        else await context.secrets.delete('overseer.apiToken');
+        client = null;
+        vscode.window.showInformationMessage('Overseer connection token updated.');
+    });
+    const settingsChanged = vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('overseer')) client = null;
+    });
+    context.subscriptions.push(listConversations, orchestrateSelection, createConversation, settingsChanged, setToken);
 }
 
 /**

@@ -13,11 +13,11 @@ use super::ServerState;
 
 pub fn router() -> Router<Arc<ServerState>> {
     Router::new()
-        .route("/v1/browser/sessions/{id}/recording/start", post(start_recording))
-        .route("/v1/browser/sessions/{id}/recording/stop", post(stop_recording))
-        .route("/v1/browser/sessions/{id}/recording", get(get_recording))
-        .route("/v1/browser/sessions/{id}/recording/events", get(get_events))
-        .route("/v1/browser/sessions/{id}/live", get(live_view))
+        .route("/v1/browser/sessions/:id/recording/start", post(start_recording))
+        .route("/v1/browser/sessions/:id/recording/stop", post(stop_recording))
+        .route("/v1/browser/sessions/:id/recording", get(get_recording))
+        .route("/v1/browser/sessions/:id/recording/events", get(get_events))
+        .route("/v1/browser/sessions/:id/live", get(live_view))
 }
 
 #[derive(Deserialize)]

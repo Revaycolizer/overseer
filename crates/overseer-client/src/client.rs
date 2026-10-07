@@ -2,6 +2,7 @@
 
 use reqwest::{Client as HttpClient, StatusCode};
 use std::sync::Arc;
+use std::time::Duration;
 use url::Url;
 
 use crate::error::ClientError;
@@ -36,16 +37,84 @@ impl OverseerClient {
     /// The base URL should be the root of the server, e.g. `http://localhost:8080`.
     pub fn new(base_url: &str) -> Result<Self, ClientError> {
         let base_url = Url::parse(base_url).map_err(|e| ClientError::InvalidUrl(e.to_string()))?;
+        if !matches!(base_url.scheme(), "http" | "https")
+            || base_url.host_str().is_none()
+            || !base_url.username().is_empty()
+            || base_url.password().is_some()
+            || base_url.path() != "/"
+            || base_url.query().is_some()
+            || base_url.fragment().is_some()
+        {
+            return Err(ClientError::InvalidUrl(
+                "expected HTTP(S) server origin without credentials".into(),
+            ));
+        }
         let http = HttpClient::builder()
+            .timeout(Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("overseer-client/", env!("CARGO_PKG_VERSION")))
             .build()?;
-        Ok(Self { http, base_url, token: None })
+        Ok(Self {
+            http,
+            base_url,
+            token: None,
+        })
     }
 
     /// Set a bearer token to use for authenticated requests.
     pub fn with_token(mut self, token: impl Into<String>) -> Self {
         self.token = Some(Arc::from(token.into()));
         self
+    }
+
+    /// Configure a total HTTP request timeout. Redirects remain disabled.
+    pub fn with_timeout(mut self, timeout: Duration) -> Result<Self, ClientError> {
+        if timeout.is_zero() {
+            return Err(ClientError::InvalidUrl("timeout must be positive".into()));
+        }
+        self.http = HttpClient::builder()
+            .timeout(timeout)
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!("overseer-client/", env!("CARGO_PKG_VERSION")))
+            .build()?;
+        Ok(self)
+    }
+
+    /// Call an additional JSON endpoint on this server. An empty response is null.
+    pub async fn request_json(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, ClientError> {
+        if !path.starts_with('/') || path.starts_with("//") {
+            return Err(ClientError::InvalidUrl(
+                "expected server-relative path".into(),
+            ));
+        }
+        let target = self.url(path);
+        if target.origin() != self.base_url.origin() {
+            return Err(ClientError::InvalidUrl(
+                "request must stay on configured origin".into(),
+            ));
+        }
+        let mut request = self.http.request(method, target);
+        if let Some((key, value)) = self.auth_header() {
+            request = request.header(key, value);
+        }
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        let response = request.send().await?;
+        let status = response.status();
+        let text = response.text().await?;
+        if !status.is_success() {
+            return Err(ClientError::Api { status, body: text });
+        }
+        if text.is_empty() {
+            return Ok(serde_json::Value::Null);
+        }
+        serde_json::from_str(&text).map_err(|error| ClientError::Parse(error.to_string()))
     }
 
     // ── Low-level helpers ──────────────────────────────────────────────
@@ -59,7 +128,10 @@ impl OverseerClient {
 
     /// Conditionally attach the Authorization header.
     fn auth_header(&self) -> Option<(&'static str, String)> {
-        self.token.as_ref().map(|t| ("Authorization", format!("Bearer {t}")))
+        self.token
+            .as_ref()
+            .filter(|t| !t.is_empty())
+            .map(|t| ("Authorization", format!("Bearer {t}")))
     }
 
     /// Perform a GET request, decode JSON response.
@@ -68,8 +140,6 @@ impl OverseerClient {
         self.check_status(resp.status())?;
         resp.json().await.map_err(ClientError::from)
     }
-
-
 
     /// Perform a POST with a JSON body, decode JSON response.
     async fn post_json<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
@@ -83,20 +153,33 @@ impl OverseerClient {
     }
 
     /// Perform a POST with a JSON body, returning nothing.
-    async fn post_void<B: serde::Serialize + ?Sized>(&self, path: &str, body: &B) -> Result<(), ClientError> {
+    async fn post_void<B: serde::Serialize + ?Sized>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<(), ClientError> {
         let resp = self.send_post(path, body).await?;
         self.check_status(resp.status())?;
         Ok(())
     }
 
     /// Perform a PATCH with a JSON body, returning nothing.
-    async fn patch_void<B: serde::Serialize + ?Sized>(&self, path: &str, body: &B) -> Result<(), ClientError> {
+    async fn patch_void<B: serde::Serialize + ?Sized>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<(), ClientError> {
         let mut req = self.http.patch(self.url(path)).json(body);
         if let Some((key, val)) = self.auth_header() {
             req = req.header(key, &val);
         }
         let resp = req.send().await?;
-        self.check_status(resp.status())?;
+        if !resp.status().is_success() {
+            return Err(ClientError::Api {
+                status: resp.status(),
+                body: resp.text().await.unwrap_or_default(),
+            });
+        }
         Ok(())
     }
 
@@ -121,7 +204,10 @@ impl OverseerClient {
         if status.is_success() {
             Ok(())
         } else {
-            Err(ClientError::Api { status, body: String::new() })
+            Err(ClientError::Api {
+                status,
+                body: String::new(),
+            })
         }
     }
 
@@ -141,7 +227,11 @@ impl OverseerClient {
     }
 
     /// Send POST request with JSON body and optional auth header.
-    async fn send_post<B: serde::Serialize + ?Sized>(&self, path: &str, body: &B) -> Result<reqwest::Response, ClientError> {
+    async fn send_post<B: serde::Serialize + ?Sized>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<reqwest::Response, ClientError> {
         let mut req = self.http.post(self.url(path)).json(body);
         if let Some((key, val)) = self.auth_header() {
             req = req.header(key, &val);
@@ -174,28 +264,41 @@ impl OverseerClient {
         password: &str,
     ) -> Result<AuthResponse, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { username: &'a str, display_name: &'a str, password: &'a str }
-        self.post_json("/v1/auth/register", &Body { username, display_name, password }).await
+        struct Body<'a> {
+            username: &'a str,
+            display_name: &'a str,
+            password: &'a str,
+        }
+        self.post_json(
+            "/v1/auth/register",
+            &Body {
+                username,
+                display_name,
+                password,
+            },
+        )
+        .await
     }
 
     /// Login with username and password.
     ///
     /// `POST /v1/auth/login`
-    pub async fn login(
-        &self,
-        username: &str,
-        password: &str,
-    ) -> Result<AuthResponse, ClientError> {
+    pub async fn login(&self, username: &str, password: &str) -> Result<AuthResponse, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { username: &'a str, password: &'a str }
-        self.post_json("/v1/auth/login", &Body { username, password }).await
+        struct Body<'a> {
+            username: &'a str,
+            password: &'a str,
+        }
+        self.post_json("/v1/auth/login", &Body { username, password })
+            .await
     }
 
     /// Logout the current session.
     ///
     /// `POST /v1/auth/logout`
     pub async fn logout(&self) -> Result<(), ClientError> {
-        self.post_void("/v1/auth/logout", &serde_json::json!({})).await
+        self.post_void("/v1/auth/logout", &serde_json::json!({}))
+            .await
     }
 
     /// Get the current user's profile.
@@ -211,7 +314,8 @@ impl OverseerClient {
     ///
     /// `GET /api/conversations?limit={limit}`
     pub async fn list_conversations(&self, limit: i64) -> Result<Vec<Conversation>, ClientError> {
-        self.get_json(&format!("/api/conversations?limit={limit}")).await
+        self.get_json(&format!("/api/conversations?limit={limit}"))
+            .await
     }
 
     /// Create a new conversation.
@@ -219,7 +323,9 @@ impl OverseerClient {
     /// `POST /api/conversations`
     pub async fn create_conversation(&self, title: &str) -> Result<i64, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { title: &'a str }
+        struct Body<'a> {
+            title: &'a str,
+        }
         self.post_json("/api/conversations", &Body { title }).await
     }
 
@@ -228,8 +334,18 @@ impl OverseerClient {
     /// `POST /api/conversations/update_title`
     pub async fn update_conversation_title(&self, id: i64, title: &str) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { id: i64, title: String }
-        self.post_void("/api/conversations/update_title", &Body { id, title: title.into() }).await
+        struct Body {
+            id: i64,
+            title: String,
+        }
+        self.post_void(
+            "/api/conversations/update_title",
+            &Body {
+                id,
+                title: title.into(),
+            },
+        )
+        .await
     }
 
     /// Delete a conversation.
@@ -237,15 +353,25 @@ impl OverseerClient {
     /// `POST /api/conversations/delete`
     pub async fn delete_conversation(&self, id: i64) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { id: i64 }
-        self.post_void("/api/conversations/delete", &Body { id }).await
+        struct Body {
+            id: i64,
+        }
+        self.post_void("/api/conversations/delete", &Body { id })
+            .await
     }
 
     /// Search messages across all conversations.
     ///
     /// `GET /api/conversations/search?q={query}`
-    pub async fn search_messages(&self, query: &str) -> Result<Vec<ConversationSearchResult>, ClientError> {
-        self.get_json(&format!("/api/conversations/search?q={}", urlencoding(query))).await
+    pub async fn search_messages(
+        &self,
+        query: &str,
+    ) -> Result<Vec<ConversationSearchResult>, ClientError> {
+        self.get_json(&format!(
+            "/api/conversations/search?q={}",
+            urlencoding(query)
+        ))
+        .await
     }
 
     // ── Messages ───────────────────────────────────────────────────────
@@ -254,7 +380,8 @@ impl OverseerClient {
     ///
     /// `GET /api/messages?conversation_id={id}`
     pub async fn list_messages(&self, conversation_id: i64) -> Result<Vec<Message>, ClientError> {
-        self.get_json(&format!("/api/messages?conversation_id={conversation_id}")).await
+        self.get_json(&format!("/api/messages?conversation_id={conversation_id}"))
+            .await
     }
 
     /// Send a new message.
@@ -274,7 +401,16 @@ impl OverseerClient {
             content: &'a str,
             hide_evidence: bool,
         }
-        self.post_json("/api/messages", &Body { conversation_id, role, content, hide_evidence }).await
+        self.post_json(
+            "/api/messages",
+            &Body {
+                conversation_id,
+                role,
+                content,
+                hide_evidence,
+            },
+        )
+        .await
     }
 
     /// Delete a message.
@@ -282,7 +418,9 @@ impl OverseerClient {
     /// `POST /api/messages/delete`
     pub async fn delete_message(&self, id: i64) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { id: i64 }
+        struct Body {
+            id: i64,
+        }
         self.post_void("/api/messages/delete", &Body { id }).await
     }
 
@@ -290,7 +428,8 @@ impl OverseerClient {
     ///
     /// `GET /api/attachments?message_id={id}`
     pub async fn list_attachments(&self, message_id: i64) -> Result<Vec<Attachment>, ClientError> {
-        self.get_json(&format!("/api/attachments?message_id={message_id}")).await
+        self.get_json(&format!("/api/attachments?message_id={message_id}"))
+            .await
     }
 
     /// Add an attachment to a message.
@@ -312,7 +451,17 @@ impl OverseerClient {
             content_type: &'a str,
             size: i64,
         }
-        self.post_json("/api/attachments", &Body { message_id, filename, file_path, content_type, size }).await
+        self.post_json(
+            "/api/attachments",
+            &Body {
+                message_id,
+                filename,
+                file_path,
+                content_type,
+                size,
+            },
+        )
+        .await
     }
 
     // ── Agents ─────────────────────────────────────────────────────────
@@ -341,8 +490,20 @@ impl OverseerClient {
         domain: &str,
     ) -> Result<i64, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { name: &'a str, description: &'a str, domain: &'a str }
-        self.post_json("/api/agents", &Body { name, description, domain }).await
+        struct Body<'a> {
+            name: &'a str,
+            description: &'a str,
+            domain: &'a str,
+        }
+        self.post_json(
+            "/api/agents",
+            &Body {
+                name,
+                description,
+                domain,
+            },
+        )
+        .await
     }
 
     /// Update an existing agent.
@@ -355,8 +516,15 @@ impl OverseerClient {
     /// Get agent by domain.
     ///
     /// `GET /api/agents/by_domain?domain={domain}`
-    pub async fn get_agent_by_domain(&self, domain: &str) -> Result<Option<AgentInfo>, ClientError> {
-        self.get_json(&format!("/api/agents/by_domain?domain={}", urlencoding(domain))).await
+    pub async fn get_agent_by_domain(
+        &self,
+        domain: &str,
+    ) -> Result<Option<AgentInfo>, ClientError> {
+        self.get_json(&format!(
+            "/api/agents/by_domain?domain={}",
+            urlencoding(domain)
+        ))
+        .await
     }
 
     // ── Tools ──────────────────────────────────────────────────────────
@@ -378,8 +546,20 @@ impl OverseerClient {
         language: &str,
     ) -> Result<i64, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { name: &'a str, description: &'a str, language: &'a str }
-        self.post_json("/api/tools", &Body { name, description, language }).await
+        struct Body<'a> {
+            name: &'a str,
+            description: &'a str,
+            language: &'a str,
+        }
+        self.post_json(
+            "/api/tools",
+            &Body {
+                name,
+                description,
+                language,
+            },
+        )
+        .await
     }
 
     /// Update an existing tool.
@@ -394,17 +574,29 @@ impl OverseerClient {
     /// `POST /api/tools/link`
     pub async fn link_tool_to_agent(&self, agent_id: i64, tool_id: i64) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { agent_id: i64, tool_id: i64 }
-        self.post_void("/api/tools/link", &Body { agent_id, tool_id }).await
+        struct Body {
+            agent_id: i64,
+            tool_id: i64,
+        }
+        self.post_void("/api/tools/link", &Body { agent_id, tool_id })
+            .await
     }
 
     /// Unlink a tool from an agent.
     ///
     /// `POST /api/tools/unlink`
-    pub async fn unlink_tool_from_agent(&self, agent_id: i64, tool_id: i64) -> Result<(), ClientError> {
+    pub async fn unlink_tool_from_agent(
+        &self,
+        agent_id: i64,
+        tool_id: i64,
+    ) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { agent_id: i64, tool_id: i64 }
-        self.post_void("/api/tools/unlink", &Body { agent_id, tool_id }).await
+        struct Body {
+            agent_id: i64,
+            tool_id: i64,
+        }
+        self.post_void("/api/tools/unlink", &Body { agent_id, tool_id })
+            .await
     }
 
     // ── Supervisors ────────────────────────────────────────────────────
@@ -426,8 +618,20 @@ impl OverseerClient {
         domain: &str,
     ) -> Result<i64, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { name: &'a str, description: &'a str, domain: &'a str }
-        self.post_json("/api/supervisors", &Body { name, description, domain }).await
+        struct Body<'a> {
+            name: &'a str,
+            description: &'a str,
+            domain: &'a str,
+        }
+        self.post_json(
+            "/api/supervisors",
+            &Body {
+                name,
+                description,
+                domain,
+            },
+        )
+        .await
     }
 
     /// Update a supervisor.
@@ -442,40 +646,79 @@ impl OverseerClient {
     /// `POST /api/supervisors/delete`
     pub async fn delete_supervisor(&self, id: i64) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { id: i64 }
-        self.post_void("/api/supervisors/delete", &Body { id }).await
+        struct Body {
+            id: i64,
+        }
+        self.post_void("/api/supervisors/delete", &Body { id })
+            .await
     }
 
     /// Get tools belonging to a supervisor.
     ///
     /// `GET /api/supervisors/{id}/tools`
-    pub async fn get_supervisor_tools(&self, supervisor_id: i64) -> Result<Vec<ToolInfo>, ClientError> {
-        self.get_json(&format!("/api/supervisors/{supervisor_id}/tools")).await
+    pub async fn get_supervisor_tools(
+        &self,
+        supervisor_id: i64,
+    ) -> Result<Vec<ToolInfo>, ClientError> {
+        self.get_json(&format!("/api/supervisors/{supervisor_id}/tools"))
+            .await
     }
 
     /// Get agents supervised by a supervisor.
     ///
     /// `GET /api/supervisors/{id}/agents`
-    pub async fn get_supervisor_agents(&self, supervisor_id: i64) -> Result<Vec<AgentInfo>, ClientError> {
-        self.get_json(&format!("/api/supervisors/{supervisor_id}/agents")).await
+    pub async fn get_supervisor_agents(
+        &self,
+        supervisor_id: i64,
+    ) -> Result<Vec<AgentInfo>, ClientError> {
+        self.get_json(&format!("/api/supervisors/{supervisor_id}/agents"))
+            .await
     }
 
     /// Link an agent to a supervisor.
     ///
     /// `POST /api/supervisors/link`
-    pub async fn link_agent_to_supervisor(&self, supervisor_id: i64, agent_id: i64) -> Result<(), ClientError> {
+    pub async fn link_agent_to_supervisor(
+        &self,
+        supervisor_id: i64,
+        agent_id: i64,
+    ) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { supervisor_id: i64, agent_id: i64 }
-        self.post_void("/api/supervisors/link", &Body { supervisor_id, agent_id }).await
+        struct Body {
+            supervisor_id: i64,
+            agent_id: i64,
+        }
+        self.post_void(
+            "/api/supervisors/link",
+            &Body {
+                supervisor_id,
+                agent_id,
+            },
+        )
+        .await
     }
 
     /// Unlink an agent from a supervisor.
     ///
     /// `POST /api/supervisors/unlink`
-    pub async fn unlink_agent_from_supervisor(&self, supervisor_id: i64, agent_id: i64) -> Result<(), ClientError> {
+    pub async fn unlink_agent_from_supervisor(
+        &self,
+        supervisor_id: i64,
+        agent_id: i64,
+    ) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { supervisor_id: i64, agent_id: i64 }
-        self.post_void("/api/supervisors/unlink", &Body { supervisor_id, agent_id }).await
+        struct Body {
+            supervisor_id: i64,
+            agent_id: i64,
+        }
+        self.post_void(
+            "/api/supervisors/unlink",
+            &Body {
+                supervisor_id,
+                agent_id,
+            },
+        )
+        .await
     }
 
     // ── Workflows ──────────────────────────────────────────────────────
@@ -492,7 +735,9 @@ impl OverseerClient {
     /// `POST /api/workflows`
     pub async fn create_workflow(&self, name: &str) -> Result<i64, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { name: &'a str }
+        struct Body<'a> {
+            name: &'a str,
+        }
         self.post_json("/api/workflows", &Body { name }).await
     }
 
@@ -508,22 +753,32 @@ impl OverseerClient {
     /// `POST /api/workflows/delete`
     pub async fn delete_workflow(&self, id: i64) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { id: i64 }
+        struct Body {
+            id: i64,
+        }
         self.post_void("/api/workflows/delete", &Body { id }).await
     }
 
     /// Get steps for a workflow.
     ///
     /// `GET /api/workflows/{id}/steps`
-    pub async fn get_workflow_steps(&self, workflow_id: i64) -> Result<Vec<WorkflowStep>, ClientError> {
-        self.get_json(&format!("/api/workflows/{workflow_id}/steps")).await
+    pub async fn get_workflow_steps(
+        &self,
+        workflow_id: i64,
+    ) -> Result<Vec<WorkflowStep>, ClientError> {
+        self.get_json(&format!("/api/workflows/{workflow_id}/steps"))
+            .await
     }
 
     /// Add a step to a workflow.
     ///
     /// `POST /api/workflows/{id}/steps`
     pub async fn add_workflow_step(&self, workflow_id: i64) -> Result<i64, ClientError> {
-        self.post_json(&format!("/api/workflows/{workflow_id}/steps"), &serde_json::json!({})).await
+        self.post_json(
+            &format!("/api/workflows/{workflow_id}/steps"),
+            &serde_json::json!({}),
+        )
+        .await
     }
 
     /// Update a workflow step.
@@ -538,53 +793,81 @@ impl OverseerClient {
     /// `POST /api/workflows/steps/delete`
     pub async fn delete_workflow_step(&self, id: i64) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { id: i64 }
-        self.post_void("/api/workflows/steps/delete", &Body { id }).await
+        struct Body {
+            id: i64,
+        }
+        self.post_void("/api/workflows/steps/delete", &Body { id })
+            .await
     }
 
     /// Get runs for a workflow.
     ///
     /// `GET /api/workflows/{id}/runs`
-    pub async fn get_workflow_runs(&self, workflow_id: i64) -> Result<Vec<WorkflowRun>, ClientError> {
-        self.get_json(&format!("/api/workflows/{workflow_id}/runs")).await
+    pub async fn get_workflow_runs(
+        &self,
+        workflow_id: i64,
+    ) -> Result<Vec<WorkflowRun>, ClientError> {
+        self.get_json(&format!("/api/workflows/{workflow_id}/runs"))
+            .await
     }
 
     /// Get step runs for a workflow run.
     ///
     /// `GET /api/workflows/runs/{id}/steps`
-    pub async fn get_workflow_step_runs(&self, run_id: i64) -> Result<Vec<WorkflowStepRun>, ClientError> {
-        self.get_json(&format!("/api/workflows/runs/{run_id}/steps")).await
+    pub async fn get_workflow_step_runs(
+        &self,
+        run_id: i64,
+    ) -> Result<Vec<WorkflowStepRun>, ClientError> {
+        self.get_json(&format!("/api/workflows/runs/{run_id}/steps"))
+            .await
     }
 
     /// Run a workflow.
     ///
     /// `POST /api/workflows/{id}/run`
     pub async fn run_workflow(&self, workflow_id: i64) -> Result<i64, ClientError> {
-        self.post_json(&format!("/api/workflows/{workflow_id}/run"), &serde_json::json!({})).await
+        self.post_json(
+            &format!("/api/workflows/{workflow_id}/run"),
+            &serde_json::json!({}),
+        )
+        .await
     }
 
     /// Publish a workflow (creates a version snapshot).
     ///
     /// `POST /v1/workflows/{id}/publish`
     pub async fn publish_workflow(&self, workflow_id: i64) -> Result<(), ClientError> {
-        self.post_void(&format!("/v1/workflows/{workflow_id}/publish"), &serde_json::json!({})).await
+        self.post_void(
+            &format!("/v1/workflows/{workflow_id}/publish"),
+            &serde_json::json!({}),
+        )
+        .await
     }
 
     /// Get published versions of a workflow.
     ///
     /// `GET /v1/workflows/{id}/versions`
-    pub async fn get_workflow_versions(&self, workflow_id: i64) -> Result<Vec<serde_json::Value>, ClientError> {
-        self.get_json(&format!("/v1/workflows/{workflow_id}/versions")).await
+    pub async fn get_workflow_versions(
+        &self,
+        workflow_id: i64,
+    ) -> Result<Vec<serde_json::Value>, ClientError> {
+        self.get_json(&format!("/v1/workflows/{workflow_id}/versions"))
+            .await
     }
 
     /// Restore a workflow to a specific version.
     ///
     /// `POST /v1/workflows/{id}/versions/{v}/restore`
-    pub async fn restore_workflow_version(&self, workflow_id: i64, version: i32) -> Result<(), ClientError> {
+    pub async fn restore_workflow_version(
+        &self,
+        workflow_id: i64,
+        version: i32,
+    ) -> Result<(), ClientError> {
         self.post_void(
             &format!("/v1/workflows/{workflow_id}/versions/{version}/restore"),
             &serde_json::json!({}),
-        ).await
+        )
+        .await
     }
 
     // ── Work Items ─────────────────────────────────────────────────────
@@ -592,8 +875,14 @@ impl OverseerClient {
     /// List work items for a conversation.
     ///
     /// `GET /api/work_items?conversation_id={id}`
-    pub async fn list_work_items(&self, conversation_id: i64) -> Result<Vec<WorkItem>, ClientError> {
-        self.get_json(&format!("/api/work_items?conversation_id={conversation_id}")).await
+    pub async fn list_work_items(
+        &self,
+        conversation_id: i64,
+    ) -> Result<Vec<WorkItem>, ClientError> {
+        self.get_json(&format!(
+            "/api/work_items?conversation_id={conversation_id}"
+        ))
+        .await
     }
 
     /// Create a work item.
@@ -608,17 +897,38 @@ impl OverseerClient {
     /// `POST /api/work_items/update_status`
     pub async fn update_work_item_status(&self, id: i64, status: &str) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { id: i64, status: &'a str }
-        self.post_void("/api/work_items/update_status", &Body { id, status }).await
+        struct Body<'a> {
+            id: i64,
+            status: &'a str,
+        }
+        self.post_void("/api/work_items/update_status", &Body { id, status })
+            .await
     }
 
     /// Update work item runtime metadata.
     ///
     /// `POST /api/work_items/update_runtime`
-    pub async fn update_work_item_runtime(&self, id: i64, status: &str, metadata_json: Option<&str>) -> Result<(), ClientError> {
+    pub async fn update_work_item_runtime(
+        &self,
+        id: i64,
+        status: &str,
+        metadata_json: Option<&str>,
+    ) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { id: i64, status: &'a str, metadata_json: Option<&'a str> }
-        self.post_void("/api/work_items/update_runtime", &Body { id, status, metadata_json }).await
+        struct Body<'a> {
+            id: i64,
+            status: &'a str,
+            metadata_json: Option<&'a str>,
+        }
+        self.post_void(
+            "/api/work_items/update_runtime",
+            &Body {
+                id,
+                status,
+                metadata_json,
+            },
+        )
+        .await
     }
 
     /// Log an event against a work item.
@@ -631,8 +941,15 @@ impl OverseerClient {
     /// Get events for a work item.
     ///
     /// `GET /api/work_items/{id}/events?limit={limit}`
-    pub async fn get_work_item_events(&self, work_item_id: i64, limit: i64) -> Result<Vec<WorkItemEvent>, ClientError> {
-        self.get_json(&format!("/api/work_items/{work_item_id}/events?limit={limit}")).await
+    pub async fn get_work_item_events(
+        &self,
+        work_item_id: i64,
+        limit: i64,
+    ) -> Result<Vec<WorkItemEvent>, ClientError> {
+        self.get_json(&format!(
+            "/api/work_items/{work_item_id}/events?limit={limit}"
+        ))
+        .await
     }
 
     // ── Artifacts ──────────────────────────────────────────────────────
@@ -641,7 +958,8 @@ impl OverseerClient {
     ///
     /// `GET /api/artifacts?conversation_id={id}`
     pub async fn list_artifacts(&self, conversation_id: i64) -> Result<Vec<Artifact>, ClientError> {
-        self.get_json(&format!("/api/artifacts?conversation_id={conversation_id}")).await
+        self.get_json(&format!("/api/artifacts?conversation_id={conversation_id}"))
+            .await
     }
 
     /// Create an artifact.
@@ -661,8 +979,14 @@ impl OverseerClient {
     /// Get artifacts for an execution run.
     ///
     /// `GET /api/artifacts/by_run?execution_run_id={id}`
-    pub async fn get_artifacts_by_run(&self, execution_run_id: i64) -> Result<Vec<Artifact>, ClientError> {
-        self.get_json(&format!("/api/artifacts/by_run?execution_run_id={execution_run_id}")).await
+    pub async fn get_artifacts_by_run(
+        &self,
+        execution_run_id: i64,
+    ) -> Result<Vec<Artifact>, ClientError> {
+        self.get_json(&format!(
+            "/api/artifacts/by_run?execution_run_id={execution_run_id}"
+        ))
+        .await
     }
 
     // ── Planners ───────────────────────────────────────────────────────
@@ -694,44 +1018,62 @@ impl OverseerClient {
     ///
     /// `POST /api/supervision/approve`
     pub async fn approve_computer_action(&self) -> Result<(), ClientError> {
-        self.post_void("/api/supervision/approve", &serde_json::json!({})).await
+        self.post_void("/api/supervision/approve", &serde_json::json!({}))
+            .await
     }
 
     /// Reject pending computer action.
     ///
     /// `POST /api/supervision/reject`
     pub async fn reject_computer_action(&self) -> Result<(), ClientError> {
-        self.post_void("/api/supervision/reject", &serde_json::json!({})).await
+        self.post_void("/api/supervision/reject", &serde_json::json!({}))
+            .await
     }
 
     /// Activate computer supervision session.
     ///
     /// `POST /api/supervision/activate`
-    pub async fn activate_supervision(&self, enabled: bool, allowlist: &str) -> Result<(), ClientError> {
+    pub async fn activate_supervision(
+        &self,
+        enabled: bool,
+        allowlist: &str,
+    ) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { enabled: bool, allowlist: &'a str }
-        self.post_void("/api/supervision/activate", &Body { enabled, allowlist }).await
+        struct Body<'a> {
+            enabled: bool,
+            allowlist: &'a str,
+        }
+        self.post_void("/api/supervision/activate", &Body { enabled, allowlist })
+            .await
     }
 
     /// Clear pending computer action.
     ///
     /// `POST /api/supervision/clear_pending`
     pub async fn clear_pending_action(&self) -> Result<(), ClientError> {
-        self.post_void("/api/supervision/clear_pending", &serde_json::json!({})).await
+        self.post_void("/api/supervision/clear_pending", &serde_json::json!({}))
+            .await
     }
 
     /// Stage a computer approval request.
     ///
     /// `POST /api/supervision/stage`
-    pub async fn stage_approval_request(&self, params: serde_json::Value) -> Result<(), ClientError> {
+    pub async fn stage_approval_request(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<(), ClientError> {
         self.post_void("/api/supervision/stage", &params).await
     }
 
     /// Register a computer action execution.
     ///
     /// `POST /api/supervision/register_execution`
-    pub async fn register_computer_execution(&self, params: serde_json::Value) -> Result<(), ClientError> {
-        self.post_void("/api/supervision/register_execution", &params).await
+    pub async fn register_computer_execution(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<(), ClientError> {
+        self.post_void("/api/supervision/register_execution", &params)
+            .await
     }
 
     /// List pending kernel approvals.
@@ -744,10 +1086,23 @@ impl OverseerClient {
     /// Approve a kernel action.
     ///
     /// `POST /api/kernel/approve`
-    pub async fn kernel_approve(&self, approval_id: &str) -> Result<serde_json::Value, ClientError> {
+    pub async fn kernel_approve(
+        &self,
+        approval_id: &str,
+    ) -> Result<serde_json::Value, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { approval_id: &'a str, resolver: &'a str }
-        self.post_json("/api/kernel/approve", &Body { approval_id, resolver: "api" }).await
+        struct Body<'a> {
+            approval_id: &'a str,
+            resolver: &'a str,
+        }
+        self.post_json(
+            "/api/kernel/approve",
+            &Body {
+                approval_id,
+                resolver: "api",
+            },
+        )
+        .await
     }
 
     /// Reject a kernel action.
@@ -755,17 +1110,33 @@ impl OverseerClient {
     /// `POST /api/kernel/reject`
     pub async fn kernel_reject(&self, approval_id: &str) -> Result<serde_json::Value, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { approval_id: &'a str, resolver: &'a str }
-        self.post_json("/api/kernel/reject", &Body { approval_id, resolver: "api" }).await
+        struct Body<'a> {
+            approval_id: &'a str,
+            resolver: &'a str,
+        }
+        self.post_json(
+            "/api/kernel/reject",
+            &Body {
+                approval_id,
+                resolver: "api",
+            },
+        )
+        .await
     }
 
     /// Emergency stop — cancel waiting approvals and abort in-flight execution.
     ///
     /// `POST /api/kernel/emergency_stop`
-    pub async fn kernel_emergency_stop(&self, run_id: Option<i64>) -> Result<serde_json::Value, ClientError> {
+    pub async fn kernel_emergency_stop(
+        &self,
+        run_id: Option<i64>,
+    ) -> Result<serde_json::Value, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { run_id: Option<i64> }
-        self.post_json("/api/kernel/emergency_stop", &Body { run_id }).await
+        struct Body {
+            run_id: Option<i64>,
+        }
+        self.post_json("/api/kernel/emergency_stop", &Body { run_id })
+            .await
     }
 
     // ── Version Control ────────────────────────────────────────────────
@@ -780,19 +1151,53 @@ impl OverseerClient {
     /// Publish an agent version.
     ///
     /// `POST /api/version/publish_agent`
-    pub async fn publish_agent_version(&self, agent_id: i64, tag: &str, description: &str) -> Result<(), ClientError> {
+    pub async fn publish_agent_version(
+        &self,
+        agent_id: i64,
+        tag: &str,
+        description: &str,
+    ) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { agent_id: i64, tag: &'a str, description: &'a str }
-        self.post_void("/api/version/publish_agent", &Body { agent_id, tag, description }).await
+        struct Body<'a> {
+            agent_id: i64,
+            tag: &'a str,
+            description: &'a str,
+        }
+        self.post_void(
+            "/api/version/publish_agent",
+            &Body {
+                agent_id,
+                tag,
+                description,
+            },
+        )
+        .await
     }
 
     /// Publish a tool version.
     ///
     /// `POST /api/version/publish_tool`
-    pub async fn publish_tool_version(&self, tool_id: i64, tag: &str, description: &str) -> Result<(), ClientError> {
+    pub async fn publish_tool_version(
+        &self,
+        tool_id: i64,
+        tag: &str,
+        description: &str,
+    ) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { tool_id: i64, tag: &'a str, description: &'a str }
-        self.post_void("/api/version/publish_tool", &Body { tool_id, tag, description }).await
+        struct Body<'a> {
+            tool_id: i64,
+            tag: &'a str,
+            description: &'a str,
+        }
+        self.post_void(
+            "/api/version/publish_tool",
+            &Body {
+                tool_id,
+                tag,
+                description,
+            },
+        )
+        .await
     }
 
     /// Rollback an entity to a specific version.
@@ -805,21 +1210,35 @@ impl OverseerClient {
     /// Get version content.
     ///
     /// `GET /api/version/content?entity_type={t}&entity_id={id}&tag={tag}`
-    pub async fn get_version_content(&self, entity_type: &str, entity_id: i64, tag: &str) -> Result<String, ClientError> {
+    pub async fn get_version_content(
+        &self,
+        entity_type: &str,
+        entity_id: i64,
+        tag: &str,
+    ) -> Result<String, ClientError> {
         self.get_text(&format!(
             "/api/version/content?entity_type={}&entity_id={}&tag={}",
-            urlencoding(entity_type), entity_id, urlencoding(tag),
-        )).await
+            urlencoding(entity_type),
+            entity_id,
+            urlencoding(tag),
+        ))
+        .await
     }
 
     /// Get version history for an entity.
     ///
     /// `GET /api/version/history?entity_type={t}&entity_id={id}`
-    pub async fn get_version_history(&self, entity_type: &str, entity_id: i64) -> Result<Vec<EntityVersion>, ClientError> {
+    pub async fn get_version_history(
+        &self,
+        entity_type: &str,
+        entity_id: i64,
+    ) -> Result<Vec<EntityVersion>, ClientError> {
         self.get_json(&format!(
             "/api/version/history?entity_type={}&entity_id={}",
-            urlencoding(entity_type), entity_id,
-        )).await
+            urlencoding(entity_type),
+            entity_id,
+        ))
+        .await
     }
 
     // ── Browser ────────────────────────────────────────────────────────
@@ -828,51 +1247,83 @@ impl OverseerClient {
     ///
     /// `POST /v1/browser/sessions`
     pub async fn create_browser_session(&self) -> Result<serde_json::Value, ClientError> {
-        self.post_json("/v1/browser/sessions", &serde_json::json!({})).await
+        self.post_json("/v1/browser/sessions", &serde_json::json!({}))
+            .await
     }
 
     /// Get browser session info.
     ///
     /// `GET /v1/browser/sessions/{id}`
-    pub async fn get_browser_session(&self, session_id: i64) -> Result<serde_json::Value, ClientError> {
-        self.get_json(&format!("/v1/browser/sessions/{session_id}")).await
+    pub async fn get_browser_session(
+        &self,
+        session_id: i64,
+    ) -> Result<serde_json::Value, ClientError> {
+        self.get_json(&format!("/v1/browser/sessions/{session_id}"))
+            .await
     }
 
     /// Close a browser session.
     ///
     /// `DELETE /v1/browser/sessions/{id}`
     pub async fn close_browser_session(&self, session_id: i64) -> Result<(), ClientError> {
-        self.delete_void(&format!("/v1/browser/sessions/{session_id}")).await
+        self.delete_void(&format!("/v1/browser/sessions/{session_id}"))
+            .await
     }
 
     /// Navigate a browser session to a URL.
     ///
     /// `POST /v1/browser/sessions/{id}/navigate`
-    pub async fn browser_navigate(&self, session_id: i64, url: &str) -> Result<serde_json::Value, ClientError> {
+    pub async fn browser_navigate(
+        &self,
+        session_id: i64,
+        url: &str,
+    ) -> Result<serde_json::Value, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { url: &'a str }
-        self.post_json(&format!("/v1/browser/sessions/{session_id}/navigate"), &Body { url }).await
+        struct Body<'a> {
+            url: &'a str,
+        }
+        self.post_json(
+            &format!("/v1/browser/sessions/{session_id}/navigate"),
+            &Body { url },
+        )
+        .await
     }
 
     /// Take a screenshot of a browser session.
     ///
     /// `GET /v1/browser/sessions/{id}/screenshot`
-    pub async fn browser_screenshot(&self, session_id: i64) -> Result<serde_json::Value, ClientError> {
-        self.get_json(&format!("/v1/browser/sessions/{session_id}/screenshot")).await
+    pub async fn browser_screenshot(
+        &self,
+        session_id: i64,
+    ) -> Result<serde_json::Value, ClientError> {
+        self.get_json(&format!("/v1/browser/sessions/{session_id}/screenshot"))
+            .await
     }
 
     /// Set action policy for a browser session.
     ///
     /// `POST /v1/browser/sessions/{id}/policy`
-    pub async fn browser_set_policy(&self, session_id: i64, policy: serde_json::Value) -> Result<(), ClientError> {
-        self.post_void(&format!("/v1/browser/sessions/{session_id}/policy"), &policy).await
+    pub async fn browser_set_policy(
+        &self,
+        session_id: i64,
+        policy: serde_json::Value,
+    ) -> Result<(), ClientError> {
+        self.post_void(
+            &format!("/v1/browser/sessions/{session_id}/policy"),
+            &policy,
+        )
+        .await
     }
 
     /// Get audit log for a browser session.
     ///
     /// `GET /v1/browser/sessions/{id}/audit`
-    pub async fn browser_audit_log(&self, session_id: i64) -> Result<Vec<serde_json::Value>, ClientError> {
-        self.get_json(&format!("/v1/browser/sessions/{session_id}/audit")).await
+    pub async fn browser_audit_log(
+        &self,
+        session_id: i64,
+    ) -> Result<Vec<serde_json::Value>, ClientError> {
+        self.get_json(&format!("/v1/browser/sessions/{session_id}/audit"))
+            .await
     }
 
     /// Get browser memory report.
@@ -887,38 +1338,63 @@ impl OverseerClient {
     /// Start recording a browser session.
     ///
     /// `POST /v1/browser/sessions/{id}/recording/start`
-    pub async fn start_recording(&self, session_id: i64, quality: u8) -> Result<serde_json::Value, ClientError> {
+    pub async fn start_recording(
+        &self,
+        session_id: i64,
+        quality: u8,
+    ) -> Result<serde_json::Value, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body { quality: u8 }
-        self.post_json(&format!("/v1/browser/sessions/{session_id}/recording/start"), &Body { quality }).await
+        struct Body {
+            quality: u8,
+        }
+        self.post_json(
+            &format!("/v1/browser/sessions/{session_id}/recording/start"),
+            &Body { quality },
+        )
+        .await
     }
 
     /// Stop recording a browser session.
     ///
     /// `POST /v1/browser/sessions/{id}/recording/stop`
     pub async fn stop_recording(&self, session_id: i64) -> Result<serde_json::Value, ClientError> {
-        self.post_json(&format!("/v1/browser/sessions/{session_id}/recording/stop"), &serde_json::json!({})).await
+        self.post_json(
+            &format!("/v1/browser/sessions/{session_id}/recording/stop"),
+            &serde_json::json!({}),
+        )
+        .await
     }
 
     /// Get recording data for a browser session.
     ///
     /// `GET /v1/browser/sessions/{id}/recording`
     pub async fn get_recording(&self, session_id: i64) -> Result<serde_json::Value, ClientError> {
-        self.get_json(&format!("/v1/browser/sessions/{session_id}/recording")).await
+        self.get_json(&format!("/v1/browser/sessions/{session_id}/recording"))
+            .await
     }
 
     /// Get recording events for a browser session.
     ///
     /// `GET /v1/browser/sessions/{id}/recording/events`
-    pub async fn get_recording_events(&self, session_id: i64) -> Result<serde_json::Value, ClientError> {
-        self.get_json(&format!("/v1/browser/sessions/{session_id}/recording/events")).await
+    pub async fn get_recording_events(
+        &self,
+        session_id: i64,
+    ) -> Result<serde_json::Value, ClientError> {
+        self.get_json(&format!(
+            "/v1/browser/sessions/{session_id}/recording/events"
+        ))
+        .await
     }
 
     /// Resume a browser HITL session.
     ///
     /// `POST /v1/browser/sessions/{id}/resume`
     pub async fn resume_browser_session(&self, session_id: i64) -> Result<(), ClientError> {
-        self.post_void(&format!("/v1/browser/sessions/{session_id}/resume"), &serde_json::json!({})).await
+        self.post_void(
+            &format!("/v1/browser/sessions/{session_id}/resume"),
+            &serde_json::json!({}),
+        )
+        .await
     }
 
     // ── Credentials ────────────────────────────────────────────────────
@@ -933,19 +1409,45 @@ impl OverseerClient {
     /// Create a new credential.
     ///
     /// `POST /v1/credentials`
-    pub async fn create_credential(&self, name: &str, value: &str, cred_type: Option<&str>) -> Result<CredentialSummary, ClientError> {
+    pub async fn create_credential(
+        &self,
+        name: &str,
+        value: &str,
+        cred_type: Option<&str>,
+    ) -> Result<CredentialSummary, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { name: &'a str, value: &'a str, cred_type: Option<&'a str> }
-        self.post_json("/v1/credentials", &Body { name, value, cred_type }).await
+        struct Body<'a> {
+            name: &'a str,
+            value: &'a str,
+            cred_type: Option<&'a str>,
+        }
+        self.post_json(
+            "/v1/credentials",
+            &Body {
+                name,
+                value,
+                cred_type,
+            },
+        )
+        .await
     }
 
     /// Update a credential.
     ///
     /// `PATCH /v1/credentials/{id}`
-    pub async fn update_credential(&self, id: i64, name: Option<&str>, value: Option<&str>) -> Result<(), ClientError> {
+    pub async fn update_credential(
+        &self,
+        id: i64,
+        name: Option<&str>,
+        value: Option<&str>,
+    ) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { name: Option<&'a str>, value: Option<&'a str> }
-        self.patch_void(&format!("/v1/credentials/{id}"), &Body { name, value }).await
+        struct Body<'a> {
+            name: Option<&'a str>,
+            value: Option<&'a str>,
+        }
+        self.patch_void(&format!("/v1/credentials/{id}"), &Body { name, value })
+            .await
     }
 
     /// Delete a credential.
@@ -967,7 +1469,10 @@ impl OverseerClient {
     /// Create a workflow template.
     ///
     /// `POST /v1/workflow-templates`
-    pub async fn create_workflow_template(&self, params: serde_json::Value) -> Result<WorkflowTemplate, ClientError> {
+    pub async fn create_workflow_template(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<WorkflowTemplate, ClientError> {
         self.post_json("/v1/workflow-templates", &params).await
     }
 
@@ -975,7 +1480,11 @@ impl OverseerClient {
     ///
     /// `POST /v1/workflow-templates/{id}/install`
     pub async fn install_workflow_template(&self, template_id: i64) -> Result<i64, ClientError> {
-        self.post_json(&format!("/v1/workflow-templates/{template_id}/install"), &serde_json::json!({})).await
+        self.post_json(
+            &format!("/v1/workflow-templates/{template_id}/install"),
+            &serde_json::json!({}),
+        )
+        .await
     }
 
     // ── Settings ───────────────────────────────────────────────────────
@@ -984,7 +1493,8 @@ impl OverseerClient {
     ///
     /// `GET /api/settings?key={key}`
     pub async fn get_setting(&self, key: &str) -> Result<Option<String>, ClientError> {
-        self.get_json(&format!("/api/settings?key={}", urlencoding(key))).await
+        self.get_json(&format!("/api/settings?key={}", urlencoding(key)))
+            .await
     }
 
     /// Set a single setting value.
@@ -992,14 +1502,19 @@ impl OverseerClient {
     /// `POST /api/settings`
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<(), ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { key: &'a str, value: &'a str }
+        struct Body<'a> {
+            key: &'a str,
+            value: &'a str,
+        }
         self.post_void("/api/settings", &Body { key, value }).await
     }
 
     /// Get all settings.
     ///
     /// `GET /api/settings/all`
-    pub async fn get_all_settings(&self) -> Result<std::collections::HashMap<String, String>, ClientError> {
+    pub async fn get_all_settings(
+        &self,
+    ) -> Result<std::collections::HashMap<String, String>, ClientError> {
         self.get_json("/api/settings/all").await
     }
 
@@ -1007,9 +1522,14 @@ impl OverseerClient {
 
     /// Get server health.
     ///
-    /// `GET /health`
-    pub async fn health(&self) -> Result<RuntimeHealth, ClientError> {
-        self.get_json("/health").await
+    /// `GET /healthz`
+    pub async fn health(&self) -> Result<ServiceHealth, ClientError> {
+        self.get_json("/healthz").await
+    }
+
+    /// Runtime/model diagnostics from the daemon.
+    pub async fn runtime_health(&self) -> Result<RuntimeHealth, ClientError> {
+        self.get_json("/api/health").await
     }
 
     /// Get system load.
@@ -1022,10 +1542,27 @@ impl OverseerClient {
     /// Orchestrate — send a query to the agent system.
     ///
     /// `POST /api/orchestrate`
-    pub async fn orchestrate(&self, conversation_id: i64, query: &str) -> Result<String, ClientError> {
+    pub async fn orchestrate(
+        &self,
+        conversation_id: i64,
+        query: &str,
+    ) -> Result<String, ClientError> {
         #[derive(serde::Serialize)]
-        struct Body<'a> { conversation_id: i64, query: &'a str }
-        self.post_json("/api/orchestrate", &Body { conversation_id, query }).await
+        struct Body<'a> {
+            conversation_id: i64,
+            query: &'a str,
+        }
+        self.send_post(
+            "/api/orchestrate",
+            &Body {
+                conversation_id,
+                query,
+            },
+        )
+        .await?
+        .text()
+        .await
+        .map_err(ClientError::from)
     }
 
     /// Get available models.
@@ -1039,7 +1576,8 @@ impl OverseerClient {
     ///
     /// `POST /api/registry/refresh`
     pub async fn refresh_registry(&self) -> Result<(), ClientError> {
-        self.post_void("/api/registry/refresh", &serde_json::json!({})).await
+        self.post_void("/api/registry/refresh", &serde_json::json!({}))
+            .await
     }
 
     /// Get registry status.

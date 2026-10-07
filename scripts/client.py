@@ -32,7 +32,7 @@ class OverseerClient:
         timeout: float = 30.0,
     ):
         self.base_url = base_url.rstrip("/")
-        self.token = token or os.environ.get("OVESEER_TOKEN")
+        self.token = token or os.environ.get("OVERSEER_API_TOKEN") or os.environ.get("OVESEER_TOKEN")
         self.http = httpx.Client(base_url=self.base_url, timeout=timeout, headers=self._headers())
 
     def _headers(self) -> dict[str, str]:
