@@ -494,9 +494,29 @@ async fn test_registry() {
 #[tokio::test]
 async fn test_models() {
     let app = TestApp::new().await;
-    let body = app.get_ok("/api/models/available").await;
-    let models = body.as_array().unwrap();
-    assert!(models.iter().all(|m| m.is_string()));
+    // The default suite runs without an Ollama installation. Verify the HTTP
+    // contract in both environments, including the actionable offline error.
+    let response = app
+        .client
+        .get(format!("{}/api/models/available", app.base_url))
+        .send()
+        .await
+        .unwrap();
+    match response.status().as_u16() {
+        200 => {
+            let body: Value = response.json().await.unwrap();
+            let models = body.as_array().expect("installed models must be an array");
+            assert!(models.iter().all(|model| model.is_string()));
+        }
+        503 => {
+            let message = response.text().await.unwrap();
+            assert!(
+                message.starts_with("Ollama unavailable:"),
+                "unexpected offline error: {message}"
+            );
+        }
+        status => panic!("Unexpected model-list status: {status}"),
+    }
 }
 
 #[tokio::test]
