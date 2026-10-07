@@ -126,5 +126,7 @@
     "Local maintenance patches require ongoing upstream/advisory tracking; registry audit results do not replace review",
     "Four external-resource tests remain ignored; existing compiler warnings remain",
     "Existing public terminal preview assets and Homebrew release have not been replaced"
-  ]
+  ],
+  "verified_source_commit": "1eeee32bf94e8e491ccbd5e37b2537d4e6b787a9",
+  "subsequent_change": "Rust workspace formatting only; pre-push workspace tests rerun"
 }

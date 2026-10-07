@@ -35,5 +35,7 @@
     "Browser history test requires Chrome, Node 22 and a preview server on 127.0.0.1:4173",
     "Desktop build is local and has not been published"
   ],
-  "dependency_verification_report": "dependency-verification.json"
+  "dependency_verification_report": "dependency-verification.json",
+  "verified_source_commit": "1eeee32bf94e8e491ccbd5e37b2537d4e6b787a9",
+  "subsequent_change": "Rust workspace formatting only; pre-push workspace tests rerun"
 }

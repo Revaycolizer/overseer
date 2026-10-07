@@ -25,5 +25,7 @@
   ],
   "backend_binary_sha256": "4d52040d1e2af0853dcd118505c764b33aff03424c89c6c46e91763633a2c452",
   "desktop_binary_sha256": "431f005b8859d990292e25e57a261f68eb05864ebf78a6b6fa3d53a1986ddb54",
-  "dependency_verification_report": "dependency-verification.json"
+  "dependency_verification_report": "dependency-verification.json",
+  "verified_source_commit": "1eeee32bf94e8e491ccbd5e37b2537d4e6b787a9",
+  "subsequent_change": "Rust workspace formatting only; pre-push workspace tests rerun"
 }
