@@ -90,12 +90,35 @@
       "root": "strict audit passed; zero vulnerabilities or warnings",
       "desktop": "strict audit passed; zero vulnerabilities or warnings",
       "local_patches": "Documented under vendor/ and verified with compatibility tests"
+    },
+    "latest_source_ci": {
+      "checked_on": "2026-10-07",
+      "ci_run": "https://github.com/Revaycolizer/overseer/actions/runs/37608353428",
+      "passed": [
+        "Linux cargo check",
+        "Mac cargo check",
+        "Mac desktop build",
+        "security audit"
+      ],
+      "failed": [
+        "Windows library tests"
+      ],
+      "sdk_run": "https://github.com/Revaycolizer/overseer/actions/runs/37608353487",
+      "sdk_failure": "Python 3.10: Attachment forward reference raises NameError during collection; historical local SDK test results do not establish current CI success"
+    },
+    "free_preview_packaging": {
+      "checked_on": "2026-10-07",
+      "desktop_report": "desktop-preview-verification.json",
+      "desktop_zip_bytes": 11170260,
+      "desktop": "Ad hoc signatures survived ZIP round trip; corrupted bundled backend rejected",
+      "terminal": "Refreshed local Apple Silicon package passed install, reinstall, metadata, invalid arguments, corruption rejection and uninstall",
+      "published": "Existing terminal preview remains available; new desktop ZIP and refreshed terminal archive prepared locally only"
     }
   },
   "remaining_blockers": [
     {
       "issue": "Mac bundle is ad hoc signed and not notarized",
-      "required_work": "Developer ID signing, notarization and clean-machine install acceptance"
+      "required_work": "Deferred for the free preview channel; remains required for a Developer ID signed/notarized Mac release. Clean-machine downloaded preview installation remains unverified."
     },
     {
       "issue": "Acceptance coverage is incomplete",
@@ -103,9 +126,19 @@
     }
   ],
   "known_limits": [
-    "Public terminal preview published; general product launch remains blocked",
+    "Free terminal preview is published; local Mac desktop preview packaging is available. General product launch remains blocked.",
     "Four tests requiring optional external resources remain ignored",
     "Existing compiler warnings remain",
     "Strict dependency audits cover both release lockfiles; local patches are tracked under vendor/"
-  ]
+  ],
+  "distribution_plan": {
+    "decided_on": "2026-10-07",
+    "primary_channel": "Free public terminal preview",
+    "mac_desktop_channel": "Ad hoc signed, unnotarized Apple Silicon preview; local ZIP preparation only",
+    "apple_membership": "Deferred; no paid membership or organization certificate assumed",
+    "terminal_install": "brew install Jeccoman/tap/overseer",
+    "desktop_packaging": "python3 scripts/package-macos-preview.py",
+    "general_release_ready": false,
+    "installation_guide": "../packaging/desktop/README.txt"
+  }
 }

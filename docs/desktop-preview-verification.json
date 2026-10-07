@@ -1,0 +1,23 @@
+{
+  "archive": "overseer-desktop-v0.1.1-macos-arm64-preview.zip",
+  "sha256": "1b7c078ba0105bb7415608d6d603ed2d233122fba4070794e9db14e89fae1983",
+  "bytes": 11170260,
+  "desktop_version": "0.1.1",
+  "platform": "macOS Apple Silicon",
+  "channel": "preview",
+  "signature": "ad hoc; no Developer ID",
+  "notarized": false,
+  "published": false,
+  "checks": [
+    "app and bundled backend are arm64",
+    "code signatures verify before and after ZIP extraction",
+    "corrupted bundled backend rejected before packaging"
+  ],
+  "limitations": [
+    "Clean-machine downloaded installation has not been verified",
+    "Packaging is not functional acceptance testing"
+  ],
+  "checked_on": "2026-10-07",
+  "artifact_path": "../dist/desktop-preview/overseer-desktop-v0.1.1-macos-arm64-preview.zip",
+  "build_provenance": "Existing locally verified ad hoc bundle; this operation packages it without rebuilding"
+}

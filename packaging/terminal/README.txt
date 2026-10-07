@@ -14,6 +14,7 @@ For a remote daemon: overseer-tui --remote --url http://127.0.0.1:8080
 
 Linux build targets Ubuntu 24.04 or compatible systems; audio requires libasound2.
 Mac builds are currently unsigned/not notarized: this is a preview release.
-Public launch remains subject to the launch-readiness review.
+This is the free terminal preview channel; a general release remains subject
+to the launch-readiness review.
 Uninstall: remove overseer-tui from the install directory. This keeps your data.
 Source and issues: https://github.com/Revaycolizer/overseer
