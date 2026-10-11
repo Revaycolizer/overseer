@@ -1,0 +1,24 @@
+{
+  "checked_on": "2026-10-11",
+  "platform": "macOS Apple Silicon",
+  "fresh_desktop_build": "passed: pnpm tauri build --bundles app -- --locked",
+  "app": "desktop-ui/src-tauri/target/release/bundle/macos/Overseer.app",
+  "app_executable_sha256": "cb9f744238994564ff02e38a476b8d0c8df577d36531d958612416e0ce6cef0d",
+  "bundled_backend_sha256": "7cee326018d4d6af2e06a7efe611348a1a61c6c7f764c417715111e63d7da897",
+  "signature": "ad hoc; fresh build is not TestFlight-uploadable",
+  "profile_validation_tests": "2 tests passed; valid distinct App ID prefix and 12 invalid-profile cases",
+  "packager_preflight": "Correctly stopped for missing Mac Installer Distribution identity",
+  "uploadable_package_created": false,
+  "uploaded": false,
+  "required_assets": [
+    "Mac App Store Connect provisioning profile matching co.tz.skyconnect.overseer and the distribution certificate",
+    "Mac Installer Distribution certificate with private key from the same authorized team",
+    "App Store Connect macOS app record for Overseer"
+  ],
+  "remaining_acceptance": [
+    "Sandboxed backend/network/persistence and native UI",
+    "Restricted filesystem, external tools, voice, automation and launch-on-login behavior",
+    "Publisher export-compliance declaration",
+    "Apple upload validation and TestFlight processing"
+  ]
+}

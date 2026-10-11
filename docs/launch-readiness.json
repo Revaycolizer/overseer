@@ -113,6 +113,14 @@
       "desktop": "Ad hoc signatures survived ZIP round trip; corrupted bundled backend rejected",
       "terminal": "Refreshed local Apple Silicon package passed install, reinstall, metadata, invalid arguments, corruption rejection and uninstall",
       "published": "Existing terminal preview remains available; new desktop ZIP and refreshed terminal archive prepared locally only"
+    },
+    "testflight_macos": {
+      "report": "testflight-build-verification.json",
+      "checked_on": "2026-10-11",
+      "desktop_rebuild": "passed; ad hoc signed only",
+      "uploadable_package_created": false,
+      "missing": "Overseer Mac App Store Connect profile and Mac Installer Distribution identity",
+      "sandbox_runtime_acceptance": "unverified"
     }
   },
   "remaining_blockers": [
