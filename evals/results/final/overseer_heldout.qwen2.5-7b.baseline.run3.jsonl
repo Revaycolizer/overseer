@@ -1,0 +1,30 @@
+{"id":"ho-none-sqrt","latency_ms":1387,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"square root of 144"},"name":"web_search"}]}
+{"id":"ho-none-capital","latency_ms":1278,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"capital of Kenya"},"name":"web_search"}]}
+{"id":"ho-none-define","latency_ms":1062,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"define latency"},"name":"web_search"}]}
+{"id":"ho-none-rewrite","latency_ms":1113,"model":"qwen2.5:7b","text":"I will inform you that I am at risk of being tardy, and I apologize in advance.","tool_calls":[]}
+{"id":"ho-none-thanks","latency_ms":1067,"model":"qwen2.5:7b","text":"Great! If you need any help in the future, feel free to ask. Have a nice day!","tool_calls":[]}
+{"id":"ho-none-code","latency_ms":4541,"model":"qwen2.5:7b","text":"To accomplish this task, we need to create a Python file with the required function. Let's start by creating a file named `reverse_string.py` and writing the function inside it.\n\nFirst, I will use `fs_write` to create the file `reverse_string.py` and write the Python code into it.\n","tool_calls":[{"arguments":{"content":"def reverse_string(s):\n    return s[::-1]","path":"~/reverse_string.py"},"name":"fs_write"}]}
+{"id":"ho-none-convert","latency_ms":3512,"model":"qwen2.5:7b","text":"To determine how many minutes are in 3.5 hours, we can multiply the number of hours by the number of minutes in an hour. There are 60 minutes in an hour. Let's calculate this.\n","tool_calls":[{"arguments":{"command":"echo $(echo \"3.5 * 60\" | bc)"},"name":"shell_exec"}]}
+{"id":"ho-none-advice","latency_ms":1182,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"tips for writing clear commit messages"},"name":"web_search"}]}
+{"id":"ho-none-swahili","latency_ms":1350,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"how to say thank you in Swahili"},"name":"web_search"}]}
+{"id":"ho-none-whoareyou","latency_ms":1841,"model":"qwen2.5:7b","text":"I'm here to assist you! Could you please tell me what you need help with? Are you trying to open a specific application, find information online, or perform a task on your computer?","tool_calls":[]}
+{"id":"ho-none-summarize","latency_ms":845,"model":"qwen2.5:7b","text":"The meeting was rescheduled from Monday to Wednesday due to the client's travel.","tool_calls":[]}
+{"id":"ho-none-compare","latency_ms":1271,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"difference between TCP and UDP in two sentences"},"name":"web_search"}]}
+{"id":"ho-hk-paste","latency_ms":764,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"ho-hk-newtab","latency_ms":1015,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+t"},"name":"hotkey"}]}
+{"id":"ho-hk-undo","latency_ms":2609,"model":"qwen2.5:7b","text":"To undo your last edit, we first need to determine what application or file you were editing. Since we don't have a record of your previous actions, let's start by seeing what's currently open on your screen.\n\n","tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"ho-coords-double","latency_ms":755,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"ho-coords-move","latency_ms":1391,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"x":800,"y":450},"name":"move_mouse"}]}
+{"id":"ho-gui-findbutton","latency_ms":770,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"ho-sh-ip","latency_ms":1056,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"hostname -I"},"name":"shell_exec"}]}
+{"id":"ho-sh-processes","latency_ms":1817,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"top -o %CPU -n 1 | head -n 5","cwd":"/"},"name":"shell_exec"}]}
+{"id":"ho-sh-count","latency_ms":1629,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"ls -1 ~/Desktop | wc -l","cwd":"~"},"name":"shell_exec"}]}
+{"id":"ho-sh-uptime","latency_ms":2473,"model":"qwen2.5:7b","text":"To determine how long your computer has been running, we can check the system uptime. Let's use `shell_exec` to run a command that retrieves this information.\n","tool_calls":[{"arguments":{"command":"uptime -p"},"name":"shell_exec"}]}
+{"id":"ho-web-price","latency_ms":1093,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"current price of Bitcoin"},"name":"web_search"}]}
+{"id":"ho-web-docs","latency_ms":1207,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"Rust Vec::retain documentation"},"name":"web_search"}]}
+{"id":"ho-mem-save","latency_ms":2594,"model":"qwen2.5:7b","text":"To ensure that dark mode is enabled in as many apps as possible, we can start by opening System Preferences and navigating to the Dark Mode settings. Let's begin by opening System Preferences.\n\n","tool_calls":[{"arguments":{"target":"System Preferences"},"name":"app_open"}]}
+{"id":"ho-mem-ask","latency_ms":774,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"ho-app-music","latency_ms":988,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"target":"Music"},"name":"app_open"}]}
+{"id":"ho-fs-save","latency_ms":1432,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"content":"meeting at 3pm","path":"~/reminder.txt"},"name":"fs_write"}]}
+{"id":"ho-sched-weekly","latency_ms":1595,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"every_secs":604800,"goal":"/do clean_downloads"},"name":"schedule_goal"}]}
+{"id":"ho-time-tokyo","latency_ms":1098,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"current time in Tokyo"},"name":"web_search"}]}

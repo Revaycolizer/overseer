@@ -1,0 +1,30 @@
+{"id":"ho-none-sqrt","latency_ms":877,"model":"llama3.1:8b","text":"{\"name\": \"math\", \"parameters\": {\"x\": \"144\"}}","tool_calls":[]}
+{"id":"ho-none-capital","latency_ms":1556,"model":"llama3.1:8b","text":"Since this question is about general knowledge that can be answered directly without needing any tools, I'll provide the answer:\n\nThe capital of Kenya is Nairobi.","tool_calls":[]}
+{"id":"ho-none-define","latency_ms":942,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"latency"},"name":"recall"}]}
+{"id":"ho-none-rewrite","latency_ms":710,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"ho-none-thanks","latency_ms":926,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"user preferences"},"name":"recall"}]}
+{"id":"ho-none-code","latency_ms":2921,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"def reverse(s):\n    return s[::-1]\n\nif __name__ == '__main__':\n    print(reverse(input(\"Enter a string: \")))","path":"/tmp/reverse.py"},"name":"fs_write"}]}
+{"id":"ho-none-convert","latency_ms":1253,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"3.5 hours in minutes"},"name":"recall"}]}
+{"id":"ho-none-advice","latency_ms":981,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"commit message tips"},"name":"recall"}]}
+{"id":"ho-none-swahili","latency_ms":1127,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"thank you in Swahili"},"name":"recall"}]}
+{"id":"ho-none-whoareyou","latency_ms":702,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"ho-none-summarize","latency_ms":993,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"meeting date change"},"name":"recall"}]}
+{"id":"ho-none-compare","latency_ms":3780,"model":"llama3.1:8b","text":"No tool calls are necessary to answer this question directly. \n\nTCP (Transmission Control Protocol) and UDP (User Datagram Protocol) are two fundamental communication protocols used in the internet. The primary difference between them is that TCP ensures reliable data transfer by acknowledging and retransmitting lost packets, whereas UDP provides faster and more efficient data transfer but doesn't guarantee delivery or order of packets.","tool_calls":[]}
+{"id":"ho-hk-paste","latency_ms":1280,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+v","text":"hotkey"},"name":"type_text"}]}
+{"id":"ho-hk-newtab","latency_ms":1057,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+shift+t"},"name":"hotkey"}]}
+{"id":"ho-hk-undo","latency_ms":990,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+z"},"name":"hotkey"}]}
+{"id":"ho-coords-double","latency_ms":1697,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"button":"left","double":"true","x":"120","y":"640"},"name":"click"}]}
+{"id":"ho-coords-move","latency_ms":1166,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"x":"800","y":"450"},"name":"move_mouse"}]}
+{"id":"ho-gui-findbutton","latency_ms":2608,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"ho-sh-ip","latency_ms":2850,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ip addr show | grep -o 'inet [0-9]*.[0-9]*.[0-9]*.[0-9]*' | awk '{ print $2}'","cwd":"/home/user"},"name":"shell_exec"}]}
+{"id":"ho-sh-processes","latency_ms":1956,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"top -b -n 1 | awk '{print $9}' | sort -rn | head -n 1"},"name":"shell_exec"}]}
+{"id":"ho-sh-count","latency_ms":1455,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ls ~/Desktop | wc -l","cwd":"~/Desktop"},"name":"shell_exec"}]}
+{"id":"ho-sh-uptime","latency_ms":1115,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"uptime","cwd":"~"},"name":"shell_exec"}]}
+{"id":"ho-web-price","latency_ms":1016,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"Bitcoin current price"},"name":"web_search"}]}
+{"id":"ho-web-docs","latency_ms":1153,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"Rust documentation Vec::retain"},"name":"web_search"}]}
+{"id":"ho-mem-save","latency_ms":943,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"dark mode preference"},"name":"recall"}]}
+{"id":"ho-mem-ask","latency_ms":851,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"editor"},"name":"recall"}]}
+{"id":"ho-app-music","latency_ms":921,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Music"},"name":"app_open"}]}
+{"id":"ho-fs-save","latency_ms":1586,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"meeting at 3pm","path":"~/reminder.txt"},"name":"fs_write"}]}
+{"id":"ho-sched-weekly","latency_ms":1832,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"every_secs":"604800","goal":"shell_exec('rm -rf /path/to/Downloads/*')"},"name":"schedule_goal"}]}
+{"id":"ho-time-tokyo","latency_ms":1539,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.timeanddate.com/worldclock/Japan/Tokyo"},"name":"read_webpage"}]}

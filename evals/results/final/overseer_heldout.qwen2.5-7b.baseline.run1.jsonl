@@ -1,0 +1,30 @@
+{"id":"ho-none-sqrt","latency_ms":1229,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"square root of 144"},"name":"web_search"}]}
+{"id":"ho-none-capital","latency_ms":1045,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"capital of Kenya"},"name":"web_search"}]}
+{"id":"ho-none-define","latency_ms":1029,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"define latency"},"name":"web_search"}]}
+{"id":"ho-none-rewrite","latency_ms":1018,"model":"qwen2.5:7b","text":"The sentence rewritten in a more formal tone would be: 'I regret that I will be late.'","tool_calls":[]}
+{"id":"ho-none-thanks","latency_ms":1068,"model":"qwen2.5:7b","text":"Great! If you need any assistance in the future, feel free to ask. Have a nice day!","tool_calls":[]}
+{"id":"ho-none-code","latency_ms":4562,"model":"qwen2.5:7b","text":"To write a Python function that reverses a string, we first need to create a file to store the Python code. Let's create a file named `reverse_string.py` and write the function inside it.\n\nFirst, I will use `fs_write` to create the file and write the Python code.\n","tool_calls":[{"arguments":{"content":"# reverse_string.py\ndef reverse_string(s):\n    return s[::-1]","path":"~/reverse_string.py"},"name":"fs_write"}]}
+{"id":"ho-none-convert","latency_ms":4208,"model":"qwen2.5:7b","text":"To answer this question, we don't need to use any of the provided tools. We can calculate it directly.\n\n1 hour is equal to 60 minutes, so 3.5 hours would be:\n\\[ 3.5 \\text{ hours} \\times 60 \\text{ minutes/hour} = 210 \\text{ minutes} \\]\n\nTherefore, there are 210 minutes in 3.5 hours.","tool_calls":[]}
+{"id":"ho-none-advice","latency_ms":1251,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"three tips for writing clear commit messages"},"name":"web_search"}]}
+{"id":"ho-none-swahili","latency_ms":1332,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"how to say thank you in Swahili"},"name":"web_search"}]}
+{"id":"ho-none-whoareyou","latency_ms":1924,"model":"qwen2.5:7b","text":"I'm happy to help! Could you please provide more details on what you need assistance with? Are you looking to open a specific application, search for something online, or perform a task on your computer?","tool_calls":[]}
+{"id":"ho-none-summarize","latency_ms":851,"model":"qwen2.5:7b","text":"The meeting was rescheduled from Monday to Wednesday due to the client's travel.","tool_calls":[]}
+{"id":"ho-none-compare","latency_ms":1134,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"difference between TCP and UDP"},"name":"web_search"}]}
+{"id":"ho-hk-paste","latency_ms":1104,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"xsel --output"},"name":"shell_exec"}]}
+{"id":"ho-hk-newtab","latency_ms":1035,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+t"},"name":"hotkey"}]}
+{"id":"ho-hk-undo","latency_ms":2333,"model":"qwen2.5:7b","text":"To undo your last edit, we first need to identify what application or file you were working on. Let's start by checking the open windows to see which application might be active.\n\n","tool_calls":[{"arguments":{},"name":"list_windows"}]}
+{"id":"ho-coords-double","latency_ms":764,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"ho-coords-move","latency_ms":1381,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"x":800,"y":450},"name":"move_mouse"}]}
+{"id":"ho-gui-findbutton","latency_ms":767,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"ho-sh-ip","latency_ms":1047,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"hostname -I"},"name":"shell_exec"}]}
+{"id":"ho-sh-processes","latency_ms":1779,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"top -o %CPU -n 1 | head -n 5","cwd":"/"},"name":"shell_exec"}]}
+{"id":"ho-sh-count","latency_ms":1342,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"ls -1 ~/","cwd":"~/Desktop"},"name":"shell_exec"}]}
+{"id":"ho-sh-uptime","latency_ms":969,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"uptime"},"name":"shell_exec"}]}
+{"id":"ho-web-price","latency_ms":1097,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"current price of Bitcoin"},"name":"web_search"}]}
+{"id":"ho-web-docs","latency_ms":1186,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"Rust Vec::retain documentation"},"name":"web_search"}]}
+{"id":"ho-mem-save","latency_ms":1139,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"content":"user_preference: dark_mode"},"name":"remember"}]}
+{"id":"ho-mem-ask","latency_ms":768,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"ho-app-music","latency_ms":962,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"target":"Music"},"name":"app_open"}]}
+{"id":"ho-fs-save","latency_ms":1429,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"content":"meeting at 3pm","path":"~/reminder.txt"},"name":"fs_write"}]}
+{"id":"ho-sched-weekly","latency_ms":1636,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"every_secs":604800,"goal":"/do clean_downloads"},"name":"schedule_goal"}]}
+{"id":"ho-time-tokyo","latency_ms":1092,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"current time in Tokyo"},"name":"web_search"}]}

@@ -1,0 +1,30 @@
+{"id":"ho-none-sqrt","latency_ms":1488,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"python -c 'import math; print(math.sqrt(144))'"},"name":"shell_exec"}]}
+{"id":"ho-none-capital","latency_ms":1290,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://en.wikipedia.org/wiki/Kenya"},"name":"read_webpage"}]}
+{"id":"ho-none-define","latency_ms":1306,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://en.wikipedia.org/wiki/Latency"},"name":"read_webpage"}]}
+{"id":"ho-none-rewrite","latency_ms":1247,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"text":"I apologize, but I anticipate arriving late."},"name":"type_text"}]}
+{"id":"ho-none-thanks","latency_ms":1239,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"Goal completed: user satisfied with previous tasks."},"name":"remember"}]}
+{"id":"ho-none-code","latency_ms":1843,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"def reverse(s): return s[::-1]\n","path":"/path/to/str_reverse.py"},"name":"fs_write"}]}
+{"id":"ho-none-convert","latency_ms":1676,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"echo \"scale=0; 3.5 * 60\" | bc -l"},"name":"shell_exec"}]}
+{"id":"ho-none-advice","latency_ms":1579,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.gitkraken.com/blog/the-art-of-writing-good-commit-messages"},"name":"read_webpage"}]}
+{"id":"ho-none-swahili","latency_ms":1125,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"thank you in Swahili"},"name":"web_search"}]}
+{"id":"ho-none-whoareyou","latency_ms":1168,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.example.com/help"},"name":"read_webpage"}]}
+{"id":"ho-none-summarize","latency_ms":997,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"meeting rescheduled date"},"name":"recall"}]}
+{"id":"ho-none-compare","latency_ms":1530,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://en.wikipedia.org/wiki/TCP/IP#TCP_vs._UDP"},"name":"read_webpage"}]}
+{"id":"ho-hk-paste","latency_ms":894,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"text":"paste"},"name":"type_text"}]}
+{"id":"ho-hk-newtab","latency_ms":965,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+t"},"name":"hotkey"}]}
+{"id":"ho-hk-undo","latency_ms":1382,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"git reset HEAD^","cwd":"/home/user/project"},"name":"shell_exec"}]}
+{"id":"ho-coords-double","latency_ms":1654,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"button":"left","double":"true","x":"120","y":"640"},"name":"click"}]}
+{"id":"ho-coords-move","latency_ms":1167,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"x":"800","y":"450"},"name":"move_mouse"}]}
+{"id":"ho-gui-findbutton","latency_ms":3891,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"see"},{"arguments":{},"name":"screenshot"},{"arguments":{"button":"left","x":123,"y":456},"name":"click"}]}
+{"id":"ho-sh-ip","latency_ms":1233,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ip addr show","cwd":"/"},"name":"shell_exec"}]}
+{"id":"ho-sh-processes","latency_ms":1720,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ps -eo pid,pcpu,comm | sort -k 2 -rn | head"},"name":"shell_exec"}]}
+{"id":"ho-sh-count","latency_ms":1366,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ls -1 ~/Desktop","cwd":"~/Desktop"},"name":"shell_exec"}]}
+{"id":"ho-sh-uptime","latency_ms":1130,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"uptime","cwd":"/"},"name":"shell_exec"}]}
+{"id":"ho-web-price","latency_ms":1400,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.coindesk.com/bitcoin-price/"},"name":"read_webpage"}]}
+{"id":"ho-web-docs","latency_ms":1120,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"Rust documentation Vec::retain"},"name":"web_search"}]}
+{"id":"ho-mem-save","latency_ms":1085,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"prefer dark mode in every app"},"name":"remember"}]}
+{"id":"ho-mem-ask","latency_ms":851,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"editor"},"name":"recall"}]}
+{"id":"ho-app-music","latency_ms":930,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Music"},"name":"app_open"}]}
+{"id":"ho-fs-save","latency_ms":1404,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"meeting at 3pm","path":"~/reminder.txt"},"name":"fs_write"}]}
+{"id":"ho-sched-weekly","latency_ms":2511,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"every_secs":604800,"goal":"/do shell_exec('rm -rf ~/Downloads/*.tmp; rm -rf ~/Downloads/*.part; rm -rf ~/Downloads/*.bak')"},"name":"schedule_goal"}]}
+{"id":"ho-time-tokyo","latency_ms":1436,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.google.com/search?q=currentTime+Tokyo"},"name":"read_webpage"}]}

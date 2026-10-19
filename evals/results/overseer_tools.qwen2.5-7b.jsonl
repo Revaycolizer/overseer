@@ -1,0 +1,40 @@
+{"id":"files-list-downloads","latency_ms":1603,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"ls -1 ~/Downloads","cwd":"~/Downloads"},"name":"shell_exec"}]}
+{"id":"files-disk-usage","latency_ms":1159,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"df -h /"},"name":"shell_exec"}]}
+{"id":"files-write-note","latency_ms":1549,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"content":"buy milk","path":"~/notes/todo.txt"},"name":"fs_write"}]}
+{"id":"files-find-pdfs","latency_ms":1497,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"find ~/Documents -type f -name '*.pdf'"},"name":"shell_exec"}]}
+{"id":"files-mkdir","latency_ms":1085,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"mkdir ~/projects"},"name":"shell_exec"}]}
+{"id":"files-read","latency_ms":1142,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"cat /etc/hosts"},"name":"shell_exec"}]}
+{"id":"apps-open-safari","latency_ms":1161,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"target":"Safari"},"name":"app_open"}]}
+{"id":"apps-open-url","latency_ms":1229,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"target":"https://supabase.com"},"name":"app_open"}]}
+{"id":"apps-list-windows","latency_ms":811,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"list_windows"}]}
+{"id":"apps-focus-terminal","latency_ms":983,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"target":"Terminal"},"name":"focus_window"}]}
+{"id":"web-search-news","latency_ms":1075,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"latest PostgreSQL release"},"name":"web_search"}]}
+{"id":"web-read-page","latency_ms":1154,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"url":"https://example.com"},"name":"read_webpage"}]}
+{"id":"web-weather","latency_ms":1241,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"weather in Dar es Salaam today"},"name":"web_search"}]}
+{"id":"web-browser-session","latency_ms":1284,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"url":"https://news.ycombinator.com"},"name":"browser_open"}]}
+{"id":"gui-screenshot","latency_ms":800,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"screenshot"}]}
+{"id":"gui-look-first","latency_ms":758,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"gui-type","latency_ms":1067,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"text":"hello world"},"name":"type_text"}]}
+{"id":"gui-press-enter","latency_ms":970,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"key":"enter"},"name":"press_key"}]}
+{"id":"gui-scroll","latency_ms":929,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"amount":5},"name":"scroll"}]}
+{"id":"gui-click-coords","latency_ms":767,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"mem-remember-pref","latency_ms":1184,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"content":"My favorite programming language is Rust."},"name":"remember"}]}
+{"id":"mem-remember-fact","latency_ms":1636,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"content":"The staging server IP is 10.0.0.12."},"name":"remember"}]}
+{"id":"mem-recall-pref","latency_ms":783,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"mem-recall-ip","latency_ms":775,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"sched-hourly","latency_ms":1585,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"every_secs":3600,"goal":"check_disk_space_and_alert"},"name":"schedule_goal"}]}
+{"id":"sched-daily","latency_ms":2164,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"every_secs":86400,"goal":"/do shell_exec command='tar -czf ~/projects_backup.tar.gz ~/projects'"},"name":"schedule_goal"}]}
+{"id":"sched-list","latency_ms":892,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"list_schedules"}]}
+{"id":"none-math","latency_ms":2821,"model":"qwen2.5:7b","text":"To calculate 17 times 23, we can use the shell to perform the multiplication or simply do it manually. Let's use the shell for this calculation.\n","tool_calls":[{"arguments":{"command":"echo $((17 * 23))"},"name":"shell_exec"}]}
+{"id":"none-greeting","latency_ms":1791,"model":"qwen2.5:7b","text":"Hello! I'm just a tool here to help with tasks on your computer. I don't have feelings, but I'm ready to assist you. How can I help you today?","tool_calls":[]}
+{"id":"none-explain","latency_ms":1141,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"what is a hash map"},"name":"web_search"}]}
+{"id":"none-translate","latency_ms":1188,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"good morning in Swahili"},"name":"web_search"}]}
+{"id":"none-joke","latency_ms":1179,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"short joke about databases"},"name":"web_search"}]}
+{"id":"tricky-open-file","latency_ms":1063,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"target":"~/Desktop/report.pdf"},"name":"app_open"}]}
+{"id":"tricky-git-status","latency_ms":1789,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"cd ~/Desktop/overseer && git status","cwd":"~/Desktop/overseer"},"name":"shell_exec"}]}
+{"id":"tricky-remember-not-search","latency_ms":1008,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"content":"Buy bread."},"name":"remember"}]}
+{"id":"tricky-hotkey","latency_ms":760,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"tricky-browser-click","latency_ms":1026,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"text":"Sign in"},"name":"browser_click"}]}
+{"id":"tricky-read-browser","latency_ms":809,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"browser_read"}]}
+{"id":"tricky-cwd","latency_ms":1052,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"ls /tmp"},"name":"shell_exec"}]}
+{"id":"tricky-system-info","latency_ms":1182,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"sw_vers -productVersion"},"name":"shell_exec"}]}

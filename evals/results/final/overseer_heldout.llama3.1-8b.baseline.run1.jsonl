@@ -1,0 +1,30 @@
+{"id":"ho-none-sqrt","latency_ms":1492,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.mathsisfun.com/calculator/square-root.html"},"name":"read_webpage"}]}
+{"id":"ho-none-capital","latency_ms":1308,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://en.wikipedia.org/wiki/Kenya"},"name":"read_webpage"}]}
+{"id":"ho-none-define","latency_ms":1452,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://en.wikipedia.org/wiki/Latency_(engineering)"},"name":"read_webpage"}]}
+{"id":"ho-none-rewrite","latency_ms":1375,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.grammarly.com/text-editor/"},"name":"read_webpage"}]}
+{"id":"ho-none-thanks","latency_ms":1088,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"The user has finished their session"},"name":"remember"}]}
+{"id":"ho-none-code","latency_ms":1954,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"def reverse_string(s):\n    return s[::-1]\n","path":"/home/user/reverse_string.py"},"name":"fs_write"}]}
+{"id":"ho-none-convert","latency_ms":1940,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"echo $(echo \"3.5 hours\" | awk '{print $1 * 60}')","cwd":"/"},"name":"shell_exec"}]}
+{"id":"ho-none-advice","latency_ms":2109,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://git-scm.com/book/en/v2/Distributed-Git-Working-with-the-Commit-History#_commit_messages"},"name":"read_webpage"}]}
+{"id":"ho-none-swahili","latency_ms":1295,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"how do you say thank you in swahili"},"name":"web_search"}]}
+{"id":"ho-none-whoareyou","latency_ms":690,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"ho-none-summarize","latency_ms":948,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"meeting schedule change"},"name":"recall"}]}
+{"id":"ho-none-compare","latency_ms":1418,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://en.wikipedia.org/wiki/Transport_Protocol"},"name":"read_webpage"}]}
+{"id":"ho-hk-paste","latency_ms":1019,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"text":"get_clipboard"},"name":"type_text"}]}
+{"id":"ho-hk-newtab","latency_ms":992,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+t"},"name":"hotkey"}]}
+{"id":"ho-hk-undo","latency_ms":1311,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"git checkout -- .","cwd":"~"},"name":"shell_exec"}]}
+{"id":"ho-coords-double","latency_ms":1719,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"button":"left","double":"true","x":"120","y":"640"},"name":"click"}]}
+{"id":"ho-coords-move","latency_ms":1224,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"x":"800","y":"450"},"name":"move_mouse"}]}
+{"id":"ho-gui-findbutton","latency_ms":4885,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"see"},{"arguments":{},"name":"see"},{"arguments":{"button":"left","x":432,"y":720},"name":"see"}]}
+{"id":"ho-sh-ip","latency_ms":1253,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ip addr show","cwd":"/"},"name":"shell_exec"}]}
+{"id":"ho-sh-processes","latency_ms":1501,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ps -eo pcpu,pid,comm","cwd":"/"},"name":"shell_exec"}]}
+{"id":"ho-sh-count","latency_ms":1450,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ls ~/Desktop | wc -l","cwd":"~/Desktop"},"name":"shell_exec"}]}
+{"id":"ho-sh-uptime","latency_ms":1298,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"cat /proc/uptime","cwd":"/"},"name":"shell_exec"}]}
+{"id":"ho-web-price","latency_ms":1401,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.google.com/search?q=bitcoin+price"},"name":"read_webpage"}]}
+{"id":"ho-web-docs","latency_ms":1115,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"Rust documentation Vec::retain"},"name":"web_search"}]}
+{"id":"ho-mem-save","latency_ms":906,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Preferences"},"name":"app_open"}]}
+{"id":"ho-mem-ask","latency_ms":846,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"editor"},"name":"recall"}]}
+{"id":"ho-app-music","latency_ms":881,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Music"},"name":"app_open"}]}
+{"id":"ho-fs-save","latency_ms":1390,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"meeting at 3pm","path":"~/reminder.txt"},"name":"fs_write"}]}
+{"id":"ho-sched-weekly","latency_ms":1586,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"rm -rf ~/Downloads/* && mkdir ~/Downloads","cwd":"~/Downloads"},"name":"shell_exec"}]}
+{"id":"ho-time-tokyo","latency_ms":1449,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.timeanddate.com/worldclock/Tokyo"},"name":"read_webpage"}]}

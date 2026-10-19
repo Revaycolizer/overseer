@@ -1,0 +1,40 @@
+{"id":"files-list-downloads","latency_ms":5110,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ls ~/,Downloads/*.txt","cwd":"~/Downloads"},"name":"shell_exec"}]}
+{"id":"files-disk-usage","latency_ms":1229,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"df -h","cwd":"/"},"name":"shell_exec"}]}
+{"id":"files-write-note","latency_ms":1334,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"buy milk","path":"~/notes/todo.txt"},"name":"fs_write"}]}
+{"id":"files-find-pdfs","latency_ms":1562,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"find ~/Documents -type f -name *.pdf","cwd":"~"},"name":"shell_exec"}]}
+{"id":"files-mkdir","latency_ms":1207,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"mkdir ~/projects","cwd":"~"},"name":"shell_exec"}]}
+{"id":"files-read","latency_ms":1339,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"cat /etc/hosts","cwd":"/etc"},"name":"shell_exec"}]}
+{"id":"apps-open-safari","latency_ms":888,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Safari"},"name":"app_open"}]}
+{"id":"apps-open-url","latency_ms":1090,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://supabase.com"},"name":"browser_open"}]}
+{"id":"apps-list-windows","latency_ms":717,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"list_windows"}]}
+{"id":"apps-focus-terminal","latency_ms":907,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Terminal"},"name":"focus_window"}]}
+{"id":"web-search-news","latency_ms":1036,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"PostgreSQL latest release"},"name":"web_search"}]}
+{"id":"web-read-page","latency_ms":1084,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://example.com"},"name":"read_webpage"}]}
+{"id":"web-weather","latency_ms":1126,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"Dar es Salaam weather today"},"name":"web_search"}]}
+{"id":"web-browser-session","latency_ms":1210,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://news.ycombinator.com"},"name":"browser_open"}]}
+{"id":"gui-screenshot","latency_ms":715,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"screenshot"}]}
+{"id":"gui-look-first","latency_ms":5461,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"see"},{"arguments":{"button":"left","x":"x","y":"y"},"name":"screenshot"}]}
+{"id":"gui-type","latency_ms":949,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"text":"hello world"},"name":"type_text"}]}
+{"id":"gui-press-enter","latency_ms":905,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"key":"Enter"},"name":"press_key"}]}
+{"id":"gui-scroll","latency_ms":1158,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"amount":"5","direction":"down"},"name":"scroll"}]}
+{"id":"gui-click-coords","latency_ms":1705,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"button":"left","double":"False","x":"400","y":"300"},"name":"click"}]}
+{"id":"mem-remember-pref","latency_ms":890,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"Rust"},"name":"remember"}]}
+{"id":"mem-remember-fact","latency_ms":1400,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"the staging server IP is 10.0.0.12"},"name":"remember"}]}
+{"id":"mem-recall-pref","latency_ms":958,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"favorite programming language"},"name":"recall"}]}
+{"id":"mem-recall-ip","latency_ms":991,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"staging server IP"},"name":"recall"}]}
+{"id":"sched-hourly","latency_ms":1548,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"every_secs":"3600","goal":"check disk space and warn if low"},"name":"schedule_goal"}]}
+{"id":"sched-daily","latency_ms":1381,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"every_secs":"86400","goal":"backup ~/projects"},"name":"schedule_goal"}]}
+{"id":"sched-list","latency_ms":755,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"list_schedules"}]}
+{"id":"none-math","latency_ms":982,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"17 times 23"},"name":"recall"}]}
+{"id":"none-greeting","latency_ms":980,"model":"llama3.1:8b","text":"I'm just a language model, but I can respond in a friendly and helpful way.","tool_calls":[]}
+{"id":"none-explain","latency_ms":987,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"definition of hash map"},"name":"recall"}]}
+{"id":"none-translate","latency_ms":1124,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"Swahili translation of good morning"},"name":"recall"}]}
+{"id":"none-joke","latency_ms":944,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"short database joke"},"name":"recall"}]}
+{"id":"tricky-open-file","latency_ms":989,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"~/Desktop/report.pdf"},"name":"app_open"}]}
+{"id":"tricky-git-status","latency_ms":1520,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"git status ~/Desktop/overseer","cwd":"~/Desktop"},"name":"shell_exec"}]}
+{"id":"tricky-remember-not-search","latency_ms":900,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"Buy bread"},"name":"remember"}]}
+{"id":"tricky-hotkey","latency_ms":949,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+c"},"name":"hotkey"}]}
+{"id":"tricky-browser-click","latency_ms":4991,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"browser_read"},{"arguments":{},"name":"see"},{"arguments":{"button":"left","double":"false","x":"123","y":"456"},"name":"click"}]}
+{"id":"tricky-read-browser","latency_ms":736,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"browser_read"}]}
+{"id":"tricky-cwd","latency_ms":1368,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ls -l /tmp","cwd":"/tmp"},"name":"shell_exec"}]}
+{"id":"tricky-system-info","latency_ms":990,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"sw_vers"},"name":"shell_exec"}]}

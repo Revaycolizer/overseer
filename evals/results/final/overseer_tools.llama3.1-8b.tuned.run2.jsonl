@@ -1,0 +1,40 @@
+{"id":"files-list-downloads","latency_ms":1172,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ls Downloads","cwd":"~"},"name":"shell_exec"}]}
+{"id":"files-disk-usage","latency_ms":1214,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"df -h","cwd":"/"},"name":"shell_exec"}]}
+{"id":"files-write-note","latency_ms":1293,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"buy milk","path":"~/notes/todo.txt"},"name":"fs_write"}]}
+{"id":"files-find-pdfs","latency_ms":1462,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"find ~/Documents -name *.pdf","cwd":"~/Documents"},"name":"shell_exec"}]}
+{"id":"files-mkdir","latency_ms":1226,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"mkdir ~/projects","cwd":"~"},"name":"shell_exec"}]}
+{"id":"files-read","latency_ms":1300,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"cat /etc/hosts","cwd":"/"},"name":"shell_exec"}]}
+{"id":"apps-open-safari","latency_ms":884,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Safari"},"name":"app_open"}]}
+{"id":"apps-open-url","latency_ms":1079,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"https://supabase.com"},"name":"app_open"}]}
+{"id":"apps-list-windows","latency_ms":715,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"list_windows"}]}
+{"id":"apps-focus-terminal","latency_ms":921,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Terminal"},"name":"focus_window"}]}
+{"id":"web-search-news","latency_ms":988,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"latest PostgreSQL release"},"name":"web_search"}]}
+{"id":"web-read-page","latency_ms":1110,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://example.com"},"name":"read_webpage"}]}
+{"id":"web-weather","latency_ms":1145,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"Dar es Salaam weather today"},"name":"web_search"}]}
+{"id":"web-browser-session","latency_ms":1219,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://news.ycombinator.com"},"name":"browser_open"}]}
+{"id":"gui-screenshot","latency_ms":721,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"screenshot"}]}
+{"id":"gui-look-first","latency_ms":4330,"model":"llama3.1:8b","text":"} \n\nNote: I will see the screen first to find the coordinates of the Submit button.\n\nAfter getting the coordinates, I will provide the next step.\n\nAssuming I see the screen and get the coordinates (x, y), I would proceed with:\n\n{\"name\": \"click\", \"parameters\": {\"x\": x, \"y\": y, \"button\": \"left\", \"double\": \"false\"}}","tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"gui-type","latency_ms":950,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"text":"hello world"},"name":"type_text"}]}
+{"id":"gui-press-enter","latency_ms":904,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"key":"Enter"},"name":"press_key"}]}
+{"id":"gui-scroll","latency_ms":1115,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"amount":"10","direction":"down"},"name":"scroll"}]}
+{"id":"gui-click-coords","latency_ms":1153,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"x":"400","y":"300"},"name":"click"}]}
+{"id":"mem-remember-pref","latency_ms":1176,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"My favorite programming language is Rust."},"name":"remember"}]}
+{"id":"mem-remember-fact","latency_ms":1468,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"The staging server IP is 10.0.0.12"},"name":"remember"}]}
+{"id":"mem-recall-pref","latency_ms":995,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"favorite programming language"},"name":"recall"}]}
+{"id":"mem-recall-ip","latency_ms":1018,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"staging server IP"},"name":"recall"}]}
+{"id":"sched-hourly","latency_ms":1678,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"every_secs":"3600","goal":"shell_exec command='df -h'"},"name":"schedule_goal"}]}
+{"id":"sched-daily","latency_ms":2184,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"every_secs":"86400","goal":"shell_exec(command='tar -czf ~/backup.tar.gz ~/projects', cwd='~/projects')"},"name":"schedule_goal"}]}
+{"id":"sched-list","latency_ms":792,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"list_schedules"}]}
+{"id":"none-math","latency_ms":1235,"model":"llama3.1:8b","text":"I can answer this question directly without using any tools. The result of multiplying 17 and 23 is:\n\n34","tool_calls":[]}
+{"id":"none-greeting","latency_ms":671,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"none-explain","latency_ms":973,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"hash map definition"},"name":"recall"}]}
+{"id":"none-translate","latency_ms":1131,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"Swahili translation of good morning"},"name":"recall"}]}
+{"id":"none-joke","latency_ms":685,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"tricky-open-file","latency_ms":991,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"~/Desktop/report.pdf"},"name":"app_open"}]}
+{"id":"tricky-git-status","latency_ms":1506,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"git status ~/Desktop/overseer","cwd":"~/Desktop"},"name":"shell_exec"}]}
+{"id":"tricky-remember-not-search","latency_ms":899,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"Buy bread"},"name":"remember"}]}
+{"id":"tricky-hotkey","latency_ms":942,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+c"},"name":"hotkey"}]}
+{"id":"tricky-browser-click","latency_ms":964,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"text":"Sign in"},"name":"browser_click"}]}
+{"id":"tricky-read-browser","latency_ms":733,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"browser_read"}]}
+{"id":"tricky-cwd","latency_ms":1262,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ls /tmp","cwd":"/tmp"},"name":"shell_exec"}]}
+{"id":"tricky-system-info","latency_ms":1219,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"sw_vers","cwd":"/"},"name":"shell_exec"}]}

@@ -1,0 +1,40 @@
+{"id":"files-list-downloads","latency_ms":1380,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ls Downloads","cwd":"/home/user/Downloads"},"name":"shell_exec"}]}
+{"id":"files-disk-usage","latency_ms":1201,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"df -h","cwd":"/"},"name":"shell_exec"}]}
+{"id":"files-write-note","latency_ms":1312,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"buy milk","path":"~/notes/todo.txt"},"name":"fs_write"}]}
+{"id":"files-find-pdfs","latency_ms":1581,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"find ~/Documents -type f -name *.pdf","cwd":"~/Documents"},"name":"shell_exec"}]}
+{"id":"files-mkdir","latency_ms":1205,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"mkdir ~/projects","cwd":"~"},"name":"shell_exec"}]}
+{"id":"files-read","latency_ms":1081,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"cat /etc/hosts"},"name":"shell_exec"}]}
+{"id":"apps-open-safari","latency_ms":882,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Safari"},"name":"app_open"}]}
+{"id":"apps-open-url","latency_ms":1066,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"https://supabase.com"},"name":"app_open"}]}
+{"id":"apps-list-windows","latency_ms":732,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"list_windows"}]}
+{"id":"apps-focus-terminal","latency_ms":893,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"Terminal"},"name":"focus_window"}]}
+{"id":"web-search-news","latency_ms":984,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"latest PostgreSQL release"},"name":"web_search"}]}
+{"id":"web-read-page","latency_ms":1088,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://example.com"},"name":"read_webpage"}]}
+{"id":"web-weather","latency_ms":1119,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"Dar es Salaam weather today"},"name":"web_search"}]}
+{"id":"web-browser-session","latency_ms":1247,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://news.ycombinator.com"},"name":"browser_open"}]}
+{"id":"gui-screenshot","latency_ms":722,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"screenshot"}]}
+{"id":"gui-look-first","latency_ms":5897,"model":"llama3.1:8b","text":"To answer the prompt, I will first call the `see` function to find the coordinates of the Submit button on the screen. Then, I will call the `click` function to click the button at those coordinates.\n\nHere are the function calls:\n\n1. {\"name\": \"see\", \"parameters\": {}}\n2. {\"name\": \"click\", \"parameters\": {\"x\": \"<x-coordinate>\", \"y\": \"<y-coordinate>\", \"button\": \"left\"}}\n\nThe `<x-coordinate>` and `<y-coordinate>` will be obtained from the result of the `see` function. \n\nPlease review and approve the function calls.","tool_calls":[]}
+{"id":"gui-type","latency_ms":940,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"text":"hello world"},"name":"type_text"}]}
+{"id":"gui-press-enter","latency_ms":927,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"key":"Enter"},"name":"press_key"}]}
+{"id":"gui-scroll","latency_ms":1158,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"amount":"10","direction":"down"},"name":"scroll"}]}
+{"id":"gui-click-coords","latency_ms":1389,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"button":"left","x":"400","y":"300"},"name":"click"}]}
+{"id":"mem-remember-pref","latency_ms":1155,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"Rust is my favorite programming language."},"name":"remember"}]}
+{"id":"mem-remember-fact","latency_ms":1390,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"the staging server IP is 10.0.0.12"},"name":"remember"}]}
+{"id":"mem-recall-pref","latency_ms":944,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"favorite programming language"},"name":"recall"}]}
+{"id":"mem-recall-ip","latency_ms":985,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"query":"staging server IP"},"name":"recall"}]}
+{"id":"sched-hourly","latency_ms":1771,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"every_secs":"3600","goal":"shell_exec(command=\"df -h\", cwd=\"/home/user\")"},"name":"schedule_goal"}]}
+{"id":"sched-daily","latency_ms":1678,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"rsync -avz ~/projects /mnt/backup","cwd":"/home/user"},"name":"shell_exec"}]}
+{"id":"sched-list","latency_ms":779,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"list_schedules"}]}
+{"id":"none-math","latency_ms":1123,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"echo 17 * 23"},"name":"shell_exec"}]}
+{"id":"none-greeting","latency_ms":670,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"none-explain","latency_ms":1292,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://en.wikipedia.org/wiki/Hash_map"},"name":"read_webpage"}]}
+{"id":"none-translate","latency_ms":1709,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.google.com/search?q=good+morning+in+swahili"},"name":"read_webpage"}]}
+{"id":"none-joke","latency_ms":1222,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"url":"https://www.xkcd.com"},"name":"read_webpage"}]}
+{"id":"tricky-open-file","latency_ms":990,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"target":"~/Desktop/report.pdf"},"name":"app_open"}]}
+{"id":"tricky-git-status","latency_ms":1665,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"git status ~/Desktop/overseer","cwd":"~/Desktop/overseer"},"name":"shell_exec"}]}
+{"id":"tricky-remember-not-search","latency_ms":956,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"content":"Buy bread"},"name":"remember"}]}
+{"id":"tricky-hotkey","latency_ms":2753,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"tricky-browser-click","latency_ms":4100,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"see"},{"arguments":{},"name":"browser_read"},{"arguments":{"button":"left","x":123,"y":456},"name":"click"}]}
+{"id":"tricky-read-browser","latency_ms":728,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{},"name":"browser_read"}]}
+{"id":"tricky-cwd","latency_ms":1258,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"ls /tmp","cwd":"/tmp"},"name":"shell_exec"}]}
+{"id":"tricky-system-info","latency_ms":1123,"model":"llama3.1:8b","text":null,"tool_calls":[{"arguments":{"command":"sw_vers -productVersion"},"name":"shell_exec"}]}
