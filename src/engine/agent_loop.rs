@@ -24,7 +24,7 @@ const MAX_STEPS: usize = 8;
 /// Clamp on observation text fed back to the model per tool call.
 const MAX_OBSERVATION: usize = 6_000;
 
-const SYSTEM_PROMPT: &str = "\
+pub const SYSTEM_PROMPT: &str = "\
 You are Overseer, an assistant that operates the user's computer to accomplish goals.
 You act by calling the provided tools. Work in small, verifiable steps: call a tool,
 read its result, then decide the next step.
