@@ -1,9 +1,0 @@
-{
-  "name": "greeter-supervisor",
-  "domain": "chat",
-  "description": "Routes greeting queries to the greeter agent",
-  "instructions": "Analyze the user's message. If it appears to be a greeting (hello, hi, hey, good morning, etc.), route to the greeter agent. For all other queries, respond indicating this supervisor only handles greetings.",
-  "model": "qwen2.5:7b",
-  "agents": ["greeter"],
-  "routing_priority": 1
-}

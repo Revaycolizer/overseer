@@ -50,7 +50,6 @@ def main():
             "labels": [],
             "published_at": manifest["built_at"],
             "summary": summary[:300] if summary else f"Automated release for {version}",
-            "notes_file": f"releases/notes/{tag}.md",
             "assets": []
         }
         registry["releases"].insert(0, release)

@@ -3,7 +3,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(clippy::missing_safety_doc)]
 #![allow(renamed_and_removed_lints)]
-#![doc = include_str!("../README.md")]
+//! Rust bindings for the GLib library.
 
 pub use bitflags;
 pub use ffi;

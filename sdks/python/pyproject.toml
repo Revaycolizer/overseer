@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "overseer-pysdk"
 version = "0.2.0"
 description = "Python client for the Overseer AI orchestration platform"
-readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
@@ -33,7 +32,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/revaycolizer/overseer"
 Repository = "https://github.com/revaycolizer/overseer"
-Documentation = "https://github.com/revaycolizer/overseer/blob/main/sdks/python/README.md"
+Documentation = "https://github.com/revaycolizer/overseer"
 
 [project.scripts]
 overseer = "overseer.__main__:cli"

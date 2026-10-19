@@ -39,7 +39,6 @@
       ],
       "published_at": "2026-07-18T00:00:00Z",
       "summary": "Overseer Kernel v0.1 (preview): deterministic policy enforcement, human approval gates, and full action tracing at a single governed execution chokepoint. Kernel crate independently verified; desktop integration in progress. No packaged binaries in this preview.",
-      "notes_file": "releases/notes/v0.1.5.md",
       "assets": []
     },
     {
@@ -56,7 +55,6 @@
       ],
       "published_at": "2026-05-08T21:18:03.7242068Z",
       "summary": "Automated release for 0.1.4",
-      "notes_file": "releases/notes/v0.1.4.md",
       "assets": [
         {
           "name": "Overseer-v0.1.4-windows-x64-setup.exe",
@@ -115,7 +113,6 @@
       ],
       "published_at": "2026-03-28T00:00:00Z",
       "summary": "Artifact-native workspace sessions, explicit work items, and more mature selector-first Windows desktop control.",
-      "notes_file": "releases/notes/v0.1.3.md",
       "assets": [
         {
           "name": "Overseer-v0.1.3-windows-x64-setup.exe",
@@ -172,7 +169,6 @@
       ],
       "published_at": "2026-03-25T00:00:00Z",
       "summary": "Native computer fast paths, reliable screenshot-to-chat rendering, and stronger machine-state inspection across the desktop operator flow.",
-      "notes_file": "releases/notes/v0.1.2.md",
       "assets": [
         {
           "name": "Overseer-v0.1.2-windows-x64-setup.exe",
@@ -215,7 +211,6 @@
       ],
       "published_at": "2026-03-23T00:00:00Z",
       "summary": "Computer supervision, approval-backed desktop control, runtime health checks, and sharper chat, trace, and workflow surfaces.",
-      "notes_file": "releases/notes/v0.1.1.md",
       "assets": [
         {
           "name": "Overseer-v0.1.1-windows-x64-setup.exe",
@@ -272,7 +267,6 @@
       ],
       "published_at": "2026-03-22T00:00:00Z",
       "summary": "First packaged desktop release with workflow runs, execution traces, and local installer support.",
-      "notes_file": "releases/notes/v0.1.0.md",
       "assets": [
         {
           "name": "Overseer-v0.1.0-windows-x64.zip",
