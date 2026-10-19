@@ -1,0 +1,30 @@
+{"id":"ho-none-sqrt","latency_ms":1227,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"square root of 144"},"name":"web_search"}]}
+{"id":"ho-none-capital","latency_ms":1063,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"capital of Kenya"},"name":"web_search"}]}
+{"id":"ho-none-define","latency_ms":1008,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"define latency"},"name":"web_search"}]}
+{"id":"ho-none-rewrite","latency_ms":1324,"model":"qwen2.5:7b","text":"The sentence \"gonna be late, sorry\" can be formally rewritten as \"I am going to be late, and I apologize.\"","tool_calls":[]}
+{"id":"ho-none-thanks","latency_ms":1063,"model":"qwen2.5:7b","text":"Great! If you need any assistance in the future, feel free to ask. Have a nice day!","tool_calls":[]}
+{"id":"ho-none-code","latency_ms":4121,"model":"qwen2.5:7b","text":"To accomplish this task, we should first create a Python file and write the function to reverse a string. After that, we can verify the function works as expected.\n\nLet's start by creating a Python file named `reverse_string.py` and writing the function inside it.\n","tool_calls":[{"arguments":{"content":"def reverse_string(s):\n    return s[::-1]","path":"~/reverse_string.py"},"name":"fs_write"}]}
+{"id":"ho-none-convert","latency_ms":3865,"model":"qwen2.5:7b","text":"To calculate the number of minutes in 3.5 hours, we can use a simple mathematical operation. However, since we are operating within a framework that allows for various actions, we can simulate this calculation using a shell command for demonstration purposes. Let's proceed with that.\n","tool_calls":[{"arguments":{"command":"echo $(echo 3.5 * 60 | bc)"},"name":"shell_exec"}]}
+{"id":"ho-none-advice","latency_ms":1194,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"tips for writing clear commit messages"},"name":"web_search"}]}
+{"id":"ho-none-swahili","latency_ms":1343,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"how to say thank you in Swahili"},"name":"web_search"}]}
+{"id":"ho-none-whoareyou","latency_ms":2018,"model":"qwen2.5:7b","text":"Hello! I can help you with various tasks on your computer. Could you please tell me what you need assistance with? Are you looking to open an application, find something on the web, or perhaps manage files?","tool_calls":[]}
+{"id":"ho-none-summarize","latency_ms":850,"model":"qwen2.5:7b","text":"The meeting was rescheduled from Monday to Wednesday due to the client's travel.","tool_calls":[]}
+{"id":"ho-none-compare","latency_ms":1146,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"difference between TCP and UDP"},"name":"web_search"}]}
+{"id":"ho-hk-paste","latency_ms":1322,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"xsel --output","cwd":null},"name":"shell_exec"}]}
+{"id":"ho-hk-newtab","latency_ms":1013,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"keys":"ctrl+t"},"name":"hotkey"}]}
+{"id":"ho-hk-undo","latency_ms":4731,"model":"qwen2.5:7b","text":"To undo your last edit, I will first need to see what changes were made. Let's start by checking the recent activity in your text editor or the file you were working on. I will use the `shell_exec` tool to run a command that lists recent changes or the file's history.\n\n","tool_calls":[{"arguments":{"command":"git log -1 --pretty=format:'%h %s' && git diff --cached","cwd":"/path/to/your/repo"},"name":"shell_exec"}]}
+{"id":"ho-coords-double","latency_ms":886,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"ho-coords-move","latency_ms":1535,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"x":800,"y":450},"name":"move_mouse"}]}
+{"id":"ho-gui-findbutton","latency_ms":832,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"see"}]}
+{"id":"ho-sh-ip","latency_ms":1168,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"hostname -I"},"name":"shell_exec"}]}
+{"id":"ho-sh-processes","latency_ms":1698,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"top -o %CPU -n 1"},"name":"shell_exec"}]}
+{"id":"ho-sh-count","latency_ms":1310,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"ls ~/","cwd":"~/Desktop"},"name":"shell_exec"}]}
+{"id":"ho-sh-uptime","latency_ms":1011,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"command":"uptime"},"name":"shell_exec"}]}
+{"id":"ho-web-price","latency_ms":1154,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"current price of Bitcoin"},"name":"web_search"}]}
+{"id":"ho-web-docs","latency_ms":1265,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"Rust documentation Vec::retain"},"name":"web_search"}]}
+{"id":"ho-mem-save","latency_ms":769,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"ho-mem-ask","latency_ms":821,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{},"name":"recall"}]}
+{"id":"ho-app-music","latency_ms":1034,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"target":"Music.app"},"name":"app_open"}]}
+{"id":"ho-fs-save","latency_ms":1564,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"content":"meeting at 3pm","path":"~/reminder.txt"},"name":"fs_write"}]}
+{"id":"ho-sched-weekly","latency_ms":2157,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"every_secs":604800,"goal":"/do shell_exec command='rm -rf ~/Downloads/*' confirm=false"},"name":"schedule_goal"}]}
+{"id":"ho-time-tokyo","latency_ms":1216,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"query":"current time in Tokyo"},"name":"web_search"}]}

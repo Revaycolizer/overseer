@@ -1,0 +1,200 @@
+{"id":"multiple_0","latency_ms":2960,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"get_angles":true,"get_area":true,"get_perimeter":true,"side1":5,"side2":4,"side3":3},"name":"triangle_properties_get"}]}
+{"id":"multiple_1","latency_ms":2143,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"side1":3,"side2":4,"side3":5},"name":"math_triangle_area_heron"}]}
+{"id":"multiple_2","latency_ms":1273,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"country":"Brazil"},"name":"country_info_capital"}]}
+{"id":"multiple_3","latency_ms":2548,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"pointA":[3,4],"pointB":[1,2],"rounding":2},"name":"EuclideanDistance_calculate"}]}
+{"id":"multiple_4","latency_ms":2370,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"acceleration":10,"initial_speed":20,"time":5},"name":"kinematics_calculate_displacement"}]}
+{"id":"multiple_5","latency_ms":3191,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"coordinates":[46.603354,1.888334],"date":"2019-12-13"},"name":"weather_get_by_coordinates_date"}]}
+{"id":"multiple_6","latency_ms":2501,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"A":10,"K":1,"d":0.01},"name":"capacitance_calculator_calculate"}]}
+{"id":"multiple_7","latency_ms":4130,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"duration":10,"location":"Washington state","species":"deer"},"name":"wildlife_population_assess_growth"},{"arguments":{"ecosystem":"woodland","location":"Washington state","species":"deer","timeframe":10},"name":"ecological_impact_analyze"}]}
+{"id":"multiple_8","latency_ms":3321,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"bedrooms":3,"budget":{"max":400000,"min":300000},"location":"San Diego","propertyType":"villa"},"name":"realestate_find_properties"}]}
+{"id":"multiple_9","latency_ms":2515,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"gradeDict":{"history":82,"math":90,"music":89,"science":75}},"name":"calculate_average"}]}
+{"id":"multiple_10","latency_ms":2578,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"columns":["email_address","social_security_number"],"db_name":"employees","operation":"delete","table":"personal_data"},"name":"database_modify_columns"}]}
+{"id":"multiple_11","latency_ms":2102,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"a":5,"b":20,"c":-25},"name":"math_roots_quadratic"}]}
+{"id":"multiple_12","latency_ms":4218,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"company_name":"Tech Inc","year1":2019,"year1_revenue":1000000,"year2":2020,"year2_revenue":1200000},"name":"corporate_finance_calculate_YOY_growth_rate"}]}
+{"id":"multiple_13","latency_ms":2328,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"company":"XYZ","product":"A","sales_units_increase_percentage":10},"name":"corporate_finance_revenue_forecast"}]}
+{"id":"multiple_14","latency_ms":2805,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"depreciation_rate":3,"initial_cost":200000,"years":5},"name":"finance_property_depreciation"}]}
+{"id":"multiple_15","latency_ms":3086,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"coordinates":[43.653225,-79.383186],"month":"December","panelArea":80000},"name":"solarFarm_potential"}]}
+{"id":"multiple_16","latency_ms":2697,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"generations":100,"probability":0.95,"species":"tiger"},"name":"population_genetics_calculate_ne"}]}
+{"id":"multiple_17","latency_ms":2488,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"date":"2022-01-01","from_currency":"EUR","to_currency":"USD"},"name":"currency_conversion_get_rate"}]}
+{"id":"multiple_18","latency_ms":1513,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"battle":"Battle of Stalingrad"},"name":"european_history_battle_details"}]}
+{"id":"multiple_19","latency_ms":1911,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"count":3,"religion":"Christianity"},"name":"religion_history_get_schisms"}]}
+{"id":"multiple_20","latency_ms":1847,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"material":"marble","size":3},"name":"sculpture_price_calculate"}]}
+{"id":"multiple_21","latency_ms":2070,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"duration":5,"frequency":440,"wave_type":"sine"},"name":"generate_sound_wave"}]}
+{"id":"multiple_22","latency_ms":1747,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"league":"NBA"},"name":"sports_data_basketball_most_points_single_game"}]}
+{"id":"multiple_23","latency_ms":2324,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"player_name":"LeBron James","stats_fields":["points","assists","minutes"]},"name":"basketball_player_stats_get"}]}
+{"id":"multiple_24","latency_ms":2111,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"destination":"Edinburgh","method":"fastest","start":"London"},"name":"route_planner_calculate_route"}]}
+{"id":"multiple_25","latency_ms":2397,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"game_title":"Assassins Creed Valhalla","platform":"PlayStation","region":"United States"},"name":"video_games_store_price"}]}
+{"id":"multiple_26","latency_ms":1822,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"game":"Fortnite","platform":"Playstation"},"name":"game_rewards_get"}]}
+{"id":"multiple_27","latency_ms":2123,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"end_location":"Rome, Italy","mode":"transit","start_location":"Paris, France"},"name":"maps_shortest_path"}]}
+{"id":"multiple_28","latency_ms":2016,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"a":2,"b":3,"c":-4},"name":"solve_quadratic_equation"}]}
+{"id":"multiple_29","latency_ms":1748,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"function1":"3*x+2","function2":"2*x+3"},"name":"functions_intersect"}]}
+{"id":"multiple_30","latency_ms":1669,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"length":12,"width":5},"name":"rectangle_area"}]}
+{"id":"multiple_31","latency_ms":1593,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"length":10,"width":7},"name":"geometry_rectangle_calculate"}]}
+{"id":"multiple_32","latency_ms":1951,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"height":7,"radius":4,"round_off":2},"name":"geometry_calculate_cone_volume"}]}
+{"id":"multiple_33","latency_ms":1866,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"a":1,"b":2,"func":"3*x**2"},"name":"calculate_integral"}]}
+{"id":"multiple_34","latency_ms":1902,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"num1":18,"num2":12},"name":"math_lcm"}]}
+{"id":"multiple_35","latency_ms":1943,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"num1":128,"num2":256},"name":"calculate_gcd"}]}
+{"id":"multiple_36","latency_ms":2177,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"distance":20,"initial_speed":0,"time":4},"name":"kinematics_calculate_speed_from_rest"}]}
+{"id":"multiple_37","latency_ms":1865,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"initial_velocity":40,"time":6},"name":"kinematics_final_velocity"}]}
+{"id":"multiple_38","latency_ms":1846,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"book_name":"The Alchemist","city":"New York"},"name":"library_search_book"}]}
+{"id":"multiple_39","latency_ms":2130,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"destination":"Philadelphia","max_cost":50,"source":"New York"},"name":"ride_hailing_get_rides"}]}
+{"id":"multiple_40","latency_ms":2116,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"current":12,"distance":8},"name":"electromagnetism_biot_savart_law"}]}
+{"id":"multiple_41","latency_ms":1985,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"I":10,"r":0.01},"name":"magnetic_field_calculate"}]}
+{"id":"multiple_42","latency_ms":2493,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"quantity1":2,"quantity2":3,"temperature1":300,"temperature2":400},"name":"calculate_final_temperature"}]}
+{"id":"multiple_43","latency_ms":2704,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"joules_per_mol":2800,"mols":5,"substance":"C6H12O6"},"name":"biological_calc_energy"}]}
+{"id":"multiple_44","latency_ms":2066,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"planet":"Mars","weight_earth_kg":70},"name":"calculate_weight_in_space"}]}
+{"id":"multiple_45","latency_ms":1741,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"calculate_years_ago":true,"era_name":"Ice age"},"name":"geology_get_era"}]}
+{"id":"multiple_46","latency_ms":1901,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"elements":["Sam","Alice","Jack"],"order":"asc"},"name":"sort_list"}]}
+{"id":"multiple_47","latency_ms":2701,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"rounding":2,"vector1":[3,2,1],"vector2":[1,2,3]},"name":"cosine_similarity_calculate"}]}
+{"id":"multiple_48","latency_ms":2077,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"location":"New York City","preferences":["Pet-friendly","Disabled Access"]},"name":"library_find_nearby"}]}
+{"id":"multiple_49","latency_ms":2987,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"annual_rate":2.5,"compound_freq":1,"duration":2,"principle_amount":1500},"name":"calc_Compound_Interest"}]}
+{"id":"multiple_50","latency_ms":1815,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"location":"New York","months":1},"name":"house_price_forecast"}]}
+{"id":"multiple_51","latency_ms":1902,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"desired_sum":7,"sides_per_die":6},"name":"dice_roll_probability"}]}
+{"id":"multiple_52","latency_ms":1884,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"amount":100,"from_currency":"EUR","to_currency":"USD"},"name":"currency_conversion"}]}
+{"id":"multiple_53","latency_ms":2387,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"dependent_var":"house_prices","forecast_period":5,"independent_var":["interest_rates","unemployment_rates"]},"name":"linear_regression"}]}
+{"id":"multiple_54","latency_ms":2021,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"company":"Apple Inc","frequency":"annually","years":5},"name":"corporate_finance_dividend_data"}]}
+{"id":"multiple_55","latency_ms":1830,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"company":"Google","days":3,"model":"regression"},"name":"stock_forecast"}]}
+{"id":"multiple_56","latency_ms":1819,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"company":"Apple","days":60},"name":"avg_closing_price"}]}
+{"id":"multiple_57","latency_ms":2614,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"n":4,"principle":1000,"rate":0.05,"time":10},"name":"financial_compound_interest"}]}
+{"id":"multiple_58","latency_ms":1701,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"expertise":"Divorce","location":"Los Angeles, CA"},"name":"lawyer_search"}]}
+{"id":"multiple_59","latency_ms":1682,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"location":"New York","specialization":["criminal law"]},"name":"lawyer_finder"}]}
+{"id":"multiple_60","latency_ms":1907,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"days":7,"location":"New York City"},"name":"humidity_temperature_forecast"}]}
+{"id":"multiple_61","latency_ms":2478,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"location":"Portland, OR","specialization":"small space garden design","years_experience":5},"name":"landscape_architect_find_specialty"}]}
+{"id":"multiple_62","latency_ms":2153,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"features":["Camping","Scenic View"],"location":"Boston, MA"},"name":"nature_park_find_nearby"}]}
+{"id":"multiple_63","latency_ms":1764,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"days":7,"location":"New York"},"name":"air_quality_forecast"}]}
+{"id":"multiple_64","latency_ms":2168,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"date":"06-01-2023","location":"Tokyo"},"name":"uv_index_get_future"}]}
+{"id":"multiple_65","latency_ms":2101,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"destination":"Los Angeles","origin":"New York City","unit":"km"},"name":"geodistance_find"}]}
+{"id":"multiple_66","latency_ms":2132,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"end_location":"Los Angeles","start_location":"Las Vegas","time_period":"weekend"},"name":"traffic_estimate"}]}
+{"id":"multiple_67","latency_ms":2120,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"source_language":"English","target_language":"French","text":"Hello, how are you?"},"name":"translate"}]}
+{"id":"multiple_68","latency_ms":2066,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"genre":"historical fiction","location":"New York public library","title":""},"name":"library_search_books"}]}
+{"id":"multiple_69","latency_ms":2998,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"artistic_interests":false,"forgiving":true,"lazy":true,"nervous":true,"talkative":true},"name":"five_factor_model_analyse"}]}
+{"id":"multiple_70","latency_ms":2193,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"century":18,"country":"France"},"name":"european_history_get_monarchs"}]}
+{"id":"multiple_71","latency_ms":1852,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"category":"veterans","year":1954},"name":"get_population"}]}
+{"id":"multiple_72","latency_ms":1944,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"state":"California","year":1970},"name":"us_history_population_by_state_year"}]}
+{"id":"multiple_73","latency_ms":1462,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"religion":"Buddhism"},"name":"religion_get_origin"}]}
+{"id":"multiple_74","latency_ms":2176,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"artist":"Van Gogh","artwork_name":"Starry Night"},"name":"art_auction_fetch_artwork_price"}]}
+{"id":"multiple_75","latency_ms":1626,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"room":"Living room"},"name":"paint_color_trends"}]}
+{"id":"multiple_76","latency_ms":1829,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"item":"horse","material":"Bronze"},"name":"sculpture_create_custom"}]}
+{"id":"multiple_77","latency_ms":2184,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"era":"contemporary","location":"New York","type":"sculpture"},"name":"artwork_search_find"}]}
+{"id":"multiple_78","latency_ms":2536,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"city":"London","features":["timings","exhibitions","accessibility"],"museum":"Natural History Museum"},"name":"museum_info"}]}
+{"id":"multiple_79","latency_ms":1884,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"month":1,"museum_name":"Museum of Modern Art, New York"},"name":"exhibition_info"}]}
+{"id":"multiple_80","latency_ms":2553,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"instruments":["Guitars","Violins"],"location":"Nashville","services":["Violin Lessons"]},"name":"music_shop_find_nearby"}]}
+{"id":"multiple_81","latency_ms":2297,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"add_ons":["Backstage Pass"],"artist":"Eminem","location":"New York City"},"name":"concert_book_ticket"}]}
+{"id":"multiple_82","latency_ms":1768,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"key":"C Major","tempo":120},"name":"music_generate"}]}
+{"id":"multiple_83","latency_ms":2066,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"player_name":"Lionel Messi","team_name":"Barcelona"},"name":"player_stats_get_all_time_goals"}]}
+{"id":"multiple_84","latency_ms":2280,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"competition":"UEFA Champions League","number":10,"team":"Barcelona"},"name":"getTopGoalScorers"}]}
+{"id":"multiple_85","latency_ms":2093,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"league":"La Liga","rounds":5,"team":"Real Madrid"},"name":"soccer_scores_get_scores"}]}
+{"id":"multiple_86","latency_ms":1873,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"category":"strategy","numPlayers":2},"name":"BoardGameGeek_recommend"}]}
+{"id":"multiple_87","latency_ms":2109,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"game":"Cyberpunk 2077","platform":"Xbox"},"name":"games_update_find"}]}
+{"id":"multiple_88","latency_ms":2021,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"game_title":"World of Warcraft","year":2020},"name":"video_games_get_player_count"}]}
+{"id":"multiple_89","latency_ms":2730,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"calories":500,"ingredients":["chicken","mushrooms"],"meal":"lunch"},"name":"recipe_search"}]}
+{"id":"multiple_90","latency_ms":2181,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"cuisine":["Seafood"],"group_size":5,"location":"Seattle, WA"},"name":"restaurant_find_group"}]}
+{"id":"multiple_91","latency_ms":1533,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"ingredientLimit":5,"mainIngredient":"apple"},"name":"recipe_find"}]}
+{"id":"multiple_92","latency_ms":2125,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"categories":["vegetarian","gluten-free"],"location":"Denver, CO"},"name":"walmart_vegan_products"}]}
+{"id":"multiple_93","latency_ms":2464,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"additional_services":["breakfast"],"location":"New York","nights":2,"roomType":"deluxe"},"name":"hotel_book"}]}
+{"id":"multiple_94","latency_ms":2501,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"hotelName":"Hilton New York","nights":3,"roomType":"suite with queen size bed"},"name":"hotel_room_pricing_get"}]}
+{"id":"multiple_95","latency_ms":2304,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"amount":200,"from_currency":"EUR","live_conversion":true,"to_currency":"USD"},"name":"currency_exchange_convert"}]}
+{"id":"multiple_96","latency_ms":2059,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"a":2,"b":6,"c":5},"name":"solve_quadratic_equation"}]}
+{"id":"multiple_97","latency_ms":1608,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"radius":10,"units":"meters"},"name":"geometry_area_circle"}]}
+{"id":"multiple_98","latency_ms":1933,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"radius":3},"name":"geometry_circumference"}]}
+{"id":"multiple_99","latency_ms":1989,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"function":"2*x**2","function_variable":"x","value":1},"name":"calculus_derivative"}]}
+{"id":"multiple_100","latency_ms":1617,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"number1":36,"number2":24},"name":"math_hcf"}]}
+{"id":"multiple_101","latency_ms":1638,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"num1":12,"num2":18},"name":"math_gcd"}]}
+{"id":"multiple_102","latency_ms":2173,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"acceleration":9.8,"initial_velocity":10,"time":5},"name":"calculate_displacement"}]}
+{"id":"multiple_103","latency_ms":1614,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"height":100},"name":"calculate_final_speed"}]}
+{"id":"multiple_104","latency_ms":2125,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"destination":"Washington D.C.","origin":"New York City"},"name":"get_shortest_driving_distance"}]}
+{"id":"multiple_105","latency_ms":1761,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"current":5,"radius":4},"name":"calculate_magnetic_field"}]}
+{"id":"multiple_106","latency_ms":2224,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"charge":0.01,"distance":4},"name":"calculate_electric_field_strength"}]}
+{"id":"multiple_107","latency_ms":1494,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"mass":45,"volume":15},"name":"calculate_density"}]}
+{"id":"multiple_108","latency_ms":1643,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"temp":298,"volume":10},"name":"calc_heat_capacity"}]}
+{"id":"multiple_109","latency_ms":2052,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"cell_compartment":"plasma membrane","include_description":false},"name":"cellbio_get_proteins"}]}
+{"id":"multiple_110","latency_ms":1650,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"snp_id":"rs6034464"},"name":"mutation_type_find"}]}
+{"id":"multiple_111","latency_ms":1745,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"allele_frequency":0.3,"genotype":"AA"},"name":"calculate_genotype_frequency"}]}
+{"id":"multiple_112","latency_ms":1983,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"include_human_impact":true,"location":"Yellowstone National Park","years":5},"name":"forest_growth_forecast"}]}
+{"id":"multiple_113","latency_ms":2731,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"trait_contributions":[0.4,0.6],"trait_values":[0.8,0.7]},"name":"calculate_fitness"}]}
+{"id":"multiple_114","latency_ms":2365,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"model":"Darwin","species":"Homo Sapiens","years":50},"name":"prediction_evolution"}]}
+{"id":"multiple_115","latency_ms":2733,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"dietary_requirements":["vegan"],"food_type":"Thai","location":"Manhattan","number":5},"name":"find_restaurants"}]}
+{"id":"multiple_116","latency_ms":1611,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"height":180,"weight":85},"name":"calculate_bmi"}]}
+{"id":"multiple_117","latency_ms":2054,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"height_m":1.75,"weight_kg":70},"name":"calculate_BMI"}]}
+{"id":"multiple_118","latency_ms":2263,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"actor_name":"Leonardo DiCaprio","year":2010},"name":"imdb_find_movies_by_actor"}]}
+{"id":"multiple_119","latency_ms":3525,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"conditions":[{"field":"age","operation":">","value":"25"},{"field":"job","operation":"=","value":"engineer"}],"table":"user"},"name":"database_query"}]}
+{"id":"multiple_120","latency_ms":2005,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"distance_in_light_years":4},"name":"light_travel_time"}]}
+{"id":"multiple_121","latency_ms":1815,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"base":6,"height":10},"name":"geometry_area_triangle"}]}
+{"id":"multiple_122","latency_ms":2752,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"predictors":["Age","Income","Education"],"standardize":true,"target":"Purchase_Amount"},"name":"run_linear_regression"}]}
+{"id":"multiple_123","latency_ms":2666,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"favorable_outcomes":4,"round_to":2,"total_outcomes":52},"name":"calculate_probability"}]}
+{"id":"multiple_124","latency_ms":2256,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"event_outcomes":4,"total_outcomes":52},"name":"probabilities_calculate_single"}]}
+{"id":"multiple_125","latency_ms":3471,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"equal_variance":true,"group1":[3,4,5,6,4],"group2":[7,8,9,8,7]},"name":"run_two_sample_ttest"}]}
+{"id":"multiple_126","latency_ms":3176,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"alpha":0.05,"dataset_A":[12,24,36],"dataset_B":[15,30,45]},"name":"t_test"}]}
+{"id":"multiple_127","latency_ms":3192,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"outstanding_shares":100000000,"total_payout":50000000},"name":"finance_calculate_quarterly_dividend_per_share"}]}
+{"id":"multiple_128","latency_ms":3709,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"dividends_paid":200000,"net_income":2000000,"shareholder_equity":10000000},"name":"calculate_return_on_equity"}]}
+{"id":"multiple_129","latency_ms":2653,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"annual_rate":5,"compounding_freq":"monthly","principal":10000,"time_in_years":5},"name":"compound_interest"}]}
+{"id":"multiple_130","latency_ms":2567,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"final_value":3000,"initial_value":2000,"period_in_years":4},"name":"calculate_cagr"}]}
+{"id":"multiple_131","latency_ms":2421,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"days":5,"indexes":["S&P 500","Dow Jones"]},"name":"market_performance_get_data"}]}
+{"id":"multiple_132","latency_ms":2520,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"initial_investment":20000,"rate_of_return":0.08,"years":5},"name":"finance_calculate_future_value"}]}
+{"id":"multiple_133","latency_ms":2250,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"annual_yield":0.05,"investment_amount":50000,"years":3},"name":"calculate_mutual_fund_balance"}]}
+{"id":"multiple_134","latency_ms":2691,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"case_number":"CA123456","county":"San Diego","details":true},"name":"crime_record_get_record"}]}
+{"id":"multiple_135","latency_ms":2356,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"court":"California","docket":"2022/AL2562","info_type":"victim"},"name":"get_case_info"}]}
+{"id":"multiple_136","latency_ms":2281,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"city":"San Francisco","state":"California","type":"violent","year":2020},"name":"get_crime_rate"}]}
+{"id":"multiple_137","latency_ms":2834,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"company":"Google","location":"California","start_date":"2021-01-01","status":"ongoing"},"name":"lawsuit_search"}]}
+{"id":"multiple_138","latency_ms":1872,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"case_id":"R vs Adams","details":true},"name":"legal_case_fetch"}]}
+{"id":"multiple_139","latency_ms":2639,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"case_type":"Patent","company_name":"Apple Inc.","year":2010},"name":"lawsuit_details_find"}]}
+{"id":"multiple_140","latency_ms":2126,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"company_name":"Google","location":"California","year":2020},"name":"lawsuits_search"}]}
+{"id":"multiple_141","latency_ms":2082,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"case_id":1234,"closed_status":true},"name":"lawsuit_check_case"}]}
+{"id":"multiple_142","latency_ms":1739,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"days":7,"location":"Miami, Florida"},"name":"weather_humidity_forecast"}]}
+{"id":"multiple_143","latency_ms":3887,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"point1":[40.7128,-74.006],"point2":[34.0522,-118.2437],"unit":"degree"},"name":"calculate_slope_gradient"}]}
+{"id":"multiple_144","latency_ms":1993,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"date":"2022-08-16","location":"London"},"name":"air_quality"}]}
+{"id":"multiple_145","latency_ms":2667,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"distance":12000,"fuel_efficiency":20,"fuel_type":"gas"},"name":"calculate_emissions"}]}
+{"id":"multiple_146","latency_ms":1908,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"cuisine":"Chinese","location":"Seattle","max_distance":10},"name":"restaurant_find_nearby"}]}
+{"id":"multiple_147","latency_ms":2456,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"avoid":["highways","tolls"],"end":"Los Angeles","start":"New York"},"name":"map_service_get_directions"}]}
+{"id":"multiple_148","latency_ms":2028,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"company_name":"Apple Inc.","detail_level":"detailed","market":"NASDAQ"},"name":"get_stock_info"}]}
+{"id":"multiple_149","latency_ms":2347,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"language":"en","text":"I love the food here! It's always fresh and delicious."},"name":"sentiment_analysis"}]}
+{"id":"multiple_150","latency_ms":2934,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"decay_rate":0.1,"input_synaptic_rate":200,"weight":0.5},"name":"calculate_neuronal_activity"}]}
+{"id":"multiple_151","latency_ms":2517,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"sub_topics":["behaviour","group dynamics"],"topic":"psychology"},"name":"social_media_analytics_most_followed"}]}
+{"id":"multiple_152","latency_ms":2778,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"country":"Germany","end_year":1945,"event_type":["War"],"start_year":1871},"name":"history_get_key_events"}]}
+{"id":"multiple_153","latency_ms":1694,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"event":"Treaty of Lisbon signing"},"name":"get_event_date"}]}
+{"id":"multiple_154","latency_ms":2277,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"full_name":true,"year":1861},"name":"US_president_in_year"}]}
+{"id":"multiple_155","latency_ms":1951,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"detail":true,"discovery":"neutron"},"name":"get_discoverer"}]}
+{"id":"multiple_156","latency_ms":2404,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"date":"1915-03-17","scientist":"Albert Einstein"},"name":"historical_contrib_get_contrib"}]}
+{"id":"multiple_157","latency_ms":1783,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"name":"Jesus Christ","source":"historical records"},"name":"get_earliest_reference"}]}
+{"id":"multiple_158","latency_ms":2772,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"include_contributions":true,"papal_name":"Innocent III"},"name":"religious_history_get_papal_biography"}]}
+{"id":"multiple_159","latency_ms":2188,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"coverage_rate":400,"height":12,"length":30},"name":"calculate_paint_needed"}]}
+{"id":"multiple_160","latency_ms":2206,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"artist_name":"James Plensa","detail":true},"name":"get_sculpture_info"}]}
+{"id":"multiple_161","latency_ms":2540,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"art_form":"sculpture","location":"New York, NY","user_ratings":"high"},"name":"find_exhibition"}]}
+{"id":"multiple_162","latency_ms":2271,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"building_id":"B1004","floors":[2,3,4],"mode":"dynamic"},"name":"analyze_structure"}]}
+{"id":"multiple_163","latency_ms":1886,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"number":5,"sort_by":"popularity"},"name":"metropolitan_museum_get_top_artworks"}]}
+{"id":"multiple_164","latency_ms":2717,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"brand":"Fender","finish":"Rosewood Finish","model":"American Professional II Stratocaster"},"name":"instrument_price_get"}]}
+{"id":"multiple_165","latency_ms":2181,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"condition":"Excellent","location":"Chicago","model":"Gibson Les Paul"},"name":"guitar_price_find"}]}
+{"id":"multiple_166","latency_ms":2470,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"date":"this weekend","genre":"classical","location":"Los Angeles","price_range":"cheap"},"name":"concert_search"}]}
+{"id":"multiple_167","latency_ms":2784,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"key":"C","length":16,"start_note":"C4","tempo":120},"name":"music_generator_generate_melody"}]}
+{"id":"multiple_168","latency_ms":2330,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"artist_name":"Queen","lang":"English","song_title":"Bohemian Rhapsody"},"name":"get_song_lyrics"}]}
+{"id":"multiple_169","latency_ms":1323,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"key":"C sharp major"},"name":"musical_scale"}]}
+{"id":"multiple_170","latency_ms":2406,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"player_name":"Cristiano Ronaldo","season":"2019-2020"},"name":"soccer_stat_get_player_stats"}]}
+{"id":"multiple_171","latency_ms":2174,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"date":"2021-01-28","teams":["Lakers","Clippers"]},"name":"game_result_get_winner"}]}
+{"id":"multiple_172","latency_ms":2270,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"name":"Lebron James","sport":"Basketball"},"name":"sports_db_find_athlete"}]}
+{"id":"multiple_173","latency_ms":1919,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"season":2021,"top":1},"name":"get_defense_ranking"}]}
+{"id":"multiple_174","latency_ms":1641,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"league":"Premier League","team":"Manchester United"},"name":"sports_ranking"}]}
+{"id":"multiple_175","latency_ms":2449,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"gender":"woman","sport":"tennis"},"name":"sports_ranking_get_top_player"}]}
+{"id":"multiple_176","latency_ms":3636,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"league":"Premier League","num_of_games":6,"team_name":"Manchester United"},"name":"sports_team_get_schedule"}]}
+{"id":"multiple_177","latency_ms":2551,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"location":"New York","minimum_rating":2300,"number_of_players":10},"name":"board_game_chess_get_top_players"}]}
+{"id":"multiple_178","latency_ms":4231,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"deck":[{"rank":"Ace","suit":"Hearts"},{"rank":"Queen","suit":"Hearts"},{"rank":"King","suit":"Clubs"}],"rank":"Queen","suit":"Hearts"},"name":"find_card_in_deck"}]}
+{"id":"multiple_179","latency_ms":1943,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"deck_size":52,"hand_size":5},"name":"poker_probability_full_house"}]}
+{"id":"multiple_180","latency_ms":2215,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"game":"Zelda","platform":"Switch","username":"Sam"},"name":"game_stats_fetch_player_statistics"}]}
+{"id":"multiple_181","latency_ms":2234,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"include_stats":true,"team_name":"Liverpool F.C."},"name":"soccer_get_last_match"}]}
+{"id":"multiple_182","latency_ms":2633,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"platform":"Windows 10","rating":4.5},"name":"multiplayer_game_finder"}]}
+{"id":"multiple_183","latency_ms":1995,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"recipe":"Beef Lasagna","website":"Foodnetwork.com"},"name":"recipe_info_get_calories"}]}
+{"id":"multiple_184","latency_ms":2378,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"dietary_restriction":"Vegetarian","ingredients":["pasta","cheese"],"servings":2},"name":"recipe_search"}]}
+{"id":"multiple_185","latency_ms":1998,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"amenities":["Patio"],"cuisine":"Sushi","location":"Boston"},"name":"restaurant_search_find_closest"}]}
+{"id":"multiple_186","latency_ms":2126,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"dietary_restrictions":"vegan","recipe_type":"dessert","time":30},"name":"find_recipe"}]}
+{"id":"multiple_187","latency_ms":2414,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"items":["tomatoes","lettuce"],"location":"Los Angeles"},"name":"whole_foods_check_price"}]}
+{"id":"multiple_188","latency_ms":2789,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"my_location":"Berkeley","products":["tomatoes","pet food"],"rating":4.5},"name":"grocery_store_find_best"}]}
+{"id":"multiple_189","latency_ms":1924,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"from_timezone":"New York","time":"3pm","to_timezone":"London"},"name":"timezone_convert"}]}
+{"id":"multiple_190","latency_ms":3135,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"hotel_name":"Hilton Hotel","location":"Chicago","nights":2,"room_type":"single","start_date":"10th December 2022"},"name":"book_hotel"}]}
+{"id":"multiple_191","latency_ms":3782,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"hotel_name":"Hotel Paradise","location":"Las Vegas","room_type":"luxury","start_date":"05-12-2022","stay_duration":3,"view":"city"},"name":"book_hotel"}]}
+{"id":"multiple_192","latency_ms":2109,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"amount":150,"from_currency":"EUR","to_currency":"CAD"},"name":"currency_conversion_convert"}]}
+{"id":"multiple_193","latency_ms":2702,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"end_location":"Louvre Museum, Paris, France","start_location":"Eiffel Tower, Paris, France"},"name":"maps_get_distance_duration"}]}
+{"id":"multiple_194","latency_ms":2076,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"day":"Saturday","museum_name":"Metropolitan Museum of Art"},"name":"get_museum_hours"}]}
+{"id":"multiple_195","latency_ms":1919,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"temp":298,"volume":10},"name":"calc_heat_capacity"}]}
+{"id":"multiple_196","latency_ms":2062,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"cell_compartment":"plasma membrane","include_description":false},"name":"cellbio_get_proteins"}]}
+{"id":"multiple_197","latency_ms":2185,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"snp_id":"rs6034464"},"name":"mutation_type_find"}]}
+{"id":"multiple_198","latency_ms":2291,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"allele_frequency":0.3,"genotype":"AA"},"name":"calculate_genotype_frequency"}]}
+{"id":"multiple_199","latency_ms":1973,"model":"qwen2.5:7b","text":null,"tool_calls":[{"arguments":{"include_human_impact":true,"location":"Yellowstone","years":5},"name":"forest_growth_forecast"}]}
