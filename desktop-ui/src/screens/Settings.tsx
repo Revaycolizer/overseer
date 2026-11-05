@@ -27,6 +27,7 @@ export default function Settings({
   const [model, setModel] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [apiKey, setApiKey] = useState("");
+  const [endUser, setEndUser] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const base = wsUrl.replace(/^ws/, "http").replace(/\/api\/ws\/chat$/, "");
@@ -46,6 +47,7 @@ export default function Settings({
           const selectedModel = await read(selected === "ollama" ? "default_chat_model" : `${selected}_model`) || "";
           setProvider(selected);
           setModel(selectedModel);
+          setEndUser(await read("otari_end_user") || "");
           const response = await fetch(`${base}/api/models/available`, { headers, signal: controller.signal });
           if (response.ok) setModels(await response.json() as string[]);
         } catch (error) {
@@ -71,6 +73,7 @@ export default function Settings({
       await write(provider === "ollama" ? "default_chat_model" : `${provider}_model`, model.trim());
       if (provider === "ollama") await write("planner_model", model.trim());
       if (provider !== "ollama" && apiKey.trim()) await write(`${provider}_api_key`, apiKey.trim());
+      if (provider === "otari") await write("otari_end_user", endUser.trim());
       await write("llm_provider", provider);
       setApiKey("");
       setNotice("Model settings saved. Your next message uses this provider.");
@@ -165,6 +168,7 @@ export default function Settings({
         </select></label> : <>
           <label>Model ID<input className="form-input" value={model} onChange={(event) => setModel(event.target.value)} /></label>
           <label>API key<input className="form-input" type="password" autoComplete="off" placeholder="Leave blank to keep your saved key" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /></label>
+          {provider === "otari" && <label>Otari user<input className="form-input" value={endUser} placeholder="Your computer's user name" onChange={(event) => setEndUser(event.target.value)} /></label>}
           <p className="setting-note">Cloud requests go to your selected provider. API keys are encrypted on this Mac.</p>
         </>}
         <button className="seg-btn" disabled={!connected || saving || (provider === "ollama" && !models.includes(model))} onClick={() => void saveModel()}>{saving ? "Saving…" : "Save model"}</button>

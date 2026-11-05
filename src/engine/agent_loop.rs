@@ -590,6 +590,13 @@ pub async fn run_agent_with_model(
             .await
         {
             Ok(t) => t,
+            Err(e) if e.is::<providers::BudgetExceeded>() => {
+                finish(db, run_id, "failed").await;
+                return respond(
+                    "failed",
+                    &format!("{e}.\n\nAsk an Otari organization admin to raise the limit, or try again after it resets."),
+                );
+            }
             Err(e) if e.is::<providers::GuardrailBlocked>() => {
                 finish(db, run_id, "failed").await;
                 return respond(

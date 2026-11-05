@@ -109,6 +109,7 @@ async fn main() -> anyhow::Result<()> {
             .clone()
             .unwrap_or_else(|| default_base_url.to_string()),
         model: args.model.clone(),
+        end_user: None,
     };
 
     let cases: Vec<Value> = std::io::BufReader::new(std::fs::File::open(&args.cases)?)
