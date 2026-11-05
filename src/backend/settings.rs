@@ -28,7 +28,10 @@ pub async fn get_setting_i64(db: &Database, key: &str, default: i64) -> i64 {
 }
 
 fn sensitive_setting(key: &str) -> bool {
-    matches!(key, "openai_api_key" | "anthropic_api_key")
+    matches!(
+        key,
+        "openai_api_key" | "anthropic_api_key" | "otari_api_key"
+    )
 }
 
 fn decode_setting(key: &str, value: String) -> String {

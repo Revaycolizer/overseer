@@ -28,7 +28,7 @@ export default function Onboarding({ url, token, onComplete }: {url:string; toke
         const selected=JSON.parse((await request("/api/settings?key=llm_provider",undefined,controller.signal))!) || "ollama";
         const saved=JSON.parse((await request(`/api/settings?key=${selected==="ollama"?"default_chat_model":`${selected}_model`}`,undefined,controller.signal))!) || "";
         if(controller.signal.aborted)return;
-        setProvider(["ollama","openai","anthropic"].includes(selected)?selected:"ollama");setModel(saved);
+        setProvider(["ollama","otari","openai","anthropic"].includes(selected)?selected:"ollama");setModel(saved);
         if(selected==="ollama")await refreshModels();
       } catch(error){if(!controller.signal.aborted)setNotice(`Setup could not load: ${String(error)}`);}
       finally {if(!controller.signal.aborted)setLoading(false);}
@@ -56,7 +56,7 @@ export default function Onboarding({ url, token, onComplete }: {url:string; toke
       <fieldset disabled={busy}>
         <legend className="setting-note">1. Choose a provider</legend>
         <label>AI provider<select className="form-input" value={provider} onChange={event=>{setProvider(event.target.value);setModel("");setKey("");setNotice("");if(event.target.value==="ollama")void refreshModels();}}>
-          <option value="ollama">Ollama · on your computer</option><option value="openai">OpenAI · cloud</option><option value="anthropic">Anthropic · cloud</option>
+          <option value="ollama">Ollama · on your computer</option><option value="otari">Otari · open-weight models</option><option value="openai">OpenAI · cloud</option><option value="anthropic">Anthropic · cloud</option>
         </select></label>
         <p className="setting-note">{provider==="ollama"?"Your prompts stay on this computer. Ollama and a downloaded model are required.":"Prompts go to your chosen provider. Your provider account is billed for usage, including this small connection test. API keys are encrypted by the local backend."}</p>
         <label>{provider==="ollama"?"2. Installed model":"2. Model ID"}{provider==="ollama"?<select className="form-input" value={model} onChange={event=>setModel(event.target.value)}><option value="">Choose an installed model</option>{model&&!models.includes(model)&&<option value={model}>{model} (unavailable)</option>}{models.map(name=><option key={name} value={name}>{name}</option>)}</select>:<input className="form-input" value={model} onChange={event=>setModel(event.target.value)} placeholder="Model ID from your provider account" required />}</label>

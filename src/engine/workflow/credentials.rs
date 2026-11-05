@@ -108,7 +108,7 @@ pub async fn migrate_legacy(db: &crate::db::Database) -> anyhow::Result<()> {
             .execute(&mut *transaction)
             .await?;
     }
-    let settings: Vec<(String, String)> = sqlx::query_as("SELECT key,value FROM settings WHERE key IN ('openai_api_key','anthropic_api_key') AND value!='' AND value NOT LIKE 'v2:%'")
+    let settings: Vec<(String, String)> = sqlx::query_as("SELECT key,value FROM settings WHERE key IN ('openai_api_key','anthropic_api_key','otari_api_key') AND value!='' AND value NOT LIKE 'v2:%'")
         .fetch_all(&mut *transaction).await?;
     for (key, value) in settings {
         sqlx::query("UPDATE settings SET value=? WHERE key=?")

@@ -156,7 +156,7 @@ export default function Settings({
       <div className="panel setting">
         <div className="setting-head"><h3>AI model</h3><p>Use an installed Ollama model or your cloud account.</p></div>
         <label>Provider<select className="form-input" value={provider} onChange={(event) => { setProvider(event.target.value); setModel(""); setApiKey(""); }}>
-          <option value="ollama">Ollama · local</option><option value="openai">OpenAI · cloud</option><option value="anthropic">Anthropic · cloud</option>
+          <option value="ollama">Ollama · local</option><option value="otari">Otari · open-weight models</option><option value="openai">OpenAI · cloud</option><option value="anthropic">Anthropic · cloud</option>
         </select></label>
         {provider === "ollama" ? <label>Installed model<select className="form-input" value={model} onChange={(event) => setModel(event.target.value)}>
           <option value="">{models.length ? "Choose a model" : "No installed models found"}</option>

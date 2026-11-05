@@ -9,6 +9,10 @@
 //!       --cases evals/cases/overseer_tools.jsonl --model qwen2.5:7b \
 //!       --out evals/results/overseer_tools.qwen2.5-7b.jsonl
 //!
+//! `--provider otari` sends the cases through the Otari gateway instead of
+//! local Ollama, reading the key from `OTARI_API_KEY`; `--base-url` defaults
+//! to `https://otari.ai/api/v1` for that provider.
+//!
 //! Cases are JSON lines with `id` and `prompt`, plus optional `tools`
 //! (`[{name, description, parameters}]`, defaulting to Overseer's catalog)
 //! and `system` (`"overseer"`, the default, or `"none"`). Results already in
@@ -29,7 +33,8 @@ struct Args {
     model: String,
     out: String,
     limit: Option<usize>,
-    base_url: String,
+    base_url: Option<String>,
+    provider: Provider,
 }
 
 fn parse_args() -> Args {
@@ -38,7 +43,8 @@ fn parse_args() -> Args {
     let mut model = None;
     let mut out = None;
     let mut limit = None;
-    let mut base_url = "http://localhost:11434".to_string();
+    let mut base_url = None;
+    let mut provider = Provider::Ollama;
     while let Some(flag) = args.next() {
         let value = args
             .next()
@@ -48,7 +54,8 @@ fn parse_args() -> Args {
             "--model" => model = Some(value),
             "--out" => out = Some(value),
             "--limit" => limit = Some(value.parse().expect("--limit must be a number")),
-            "--base-url" => base_url = value,
+            "--base-url" => base_url = Some(value),
+            "--provider" => provider = Provider::parse(&value),
             other => panic!("unknown flag {other}"),
         }
     }
@@ -58,6 +65,7 @@ fn parse_args() -> Args {
         out: out.expect("--out is required"),
         limit,
         base_url,
+        provider,
     }
 }
 
@@ -90,10 +98,20 @@ fn done_ids(path: &str) -> HashSet<String> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = parse_args();
+    let (default_base_url, api_key) = match args.provider {
+        Provider::Otari => (
+            "https://otari.ai/api/v1",
+            std::env::var("OTARI_API_KEY").expect("set OTARI_API_KEY for --provider otari"),
+        ),
+        _ => ("http://localhost:11434", String::new()),
+    };
     let cfg = ProviderConfig {
-        provider: Provider::Ollama,
-        api_key: String::new(),
-        base_url: args.base_url.clone(),
+        provider: args.provider.clone(),
+        api_key,
+        base_url: args
+            .base_url
+            .clone()
+            .unwrap_or_else(|| default_base_url.to_string()),
         model: args.model.clone(),
     };
 

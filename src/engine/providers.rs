@@ -16,12 +16,16 @@ pub enum Provider {
     Ollama,
     OpenAI,
     Anthropic,
+    /// Mozilla's Otari gateway: an OpenAI-compatible endpoint that routes to
+    /// many providers, including open-weight models.
+    Otari,
 }
 
 impl Provider {
     pub fn parse(s: &str) -> Provider {
         match s.trim().to_lowercase().as_str() {
             "openai" => Provider::OpenAI,
+            "otari" => Provider::Otari,
             "anthropic" | "claude" => Provider::Anthropic,
             _ => Provider::Ollama,
         }
@@ -61,6 +65,18 @@ pub async fn load_config(db: &Database) -> ProviderConfig {
                 b.trim_end_matches('/').to_string()
             },
             model: crate::backend::get_setting_or(db, "openai_model", "gpt-4o-mini").await,
+        },
+        Provider::Otari => ProviderConfig {
+            provider,
+            api_key: crate::backend::get_setting(db, "otari_api_key").await,
+            base_url: {
+                let b =
+                    crate::backend::get_setting_or(db, "otari_base_url", "https://otari.ai/api/v1")
+                        .await;
+                b.trim_end_matches('/').to_string()
+            },
+            model: crate::backend::get_setting_or(db, "otari_model", "groq/openai/gpt-oss-120b")
+                .await,
         },
         Provider::Anthropic => ProviderConfig {
             provider,
@@ -168,7 +184,7 @@ pub async fn complete_chat(
         .timeout(std::time::Duration::from_secs(180))
         .build()?;
     match cfg.provider {
-        Provider::OpenAI => {
+        Provider::OpenAI | Provider::Otari => {
             let body = serde_json::json!({
                 "model": cfg.model,
                 "messages": [
@@ -281,7 +297,9 @@ pub async fn complete_with_tools(
         .timeout(std::time::Duration::from_secs(180))
         .build()?;
     match cfg.provider {
-        Provider::OpenAI => openai_with_tools(&client, cfg, system, messages, tools).await,
+        Provider::OpenAI | Provider::Otari => {
+            openai_with_tools(&client, cfg, system, messages, tools).await
+        }
         Provider::Anthropic => anthropic_with_tools(&client, cfg, system, messages, tools).await,
         Provider::Ollama => ollama_with_tools(&client, cfg, system, messages, tools).await,
     }
@@ -573,6 +591,7 @@ mod tests {
     #[test]
     fn provider_parse() {
         assert_eq!(Provider::parse("OpenAI"), Provider::OpenAI);
+        assert_eq!(Provider::parse("otari"), Provider::Otari);
         assert_eq!(Provider::parse("anthropic"), Provider::Anthropic);
         assert_eq!(Provider::parse("claude"), Provider::Anthropic);
         assert_eq!(Provider::parse("ollama"), Provider::Ollama);
@@ -604,9 +623,9 @@ mod tests {
     #[tokio::test]
     async fn cloud_providers_send_authenticated_tools_and_parse_calls() {
         use axum::{http::HeaderMap, routing::post, Json, Router};
-        for provider in [Provider::OpenAI, Provider::Anthropic] {
+        for provider in [Provider::OpenAI, Provider::Otari, Provider::Anthropic] {
             let expected = provider.clone();
-            let route = if matches!(provider, Provider::OpenAI) {
+            let route = if matches!(provider, Provider::OpenAI | Provider::Otari) {
                 "/chat/completions"
             } else {
                 "/v1/messages"
@@ -616,7 +635,7 @@ mod tests {
                 async move {
                     assert_eq!(body["model"], "test-model");
                     assert_eq!(body["tools"].as_array().unwrap().len(), 1);
-                    let response = if matches!(expected, Provider::OpenAI) {
+                    let response = if matches!(expected, Provider::OpenAI | Provider::Otari) {
                         assert_eq!(headers["authorization"], "Bearer test-key");
                         serde_json::json!({"choices":[{"message":{"content":"Working", "tool_calls":[{"id":"call-test", "function":{"name":"read_file", "arguments":"{\"path\":\"README.md\"}"}}]}}]})
                     } else {
