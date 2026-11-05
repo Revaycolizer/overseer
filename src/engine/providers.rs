@@ -283,6 +283,29 @@ pub struct AgentTurn {
     pub text: Option<String>,
     pub tool_calls: Vec<ToolCall>,
     pub served: Option<Served>,
+    pub gateway_calls: Vec<String>,
+}
+
+pub const GATEWAY_TOOL_PREFIX: &str = "otari_";
+
+fn describe_gateway_call(call: &serde_json::Value) -> String {
+    let status = call["status"].as_str().unwrap_or("unknown");
+    match call["type"].as_str().unwrap_or_default() {
+        "web_search" => format!(
+            "web search: {} ({status}, {} sources)",
+            call["query"].as_str().unwrap_or_default(),
+            call["sources"].as_array().map_or(0, Vec::len)
+        ),
+        "web_fetch" => format!(
+            "web fetch: {} ({status})",
+            call["url"].as_str().unwrap_or_default()
+        ),
+        "code_execution" => match call["exit_code"].as_i64() {
+            Some(code) => format!("code execution: exit {code}"),
+            None => format!("code execution ({status})"),
+        },
+        other => format!("{other} ({status})"),
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -529,6 +552,13 @@ async fn openai_with_tools(
     let tool_defs: Vec<serde_json::Value> = tools
         .iter()
         .map(|t| {
+            if t.name.starts_with(GATEWAY_TOOL_PREFIX) {
+                let mut def = serde_json::json!({ "type": t.name });
+                if let Some(options) = t.parameters.as_object() {
+                    def.as_object_mut().unwrap().extend(options.clone());
+                }
+                return def;
+            }
             serde_json::json!({
                 "type": "function",
                 "function": { "name": t.name, "description": t.description, "parameters": t.parameters },
@@ -560,6 +590,10 @@ async fn openai_with_tools(
     let msg = &v["choices"][0]["message"];
     let mut turn = AgentTurn {
         served: served_from(&headers, &v),
+        gateway_calls: v["otari_tool_calls"]
+            .as_array()
+            .map(|calls| calls.iter().map(describe_gateway_call).collect())
+            .unwrap_or_default(),
         ..AgentTurn::default()
     };
     if let Some(text) = msg["content"].as_str() {
@@ -698,6 +732,75 @@ mod tests {
         assert_eq!(Provider::parse("claude"), Provider::Anthropic);
         assert_eq!(Provider::parse("ollama"), Provider::Ollama);
         assert_eq!(Provider::parse("whatever"), Provider::Ollama);
+    }
+
+    #[tokio::test]
+    async fn otari_builtin_tools_are_declared_by_type_and_reported() {
+        use axum::{routing::post, Json, Router};
+        let app = Router::new().route(
+            "/chat/completions",
+            post(|Json(body): Json<serde_json::Value>| async move {
+                assert_eq!(
+                    body["tools"],
+                    serde_json::json!([
+                        {"type": "function", "function": {"name": "read_file", "description": "Read a file", "parameters": {"type": "object"}}},
+                        {"type": "otari_web_search", "max_uses": 1},
+                        {"type": "otari_code_execution"}
+                    ])
+                );
+                Json(serde_json::json!({
+                    "choices": [{"message": {"content": "4192 days"}}],
+                    "otari_tool_calls": [
+                        {"type": "web_search", "status": "completed", "query": "latest Rust", "sources": [{"url": "https://doc.rust-lang.org"}, {"url": "https://blog.rust-lang.org"}]},
+                        {"type": "code_execution", "status": "completed", "stdout": "4192\n", "exit_code": 0},
+                        {"type": "web_fetch", "status": "failed", "url": "https://example.com"}
+                    ]
+                }))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let cfg = ProviderConfig {
+            provider: Provider::Otari,
+            api_key: "test-key".into(),
+            base_url: format!("http://{address}"),
+            model: "overseer-agent".into(),
+        };
+        let tools = vec![
+            ToolSpec {
+                name: "read_file".into(),
+                description: "Read a file".into(),
+                parameters: serde_json::json!({"type": "object"}),
+            },
+            ToolSpec {
+                name: "otari_web_search".into(),
+                description: String::new(),
+                parameters: serde_json::json!({"max_uses": 1}),
+            },
+            ToolSpec {
+                name: "otari_code_execution".into(),
+                description: String::new(),
+                parameters: serde_json::json!({}),
+            },
+        ];
+        let turn = complete_with_tools(
+            &cfg,
+            "Test system",
+            &[AgentMessage::User("How long since Rust 1.0?".into())],
+            &tools,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            turn.gateway_calls,
+            vec![
+                "web search: latest Rust (completed, 2 sources)",
+                "code execution: exit 0",
+                "web fetch: https://example.com (failed)",
+            ]
+        );
+        task.abort();
     }
 
     #[tokio::test]
