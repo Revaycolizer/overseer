@@ -544,6 +544,7 @@ pub async fn run_agent_with_model(
         history.push(AgentMessage::User(goal.to_string()));
     }
     let mut transcript = String::new();
+    let mut gateway = GatewayUsage::default();
 
     for _step in 0..MAX_STEPS {
         let turn = match providers::complete_with_tools(&cfg, &system_prompt, &history, &tools)
@@ -561,15 +562,27 @@ pub async fn run_agent_with_model(
             }
         };
 
+        if let Some(served) = &turn.served {
+            if served.fallback {
+                if let Some(tx) = token_sender.as_ref() {
+                    let _ = tx.send(format!("↪ fell back to {}\n", served.model));
+                }
+            }
+            gateway.record(served);
+        }
+
         // No tool calls → the model is done.
         if turn.tool_calls.is_empty() {
             let final_text = turn.text.unwrap_or_else(|| "Done.".to_string());
             finish(db, run_id, "completed").await;
-            let body = if transcript.is_empty() {
+            let mut body = if transcript.is_empty() {
                 final_text
             } else {
                 format!("{final_text}\n\n---\n{}", transcript.trim_end())
             };
+            if let Some(footer) = gateway.footer() {
+                body.push_str(&format!("\n\n{footer}"));
+            }
             return respond("completed", &body);
         }
 
@@ -604,6 +617,38 @@ pub async fn run_agent_with_model(
             transcript.trim_end()
         ),
     )
+}
+
+#[derive(Default)]
+struct GatewayUsage {
+    models: Vec<String>,
+    fallbacks: usize,
+    cost_usd: f64,
+}
+
+impl GatewayUsage {
+    fn record(&mut self, served: &providers::Served) {
+        if !self.models.contains(&served.model) {
+            self.models.push(served.model.clone());
+        }
+        self.fallbacks += usize::from(served.fallback);
+        self.cost_usd += served.cost_usd.unwrap_or(0.0);
+    }
+
+    fn footer(&self) -> Option<String> {
+        if self.models.is_empty() {
+            return None;
+        }
+        let mut line = format!(
+            "Served via Otari by {} · ${:.6}",
+            self.models.join(", "),
+            self.cost_usd
+        );
+        if self.fallbacks > 0 {
+            line.push_str(&format!(" · {} fallback(s)", self.fallbacks));
+        }
+        Some(line)
+    }
 }
 
 async fn remember_note(db: &Database, conversation_id: i64, args: &Value) -> String {
@@ -836,6 +881,30 @@ fn respond(status: &str, message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gateway_footer_sums_cost_and_counts_fallbacks() {
+        let mut usage = GatewayUsage::default();
+        assert_eq!(usage.footer(), None);
+
+        let served = |model: &str, fallback: bool, cost: Option<f64>| providers::Served {
+            model: model.into(),
+            fallback,
+            cost_usd: cost,
+        };
+        usage.record(&served("openai/gpt-oss-120b", false, Some(0.0002)));
+        assert_eq!(
+            usage.footer().as_deref(),
+            Some("Served via Otari by openai/gpt-oss-120b · $0.000200")
+        );
+
+        usage.record(&served("openai/gpt-oss-20b", true, Some(0.0001)));
+        usage.record(&served("openai/gpt-oss-120b", false, None));
+        assert_eq!(
+            usage.footer().as_deref(),
+            Some("Served via Otari by openai/gpt-oss-120b, openai/gpt-oss-20b · $0.000300 · 1 fallback(s)")
+        );
+    }
 
     #[test]
     fn catalog_has_tier1_tools() {

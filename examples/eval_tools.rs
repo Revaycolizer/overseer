@@ -9,10 +9,6 @@
 //!       --cases evals/cases/overseer_tools.jsonl --model qwen2.5:7b \
 //!       --out evals/results/overseer_tools.qwen2.5-7b.jsonl
 //!
-//! `--provider otari` sends the cases through the Otari gateway instead of
-//! local Ollama, reading the key from `OTARI_API_KEY`; `--base-url` defaults
-//! to `https://otari.ai/api/v1` for that provider.
-//!
 //! Cases are JSON lines with `id` and `prompt`, plus optional `tools`
 //! (`[{name, description, parameters}]`, defaulting to Overseer's catalog)
 //! and `system` (`"overseer"`, the default, or `"none"`). Results already in
@@ -155,15 +151,23 @@ async fn main() -> anyhow::Result<()> {
         let latency_ms = started.elapsed().as_millis() as u64;
 
         let record = match turn {
-            Ok(turn) => json!({
-                "id": id,
-                "model": args.model,
-                "latency_ms": latency_ms,
-                "text": turn.text,
-                "tool_calls": turn.tool_calls.iter()
-                    .map(|c| json!({ "name": c.name, "arguments": c.arguments }))
-                    .collect::<Vec<_>>(),
-            }),
+            Ok(turn) => {
+                let mut record = json!({
+                    "id": id,
+                    "model": args.model,
+                    "latency_ms": latency_ms,
+                    "text": turn.text,
+                    "tool_calls": turn.tool_calls.iter()
+                        .map(|c| json!({ "name": c.name, "arguments": c.arguments }))
+                        .collect::<Vec<_>>(),
+                });
+                if let Some(served) = turn.served {
+                    record["served_model"] = json!(served.model);
+                    record["fallback"] = json!(served.fallback);
+                    record["cost_usd"] = json!(served.cost_usd);
+                }
+                record
+            }
             Err(err) => json!({
                 "id": id,
                 "model": args.model,

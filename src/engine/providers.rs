@@ -16,8 +16,6 @@ pub enum Provider {
     Ollama,
     OpenAI,
     Anthropic,
-    /// Mozilla's Otari gateway: an OpenAI-compatible endpoint that routes to
-    /// many providers, including open-weight models.
     Otari,
 }
 
@@ -281,6 +279,27 @@ pub enum AgentMessage {
 pub struct AgentTurn {
     pub text: Option<String>,
     pub tool_calls: Vec<ToolCall>,
+    pub served: Option<Served>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Served {
+    pub model: String,
+    pub fallback: bool,
+    pub cost_usd: Option<f64>,
+}
+
+fn served_from(headers: &reqwest::header::HeaderMap, body: &serde_json::Value) -> Option<Served> {
+    let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
+    let model = header("otari-model")?.to_string();
+    Some(Served {
+        model,
+        fallback: header("otari-fallback") == Some("true"),
+        cost_usd: match &body["usage"]["cost_usd"] {
+            serde_json::Value::String(s) => s.parse().ok(),
+            v => v.as_f64(),
+        },
+    })
 }
 
 /// One agentic step against the configured provider (local Ollama by default,
@@ -453,13 +472,17 @@ async fn openai_with_tools(
         .send()
         .await?;
     let status = resp.status();
+    let headers = resp.headers().clone();
     let v: serde_json::Value = resp.json().await?;
     if !status.is_success() {
         anyhow::bail!("OpenAI error {}: {}", status, v);
     }
 
     let msg = &v["choices"][0]["message"];
-    let mut turn = AgentTurn::default();
+    let mut turn = AgentTurn {
+        served: served_from(&headers, &v),
+        ..AgentTurn::default()
+    };
     if let Some(text) = msg["content"].as_str() {
         if !text.is_empty() {
             turn.text = Some(text.to_string());
@@ -596,6 +619,29 @@ mod tests {
         assert_eq!(Provider::parse("claude"), Provider::Anthropic);
         assert_eq!(Provider::parse("ollama"), Provider::Ollama);
         assert_eq!(Provider::parse("whatever"), Provider::Ollama);
+    }
+
+    #[test]
+    fn served_reads_otari_headers_and_cost() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        let body = serde_json::json!({"usage": {"cost_usd": "0.000035"}});
+        assert_eq!(served_from(&headers, &body), None);
+
+        headers.insert("otari-model", "openai/gpt-oss-20b".parse().unwrap());
+        headers.insert("otari-fallback", "true".parse().unwrap());
+        assert_eq!(
+            served_from(&headers, &body),
+            Some(Served {
+                model: "openai/gpt-oss-20b".into(),
+                fallback: true,
+                cost_usd: Some(0.000035),
+            })
+        );
+
+        headers.insert("otari-fallback", "false".parse().unwrap());
+        let served = served_from(&headers, &serde_json::json!({})).unwrap();
+        assert!(!served.fallback);
+        assert_eq!(served.cost_usd, None);
     }
 
     #[test]
