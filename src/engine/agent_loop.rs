@@ -588,7 +588,7 @@ pub async fn run_agent_with_model(
     }
     let mut transcript = String::new();
     let mut gateway = GatewayUsage::default();
-    let mut retried_empty = false;
+    let mut empty_retries = 0;
 
     for _step in 0..MAX_STEPS {
         let turn = match providers::complete_with_tools(&cfg, &system_prompt, &history, &tools)
@@ -637,10 +637,10 @@ pub async fn run_agent_with_model(
             transcript.push_str(&format!("• {call}\n"));
         }
 
-        if turn.tool_calls.is_empty() && turn.text.is_none() && !retried_empty {
-            retried_empty = true;
+        if turn.tool_calls.is_empty() && turn.text.is_none() && empty_retries < 2 {
+            empty_retries += 1;
             history.push(AgentMessage::User(
-                "Continue: call the next tool, or give your final answer.".into(),
+                "Your last reply was empty. If you meant to call a tool, call it now through the tool interface instead of writing it in your reasoning; otherwise give your final answer.".into(),
             ));
             continue;
         }
