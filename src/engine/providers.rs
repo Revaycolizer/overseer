@@ -182,10 +182,7 @@ pub async fn complete_chat(
     system: &str,
     user: &str,
 ) -> anyhow::Result<String> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(180))
-        .build()?;
+    let client = model_client();
     match cfg.provider {
         Provider::OpenAI | Provider::Otari => {
             let mut body = serde_json::json!({
@@ -416,6 +413,17 @@ fn guardrail_blocked(body: &serde_json::Value) -> Option<GuardrailBlocked> {
     })
 }
 
+fn model_client() -> &'static reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(15))
+            .timeout(std::time::Duration::from_secs(180))
+            .build()
+            .expect("HTTP client")
+    })
+}
+
 pub async fn screen_untrusted(
     cfg: &ProviderConfig,
     text: &str,
@@ -423,10 +431,7 @@ pub async fn screen_untrusted(
     if cfg.provider != Provider::Otari || text.trim().is_empty() {
         return Ok(None);
     }
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
+    let client = model_client();
     let content: String = text.chars().take(8000).collect();
     let mut body = serde_json::json!({
         "model": cfg.model,
@@ -437,6 +442,7 @@ pub async fn screen_untrusted(
     let resp = client
         .post(format!("{}/chat/completions", cfg.base_url))
         .bearer_auth(&cfg.api_key)
+        .timeout(std::time::Duration::from_secs(30))
         .json(&body)
         .send()
         .await?;
@@ -473,10 +479,7 @@ pub async fn complete_with_tools(
     messages: &[AgentMessage],
     tools: &[ToolSpec],
 ) -> anyhow::Result<AgentTurn> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(180))
-        .build()?;
+    let client = model_client();
     match cfg.provider {
         Provider::OpenAI | Provider::Otari => {
             openai_with_tools(&client, cfg, system, messages, tools).await
