@@ -201,7 +201,7 @@ pub async fn complete_chat(
                 .await?;
             let status = resp.status();
             let headers = resp.headers().clone();
-            let v: serde_json::Value = resp.json().await?;
+            let v: serde_json::Value = read_json(resp).await?;
             if !status.is_success() {
                 return Err(gateway_error(status, &headers, &v));
             }
@@ -413,6 +413,82 @@ fn guardrail_blocked(body: &serde_json::Value) -> Option<GuardrailBlocked> {
     })
 }
 
+async fn read_json(resp: reqwest::Response) -> anyhow::Result<serde_json::Value> {
+    let status = resp.status();
+    let text = resp.text().await?;
+    serde_json::from_str(&text).map_err(|error| {
+        let start: String = text.chars().take(300).collect();
+        anyhow::anyhow!("Unreadable response ({status}, {error}): {start}")
+    })
+}
+
+async fn read_stream(mut resp: reqwest::Response) -> anyhow::Result<serde_json::Value> {
+    let mut pending: Vec<u8> = Vec::new();
+    let mut content = String::new();
+    let mut calls: std::collections::BTreeMap<u64, (String, String, String)> = Default::default();
+    let mut gateway_calls: Vec<serde_json::Value> = Vec::new();
+    let mut usage = serde_json::Value::Null;
+    while let Some(bytes) = resp.chunk().await? {
+        pending.extend_from_slice(&bytes);
+        while let Some(end) = pending.iter().position(|&b| b == b'\n') {
+            let line: Vec<u8> = pending.drain(..=end).collect();
+            let line = String::from_utf8_lossy(&line);
+            let Some(data) = line.trim().strip_prefix("data:").map(str::trim) else {
+                continue;
+            };
+            if data.is_empty() || data == "[DONE]" {
+                continue;
+            }
+            let chunk: serde_json::Value = serde_json::from_str(data)?;
+            if !chunk["error"].is_null() {
+                anyhow::bail!("Otari stream error: {}", chunk["error"]);
+            }
+            let delta = &chunk["choices"][0]["delta"];
+            if let Some(text) = delta["content"].as_str() {
+                content.push_str(text);
+            }
+            for call in delta["tool_calls"].as_array().into_iter().flatten() {
+                let entry = calls
+                    .entry(call["index"].as_u64().unwrap_or(0))
+                    .or_default();
+                if let Some(id) = call["id"].as_str() {
+                    entry.0 = id.to_string();
+                }
+                if let Some(name) = call["function"]["name"].as_str() {
+                    entry.1.push_str(name);
+                }
+                if let Some(arguments) = call["function"]["arguments"].as_str() {
+                    entry.2.push_str(arguments);
+                }
+            }
+            for call in chunk["otari_tool_calls"].as_array().into_iter().flatten() {
+                match gateway_calls.iter_mut().find(|c| c["id"] == call["id"]) {
+                    Some(existing) => *existing = call.clone(),
+                    None => gateway_calls.push(call.clone()),
+                }
+            }
+            if !chunk["usage"].is_null() {
+                usage = chunk["usage"].clone();
+            }
+        }
+    }
+    let tool_calls: Vec<serde_json::Value> = calls
+        .into_values()
+        .map(|(id, name, arguments)| {
+            serde_json::json!({
+                "id": id,
+                "type": "function",
+                "function": { "name": name, "arguments": arguments },
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "choices": [{ "message": { "content": content, "tool_calls": tool_calls } }],
+        "otari_tool_calls": gateway_calls,
+        "usage": usage,
+    }))
+}
+
 fn model_client() -> &'static reqwest::Client {
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     CLIENT.get_or_init(|| {
@@ -450,7 +526,7 @@ pub async fn screen_untrusted(
         return Ok(None);
     }
     let status = resp.status();
-    let v: serde_json::Value = resp.json().await?;
+    let v: serde_json::Value = read_json(resp).await?;
     match guardrail_blocked(&v) {
         Some(blocked) => Ok(Some(blocked)),
         None => anyhow::bail!("Otari screening error {}: {}", status, v),
@@ -637,6 +713,12 @@ async fn openai_with_tools(
     if !tool_defs.is_empty() {
         body["tools"] = serde_json::Value::Array(tool_defs);
     }
+    let streaming = cfg.provider == Provider::Otari;
+    if streaming {
+        body["max_tokens"] = serde_json::json!(4096);
+        body["stream"] = serde_json::json!(true);
+        body["stream_options"] = serde_json::json!({ "include_usage": true });
+    }
 
     let resp = client
         .post(format!("{}/chat/completions", cfg.base_url))
@@ -646,7 +728,11 @@ async fn openai_with_tools(
         .await?;
     let status = resp.status();
     let headers = resp.headers().clone();
-    let v: serde_json::Value = resp.json().await?;
+    let v: serde_json::Value = if streaming && status.is_success() {
+        read_stream(resp).await?
+    } else {
+        read_json(resp).await?
+    };
     if !status.is_success() {
         return Err(gateway_error(status, &headers, &v));
     }
@@ -788,6 +874,12 @@ async fn anthropic_with_tools(
 mod tests {
     use super::*;
 
+    fn sse(chunks: &[serde_json::Value]) -> ([(&'static str, &'static str); 1], String) {
+        let mut body: String = chunks.iter().map(|c| format!("data: {c}\n\n")).collect();
+        body.push_str("data: [DONE]\n\n");
+        ([("content-type", "text/event-stream")], body)
+    }
+
     #[test]
     fn provider_parse() {
         assert_eq!(Provider::parse("OpenAI"), Provider::OpenAI);
@@ -812,14 +904,19 @@ mod tests {
                         {"type": "otari_code_execution"}
                     ])
                 );
-                Json(serde_json::json!({
-                    "choices": [{"message": {"content": "4192 days"}}],
-                    "otari_tool_calls": [
-                        {"type": "web_search", "status": "completed", "query": "latest Rust", "sources": [{"url": "https://doc.rust-lang.org"}, {"url": "https://blog.rust-lang.org"}]},
-                        {"type": "code_execution", "status": "completed", "stdout": "4192\n", "exit_code": 0},
-                        {"type": "web_fetch", "status": "failed", "url": "https://example.com"}
-                    ]
-                }))
+                assert_eq!(body["stream"], true);
+                sse(&[
+                    serde_json::json!({"choices": [{"delta": {"role": "assistant"}}], "otari_tool_calls": [
+                        {"id": "ws1", "type": "web_search", "status": "in_progress", "query": "latest Rust"}
+                    ]}),
+                    serde_json::json!({"choices": [{"delta": {"content": "4192 "}}], "otari_tool_calls": [
+                        {"id": "ws1", "type": "web_search", "status": "completed", "query": "latest Rust", "sources": [{"url": "https://doc.rust-lang.org"}, {"url": "https://blog.rust-lang.org"}]},
+                        {"id": "ci1", "type": "code_execution", "status": "completed", "stdout": "4192\n", "exit_code": 0},
+                        {"id": "wf1", "type": "web_fetch", "status": "failed", "url": "https://example.com"}
+                    ]}),
+                    serde_json::json!({"choices": [{"delta": {"content": "days"}}]}),
+                    serde_json::json!({"choices": [], "usage": {"cost_usd": "0.0201"}}),
+                ])
             }),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -857,6 +954,7 @@ mod tests {
         )
         .await
         .unwrap();
+        assert_eq!(turn.text.as_deref(), Some("4192 days"));
         assert_eq!(
             turn.gateway_calls,
             vec![
@@ -1086,7 +1184,7 @@ mod tests {
     }
     #[tokio::test]
     async fn cloud_providers_send_authenticated_tools_and_parse_calls() {
-        use axum::{http::HeaderMap, routing::post, Json, Router};
+        use axum::{http::HeaderMap, response::IntoResponse, routing::post, Json, Router};
         for provider in [Provider::OpenAI, Provider::Otari, Provider::Anthropic] {
             let expected = provider.clone();
             let route = if matches!(provider, Provider::OpenAI | Provider::Otari) {
@@ -1099,7 +1197,15 @@ mod tests {
                 async move {
                     assert_eq!(body["model"], "test-model");
                     assert_eq!(body["tools"].as_array().unwrap().len(), 1);
-                    let response = if matches!(expected, Provider::OpenAI | Provider::Otari) {
+                    if matches!(expected, Provider::Otari) {
+                        assert_eq!(headers["authorization"], "Bearer test-key");
+                        return sse(&[
+                            serde_json::json!({"choices":[{"delta":{"content":"Work", "tool_calls":[{"index":0, "id":"call-test", "function":{"name":"read_file", "arguments":"{\"path\":"}}]}}]}),
+                            serde_json::json!({"choices":[{"delta":{"content":"ing", "tool_calls":[{"index":0, "function":{"arguments":"\"README.md\"}"}}]}}]}),
+                        ])
+                        .into_response();
+                    }
+                    let response = if matches!(expected, Provider::OpenAI) {
                         assert_eq!(headers["authorization"], "Bearer test-key");
                         serde_json::json!({"choices":[{"message":{"content":"Working", "tool_calls":[{"id":"call-test", "function":{"name":"read_file", "arguments":"{\"path\":\"README.md\"}"}}]}}]})
                     } else {
@@ -1107,7 +1213,7 @@ mod tests {
                         assert_eq!(headers["anthropic-version"], "2023-06-01");
                         serde_json::json!({"content":[{"type":"text", "text":"Working"},{"type":"tool_use", "id":"call-test", "name":"read_file", "input":{"path":"README.md"}}]})
                     };
-                    Json(response)
+                    Json(response).into_response()
                 }
             }));
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

@@ -34,7 +34,8 @@ fn withheld_observation(tool: &str, blocked: &providers::GuardrailBlocked) -> St
 const GATEWAY_TOOLS_PROMPT: &str = "
 - Web search and code execution run on the gateway: search the web for current facts, and
   run Python in its sandbox for calculations or data work. Neither touches this computer.
-  Answer from search results directly; open the browser only when the user asks to see a page.";
+  Answer from search results directly; open the browser only when the user asks to see a page.
+  Answer as soon as you have the facts: one search is usually enough, so do not re-verify.";
 
 fn gateway_tool_catalog() -> Vec<ToolSpec> {
     let mut tools: Vec<ToolSpec> = tool_catalog()
@@ -44,7 +45,7 @@ fn gateway_tool_catalog() -> Vec<ToolSpec> {
     tools.push(ToolSpec {
         name: "otari_web_search".into(),
         description: String::new(),
-        parameters: json!({ "max_uses": 1 }),
+        parameters: json!({ "max_uses": 2 }),
     });
     tools.push(ToolSpec {
         name: "otari_code_execution".into(),
@@ -560,7 +561,10 @@ pub async fn run_agent_with_model(
     let (tools, system_prompt) = if cfg.provider == providers::Provider::Otari {
         (
             gateway_tool_catalog(),
-            format!("{system_prompt}{GATEWAY_TOOLS_PROMPT}"),
+            format!(
+                "{system_prompt}{GATEWAY_TOOLS_PROMPT}\n- Today is {}. Trust current search results over older knowledge.",
+                chrono::Utc::now().format("%Y-%m-%d")
+            ),
         )
     } else {
         (tool_catalog(), system_prompt)
@@ -584,6 +588,7 @@ pub async fn run_agent_with_model(
     }
     let mut transcript = String::new();
     let mut gateway = GatewayUsage::default();
+    let mut retried_empty = false;
 
     for _step in 0..MAX_STEPS {
         let turn = match providers::complete_with_tools(&cfg, &system_prompt, &history, &tools)
@@ -630,6 +635,14 @@ pub async fn run_agent_with_model(
                 let _ = tx.send(format!("→ {call}\n"));
             }
             transcript.push_str(&format!("• {call}\n"));
+        }
+
+        if turn.tool_calls.is_empty() && turn.text.is_none() && !retried_empty {
+            retried_empty = true;
+            history.push(AgentMessage::User(
+                "Continue: call the next tool, or give your final answer.".into(),
+            ));
+            continue;
         }
 
         // No tool calls → the model is done.
