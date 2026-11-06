@@ -408,6 +408,20 @@ export default function App() {
             <div className="topbar">
               <div className="spacer" />
               <div className="bar-right">
+                {view === "chat" && (
+                  <button
+                    className="btn-ghost"
+                    disabled={busy}
+                    onClick={() => {
+                      localStorage.removeItem("overseer.conv");
+                      setConversationId("0");
+                      setMessages([]);
+                      setApprovals([]);
+                    }}
+                  >
+                    New chat
+                  </button>
+                )}
                 <div className={`conn ${connected ? "on" : "off"}`} role="status">
                   <span className="pulse" />
                   {connected ? "connected" : "offline"}
