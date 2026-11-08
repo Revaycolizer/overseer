@@ -34,13 +34,14 @@ fn withheld_observation(tool: &str, blocked: &providers::GuardrailBlocked) -> St
 const GATEWAY_TOOLS_PROMPT: &str = "
 - Web search and code execution run on the gateway: search the web for current facts, and
   run Python in its sandbox for calculations or data work. Neither touches this computer.
-  Answer from search results directly; open the browser only when the user asks to see a page.
-  Answer as soon as you have the facts: one search is usually enough, so do not re-verify.";
+  Answer from the search results directly.
+  Answer as soon as you have the facts: one search is usually enough, so do not re-verify.
+- Reply in plain text without Markdown: no asterisks, headings or tables.";
 
 fn gateway_tool_catalog() -> Vec<ToolSpec> {
     let mut tools: Vec<ToolSpec> = tool_catalog()
         .into_iter()
-        .filter(|t| t.name != "web_search")
+        .filter(|t| !matches!(t.name.as_str(), "web_search" | "read_webpage") && !t.name.starts_with("browser_"))
         .collect();
     tools.push(ToolSpec {
         name: "otari_web_search".into(),
@@ -611,6 +612,13 @@ pub async fn run_agent_with_model(
                     ),
                 );
             }
+            Err(e) if cfg.provider == providers::Provider::Otari => {
+                finish(db, run_id, "failed").await;
+                return respond(
+                    "failed",
+                    &format!("Model error: {e}\n\nOtari could not be reached or the model is busy. Check your internet connection, wait a minute and try again."),
+                );
+            }
             Err(e) => {
                 finish(db, run_id, "failed").await;
                 return respond(
@@ -681,8 +689,7 @@ pub async fn run_agent_with_model(
                     observation = withheld_observation(&call.name, &blocked);
                 }
             }
-            let one_line = observation.lines().next().unwrap_or("").trim();
-            transcript.push_str(&format!("• {label} — {}\n", short(one_line, 160)));
+            transcript.push_str(&format!("• {label}\n"));
             history.push(AgentMessage::ToolResult {
                 id: call.id.clone(),
                 name: call.name.clone(),
